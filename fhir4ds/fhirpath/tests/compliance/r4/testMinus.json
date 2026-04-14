@@ -1,0 +1,97 @@
+{
+  "name": "testMinus",
+  "description": null,
+  "source": "fhir-test-cases r5",
+  "tests": [
+    {
+      "name": "testMinus1",
+      "expression": "1 - 1 = 0",
+      "input": null,
+      "inputfile": "patient-example.json",
+      "expected": [
+        true
+      ],
+      "tags": [
+        "r5-xml",
+        "testMinus"
+      ],
+      "outputTypes": [
+        "boolean"
+      ]
+    },
+    {
+      "name": "testMinus2",
+      "expression": "1 - 0 = 1",
+      "input": null,
+      "inputfile": "patient-example.json",
+      "expected": [
+        true
+      ],
+      "tags": [
+        "r5-xml",
+        "testMinus"
+      ],
+      "outputTypes": [
+        "boolean"
+      ]
+    },
+    {
+      "name": "testMinus3",
+      "expression": "1.8 - 1.2 = 0.6",
+      "input": null,
+      "inputfile": "patient-example.json",
+      "expected": [
+        true
+      ],
+      "tags": [
+        "r5-xml",
+        "testMinus"
+      ],
+      "outputTypes": [
+        "boolean"
+      ]
+    },
+    {
+      "name": "testMinus4",
+      "expression": "'a'-'b' = 'ab'",
+      "input": null,
+      "inputfile": "patient-example.json",
+      "expected": [],
+      "tags": [
+        "r5-xml",
+        "testMinus"
+      ],
+      "expectError": true,
+      "invalidKind": "execution"
+    },
+    {
+      "name": "testMinus5",
+      "expression": "@1974-12-25 - 1 'month'",
+      "input": null,
+      "inputfile": "patient-example.json",
+      "expected": [
+        "1974-11-25"
+      ],
+      "tags": [
+        "r5-xml",
+        "testMinus"
+      ],
+      "outputTypes": [
+        "date"
+      ]
+    },
+    {
+      "name": "testMinus6",
+      "expression": "@1974-12-25 - 1 'cm'",
+      "input": null,
+      "inputfile": "patient-example.json",
+      "expected": [],
+      "tags": [
+        "r5-xml",
+        "testMinus"
+      ],
+      "expectError": true,
+      "invalidKind": "execution"
+    }
+  ]
+}

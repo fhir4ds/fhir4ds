@@ -1,0 +1,29 @@
+{
+    "_comment": "Default FHIR resource type to primary terminology property path mappings",
+    "Condition": "code",
+    "Observation": "code",
+    "Procedure": "code",
+    "MedicationRequest": "medicationCodeableConcept",
+    "MedicationAdministration": "medicationCodeableConcept",
+    "MedicationDispense": "medicationCodeableConcept",
+    "Medication": "code",
+    "DiagnosticReport": "code",
+    "ServiceRequest": "code",
+    "DeviceRequest": "codeCodeableConcept",
+    "Coverage": "type",
+    "Task": "code",
+    "Communication": "reasonCode",
+    "Goal": "description",
+    "Immunization": "vaccineCode",
+    "AdverseEvent": "event",
+    "AllergyIntolerance": "code",
+    "Device": "type",
+    "Encounter": "type",
+    "_default": "code",
+    "_medication_reference_alternatives": {
+        "_comment": "For medication[x] choice types, when the primary path is a CodeableConcept, also check if a Reference to a Medication resource is used and resolve its code.",
+        "MedicationRequest": { "reference_property": "medicationReference", "target_type": "Medication", "target_code_property": "code" },
+        "MedicationAdministration": { "reference_property": "medicationReference", "target_type": "Medication", "target_code_property": "code" },
+        "MedicationDispense": { "reference_property": "medicationReference", "target_type": "Medication", "target_code_property": "code" }
+    }
+}

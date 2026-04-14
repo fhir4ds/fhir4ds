@@ -1,0 +1,41 @@
+{
+  "name": "miscEngineTests",
+  "description": null,
+  "source": "fhir-test-cases r5",
+  "tests": [
+    {
+      "name": "testContainedId",
+      "expression": "contained.id",
+      "input": null,
+      "inputfile": "patient-container-example.json",
+      "expected": [
+        "1"
+      ],
+      "tags": [
+        "r5-xml",
+        "miscEngineTests"
+      ],
+      "outputTypes": [
+        "id"
+      ]
+    },
+    {
+      "name": "testPrimitiveExtensions",
+      "expression": "Patient.name.given.select($this.hasValue())",
+      "input": null,
+      "inputfile": "patient-name-extensions.json",
+      "expected": [
+        false,
+        true
+      ],
+      "tags": [
+        "r5-xml",
+        "miscEngineTests"
+      ],
+      "outputTypes": [
+        "boolean",
+        "boolean"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,226 @@
+{
+    "_comment": "Profile registry for QICore and US Core FHIR profiles. Consolidates QICORE_PROFILE_PATTERNS, QICORE_TO_FHIR_TYPE, USCORE_PROFILE_TO_FHIR_TYPE, and PROFILES_REQUIRING_SUFFIX.",
+    "generic_profiles": {
+        "Condition": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition",
+        "Observation": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation",
+        "Procedure": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure",
+        "MedicationRequest": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest",
+        "Medication": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medication",
+        "DiagnosticReport": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-diagnosticreport",
+        "ServiceRequest": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest",
+        "Goal": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-goal",
+        "Immunization": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization",
+        "AllergyIntolerance": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-allergyintolerance",
+        "Device": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-device",
+        "Encounter": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter",
+        "Patient": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient",
+        "Practitioner": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner",
+        "Organization": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization",
+        "Location": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-location"
+    },
+    "named_profiles": {
+        "ConditionProblemsHealthConcerns": {
+            "base_type": "Condition",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns",
+            "meta_profile_filter": true
+        },
+        "ConditionEncounterDiagnosis": {
+            "base_type": "Condition",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis",
+            "meta_profile_filter": true
+        },
+        "USCoreBloodPressureProfile": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-blood-pressure"
+        },
+        "USCoreBodyHeight": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-height"
+        },
+        "USCoreBodyWeight": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-weight"
+        },
+        "USCoreBodyTemperature": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-temperature"
+        },
+        "USCoreHeartRate": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-heart-rate"
+        },
+        "USCoreRespiratoryRate": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-respiratory-rate"
+        },
+        "USCorePulseOximetry": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-pulse-oximetry"
+        },
+        "USCoreSmokingStatus": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-smoking-status"
+        },
+        "USCoreLaboratoryResult": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-laboratory-result-observation"
+        },
+        "QICoreObservationClinicalResult": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result"
+        },
+        "QICoreSimpleObservation": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation"
+        },
+        "MedicationNotRequested": {
+            "base_type": "MedicationRequest",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested",
+            "negation_filter": "doNotPerform"
+        },
+        "TaskRejected": {
+            "base_type": "Task",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-taskrejected"
+        },
+        "ObservationClinicalResult": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result"
+        },
+        "USCoreHeartRateProfile": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-heart-rate"
+        },
+        "USCorePatient": {
+            "base_type": "Patient",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+        },
+        "QICoreEncounter": {
+            "base_type": "Encounter",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"
+        },
+        "LaboratoryResultObservation": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-laboratory-result-observation"
+        },
+        "ObservationScreeningAssessment": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment"
+        },
+        "SimpleObservation": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation"
+        },
+        "ObservationCancelled": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observationcancelled"
+        },
+        "ProcedureNotDone": {
+            "base_type": "Procedure",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone",
+            "negation_filter": "status_not_done"
+        },
+        "ServiceNotRequested": {
+            "base_type": "ServiceRequest",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested",
+            "negation_filter": "doNotPerform"
+        },
+        "CommunicationNotDone": {
+            "base_type": "Communication",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone",
+            "negation_filter": "status_not_done"
+        },
+        "MedicationAdministrationNotDone": {
+            "base_type": "MedicationAdministration",
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministrationnotdone",
+            "negation_filter": "status_not_done"
+        },
+        "USCoreBMIProfile": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-bmi"
+        },
+        "USCoreBodyHeightProfile": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-height"
+        },
+        "USCoreBodyWeightProfile": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-weight"
+        },
+        "USCoreBodyTemperatureProfile": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-temperature"
+        },
+        "USCoreRespiratoryRateProfile": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-respiratory-rate"
+        },
+        "USCoreObservationPregnancyStatusProfile": {
+            "base_type": "Observation",
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-pregnancystatus"
+        }
+    },
+    "url_to_type": {
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient": "Patient",
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-condition": "Condition",
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation": "Observation",
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab": "Observation",
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-encounter": "Encounter",
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure": "Procedure",
+        "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition": "Condition",
+        "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter": "Encounter",
+        "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation": "Observation",
+        "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure": "Procedure",
+        "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest": "MedicationRequest"
+    },
+    "profiles_requiring_suffix": {
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-blood-pressure": "us-core-blood-pressure",
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-temperature": "us-core-body-temperature",
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-heart-rate": "us-core-heart-rate",
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-respiratory-rate": "us-core-respiratory-rate",
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-height": "us-core-body-height",
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-weight": "us-core-body-weight",
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-bmi": "us-core-bmi",
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-head-circumference": "us-core-head-circumference",
+        "http://hl7.org/fhir/us/core/StructureDefinition/us-core-pulse-oximetry": "us-core-pulse-oximetry"
+    },
+    "component_profile_keywords": {
+        "_comment": "Profile URL substrings that indicate component-based observations requiring precomputed component columns",
+        "keywords": [
+            "blood-pressure"
+        ]
+    },
+    "property_extensions": {
+        "ServiceRequest.recorded": {
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+            "value_type": "DateTime"
+        },
+        "ServiceRequest.isElective": {
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-isElective",
+            "value_type": "Boolean"
+        },
+        "MedicationRequest.doNotPerformReason": {
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+            "value_type": "CodeableConcept"
+        },
+        "Observation.notDoneReason": {
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneReason",
+            "value_type": "CodeableConcept"
+        },
+        "Procedure.reasonRefused": {
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+            "value_type": "CodeableConcept"
+        },
+        "Procedure.doNotPerformReason": {
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+            "value_type": "CodeableConcept"
+        },
+        "Immunization.notGivenReason": {
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneReason",
+            "value_type": "CodeableConcept"
+        },
+        "DeviceRequest.doNotPerformReason": {
+            "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneReason",
+            "value_type": "CodeableConcept"
+        }
+    }
+}

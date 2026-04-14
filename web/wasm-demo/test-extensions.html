@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DuckDB-WASM Extension Load Test</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'SF Mono', 'Consolas', 'Menlo', monospace; background: #1a1a2e; color: #e0e0e0; padding: 2rem; }
+  h1 { color: #00d4ff; margin-bottom: 0.5rem; font-size: 1.2rem; }
+  #log { white-space: pre-wrap; font-size: 0.8rem; line-height: 1.6; }
+  .ok { color: #4caf50; }
+  .fail { color: #f44336; }
+  .warn { color: #ff9800; }
+  .info { color: #888; }
+  #results { margin-top: 1rem; }
+  table { border-collapse: collapse; margin-top: 0.5rem; font-size: 0.8rem; }
+  th, td { border: 1px solid #333; padding: 0.3rem 0.8rem; text-align: left; }
+  th { background: #16213e; color: #00d4ff; }
+  td { background: #0f3460; }
+</style>
+</head>
+<body>
+<h1>DuckDB-WASM Extension Load Test</h1>
+<div id="log"></div>
+<div id="results"></div>
+<script type="module" src="/src/test-extensions.ts"></script>
+</body>
+</html>

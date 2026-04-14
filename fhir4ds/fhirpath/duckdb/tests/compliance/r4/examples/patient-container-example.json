@@ -1,0 +1,12 @@
+{
+  "resourceType": "Patient",
+  "id": "container-example",
+  "active": true,
+  "contained": [
+    {
+      "resourceType": "Organization",
+      "id": "1",
+      "name": "Test Organization"
+    }
+  ]
+}

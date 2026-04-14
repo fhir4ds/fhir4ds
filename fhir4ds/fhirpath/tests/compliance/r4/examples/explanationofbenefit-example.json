@@ -1,0 +1,5 @@
+{
+  "resourceType": "ExplanationOfBenefit",
+  "id": "example",
+  "status": "active"
+}

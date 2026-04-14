@@ -1,0 +1,8 @@
+{
+    "_comment": "Standard CQL library names that are auto-discovered and loaded for fluent function inlining",
+    "standard_libraries": [
+        "FHIRHelpers",
+        "QICoreCommon",
+        "Status"
+    ]
+}

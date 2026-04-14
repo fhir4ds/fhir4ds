@@ -1,0 +1,234 @@
+# name: test/sql/fhirpath.test
+# description: test fhirpath extension
+# group: [sql]
+
+# Before we load the extension, this will fail
+statement error
+SELECT fhirpath_text('{"id":"1"}', 'id');
+----
+Catalog Error: Scalar Function with name fhirpath_text does not exist!
+
+# Require statement will ensure this test is run with this extension loaded
+require fhirpath
+
+# =====================================================================
+# fhirpath_text — basic path access
+# =====================================================================
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","id":"123"}', 'id');
+----
+123
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","name":[{"given":["John"]}]}', 'name.given');
+----
+John
+
+# Test deeply nested path
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","component":[{"code":{"text":"BP"}}]}', 'component.code.text');
+----
+BP
+
+# Test resourceType access
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","id":"1"}', 'resourceType');
+----
+Patient
+
+# =====================================================================
+# fhirpath_number — numeric extraction
+# =====================================================================
+query I
+SELECT fhirpath_number('{"resourceType":"Observation","valueQuantity":{"value":120}}', 'valueQuantity.value');
+----
+120.0
+
+query I
+SELECT fhirpath_number('{"resourceType":"Observation","valueQuantity":{"value":98.6}}', 'valueQuantity.value');
+----
+98.6
+
+# =====================================================================
+# fhirpath_bool — boolean extraction
+# =====================================================================
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","active":true}', 'active');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","active":false}', 'active');
+----
+false
+
+# =====================================================================
+# fhirpath_is_valid — expression validation
+# =====================================================================
+query I
+SELECT fhirpath_is_valid('Patient.name.given');
+----
+true
+
+query I
+SELECT fhirpath_is_valid('invalid!!!');
+----
+false
+
+query I
+SELECT fhirpath_is_valid('name.where(given = ''John'')');
+----
+true
+
+# =====================================================================
+# NULL handling
+# =====================================================================
+query I
+SELECT fhirpath_text(NULL, 'id');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"id":"1"}', NULL);
+----
+NULL
+
+query I
+SELECT fhirpath_number(NULL, 'value');
+----
+NULL
+
+query I
+SELECT fhirpath_bool(NULL, 'active');
+----
+NULL
+
+# =====================================================================
+# fhirpath — list return
+# =====================================================================
+query I
+SELECT fhirpath('{"resourceType":"Patient","name":[{"given":["John","James"]}]}', 'name.given');
+----
+[John, James]
+
+# =====================================================================
+# fhirpath_date — date normalization
+# =====================================================================
+query I
+SELECT fhirpath_date('{"resourceType":"Patient","birthDate":"1990"}', 'birthDate');
+----
+1990-01-01
+
+query I
+SELECT fhirpath_date('{"resourceType":"Patient","birthDate":"1990-06"}', 'birthDate');
+----
+1990-06-01
+
+query I
+SELECT fhirpath_date('{"resourceType":"Patient","birthDate":"1990-06-15"}', 'birthDate');
+----
+1990-06-15
+
+# Full datetime should be truncated to date
+query I
+SELECT fhirpath_date('{"resourceType":"Patient","birthDate":"1990-06-15T10:30:00Z"}', 'birthDate');
+----
+1990-06-15
+
+# =====================================================================
+# Complex expressions — where clauses
+# =====================================================================
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","component":[{"code":{"coding":[{"code":"8480-6"}]},"valueQuantity":{"value":120}},{"code":{"coding":[{"code":"8462-4"}]},"valueQuantity":{"value":80}}]}', 'component.where(code.coding.exists(code = ''8480-6'')).valueQuantity.value');
+----
+120
+
+# Extension function
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","extension":[{"url":"http://example.org/race","valueString":"White"},{"url":"http://example.org/ethnicity","valueString":"Hispanic"}]}', 'extension.where(url = ''http://example.org/race'').valueString');
+----
+White
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","extension":[{"url":"http://example.org/race","valueString":"White"},{"url":"http://example.org/ethnicity","valueString":"Hispanic"}]}', 'extension.where(url = ''http://example.org/ethnicity'').valueString');
+----
+Hispanic
+
+# =====================================================================
+# String functions
+# =====================================================================
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","name":[{"given":["John"]}]}', 'name.given.startsWith(''Jo'')');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","name":[{"given":["John"]}]}', 'name.given.endsWith(''hn'')');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","name":[{"given":["John"]}]}', 'name.given.contains(''oh'')');
+----
+true
+
+# =====================================================================
+# Existence and count functions
+# =====================================================================
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","name":[{"given":["John"]}]}', 'name.exists()');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient"}', 'name.exists()');
+----
+false
+
+query I
+SELECT fhirpath_number('{"resourceType":"Patient","name":[{"given":["John","James"]}]}', 'name.given.count()');
+----
+2.0
+
+# =====================================================================
+# Malformed JSON handling (should return NULL, not crash)
+# =====================================================================
+query I
+SELECT fhirpath_text('not json', 'id');
+----
+NULL
+
+query I
+SELECT fhirpath_text('', 'id');
+----
+NULL
+
+# Missing field (should return NULL)
+query I
+SELECT fhirpath_text('{"resourceType":"Patient"}', 'birthDate');
+----
+NULL
+
+# =====================================================================
+# fhirpath_json — JSON serialization
+# =====================================================================
+query I
+SELECT length(fhirpath_json('{"resourceType":"Patient","id":"123"}', 'id')) > 0;
+----
+true
+
+# =====================================================================
+# fhirpath_timestamp — timestamp pass-through
+# =====================================================================
+query I
+SELECT fhirpath_timestamp('{"resourceType":"Observation","effectiveDateTime":"2024-01-15T10:30:00Z"}', 'effectiveDateTime');
+----
+2024-01-15T10:30:00Z
+
+# =====================================================================
+# Choice type resolution (value[x] pattern)
+# =====================================================================
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","valueString":"normal"}', 'value');
+----
+normal

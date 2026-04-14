@@ -1,0 +1,29 @@
+{
+  "_source": "qicore-modelinfo-4.1.1.xml, manually curated 2026-03-06",
+  "_version": "4.1.1",
+  "Patient": {
+    "race": {
+      "extension_url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+      "fhirpath": "extension('http://hl7.org/fhir/us/core/StructureDefinition/us-core-race')",
+      "value_path": "extension.where(url='ombCategory').valueCoding.code",
+      "notes": "Multi-valued; ombCategory coding gives the primary race code"
+    },
+    "ethnicity": {
+      "extension_url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+      "fhirpath": "extension('http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity')",
+      "value_path": "extension.where(url='ombCategory').valueCoding.code"
+    },
+    "sex": {
+      "extension_url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+      "fhirpath": "extension('http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex')",
+      "value_path": "valueCode",
+      "notes": "SNOMED codes: 248153007=Male, 248152002=Female"
+    },
+    "birthSex": {
+      "extension_url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-birthsex",
+      "fhirpath": "extension('http://hl7.org/fhir/us/core/StructureDefinition/us-core-birthsex')",
+      "value_path": "valueCode",
+      "notes": "HL7 v3 codes: M/F/UN. Deprecated in US Core 6.1.0."
+    }
+  }
+}

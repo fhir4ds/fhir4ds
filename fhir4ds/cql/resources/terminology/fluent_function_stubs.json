@@ -1,0 +1,12 @@
+{
+    "_comment": "Fallback fluent function stubs registered when CQL library files are unavailable. Each entry pre-registers a well-known fluent function so the registry is queryable without loading full CQL.",
+    "stubs": [
+        {"name": "verified", "library": "Status", "resource_type": "Condition"},
+        {"name": "prevalenceInterval", "library": "QICoreCommon", "resource_type": "Condition"},
+        {"name": "latest", "library": "QICoreCommon", "resource_type": "Observation"},
+        {"name": "isEncounterPerformed", "library": "Status", "resource_type": "Encounter"},
+        {"name": "isAssessmentPerformed", "library": "Status", "resource_type": "Observation"},
+        {"name": "isProcedurePerformed", "library": "Status", "resource_type": "Procedure"},
+        {"name": "isMedicationActive", "library": "Status", "resource_type": "MedicationRequest"}
+    ]
+}

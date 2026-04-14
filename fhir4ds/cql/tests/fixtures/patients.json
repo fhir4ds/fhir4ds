@@ -1,0 +1,18 @@
+{
+  "patients": [
+    {"id": "P1", "name": "No Resources Patient"},
+    {"id": "P2", "name": "Single Resource Patient"},
+    {"id": "P3", "name": "Multiple Resources Patient"}
+  ],
+  "conditions": [
+    {"id": "C1", "patient_ref": "P2", "code": "diabetes", "status": "confirmed", "onset_date": "2020-01-15"},
+    {"id": "C2", "patient_ref": "P3", "code": "diabetes", "status": "confirmed", "onset_date": "2019-03-20"},
+    {"id": "C3", "patient_ref": "P3", "code": "diabetes", "status": "provisional", "onset_date": "2021-06-10"},
+    {"id": "C4", "patient_ref": "P3", "code": "hypertension", "status": "confirmed", "onset_date": "2018-11-05"}
+  ],
+  "observations": [
+    {"id": "O1", "patient_ref": "P2", "code": "hba1c", "value": 6.5, "effective_date": "2023-01-15"},
+    {"id": "O2", "patient_ref": "P3", "code": "hba1c", "value": 7.0, "effective_date": "2023-02-20"},
+    {"id": "O3", "patient_ref": "P3", "code": "hba1c", "value": 7.5, "effective_date": "2023-03-10"}
+  ]
+}

@@ -1,0 +1,98 @@
+{
+  "name": "testPrecedence",
+  "description": null,
+  "source": "fhir-test-cases r5",
+  "tests": [
+    {
+      "name": "testPrecedence1",
+      "expression": "-1.convertsToInteger()",
+      "input": null,
+      "expected": [],
+      "tags": [
+        "r5-xml",
+        "testPrecedence"
+      ],
+      "description": "test unary precedence",
+      "expectError": true,
+      "invalidKind": "execution"
+    },
+    {
+      "name": "testPrecedence2",
+      "expression": "1+2*3+4 = 11",
+      "input": null,
+      "expected": [
+        true
+      ],
+      "tags": [
+        "r5-xml",
+        "testPrecedence"
+      ],
+      "outputTypes": [
+        "boolean"
+      ]
+    },
+    {
+      "name": "testPrecedence3",
+      "expression": "1 > 2 is Boolean",
+      "input": null,
+      "expected": [
+        true
+      ],
+      "tags": [
+        "r5-xml",
+        "testPrecedence"
+      ],
+      "expectError": true,
+      "invalidKind": "execution",
+      "outputTypes": [
+        "boolean"
+      ]
+    },
+    {
+      "name": "testPrecedence4",
+      "expression": "(1 | 1 is Integer).count()",
+      "input": null,
+      "expected": [
+        2
+      ],
+      "tags": [
+        "r5-xml",
+        "testPrecedence"
+      ],
+      "outputTypes": [
+        "integer"
+      ]
+    },
+    {
+      "name": "testPrecedence5",
+      "expression": "true and '0215' in ('0215' | '0216')",
+      "input": null,
+      "expected": [
+        true
+      ],
+      "tags": [
+        "r5-xml",
+        "testPrecedence"
+      ],
+      "outputTypes": [
+        "boolean"
+      ]
+    },
+    {
+      "name": "testPrecedence6",
+      "expression": "category.exists(coding.exists(system = 'http://terminology.hl7.org/CodeSystem/observation-category' and code.trace('c') in ('vital-signs' | 'vital-signs2').trace('codes')))",
+      "input": null,
+      "inputfile": "observation-example.json",
+      "expected": [
+        true
+      ],
+      "tags": [
+        "r5-xml",
+        "testPrecedence"
+      ],
+      "outputTypes": [
+        "boolean"
+      ]
+    }
+  ]
+}

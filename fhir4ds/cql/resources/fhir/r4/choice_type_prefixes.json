@@ -1,0 +1,4 @@
+{
+  "_comment": "FHIR choice type element prefixes. Elements starting with these prefixes may resolve to multiple types (e.g., valueString, valueQuantity, effectiveDateTime, effectivePeriod).",
+  "prefixes": ["value", "onset", "effective", "performed"]
+}

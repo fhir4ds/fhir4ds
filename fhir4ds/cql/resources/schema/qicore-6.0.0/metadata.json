@@ -1,0 +1,6 @@
+{
+  "layer": "qicore",
+  "version": "6.0.0",
+  "status": "not-implemented",
+  "notes": "Pending support. Requires US Core 6.1.0. See PLAN-SCHEMA-REGISTRY-VERSIONING.md §6."
+}

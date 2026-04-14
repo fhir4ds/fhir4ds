@@ -1,0 +1,1247 @@
+[
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/fhirpath",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"3506aeb\\\" @CMakeFiles/fhirpath_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_loadable_extension.dir/src/fhirpath_extension.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath_extension.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath_extension.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/fhirpath",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"3506aeb\\\" @CMakeFiles/fhirpath_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_loadable_extension.dir/src/fhirpath/lexer.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath/lexer.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath/lexer.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/fhirpath",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"3506aeb\\\" @CMakeFiles/fhirpath_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_loadable_extension.dir/src/fhirpath/parser.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath/parser.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath/parser.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/fhirpath",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"3506aeb\\\" @CMakeFiles/fhirpath_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_loadable_extension.dir/src/fhirpath/evaluator.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath/evaluator.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath/evaluator.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/fhirpath",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"3506aeb\\\" @CMakeFiles/fhirpath_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_extension.dir/src/fhirpath_extension.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath_extension.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath_extension.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/fhirpath",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"3506aeb\\\" @CMakeFiles/fhirpath_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_extension.dir/src/fhirpath/lexer.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath/lexer.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath/lexer.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/fhirpath",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"3506aeb\\\" @CMakeFiles/fhirpath_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_extension.dir/src/fhirpath/parser.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath/parser.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath/parser.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/fhirpath",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"3506aeb\\\" @CMakeFiles/fhirpath_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_extension.dir/src/fhirpath/evaluator.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath/evaluator.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/src/fhirpath/evaluator.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/core_functions_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/core_functions_loadable_extension.dir/core_functions_extension.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/core_functions/core_functions_extension.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/core_functions/core_functions_extension.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/core_functions_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/core_functions_loadable_extension.dir/function_list.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/core_functions/function_list.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/core_functions/function_list.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/core_functions_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/core_functions_loadable_extension.dir/lambda_functions.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/core_functions/lambda_functions.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/core_functions/lambda_functions.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/core_functions_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/core_functions_extension.dir/core_functions_extension.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/core_functions/core_functions_extension.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/core_functions/core_functions_extension.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/core_functions_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/core_functions_extension.dir/function_list.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/core_functions/function_list.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/core_functions/function_list.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/core_functions_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/core_functions_extension.dir/lambda_functions.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/core_functions/lambda_functions.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/core_functions/lambda_functions.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/algebraic",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_algebraic.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_algebraic.dir/ub_duckdb_core_functions_algebraic.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/algebraic/ub_duckdb_core_functions_algebraic.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/algebraic/ub_duckdb_core_functions_algebraic.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/distributive",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_distributive.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_distributive.dir/ub_duckdb_core_functions_distributive.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/distributive/ub_duckdb_core_functions_distributive.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/distributive/ub_duckdb_core_functions_distributive.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/holistic",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_holistic.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_holistic.dir/ub_duckdb_core_functions_holistic.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/holistic/ub_duckdb_core_functions_holistic.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/holistic/ub_duckdb_core_functions_holistic.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/nested",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_nested.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_nested.dir/ub_duckdb_core_functions_nested.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/nested/ub_duckdb_core_functions_nested.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/nested/ub_duckdb_core_functions_nested.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/regression",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_regression.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_regression.dir/ub_duckdb_core_functions_regression.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/regression/ub_duckdb_core_functions_regression.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/aggregate/regression/ub_duckdb_core_functions_regression.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/array",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_array.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_array.dir/ub_duckdb_core_functions_array.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/array/ub_duckdb_core_functions_array.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/array/ub_duckdb_core_functions_array.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/bit",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_bit.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_bit.dir/ub_duckdb_core_functions_bit.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/bit/ub_duckdb_core_functions_bit.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/bit/ub_duckdb_core_functions_bit.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/blob",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_blob.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_blob.dir/ub_duckdb_core_functions_blob.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/blob/ub_duckdb_core_functions_blob.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/blob/ub_duckdb_core_functions_blob.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/date",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_date.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_date.dir/ub_duckdb_core_functions_date.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/date/ub_duckdb_core_functions_date.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/date/ub_duckdb_core_functions_date.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/debug",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_debug.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_debug.dir/ub_duckdb_core_functions_debug.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/debug/ub_duckdb_core_functions_debug.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/debug/ub_duckdb_core_functions_debug.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/enum",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_enum.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_enum.dir/ub_duckdb_core_functions_enum.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/enum/ub_duckdb_core_functions_enum.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/enum/ub_duckdb_core_functions_enum.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/generic",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_generic.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_generic.dir/ub_duckdb_core_functions_generic.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/generic/ub_duckdb_core_functions_generic.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/generic/ub_duckdb_core_functions_generic.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/list",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_list.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_list.dir/ub_duckdb_core_functions_list.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/list/ub_duckdb_core_functions_list.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/list/ub_duckdb_core_functions_list.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/map",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_map.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_map.dir/ub_duckdb_core_functions_map.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/map/ub_duckdb_core_functions_map.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/map/ub_duckdb_core_functions_map.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/math",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_math.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_math.dir/ub_duckdb_core_functions_math.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/math/ub_duckdb_core_functions_math.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/math/ub_duckdb_core_functions_math.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/operators",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_operators.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_operators.dir/ub_duckdb_core_functions_operators.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/operators/ub_duckdb_core_functions_operators.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/operators/ub_duckdb_core_functions_operators.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/random",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_random.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_random.dir/ub_duckdb_core_functions_random.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/random/ub_duckdb_core_functions_random.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/random/ub_duckdb_core_functions_random.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/string",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_string.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_string.dir/ub_duckdb_core_functions_string.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/string/ub_duckdb_core_functions_string.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/string/ub_duckdb_core_functions_string.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/struct",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_struct.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_struct.dir/ub_duckdb_core_functions_struct.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/struct/ub_duckdb_core_functions_struct.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/struct/ub_duckdb_core_functions_struct.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/union",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CORE_FUNCTIONS=\\\"v1.5.1\\\" @CMakeFiles/duckdb_core_functions_union.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_core_functions_union.dir/ub_duckdb_core_functions_union.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/union/ub_duckdb_core_functions_union.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/core_functions/scalar/union/ub_duckdb_core_functions_union.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/column_reader.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/column_reader.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/column_reader.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/column_writer.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/column_writer.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/column_writer.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/parquet_crypto.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_crypto.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_crypto.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/parquet_extension.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_extension.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_extension.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/parquet_file_metadata_cache.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_file_metadata_cache.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_file_metadata_cache.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/parquet_float16.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_float16.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_float16.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/parquet_multi_file_info.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_multi_file_info.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_multi_file_info.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/parquet_metadata.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_metadata.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_metadata.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/parquet_reader.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_reader.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_reader.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/parquet_field_id.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_field_id.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_field_id.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/parquet_statistics.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_statistics.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_statistics.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/parquet_timestamp.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_timestamp.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_timestamp.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/parquet_writer.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_writer.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_writer.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/parquet_shredding.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_shredding.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_shredding.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/parquet_column_schema.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_column_schema.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_column_schema.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/parquet_geometry.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_geometry.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_geometry.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/serialize_parquet.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/serialize_parquet.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/serialize_parquet.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/zstd_file_system.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/zstd_file_system.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/zstd_file_system.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/parquet/parquet_types.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/parquet/parquet_types.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/parquet/parquet_types.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/thrift/thrift/protocol/TProtocol.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/thrift/thrift/protocol/TProtocol.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/thrift/thrift/protocol/TProtocol.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/thrift/thrift/transport/TTransportException.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/thrift/thrift/transport/TTransportException.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/thrift/thrift/transport/TTransportException.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/thrift/thrift/transport/TBufferTransports.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/thrift/thrift/transport/TBufferTransports.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/thrift/thrift/transport/TBufferTransports.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/snappy/snappy.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/snappy/snappy.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/snappy/snappy.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/snappy/snappy-sinksource.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/snappy/snappy-sinksource.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/snappy/snappy-sinksource.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/lz4/lz4.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/lz4/lz4.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/lz4/lz4.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/dictionary_hash.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/dictionary_hash.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/dictionary_hash.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/backward_references_hq.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/backward_references_hq.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/backward_references_hq.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/histogram.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/histogram.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/histogram.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/memory.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/memory.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/memory.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/entropy_encode.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/entropy_encode.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/entropy_encode.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/compound_dictionary.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/compound_dictionary.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/compound_dictionary.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/compress_fragment_two_pass.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/compress_fragment_two_pass.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/compress_fragment_two_pass.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/block_splitter.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/block_splitter.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/block_splitter.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/command.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/command.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/command.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/encode.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/encode.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/encode.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/encoder_dict.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/encoder_dict.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/encoder_dict.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/cluster.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/cluster.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/cluster.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/backward_references.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/backward_references.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/backward_references.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/utf8_util.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/utf8_util.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/utf8_util.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/compress_fragment.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/compress_fragment.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/compress_fragment.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/fast_log.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/fast_log.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/fast_log.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/brotli_bit_stream.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/brotli_bit_stream.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/brotli_bit_stream.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/bit_cost.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/bit_cost.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/bit_cost.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/static_dict.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/static_dict.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/static_dict.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/literal_cost.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/literal_cost.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/literal_cost.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/enc/metablock.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/metablock.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/metablock.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/common/dictionary.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/dictionary.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/dictionary.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/common/constants.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/constants.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/constants.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/common/transform.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/transform.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/transform.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/common/platform.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/platform.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/platform.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/common/shared_dictionary.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/shared_dictionary.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/shared_dictionary.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/common/context.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/context.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/context.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/dec/state.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/state.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/state.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/dec/decode.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/decode.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/decode.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/dec/huffman.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/huffman.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/huffman.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_loadable_extension.dir/__/__/third_party/brotli/dec/bit_reader.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/bit_reader.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/bit_reader.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/column_reader.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/column_reader.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/column_reader.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/column_writer.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/column_writer.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/column_writer.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/parquet_crypto.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_crypto.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_crypto.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/parquet_extension.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_extension.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_extension.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/parquet_file_metadata_cache.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_file_metadata_cache.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_file_metadata_cache.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/parquet_float16.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_float16.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_float16.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/parquet_multi_file_info.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_multi_file_info.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_multi_file_info.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/parquet_metadata.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_metadata.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_metadata.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/parquet_reader.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_reader.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_reader.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/parquet_field_id.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_field_id.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_field_id.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/parquet_statistics.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_statistics.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_statistics.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/parquet_timestamp.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_timestamp.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_timestamp.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/parquet_writer.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_writer.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_writer.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/parquet_shredding.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_shredding.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_shredding.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/parquet_column_schema.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_column_schema.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_column_schema.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/parquet_geometry.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_geometry.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/parquet_geometry.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/serialize_parquet.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/serialize_parquet.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/serialize_parquet.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/zstd_file_system.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/zstd_file_system.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/extension/parquet/zstd_file_system.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/parquet/parquet_types.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/parquet/parquet_types.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/parquet/parquet_types.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/thrift/thrift/protocol/TProtocol.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/thrift/thrift/protocol/TProtocol.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/thrift/thrift/protocol/TProtocol.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/thrift/thrift/transport/TTransportException.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/thrift/thrift/transport/TTransportException.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/thrift/thrift/transport/TTransportException.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/thrift/thrift/transport/TBufferTransports.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/thrift/thrift/transport/TBufferTransports.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/thrift/thrift/transport/TBufferTransports.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/snappy/snappy.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/snappy/snappy.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/snappy/snappy.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/snappy/snappy-sinksource.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/snappy/snappy-sinksource.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/snappy/snappy-sinksource.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/lz4/lz4.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/lz4/lz4.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/lz4/lz4.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/dictionary_hash.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/dictionary_hash.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/dictionary_hash.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/backward_references_hq.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/backward_references_hq.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/backward_references_hq.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/histogram.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/histogram.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/histogram.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/memory.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/memory.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/memory.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/entropy_encode.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/entropy_encode.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/entropy_encode.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/compound_dictionary.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/compound_dictionary.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/compound_dictionary.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/compress_fragment_two_pass.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/compress_fragment_two_pass.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/compress_fragment_two_pass.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/block_splitter.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/block_splitter.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/block_splitter.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/command.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/command.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/command.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/encode.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/encode.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/encode.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/encoder_dict.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/encoder_dict.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/encoder_dict.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/cluster.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/cluster.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/cluster.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/backward_references.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/backward_references.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/backward_references.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/utf8_util.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/utf8_util.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/utf8_util.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/compress_fragment.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/compress_fragment.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/compress_fragment.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/fast_log.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/fast_log.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/fast_log.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/brotli_bit_stream.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/brotli_bit_stream.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/brotli_bit_stream.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/bit_cost.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/bit_cost.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/bit_cost.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/static_dict.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/static_dict.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/static_dict.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/literal_cost.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/literal_cost.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/literal_cost.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/enc/metablock.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/metablock.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/enc/metablock.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/common/dictionary.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/dictionary.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/dictionary.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/common/constants.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/constants.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/constants.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/common/transform.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/transform.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/transform.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/common/platform.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/platform.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/platform.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/common/shared_dictionary.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/shared_dictionary.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/shared_dictionary.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/common/context.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/context.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/common/context.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/dec/state.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/state.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/state.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/dec/decode.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/decode.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/decode.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/dec/huffman.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/huffman.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/huffman.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/parquet_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/parquet_extension.dir/__/__/third_party/brotli/dec/bit_reader.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/bit_reader.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/brotli/dec/bit_reader.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/decoder",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/duckdb_parquet_decoders.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_parquet_decoders.dir/ub_duckdb_parquet_decoders.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/decoder/ub_duckdb_parquet_decoders.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/decoder/ub_duckdb_parquet_decoders.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/reader",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/duckdb_parquet_readers.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_parquet_readers.dir/ub_duckdb_parquet_readers.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/reader/ub_duckdb_parquet_readers.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/reader/ub_duckdb_parquet_readers.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/reader/variant",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/duckdb_parquet_reader_variant.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_parquet_reader_variant.dir/ub_duckdb_parquet_reader_variant.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/reader/variant/ub_duckdb_parquet_reader_variant.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/reader/variant/ub_duckdb_parquet_reader_variant.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/writer",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/duckdb_parquet_writers.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_parquet_writers.dir/ub_duckdb_parquet_writers.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/writer/ub_duckdb_parquet_writers.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/writer/ub_duckdb_parquet_writers.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/writer/variant",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_PARQUET=\\\"v1.5.1\\\" @CMakeFiles/duckdb_parquet_writer_variant.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_parquet_writer_variant.dir/ub_duckdb_parquet_writer_variant.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/writer/variant/ub_duckdb_parquet_writer_variant.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/extension/parquet/writer/variant/ub_duckdb_parquet_writer_variant.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/fastpforlib",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_fastpforlib.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_fastpforlib.dir/bitpacking.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/fastpforlib/bitpacking.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/fastpforlib/bitpacking.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/fmt",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_fmt.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_fmt.dir/format.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/fmt/format.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/fmt/format.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/fsst",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_fsst.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -w -std=c++11 -o CMakeFiles/duckdb_fsst.dir/libfsst.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/fsst/libfsst.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/fsst/libfsst.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/hyperloglog",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_hyperloglog.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_hyperloglog.dir/hyperloglog.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/hyperloglog/hyperloglog.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/hyperloglog/hyperloglog.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/hyperloglog",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_hyperloglog.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_hyperloglog.dir/sds.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/hyperloglog/sds.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/hyperloglog/sds.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/libpg_query",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_pg_query.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -w -std=c++11 -o CMakeFiles/duckdb_pg_query.dir/postgres_parser.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/postgres_parser.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/postgres_parser.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/libpg_query",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_pg_query.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -w -std=c++11 -o CMakeFiles/duckdb_pg_query.dir/pg_functions.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/pg_functions.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/pg_functions.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/libpg_query",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_pg_query.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -w -std=c++11 -o CMakeFiles/duckdb_pg_query.dir/src_backend_parser_parser.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_backend_parser_parser.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_backend_parser_parser.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/libpg_query",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_pg_query.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -w -std=c++11 -o CMakeFiles/duckdb_pg_query.dir/src_backend_parser_gram.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_backend_parser_gram.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_backend_parser_gram.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/libpg_query",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_pg_query.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -w -std=c++11 -o CMakeFiles/duckdb_pg_query.dir/src_backend_nodes_list.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_backend_nodes_list.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_backend_nodes_list.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/libpg_query",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_pg_query.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -w -std=c++11 -o CMakeFiles/duckdb_pg_query.dir/src_backend_parser_scansup.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_backend_parser_scansup.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_backend_parser_scansup.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/libpg_query",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_pg_query.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -w -std=c++11 -o CMakeFiles/duckdb_pg_query.dir/src_backend_nodes_makefuncs.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_backend_nodes_makefuncs.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_backend_nodes_makefuncs.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/libpg_query",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_pg_query.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -w -std=c++11 -o CMakeFiles/duckdb_pg_query.dir/src_backend_nodes_value.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_backend_nodes_value.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_backend_nodes_value.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/libpg_query",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_pg_query.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -w -std=c++11 -o CMakeFiles/duckdb_pg_query.dir/src_backend_parser_scan.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_backend_parser_scan.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_backend_parser_scan.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/libpg_query",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_pg_query.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -w -std=c++11 -o CMakeFiles/duckdb_pg_query.dir/src_common_keywords.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_common_keywords.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/libpg_query/src_common_keywords.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/mbedtls_wrapper.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/mbedtls_wrapper.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/mbedtls_wrapper.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/aes.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/aes.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/aes.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/asn1parse.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/asn1parse.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/asn1parse.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/asn1write.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/asn1write.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/asn1write.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/base64.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/base64.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/base64.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/bignum.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/bignum.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/bignum.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/bignum_core.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/bignum_core.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/bignum_core.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/cipher.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/cipher.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/cipher.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/cipher_wrap.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/cipher_wrap.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/cipher_wrap.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/constant_time.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/constant_time.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/constant_time.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/gcm.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/gcm.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/gcm.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/md.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/md.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/md.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/oid.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/oid.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/oid.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/pem.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/pem.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/pem.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/pk.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/pk.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/pk.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/pk_wrap.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/pk_wrap.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/pk_wrap.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/pkparse.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/pkparse.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/pkparse.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/platform.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/platform.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/platform.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/platform_util.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/platform_util.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/platform_util.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/rsa.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/rsa.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/rsa.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/rsa_alt_helpers.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/rsa_alt_helpers.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/rsa_alt_helpers.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/sha1.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/sha1.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/sha1.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/mbedtls",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_mbedtls.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -o CMakeFiles/duckdb_mbedtls.dir/library/sha256.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/sha256.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/mbedtls/library/sha256.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/miniz",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_miniz.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_miniz.dir/miniz.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/miniz/miniz.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/miniz/miniz.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/bitmap256.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/bitmap256.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/bitmap256.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/compile.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/compile.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/compile.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/bitstate.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/bitstate.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/bitstate.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/dfa.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/dfa.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/dfa.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/filtered_re2.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/filtered_re2.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/filtered_re2.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/mimics_pcre.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/mimics_pcre.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/mimics_pcre.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/nfa.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/nfa.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/nfa.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/onepass.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/onepass.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/onepass.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/parse.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/parse.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/parse.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/perl_groups.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/perl_groups.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/perl_groups.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/prefilter.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/prefilter.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/prefilter.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/prefilter_tree.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/prefilter_tree.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/prefilter_tree.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/prog.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/prog.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/prog.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/re2.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/re2.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/re2.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/regexp.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/regexp.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/regexp.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/set.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/set.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/set.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/simplify.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/simplify.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/simplify.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/stringpiece.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/stringpiece.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/stringpiece.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/tostring.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/tostring.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/tostring.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/unicode_casefold.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/unicode_casefold.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/unicode_casefold.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/re2/unicode_groups.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/unicode_groups.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/re2/unicode_groups.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/util/rune.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/util/rune.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/util/rune.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/re2",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DRE2_ON_VALGRIND @CMakeFiles/duckdb_re2.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -fvisibility=hidden -std=c++11 -w -std=c++11 -o CMakeFiles/duckdb_re2.dir/util/strutil.cc.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/util/strutil.cc",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/re2/util/strutil.cc"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/skiplist",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_skiplistlib.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_skiplistlib.dir/SkipList.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/skiplist/SkipList.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/skiplist/SkipList.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/utf8proc",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_utf8proc.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_utf8proc.dir/utf8proc.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/utf8proc/utf8proc.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/utf8proc/utf8proc.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/utf8proc",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_utf8proc.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/duckdb_utf8proc.dir/utf8proc_wrapper.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/utf8proc/utf8proc_wrapper.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/utf8proc/utf8proc_wrapper.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/yyjson",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_yyjson.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_yyjson.dir/yyjson.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/yyjson/yyjson.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/yyjson/yyjson.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/compress/zstd_compress_superblock.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_compress_superblock.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_compress_superblock.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/compress/zstdmt_compress.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstdmt_compress.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstdmt_compress.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/compress/zstd_double_fast.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_double_fast.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_double_fast.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/compress/zstd_fast.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_fast.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_fast.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/compress/zstd_compress_sequences.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_compress_sequences.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_compress_sequences.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/compress/zstd_ldm.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_ldm.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_ldm.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/compress/hist.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/hist.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/hist.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/compress/zstd_compress.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_compress.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_compress.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/compress/zstd_lazy.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_lazy.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_lazy.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/compress/zstd_compress_literals.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_compress_literals.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_compress_literals.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/compress/huf_compress.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/huf_compress.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/huf_compress.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/compress/zstd_opt.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_opt.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/zstd_opt.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/compress/fse_compress.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/fse_compress.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/compress/fse_compress.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/decompress/zstd_ddict.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/decompress/zstd_ddict.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/decompress/zstd_ddict.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/decompress/huf_decompress.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/decompress/huf_decompress.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/decompress/huf_decompress.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/decompress/zstd_decompress.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/decompress/zstd_decompress.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/decompress/zstd_decompress.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/decompress/zstd_decompress_block.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/decompress/zstd_decompress_block.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/decompress/zstd_decompress_block.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/common/entropy_common.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/entropy_common.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/entropy_common.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/common/fse_decompress.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/fse_decompress.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/fse_decompress.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/common/debug.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/debug.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/debug.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/common/xxhash.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/xxhash.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/xxhash.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/common/pool.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/pool.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/pool.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/common/threading.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/threading.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/threading.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/common/zstd_common.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/zstd_common.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/zstd_common.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/common/error_private.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/error_private.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/common/error_private.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/dict/cover.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/dict/cover.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/dict/cover.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/dict/divsufsort.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/dict/divsufsort.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/dict/divsufsort.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/dict/fastcover.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/dict/fastcover.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/dict/fastcover.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/dict/zdict.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/dict/zdict.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/dict/zdict.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/deprecated/zbuff_common.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/deprecated/zbuff_common.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/deprecated/zbuff_common.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/deprecated/zbuff_decompress.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/deprecated/zbuff_decompress.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/deprecated/zbuff_decompress.cpp"
+},
+{
+  "directory": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/build/wasm_eh/third_party/zstd",
+  "command": "/mnt/d/duckdb-fhirpath/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh @CMakeFiles/duckdb_zstd.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -w -std=c++11 -o CMakeFiles/duckdb_zstd.dir/deprecated/zbuff_compress.cpp.o -c /mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/deprecated/zbuff_compress.cpp",
+  "file": "/mnt/d/duckdb-fhirpath/duckdb-fhirpath-cpp/duckdb/third_party/zstd/deprecated/zbuff_compress.cpp"
+}
+]

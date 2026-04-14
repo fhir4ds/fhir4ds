@@ -1,0 +1,1022 @@
+# name: test/sql/cql.test
+# description: test cql extension
+# group: [sql]
+
+# Before we load the extension, this will fail
+statement error
+SELECT AgeInYears('{"birthDate":"2000-01-01"}');
+----
+Catalog Error
+
+# Require statement will ensure this test is run with this extension loaded
+require cql
+
+# =====================================================================
+# Age UDFs
+# =====================================================================
+
+# Test AgeInYears
+query I
+SELECT AgeInYears('{"birthDate":"2000-01-15"}') > 0;
+----
+true
+
+# Test AgeInYearsAt
+query I
+SELECT AgeInYearsAt('{"birthDate":"2000-06-15"}', '2025-06-14');
+----
+24
+
+query I
+SELECT AgeInYearsAt('{"birthDate":"2000-06-15"}', '2025-06-15');
+----
+25
+
+# Test AgeInMonthsAt
+query I
+SELECT AgeInMonthsAt('{"birthDate":"2000-01-15"}', '2000-07-15');
+----
+6
+
+# Test AgeInDaysAt
+query I
+SELECT AgeInDaysAt('{"birthDate":"2000-01-01"}', '2000-01-31');
+----
+30
+
+# Test NULL handling for age
+query I
+SELECT AgeInYears(NULL);
+----
+NULL
+
+# Missing birthDate
+query I
+SELECT AgeInYears('{"resourceType":"Patient"}');
+----
+NULL
+
+# =====================================================================
+# Interval operations
+# =====================================================================
+
+# Test intervalContains
+query I
+SELECT intervalContains('{"low":"2024-01-01","high":"2024-12-31","lowClosed":true,"highClosed":true}', '2024-06-15');
+----
+true
+
+query I
+SELECT intervalContains('{"low":"2024-01-01","high":"2024-12-31","lowClosed":true,"highClosed":true}', '2025-01-01');
+----
+false
+
+# Test intervalStart/End
+query I
+SELECT intervalStart('{"low":"2024-01-01","high":"2024-12-31"}');
+----
+2024-01-01
+
+query I
+SELECT intervalEnd('{"low":"2024-01-01","high":"2024-12-31"}');
+----
+2024-12-31
+
+# Test FHIR Period format
+query I
+SELECT intervalStart('{"start":"2024-03-01","end":"2024-03-31"}');
+----
+2024-03-01
+
+# Test intervalWidth
+query I
+SELECT intervalWidth('{"low":"2024-01-01","high":"2024-01-31"}');
+----
+30
+
+# Test intervalOverlaps
+query I
+SELECT intervalOverlaps('{"low":"2024-01-01","high":"2024-06-30"}', '{"low":"2024-03-01","high":"2024-12-31"}');
+----
+true
+
+query I
+SELECT intervalOverlaps('{"low":"2024-01-01","high":"2024-03-31"}', '{"low":"2024-06-01","high":"2024-12-31"}');
+----
+false
+
+# Test intervalBefore/After
+query I
+SELECT intervalBefore('{"low":"2024-01-01","high":"2024-03-31"}', '{"low":"2024-06-01","high":"2024-12-31"}');
+----
+true
+
+query I
+SELECT intervalAfter('{"low":"2024-06-01","high":"2024-12-31"}', '{"low":"2024-01-01","high":"2024-03-31"}');
+----
+true
+
+# Test intervalIncludes
+query I
+SELECT intervalIncludes('{"low":"2024-01-01","high":"2024-12-31"}', '{"low":"2024-03-01","high":"2024-06-30"}');
+----
+true
+
+# Test intervalIncludedIn
+query I
+SELECT intervalIncludedIn('{"low":"2024-03-01","high":"2024-06-30"}', '{"low":"2024-01-01","high":"2024-12-31"}');
+----
+true
+
+# Test intervalFromBounds
+query I
+SELECT intervalStart(intervalFromBounds('2024-01-01', '2024-12-31', true, true));
+----
+2024-01-01
+
+# Test NULL handling for intervals
+query I
+SELECT intervalContains(NULL, '2024-01-01');
+----
+NULL
+
+# =====================================================================
+# Datetime difference UDFs
+# =====================================================================
+
+# Test differenceInYears
+query I
+SELECT differenceInYears('2000-01-01', '2025-01-01');
+----
+25
+
+# Test differenceInDays
+query I
+SELECT differenceInDays('2024-01-01', '2024-01-31');
+----
+30
+
+# Test differenceInMonths
+query I
+SELECT differenceInMonths('2024-01-15', '2024-07-15');
+----
+6
+
+# Test weeksBetween
+query I
+SELECT weeksBetween('2024-01-01', '2024-01-15');
+----
+2
+
+# Test dateTimeNow returns a string
+query I
+SELECT length(dateTimeNow()) > 0;
+----
+true
+
+# Test dateTimeToday returns a date
+query I
+SELECT length(dateTimeToday()) >= 10;
+----
+true
+
+# Test dateTimeSameAs
+query I
+SELECT dateTimeSameAs('2024-01-01', '2024-01-01', 'day');
+----
+true
+
+query I
+SELECT dateTimeSameAs('2024-01-01', '2024-01-02', 'day');
+----
+false
+
+query I
+SELECT dateTimeSameAs('2024-01-01', '2024-01-31', 'month');
+----
+true
+
+# Test dateTimeSameOrBefore
+query I
+SELECT dateTimeSameOrBefore('2024-01-01', '2024-01-02', 'day');
+----
+true
+
+query I
+SELECT dateTimeSameOrBefore('2024-01-02', '2024-01-01', 'day');
+----
+false
+
+# Test dateTimeSameOrAfter
+query I
+SELECT dateTimeSameOrAfter('2024-01-02', '2024-01-01', 'day');
+----
+true
+
+# =====================================================================
+# Clinical UDFs — Latest, Earliest, claim_principal_*
+# =====================================================================
+
+# Test Latest
+query I
+SELECT Latest(['{"effectiveDateTime":"2024-01-01"}', '{"effectiveDateTime":"2024-06-15"}', '{"effectiveDateTime":"2024-03-01"}'], 'effectiveDateTime') LIKE '%2024-06-15%';
+----
+true
+
+# Test Earliest
+query I
+SELECT Earliest(['{"effectiveDateTime":"2024-06-15"}', '{"effectiveDateTime":"2024-01-01"}', '{"effectiveDateTime":"2024-03-01"}'], 'effectiveDateTime') LIKE '%2024-01-01%';
+----
+true
+
+# Test Latest with NULL
+query I
+SELECT Latest(NULL, 'effectiveDateTime');
+----
+NULL
+
+# Test Earliest with empty list
+query I
+SELECT Earliest([], 'effectiveDateTime');
+----
+NULL
+
+# Test claim_principal_diagnosis (encounter-referenced item with principal type)
+query I
+SELECT claim_principal_diagnosis('{"item":[{"encounter":[{"reference":"Encounter/enc1"}],"diagnosisSequence":[1]}],"diagnosis":[{"sequence":1,"type":[{"coding":[{"system":"http://terminology.hl7.org/CodeSystem/ex-diagnosistype","code":"principal"}]}],"diagnosisCodeableConcept":{"coding":[{"system":"http://hl7.org/fhir/sid/icd-10","code":"E11"}]}}]}', 'enc1') LIKE '%E11%';
+----
+true
+
+# Test claim_principal_procedure (encounter-referenced item with primary type)
+query I
+SELECT claim_principal_procedure('{"item":[{"encounter":[{"reference":"Encounter/enc1"}],"procedureSequence":[1]}],"procedure":[{"sequence":1,"type":[{"coding":[{"system":"http://terminology.hl7.org/CodeSystem/ex-procedure-type","code":"primary"}]}],"procedureCodeableConcept":{"coding":[{"code":"12345"}]}}]}', 'enc1') LIKE '%12345%';
+----
+true
+
+# Test claim_principal_diagnosis with no matching encounter
+query I
+SELECT claim_principal_diagnosis('{"item":[{"encounter":[{"reference":"Encounter/enc2"}],"diagnosisSequence":[1]}],"diagnosis":[{"sequence":1,"type":[{"coding":[{"code":"principal"}]}],"diagnosisCodeableConcept":{"coding":[{"code":"E11"}]}}]}', 'enc1');
+----
+NULL
+
+# =====================================================================
+# Aggregate UDFs — statisticalMedian, Mode, StdDev, Variance
+# =====================================================================
+
+# Test statisticalMedian
+query I
+SELECT statisticalMedian([1.0, 2.0, 3.0, 4.0, 5.0]);
+----
+3.0
+
+query I
+SELECT statisticalMedian([1.0, 2.0, 3.0, 4.0]);
+----
+2.5
+
+# Test statisticalMode
+query I
+SELECT statisticalMode([1.0, 2.0, 2.0, 3.0]);
+----
+2.0
+
+# Test statisticalVariance
+query I
+SELECT statisticalVariance([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]) > 0;
+----
+true
+
+# Test statisticalStdDev
+query I
+SELECT statisticalStdDev([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]) > 0;
+----
+true
+
+# Test empty list returns NULL
+query I
+SELECT statisticalMedian([]);
+----
+NULL
+
+# Test single value
+query I
+SELECT statisticalMedian([42.0]);
+----
+42.0
+
+# Variance with single value returns NULL (needs n>=2)
+query I
+SELECT statisticalVariance([42.0]);
+----
+NULL
+
+# =====================================================================
+# Valueset UDFs — extractCodes, extractFirst*, resolveProfileUrl
+# =====================================================================
+
+# Test extractFirstCode
+query I
+SELECT extractFirstCode('{"code":{"coding":[{"system":"http://loinc.org","code":"8480-6"}]}}', 'code');
+----
+http://loinc.org|8480-6
+
+# Test extractFirstCodeSystem
+query I
+SELECT extractFirstCodeSystem('{"code":{"coding":[{"system":"http://loinc.org","code":"8480-6"}]}}', 'code');
+----
+http://loinc.org
+
+# Test extractFirstCodeValue
+query I
+SELECT extractFirstCodeValue('{"code":{"coding":[{"system":"http://loinc.org","code":"8480-6"}]}}', 'code');
+----
+8480-6
+
+# Test with no codes
+query I
+SELECT extractFirstCode('{"resourceType":"Patient"}', 'code');
+----
+NULL
+
+# Test resolveProfileUrl (1 arg: derives resource type from profile URL)
+query I
+SELECT resolveProfileUrl('http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient');
+----
+Patient
+
+query I
+SELECT resolveProfileUrl('http://hl7.org/fhir/us/core/StructureDefinition/us-core-blood-pressure');
+----
+Observation
+
+query I
+SELECT resolveProfileUrl('http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested');
+----
+ServiceRequest
+
+query I
+SELECT resolveProfileUrl('http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested|4.1.1');
+----
+MedicationRequest
+
+# Unknown profile URL returns NULL
+query I
+SELECT resolveProfileUrl('http://example.org/unknown-profile');
+----
+NULL
+
+# =====================================================================
+# Missing datetime UDFs
+# =====================================================================
+
+# Test dateComponent
+query I
+SELECT dateComponent('2024-06-15', 'year');
+----
+2024
+
+query I
+SELECT dateComponent('2024-06-15', 'month');
+----
+6
+
+query I
+SELECT dateComponent('2024-06-15', 'day');
+----
+15
+
+# Test dateTimeTimeOfDay returns a time string
+query I
+SELECT length(dateTimeTimeOfDay()) > 0;
+----
+true
+
+# Test dateAddQuantity
+query I
+SELECT dateAddQuantity('2024-01-01', '{"value":7,"unit":"d"}');
+----
+2024-01-08
+
+# Test dateSubtractQuantity
+query I
+SELECT dateSubtractQuantity('2024-01-08', '{"value":7,"unit":"d"}');
+----
+2024-01-01
+
+# =====================================================================
+# collapse_intervals
+# =====================================================================
+
+# Test merge of overlapping intervals
+query I
+SELECT collapse_intervals('[{"low":"2024-01-01","high":"2024-06-30","lowClosed":true,"highClosed":true},{"low":"2024-03-01","high":"2024-12-31","lowClosed":true,"highClosed":true}]') LIKE '%2024-01-01%';
+----
+true
+
+# Test non-overlapping intervals stay separate
+query I
+SELECT collapse_intervals('[{"low":"2024-01-01","high":"2024-03-31","lowClosed":true,"highClosed":true},{"low":"2024-06-01","high":"2024-12-31","lowClosed":true,"highClosed":true}]') LIKE '%2024-03-31%';
+----
+true
+
+# Test NULL handling
+query I
+SELECT collapse_intervals(NULL);
+----
+NULL
+
+# =====================================================================
+# Ratio UDFs
+# =====================================================================
+
+# ratioNumeratorValue
+query R
+SELECT ratioNumeratorValue('{"numerator": {"value": 5, "unit": "mg"}, "denominator": {"value": 1, "unit": "mL"}}');
+----
+5.0
+
+# ratioDenominatorValue
+query R
+SELECT ratioDenominatorValue('{"numerator": {"value": 5, "unit": "mg"}, "denominator": {"value": 1, "unit": "mL"}}');
+----
+1.0
+
+# ratioValue (5 / 1 = 5.0)
+query R
+SELECT ratioValue('{"numerator": {"value": 5, "unit": "mg"}, "denominator": {"value": 1, "unit": "mL"}}');
+----
+5.0
+
+# ratioValue with non-trivial division
+query R
+SELECT ratioValue('{"numerator": {"value": 10, "unit": "mg"}, "denominator": {"value": 4, "unit": "mL"}}');
+----
+2.5
+
+# ratioValue with zero denominator returns NULL
+query I
+SELECT ratioValue('{"numerator": {"value": 5}, "denominator": {"value": 0}}');
+----
+NULL
+
+# ratioNumeratorUnit
+query I
+SELECT ratioNumeratorUnit('{"numerator": {"value": 5, "unit": "mg"}, "denominator": {"value": 1, "unit": "mL"}}');
+----
+mg
+
+# ratioDenominatorUnit
+query I
+SELECT ratioDenominatorUnit('{"numerator": {"value": 5, "unit": "mg"}, "denominator": {"value": 1, "unit": "mL"}}');
+----
+mL
+
+# ratioNumeratorUnit with "code" instead of "unit"
+query I
+SELECT ratioNumeratorUnit('{"numerator": {"value": 5, "code": "mg"}, "denominator": {"value": 1, "code": "mL"}}');
+----
+mg
+
+# Ratio NULL input
+query I
+SELECT ratioNumeratorValue(NULL);
+----
+NULL
+
+# Ratio invalid JSON
+query I
+SELECT ratioValue('not json');
+----
+NULL
+
+# =====================================================================
+# Quantity UDFs
+# =====================================================================
+
+# quantityValue
+query R
+SELECT quantityValue('{"value": 140, "code": "mm[Hg]", "system": "http://unitsofmeasure.org"}');
+----
+140.0
+
+# quantityUnit
+query I
+SELECT quantityUnit('{"value": 140, "code": "mm[Hg]", "system": "http://unitsofmeasure.org"}');
+----
+mm[Hg]
+
+# quantityUnit with "unit" field instead of "code"
+query I
+SELECT quantityUnit('{"value": 140, "unit": "mmHg"}');
+----
+mmHg
+
+# parseQuantity returns normalized JSON
+query I
+SELECT parseQuantity('{"value": 140, "code": "mm[Hg]"}') LIKE '%140%';
+----
+true
+
+# quantityCompare - greater than
+query I
+SELECT quantityCompare('{"value": 140, "code": "mm[Hg]"}', '{"value": 120, "code": "mm[Hg]"}', '>');
+----
+true
+
+# quantityCompare - less than
+query I
+SELECT quantityCompare('{"value": 100, "code": "mm[Hg]"}', '{"value": 120, "code": "mm[Hg]"}', '<');
+----
+true
+
+# quantityCompare - cross-unit (hours vs minutes)
+query I
+SELECT quantityCompare('{"value": 1, "code": "h"}', '{"value": 30, "code": "min"}', '>');
+----
+true
+
+# quantityCompare - incompatible units returns NULL
+query I
+SELECT quantityCompare('{"value": 1, "code": "kg"}', '{"value": 1, "code": "m"}', '>');
+----
+NULL
+
+# quantityAdd - same units
+query I
+SELECT quantityAdd('{"value": 5, "code": "mg"}', '{"value": 3, "code": "mg"}') LIKE '%8%';
+----
+true
+
+# quantityAdd - cross-unit (g + mg)
+query I
+SELECT quantityAdd('{"value": 1, "code": "g"}', '{"value": 500, "code": "mg"}') LIKE '%1.5%';
+----
+true
+
+# quantitySubtract
+query I
+SELECT quantitySubtract('{"value": 10, "code": "mg"}', '{"value": 3, "code": "mg"}') LIKE '%7%';
+----
+true
+
+# quantityConvert - hours to minutes
+query I
+SELECT quantityConvert('{"value": 2, "code": "h"}', 'min') LIKE '%120%';
+----
+true
+
+# quantityConvert - kg to g
+query I
+SELECT quantityConvert('{"value": 1, "code": "kg"}', 'g') LIKE '%1000%';
+----
+true
+
+# quantity NULL input
+query I
+SELECT quantityValue(NULL);
+----
+NULL
+
+# snake_case alias works
+query R
+SELECT quantity_value('{"value": 42, "code": "mg"}');
+----
+42.0
+
+# =====================================================================
+# List UDFs
+# =====================================================================
+
+# SingletonFrom with exactly 1 element
+query I
+SELECT SingletonFrom(['hello']);
+----
+hello
+
+# SingletonFrom with 0 elements returns NULL
+query I
+SELECT SingletonFrom(CAST([] AS VARCHAR[]));
+----
+NULL
+
+# SingletonFrom with >1 elements returns NULL
+query I
+SELECT SingletonFrom(['a', 'b']);
+----
+NULL
+
+# SingletonFrom with NULL input
+query I
+SELECT SingletonFrom(NULL::VARCHAR[]);
+----
+NULL
+
+# ElementAt - 0-based index
+query I
+SELECT ElementAt(['a', 'b', 'c'], 0);
+----
+a
+
+# ElementAt - second element
+query I
+SELECT ElementAt(['a', 'b', 'c'], 1);
+----
+b
+
+# ElementAt - last element
+query I
+SELECT ElementAt(['a', 'b', 'c'], 2);
+----
+c
+
+# ElementAt - negative index (-1 = last)
+query I
+SELECT ElementAt(['a', 'b', 'c'], -1);
+----
+c
+
+# ElementAt - out of bounds returns NULL
+query I
+SELECT ElementAt(['a', 'b'], 5);
+----
+NULL
+
+# ElementAt - NULL input
+query I
+SELECT ElementAt(NULL::VARCHAR[], 0);
+----
+NULL
+
+# jsonConcat - two scalars
+query I
+SELECT length(jsonConcat('a', 'b'));
+----
+2
+
+# jsonConcat - one NULL
+query I
+SELECT length(jsonConcat('a', NULL));
+----
+1
+
+# jsonConcat - both NULL
+query I
+SELECT jsonConcat(NULL, NULL);
+----
+NULL
+
+# =====================================================================
+# Bug 2: dateAddQuantity calendar-aware year/month arithmetic
+# =====================================================================
+
+# Year add across leap year: 2024 is leap year (366 days)
+query I
+SELECT dateAddQuantity('2024-01-01', '{"value":2,"unit":"a"}');
+----
+2026-01-01
+
+# Subtract years
+query I
+SELECT dateSubtractQuantity('2026-01-01', '{"value":2,"unit":"a"}');
+----
+2024-01-01
+
+# Month add with end-of-month clamping: Jan 31 + 1 month → Feb 28
+query I
+SELECT dateAddQuantity('2023-01-31', '{"value":1,"unit":"mo"}');
+----
+2023-02-28
+
+# Month add in leap year: Jan 31 + 1 month → Feb 29
+query I
+SELECT dateAddQuantity('2024-01-31', '{"value":1,"unit":"mo"}');
+----
+2024-02-29
+
+# Subtract 1 year from Feb 29 in leap year → Feb 28
+query I
+SELECT dateSubtractQuantity('2024-02-29', '{"value":1,"unit":"a"}');
+----
+2023-02-28
+
+# =====================================================================
+# Bug 3: NULL inputs to boolean UDFs return NULL (not false)
+# =====================================================================
+
+query I
+SELECT intervalContains(NULL, '2024-01-01');
+----
+NULL
+
+query I
+SELECT intervalOverlaps(NULL, '{"low":"2024-01-01","high":"2024-12-31","lowClosed":true,"highClosed":true}');
+----
+NULL
+
+query I
+SELECT intervalBefore(NULL, '{"low":"2024-01-01","high":"2024-12-31","lowClosed":true,"highClosed":true}');
+----
+NULL
+
+# =====================================================================
+# Bug 4: overlaps_before - encompassing interval
+# =====================================================================
+
+# A encompasses B entirely → overlaps_before is true (A starts before B)
+query I
+SELECT intervalOverlapsBefore('{"low":"2010-01-01","high":"2030-12-31","lowClosed":true,"highClosed":true}', '{"low":"2026-01-01","high":"2026-01-01","lowClosed":true,"highClosed":true}');
+----
+true
+
+# Same start → not overlaps_before
+query I
+SELECT intervalOverlapsBefore('{"low":"2026-01-01","high":"2026-06-01","lowClosed":true,"highClosed":true}', '{"low":"2026-01-01","high":"2026-01-01","lowClosed":true,"highClosed":true}');
+----
+false
+
+# Normal partial overlap → true
+query I
+SELECT intervalOverlapsBefore('{"low":"2024-01-01","high":"2024-06-01","lowClosed":true,"highClosed":true}', '{"low":"2024-03-01","high":"2024-12-31","lowClosed":true,"highClosed":true}');
+----
+true
+
+# =====================================================================
+# Bug 6: *Between date-difference macros
+# =====================================================================
+
+query I
+SELECT DaysBetween('2024-01-01', '2024-12-31');
+----
+365
+
+query I
+SELECT HoursBetween('2024-01-01T00:00:00', '2024-01-01T06:00:00');
+----
+6
+
+query I
+SELECT MonthsBetween('2024-01-01', '2024-06-01');
+----
+5
+
+query I
+SELECT YearsBetween('2020-01-01', '2024-01-01');
+----
+4
+
+query I
+SELECT MinutesBetween('2024-01-01T00:00:00', '2024-01-01T01:30:00');
+----
+90
+
+query I
+SELECT SecondsBetween('2024-01-01T00:00:00', '2024-01-01T00:01:30');
+----
+90
+
+# Between with NULL inputs → NULL
+query I
+SELECT DaysBetween(NULL, '2024-01-01');
+----
+NULL
+
+# =====================================================================
+# Bug fix: space-separated timestamp must parse time component
+# =====================================================================
+
+query I
+SELECT intervalStart(intervalFromBounds('2026-01-01 00:00:00.000', '2026-12-31 23:59:59.999', true, true));
+----
+2026-01-01T00:00:00
+
+query I
+SELECT intervalEnd(intervalFromBounds('2026-01-01 00:00:00.000', '2026-12-31 23:59:59.999', true, true));
+----
+2026-12-31T23:59:59.999
+
+# Condition onset at 23:59:59 must be inside MP
+query I
+SELECT intervalIncludes(intervalFromBounds('2026-01-01 00:00:00.000', '2026-12-31 23:59:59.999', true, true), '2026-12-31T23:59:59.000Z');
+----
+true
+
+# =====================================================================
+# Bug fix: overlaps with exclusive boundary at equality
+# =====================================================================
+
+# [2026-01-01, 2026-07-01) does NOT overlap [2026-07-01, NULL)
+query I
+SELECT intervalOverlaps(intervalFromBounds('2026-01-01T00:00:00', '2026-07-01T00:00:00', true, false), intervalFromBounds('2026-07-01T00:00:00', NULL, true, true));
+----
+false
+
+# [2026-01-01, 2026-07-01] DOES overlap [2026-07-01, NULL) (closed boundary)
+query I
+SELECT intervalOverlaps(intervalFromBounds('2026-01-01T00:00:00', '2026-07-01T00:00:00', true, true), intervalFromBounds('2026-07-01T00:00:00', NULL, true, true));
+----
+true
+
+# [2026-01-01, 2026-07-01) does NOT overlap [2026-07-01, 2026-12-31]
+query I
+SELECT intervalOverlaps(intervalFromBounds('2026-01-01T00:00:00', '2026-07-01T00:00:00', true, false), intervalFromBounds('2026-07-01T00:00:00', '2026-12-31T00:00:00', true, true));
+----
+false
+
+# =====================================================================
+# Bug fix: intervalIncludes with null-bound periods
+# =====================================================================
+
+# Period with no start → false
+query I
+SELECT intervalIncludes(intervalFromBounds('2026-01-01T00:00:00', '2026-12-31T23:59:59.999', true, true), '{"end":"2026-01-02T03:45:00.000+00:00"}');
+----
+false
+
+# Period with no end → false
+query I
+SELECT intervalIncludes(intervalFromBounds('2026-01-01T00:00:00', '2026-12-31T23:59:59.999', true, true), '{"start":"2026-06-01T00:00:00.000+00:00"}');
+----
+false
+
+# Complete period with both start and end still works
+query I
+SELECT intervalIncludes(intervalFromBounds('2026-01-01T00:00:00', '2026-12-31T23:59:59.999', true, true), '{"start":"2026-06-01T00:00:00.000+00:00","end":"2026-06-30T00:00:00.000+00:00"}');
+----
+true
+
+# Regression: active-condition interval (null high) still overlaps MP
+query I
+SELECT intervalOverlaps(intervalFromBounds('2026-01-01T00:00:00', NULL, true, true), intervalFromBounds('2026-01-01T00:00:00', '2026-12-31T23:59:59', true, true));
+----
+true
+
+# =====================================================================
+# Bug 1: IntervalEnd/IntervalStart sentinel values for null-bound closed intervals
+# =====================================================================
+
+# Bug 1a: intervalEnd of closed null-high interval returns max datetime sentinel
+query I
+SELECT intervalEnd(intervalFromBounds('2026-01-01T00:00:00', CAST(NULL AS VARCHAR), true, true));
+----
+9999-12-31T23:59:59.999+00:00
+
+# Bug 1b: intervalStart of closed null-low interval returns min datetime sentinel
+query I
+SELECT intervalStart(intervalFromBounds(CAST(NULL AS VARCHAR), '2026-12-31T23:59:59', true, true));
+----
+0001-01-01T00:00:00.000+00:00
+
+# Bug 1c: open null-high interval still returns NULL (not sentinel)
+query I
+SELECT intervalEnd(intervalFromBounds('2026-01-01T00:00:00', CAST(NULL AS VARCHAR), true, false));
+----
+NULL
+
+# Bug 1d: both-null interval still returns NULL
+query I
+SELECT intervalEnd(intervalFromBounds(CAST(NULL AS VARCHAR), CAST(NULL AS VARCHAR), true, true));
+----
+NULL
+
+# Bug 1e: active condition (null high) sentinel used in comparison
+query I
+SELECT NOT CAST(intervalEnd(intervalFromBounds('2026-01-01T00:30:00', CAST(NULL AS VARCHAR), true, true)) AS TIMESTAMP) < CAST('2026-01-01' AS DATE);
+----
+true
+
+# Bug 1f: active condition end >= encounter start
+query I
+SELECT CAST(intervalEnd(intervalFromBounds('2026-10-08T05:00:00', CAST(NULL AS VARCHAR), true, true)) AS DATE) >= CAST('2026-10-08' AS DATE);
+----
+true
+
+# Bug 1g: open null-low interval still returns NULL
+query I
+SELECT intervalStart(intervalFromBounds(CAST(NULL AS VARCHAR), '2026-12-31T23:59:59', false, true));
+----
+NULL
+
+# Bug 1h: both-null interval start still returns NULL
+query I
+SELECT intervalStart(intervalFromBounds(CAST(NULL AS VARCHAR), CAST(NULL AS VARCHAR), true, true));
+----
+NULL
+
+# Bug 1i: defined bounds still work normally (no regression)
+query I
+SELECT intervalEnd(intervalFromBounds('2026-01-01T00:00:00', '2026-12-31T23:59:59', true, true));
+----
+2026-12-31T23:59:59
+
+query I
+SELECT intervalStart(intervalFromBounds('2026-01-01T00:00:00', '2026-12-31T23:59:59', true, true));
+----
+2026-01-01T00:00:00
+
+# =====================================================================
+# Bug 2: collapse_intervals handles JSON-string elements
+# =====================================================================
+
+# Bug 2a: collapse_intervals handles JSON-string elements (DuckDB to_json encoding)
+query I
+SELECT collapse_intervals('["{\"low\":\"2026-03-03T14:00:00+00:00\",\"high\":\"2026-12-03T14:00:00+00:00\",\"lowClosed\":true,\"highClosed\":true}"]');
+----
+[{"low":"2026-03-03T14:00:00Z","high":"2026-12-03T14:00:00Z","lowClosed":true,"highClosed":true}]
+
+# Bug 2b: collapse_intervals handles FHIR Period strings (start/end keys inside JSON string)
+query I
+SELECT collapse_intervals('["{\"start\":\"2026-03-03T14:00:00.000+00:00\",\"end\":\"2026-12-03T14:00:00.000+00:00\"}"]');
+----
+[{"low":"2026-03-03T14:00:00Z","high":"2026-12-03T14:00:00Z","lowClosed":true,"highClosed":true}]
+
+# Bug 2c: collapse_intervals handles embedded JSON objects (original behavior preserved)
+query I
+SELECT collapse_intervals('[{"low":"2026-03-03T14:00:00+00:00","high":"2026-12-03T14:00:00+00:00","lowClosed":true,"highClosed":true}]');
+----
+[{"low":"2026-03-03T14:00:00Z","high":"2026-12-03T14:00:00Z","lowClosed":true,"highClosed":true}]
+
+# Bug 2d: collapse_intervals returns non-empty for string elements (was returning [])
+query I
+SELECT length(collapse_intervals('["{\"low\":\"2026-03-03T14:00:00+00:00\",\"high\":\"2026-12-03T14:00:00+00:00\",\"lowClosed\":true,\"highClosed\":true}"]')) > 2;
+----
+true
+
+# Bug 2e: intervalStart of medication start correctly returns date before staging
+query I
+SELECT CAST(intervalStart('{"low":"2026-03-03T14:00:00+00:00","high":"2026-12-03T14:00:00+00:00","lowClosed":true,"highClosed":true}') AS DATE) <= CAST('2026-04-06' AS DATE);
+----
+true
+
+# =====================================================================
+# Bug 3: dateAddQuantity/dateSubtractQuantity sub-day arithmetic
+# =====================================================================
+
+# dateAddQuantity with hours
+query I
+SELECT dateAddQuantity('2026-11-12T15:00:00+00:00', '{"value": 6.0, "unit": "hour", "system": "http://unitsofmeasure.org"}');
+----
+2026-11-12T21:00:00Z
+
+# dateSubtractQuantity with hours
+query I
+SELECT dateSubtractQuantity('2026-11-12T15:00:00+00:00', '{"value": 1.0, "unit": "hour", "system": "http://unitsofmeasure.org"}');
+----
+2026-11-12T14:00:00Z
+
+# dateAddQuantity hour that crosses midnight
+query I
+SELECT dateAddQuantity('2026-11-12T22:00:00+00:00', '{"value": 4.0, "unit": "hour"}');
+----
+2026-11-13T02:00:00Z
+
+# dateSubtractQuantity hour that crosses midnight backward
+query I
+SELECT dateSubtractQuantity('2026-11-12T02:00:00+00:00', '{"value": 4.0, "unit": "hour"}');
+----
+2026-11-11T22:00:00Z
+
+# dateAddQuantity with minutes
+query I
+SELECT dateAddQuantity('2026-11-12T15:00:00+00:00', '{"value": 30.0, "unit": "minute"}');
+----
+2026-11-12T15:30:00Z
+
+# dateAddQuantity with days still works
+query I
+SELECT dateAddQuantity('2026-11-12T15:00:00+00:00', '{"value": 2.0, "unit": "day"}');
+----
+2026-11-14T15:00:00Z
+
+# dateSubtractQuantity with days still works
+query I
+SELECT dateSubtractQuantity('2026-11-14T15:00:00+00:00', '{"value": 2.0, "unit": "day"}');
+----
+2026-11-12T15:00:00Z
+
+# Glucose window: 15:00 - 1h to 15:00 + 6h should contain 14:30
+query I
+SELECT intervalContains(intervalFromBounds(CAST(dateSubtractQuantity('2026-11-12T15:00:00+00:00', '{"value": 1.0, "unit": "hour", "system": "http://unitsofmeasure.org"}') AS VARCHAR), CAST(dateAddQuantity('2026-11-12T15:00:00+00:00', '{"value": 6.0, "unit": "hour", "system": "http://unitsofmeasure.org"}') AS VARCHAR), TRUE, TRUE), '2026-11-12T14:30:00+00:00');
+----
+true
+
+# =====================================================================
+# Bug 4: parse_quantity must preserve "unit" field in output
+# =====================================================================
+
+# parse_quantity should include "unit" in output
+query I
+SELECT parse_quantity('{"value":1.1,"unit":"mg/dL","system":"http://unitsofmeasure.org","code":"mg/dL"}') LIKE '%"unit":"mg/dL"%';
+----
+true
+
+# parse_quantity with only "unit" (no "code") should also have "unit" in output
+query I
+SELECT parse_quantity('{"value":2.5,"unit":"kg"}') LIKE '%"unit":"kg"%';
+----
+true
+
+# parse_quantity with only "code" should synthesize "unit" from "code"
+query I
+SELECT parse_quantity('{"value":3.0,"code":"mg/dL","system":"http://unitsofmeasure.org"}') LIKE '%"unit":"mg/dL"%';
+----
+true

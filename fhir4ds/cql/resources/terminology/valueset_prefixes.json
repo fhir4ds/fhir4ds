@@ -1,0 +1,9 @@
+{
+    "_comment": "Common FHIR ValueSet URL prefixes for resolution, ordered by priority",
+    "prefixes": [
+        "http://cts.nlm.nih.gov/fhir/ValueSet/",
+        "http://hl7.org/fhir/ValueSet/",
+        "http://example.org/fhir/ValueSet/"
+    ],
+    "default_prefix": "http://cts.nlm.nih.gov/fhir/ValueSet/"
+}

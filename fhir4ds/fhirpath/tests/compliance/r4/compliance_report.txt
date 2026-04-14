@@ -1,0 +1,2893 @@
+======================================================================
+FHIRPath Compliance Report
+======================================================================
+Generated: 2026-03-05T22:02:31.607377
+
+Summary
+----------------------------------------
+Total Tests: 935
+Passed:      912
+Failed:      0
+Errors:      23
+Pass Rate:   97.5%
+
+Test Results
+----------------------------------------
+[PASS] comments/testComment1
+       Expression: 2 + 2 // This is a single-line comment + 4
+
+[PASS] comments/testComment2
+       Expression: // This is a multi line comment using // that
+  // should not fail during parsing
+  2+2
+
+[PASS] comments/testComment3
+       Expression: 2 + 2 
+      /*
+This is a multi-line comment
+Any text enclosed within is ignored
++2
+*/
+
+[PASS] comments/testComment4
+       Expression: 2 + 2 
+      /*
+This is a multi-line comment
+Any text enclosed within is ignored
+*/
++2
+
+[PASS] comments/testComment5
+       Expression: /*
+This is a multi-line comment
+Any text enclosed within is ignored
+*/
+2+2
+
+[PASS] comments/testComment6
+       Expression: 2 // comment
+/ 2
+
+[PASS] comments/testComment7
+       Expression: 2 + 2 /
+
+[FAIL] comments/testComment8
+       Expression: 2 + 2 /* not finished
+       Error: Expected error (syntax) but got result
+       Actual: []
+
+[PASS] comments/testComment9
+       Expression: 2 + /* inline $@%^+ * */ 2 = 4
+
+[PASS] testMiscellaneousAccessorTests/testExtractBirthDate
+       Expression: birthDate
+
+[PASS] testMiscellaneousAccessorTests/testPatientHasBirthDate
+       Expression: birthDate
+
+[PASS] testMiscellaneousAccessorTests/testPatientTelecomTypes
+       Expression: telecom.use
+
+[PASS] testBasics/testSimple
+       Expression: name.given
+
+[PASS] testBasics/testSimpleNone
+       Expression: name.suffix
+
+[PASS] testBasics/testEscapedIdentifier
+       Expression: name.`given`
+
+[PASS] testBasics/testSimpleBackTick1
+       Expression: `Patient`.name.`given`
+
+[FAIL] testBasics/testSimpleFail
+       Expression: name.given1
+       Error: Expected error (semantic) but got result
+       Actual: []
+
+[PASS] testBasics/testSimpleWithContext
+       Expression: Patient.name.given
+
+[FAIL] testBasics/testSimpleWithWrongContext
+       Expression: Encounter.name.given
+       Error: Expected error (semantic) but got result
+       Actual: []
+
+[PASS] testObservations/testPolymorphismA
+       Expression: Observation.value.unit
+
+[FAIL] testObservations/testPolymorphismB
+       Expression: Observation.valueQuantity.unit
+       Error: Expected error (semantic) but got result
+       Actual: ['lbs']
+
+[PASS] testObservations/testPolymorphismIsA1
+       Expression: Observation.value.is(Quantity)
+
+[PASS] testObservations/testPolymorphismIsA2
+       Expression: Observation.value is Quantity
+
+[PASS] testObservations/testPolymorphismIsA3
+       Expression: Observation.issued is instant
+
+[PASS] testObservations/testPolymorphismIsB
+       Expression: Observation.value.is(Period).not()
+
+[PASS] testObservations/testPolymorphismAsA
+       Expression: Observation.value.as(Quantity).unit
+
+[PASS] testObservations/testPolymorphismAsAFunction
+       Expression: (Observation.value as Quantity).unit
+
+[FAIL] testObservations/testPolymorphismAsB
+       Expression: (Observation.value as Period).unit
+       Error: Expected error (semantic) but got result
+       Actual: []
+
+[PASS] testObservations/testPolymorphismAsBFunction
+       Expression: Observation.value.as(Period).start
+
+[PASS] testDollar/testDollarThis1
+       Expression: Patient.name.given.where(substring($this.length()-3) = 'out')
+
+[PASS] testDollar/testDollarThis2
+       Expression: Patient.name.given.where(substring($this.length()-3) = 'ter')
+
+[PASS] testDollar/testDollarOrderAllowed
+       Expression: Patient.name.skip(1).given
+
+[PASS] testDollar/testDollarOrderAllowedA
+       Expression: Patient.name.skip(3).given
+
+[FAIL] testDollar/testDollarOrderNotAllowed
+       Expression: Patient.children().skip(1)
+       Error: Expected error (semantic) but got result
+       Actual: [{'status': 'generated', 'div': {'table': {'tbody': {'tr': [{'td': ['Name', {'b': 'Chalmers'}]}, {'td': ['Address', '534 Erewhon, Pleasantville, Vic, 3999']}, {'td': ['Contacts', 'Home: unknown. Work: (03) 5555 6473']}, {'td': ['Id', 'MRN: 12345 (Acme Healthcare)']}]}}}}, {'use': 'usual', 'type': {'coding': {'system': 'http://terminology.hl7.org/CodeSystem/v2-0203', 'code': 'MR'}}, 'system': 'urn:oid:1.2.36.146.595.217.0.1', 'value': '12345', 'period': {'start': '2001-05-06'}, 'assigner': {'display': 'Acme Healthcare'}}, 'true', {'use': 'official', 'family': 'Chalmers', 'given': ['Peter', 'James']}, {'use': 'usual', 'given': 'Jim'}, {'use': 'maiden', 'family': 'Windsor', 'given': ['Peter', 'James'], 'period': {'end': '2002'}}, {'use': 'home'}, {'system': 'phone', 'value': '(03) 5555 6473', 'use': 'work', 'rank': '1'}, {'system': 'phone', 'value': '(03) 3410 5613', 'use': 'mobile', 'rank': '2'}, {'system': 'phone', 'value': '(03) 5555 8834', 'use': 'old', 'period': {'end': '2014'}}, 'male', '1974-12-25', 'false', {'use': 'home', 'type': 'both', 'text': '534 Erewhon St PeasantVille, Rainbow, Vic  3999', 'line': '534 Erewhon St', 'city': 'PleasantVille', 'district': 'Rainbow', 'state': 'Vic', 'postalCode': '3999', 'period': {'start': '1974-12-25'}}, {'relationship': {'coding': {'system': 'http://terminology.hl7.org/CodeSystem/v2-0131', 'code': 'N'}}, 'name': {'family': 'du Marché', '_family': {'extension': {'url': 'http://hl7.org/fhir/StructureDefinition/humanname-own-prefix', 'valueString': 'VV'}}, 'given': 'Bénédicte'}, 'telecom': {'system': 'phone', 'value': '+33 (237) 998327'}, 'address': {'use': 'home', 'type': 'both', 'line': '534 Erewhon St', 'city': 'PleasantVille', 'district': 'Rainbow', 'state': 'Vic', 'postalCode': '3999', 'period': {'start': '1974-12-25'}}, 'gender': 'female', 'period': {'start': '2012'}}, {'reference': 'Organization/1'}, 'Patient']
+
+[PASS] testLiterals/testLiteralTrue
+       Expression: Patient.name.exists() = true
+
+[PASS] testLiterals/testLiteralFalse
+       Expression: Patient.name.empty() = false
+
+[PASS] testLiterals/testLiteralString1
+       Expression: Patient.name.given.first() = 'Peter'
+
+[PASS] testLiterals/testLiteralInteger1
+       Expression: 1.convertsToInteger()
+
+[PASS] testLiterals/testLiteralInteger0
+       Expression: 0.convertsToInteger()
+
+[PASS] testLiterals/testLiteralIntegerNegative1
+       Expression: (-1).convertsToInteger()
+
+[FAIL] testLiterals/testLiteralIntegerNegative1Invalid
+       Expression: -1.convertsToInteger()
+       Error: Expected error (execution) but got result
+       Actual: [DescendingSortMarker(True)]
+
+[PASS] testLiterals/testLiteralIntegerMax
+       Expression: 2147483647.convertsToInteger()
+
+[PASS] testLiterals/testLiteralString2
+       Expression: 'test'.convertsToString()
+
+[PASS] testLiterals/testLiteralStringEscapes
+       Expression: '\\\/\f\r\n\t\"\`\'\u002a'.convertsToString()
+
+[PASS] testLiterals/testLiteralBooleanTrue
+       Expression: true.convertsToBoolean()
+
+[PASS] testLiterals/testLiteralBooleanFalse
+       Expression: false.convertsToBoolean()
+
+[PASS] testLiterals/testLiteralDecimal10
+       Expression: 1.0.convertsToDecimal()
+
+[PASS] testLiterals/testLiteralDecimal01
+       Expression: 0.1.convertsToDecimal()
+
+[PASS] testLiterals/testLiteralDecimal00
+       Expression: 0.0.convertsToDecimal()
+
+[PASS] testLiterals/testLiteralDecimalNegative01
+       Expression: (-0.1).convertsToDecimal()
+
+[FAIL] testLiterals/testLiteralDecimalNegative01Invalid
+       Expression: -0.1.convertsToDecimal()
+       Error: Expected error (execution) but got result
+       Actual: [DescendingSortMarker(True)]
+
+[PASS] testLiterals/testLiteralDecimalMax
+       Expression: 1234567890987654321.0.convertsToDecimal()
+
+[PASS] testLiterals/testLiteralDecimalStep
+       Expression: 0.00000001.convertsToDecimal()
+
+[PASS] testLiterals/testLiteralDateYear
+       Expression: @2015.is(Date)
+
+[PASS] testLiterals/testLiteralDateMonth
+       Expression: @2015-02.is(Date)
+
+[PASS] testLiterals/testLiteralDateDay
+       Expression: @2015-02-04.is(Date)
+
+[PASS] testLiterals/testLiteralDateTimeYear
+       Expression: @2015T.is(DateTime)
+
+[PASS] testLiterals/testLiteralDateTimeMonth
+       Expression: @2015-02T.is(DateTime)
+
+[PASS] testLiterals/testLiteralDateTimeDay
+       Expression: @2015-02-04T.is(DateTime)
+
+[PASS] testLiterals/testLiteralDateTimeHour
+       Expression: @2015-02-04T14.is(DateTime)
+
+[PASS] testLiterals/testLiteralDateTimeMinute
+       Expression: @2015-02-04T14:34.is(DateTime)
+
+[PASS] testLiterals/testLiteralDateTimeSecond
+       Expression: @2015-02-04T14:34:28.is(DateTime)
+
+[PASS] testLiterals/testLiteralDateTimeMillisecond
+       Expression: @2015-02-04T14:34:28.123.is(DateTime)
+
+[PASS] testLiterals/testLiteralDateTimeUTC
+       Expression: @2015-02-04T14:34:28Z.is(DateTime)
+
+[PASS] testLiterals/testLiteralDateTimeTimezoneOffset
+       Expression: @2015-02-04T14:34:28+10:00.is(DateTime)
+
+[PASS] testLiterals/testLiteralTimeHour
+       Expression: @T14.is(Time)
+
+[PASS] testLiterals/testLiteralTimeMinute
+       Expression: @T14:34.is(Time)
+
+[PASS] testLiterals/testLiteralTimeSecond
+       Expression: @T14:34:28.is(Time)
+
+[PASS] testLiterals/testLiteralTimeMillisecond
+       Expression: @T14:34:28.123.is(Time)
+
+[PASS] testLiterals/testLiteralTimeUTC
+       Expression: @T14:34:28Z.is(Time)
+
+[PASS] testLiterals/testLiteralTimeTimezoneOffset
+       Expression: @T14:34:28+10:00.is(Time)
+
+[PASS] testLiterals/testLiteralQuantityDecimal
+       Expression: 10.1 'mg'.convertsToQuantity()
+
+[PASS] testLiterals/testLiteralQuantityInteger
+       Expression: 10 'mg'.convertsToQuantity()
+
+[PASS] testLiterals/testLiteralQuantityDay
+       Expression: 4 days.convertsToQuantity()
+
+[PASS] testLiterals/testLiteralIntegerNotEqual
+       Expression: -3 != 3
+
+[PASS] testLiterals/testLiteralIntegerEqual
+       Expression: Patient.name.given.count() = 5
+
+[PASS] testLiterals/testPolarityPrecedence
+       Expression: -Patient.name.given.count() = -5
+
+[PASS] testLiterals/testLiteralIntegerGreaterThan
+       Expression: Patient.name.given.count() > -3
+
+[PASS] testLiterals/testLiteralIntegerCountNotEqual
+       Expression: Patient.name.given.count() != 0
+
+[PASS] testLiterals/testLiteralIntegerLessThanTrue
+       Expression: 1 < 2
+
+[PASS] testLiterals/testLiteralIntegerLessThanFalse
+       Expression: 1 < -2
+
+[PASS] testLiterals/testLiteralIntegerLessThanPolarityTrue
+       Expression: +1 < +2
+
+[PASS] testLiterals/testLiteralIntegerLessThanPolarityFalse
+       Expression: -1 < 2
+
+[PASS] testLiterals/testLiteralDecimalGreaterThanNonZeroTrue
+       Expression: Observation.value.value > 180.0
+
+[PASS] testLiterals/testLiteralDecimalGreaterThanZeroTrue
+       Expression: Observation.value.value > 0.0
+
+[PASS] testLiterals/testLiteralDecimalGreaterThanIntegerTrue
+       Expression: Observation.value.value > 0
+
+[PASS] testLiterals/testLiteralDecimalLessThanInteger
+       Expression: Observation.value.value < 190
+
+[PASS] testLiterals/testLiteralDecimalLessThanInvalid
+       Expression: Observation.value.value < 'test'
+
+[PASS] testLiterals/testDateEqual
+       Expression: Patient.birthDate = @1974-12-25
+
+[PASS] testLiterals/testDateNotEqual
+       Expression: Patient.birthDate != @1974-12-25T12:34:00
+
+[PASS] testLiterals/testDateNotEqualTimezoneOffsetBefore
+       Expression: Patient.birthDate != @1974-12-25T12:34:00-10:00
+
+[PASS] testLiterals/testDateNotEqualTimezoneOffsetAfter
+       Expression: Patient.birthDate != @1974-12-25T12:34:00+10:00
+
+[PASS] testLiterals/testDateNotEqualUTC
+       Expression: Patient.birthDate != @1974-12-25T12:34:00Z
+
+[PASS] testLiterals/testDateNotEqualTimeSecond
+       Expression: Patient.birthDate != @T12:14:15
+
+[PASS] testLiterals/testDateNotEqualTimeMinute
+       Expression: Patient.birthDate != @T12:14
+
+[PASS] testLiterals/testDateNotEqualToday
+       Expression: Patient.birthDate < today()
+
+[PASS] testLiterals/testDateTimeGreaterThanDate1
+       Expression: now() > Patient.birthDate
+
+[PASS] testLiterals/testDateGreaterThanDate
+       Expression: today() > Patient.birthDate
+
+[FAIL] testLiterals/testDateTimeGreaterThanDate2
+       Expression: now() > today()
+       Error: Expected empty, got: [True]
+       Actual: [True]
+
+[PASS] testLiterals/testLiteralDateTimeTZGreater
+       Expression: @2017-11-05T01:30:00.0-04:00 > @2017-11-05T01:15:00.0-05:00
+
+[PASS] testLiterals/testLiteralDateTimeTZLess
+       Expression: @2017-11-05T01:30:00.0-04:00 < @2017-11-05T01:15:00.0-05:00
+
+[PASS] testLiterals/testLiteralDateTimeTZEqualFalse
+       Expression: @2017-11-05T01:30:00.0-04:00 = @2017-11-05T01:15:00.0-05:00
+
+[PASS] testLiterals/testLiteralDateTimeTZEqualTrue
+       Expression: @2017-11-05T01:30:00.0-04:00 = @2017-11-05T00:30:00.0-05:00
+
+[PASS] testLiterals/testLiteralUnicode
+       Expression: Patient.name.given.first() = 'P\u0065ter'
+
+[PASS] testLiterals/testCollectionNotEmpty
+       Expression: Patient.name.given.empty().not()
+
+[PASS] testLiterals/testCollectionNotEqualEmpty
+       Expression: Patient.name.given != {}
+
+[PASS] testLiterals/testExpressions
+       Expression: Patient.name.select(given | family).distinct()
+
+[PASS] testLiterals/testExpressionsEqual
+       Expression: Patient.name.given.count() = 1 + 4
+
+[PASS] testLiterals/testNotEmpty
+       Expression: Patient.name.empty().not()
+
+[PASS] testLiterals/testEmpty
+       Expression: Patient.link.empty()
+
+[PASS] testLiterals/testLiteralNotOnEmpty
+       Expression: {}.not().empty()
+
+[PASS] testLiterals/testLiteralNotTrue
+       Expression: true.not() = false
+
+[PASS] testLiterals/testLiteralNotFalse
+       Expression: false.not() = true
+
+[PASS] testLiterals/testIntegerBooleanNotTrue
+       Expression: (0).not() = false
+
+[PASS] testLiterals/testIntegerBooleanNotFalse
+       Expression: (1).not() = false
+
+[PASS] testLiterals/testNotInvalid
+       Expression: (1|2).not() = false
+
+[PASS] testTypes/testStringYearConvertsToDate
+       Expression: '2015'.convertsToDate()
+
+[PASS] testTypes/testStringMonthConvertsToDate
+       Expression: '2015-02'.convertsToDate()
+
+[PASS] testTypes/testStringDayConvertsToDate
+       Expression: '2015-02-04'.convertsToDate()
+
+[PASS] testTypes/testStringYearConvertsToDateTime
+       Expression: '2015'.convertsToDateTime()
+
+[PASS] testTypes/testStringMonthConvertsToDateTime
+       Expression: '2015-02'.convertsToDateTime()
+
+[PASS] testTypes/testStringDayConvertsToDateTime
+       Expression: '2015-02-04'.convertsToDateTime()
+
+[PASS] testTypes/testStringHourConvertsToDateTime
+       Expression: '2015-02-04T14'.convertsToDateTime()
+
+[PASS] testTypes/testStringMinuteConvertsToDateTime
+       Expression: '2015-02-04T14:34'.convertsToDateTime()
+
+[PASS] testTypes/testStringSecondConvertsToDateTime
+       Expression: '2015-02-04T14:34:28'.convertsToDateTime()
+
+[PASS] testTypes/testStringMillisecondConvertsToDateTime
+       Expression: '2015-02-04T14:34:28.123'.convertsToDateTime()
+
+[PASS] testTypes/testStringUTCConvertsToDateTime
+       Expression: '2015-02-04T14:34:28Z'.convertsToDateTime()
+
+[PASS] testTypes/testStringTZConvertsToDateTime
+       Expression: '2015-02-04T14:34:28+10:00'.convertsToDateTime()
+
+[PASS] testTypes/testStringHourConvertsToTime
+       Expression: '14'.convertsToTime()
+
+[PASS] testTypes/testStringMinuteConvertsToTime
+       Expression: '14:34'.convertsToTime()
+
+[PASS] testTypes/testStringSecondConvertsToTime
+       Expression: '14:34:28'.convertsToTime()
+
+[PASS] testTypes/testStringMillisecondConvertsToTime
+       Expression: '14:34:28.123'.convertsToTime()
+
+[PASS] testTypes/testIntegerLiteralConvertsToInteger
+       Expression: 1.convertsToInteger()
+
+[PASS] testTypes/testIntegerLiteralIsInteger
+       Expression: 1.is(Integer)
+
+[PASS] testTypes/testIntegerLiteralIsSystemInteger
+       Expression: 1.is(System.Integer)
+
+[PASS] testTypes/testStringLiteralConvertsToInteger
+       Expression: '1'.convertsToInteger()
+
+[PASS] testTypes/testStringLiteralConvertsToIntegerFalse
+       Expression: 'a'.convertsToInteger().not()
+
+[PASS] testTypes/testStringDecimalConvertsToIntegerFalse
+       Expression: '1.0'.convertsToInteger().not()
+
+[PASS] testTypes/testStringLiteralIsNotInteger
+       Expression: '1'.is(Integer).not()
+
+[PASS] testTypes/testBooleanLiteralConvertsToInteger
+       Expression: true.convertsToInteger()
+
+[PASS] testTypes/testBooleanLiteralIsNotInteger
+       Expression: true.is(Integer).not()
+
+[PASS] testTypes/testDateIsNotInteger
+       Expression: @2013-04-05.is(Integer).not()
+
+[PASS] testTypes/testIntegerLiteralToInteger
+       Expression: 1.toInteger() = 1
+
+[PASS] testTypes/testStringIntegerLiteralToInteger
+       Expression: '1'.toInteger() = 1
+
+[PASS] testTypes/testDecimalLiteralToInteger
+       Expression: '1.1'.toInteger() = {}
+
+[PASS] testTypes/testDecimalLiteralToIntegerIsEmpty
+       Expression: '1.1'.toInteger().empty()
+
+[PASS] testTypes/testBooleanLiteralToInteger
+       Expression: true.toInteger() = 1
+
+[PASS] testTypes/testIntegerLiteralConvertsToDecimal
+       Expression: 1.convertsToDecimal()
+
+[PASS] testTypes/testIntegerLiteralIsNotDecimal
+       Expression: 1.is(Decimal).not()
+
+[PASS] testTypes/testDecimalLiteralConvertsToDecimal
+       Expression: 1.0.convertsToDecimal()
+
+[PASS] testTypes/testDecimalLiteralIsDecimal
+       Expression: 1.0.is(Decimal)
+
+[PASS] testTypes/testStringIntegerLiteralConvertsToDecimal
+       Expression: '1'.convertsToDecimal()
+
+[PASS] testTypes/testStringIntegerLiteralIsNotDecimal
+       Expression: '1'.is(Decimal).not()
+
+[PASS] testTypes/testStringLiteralConvertsToDecimalFalse
+       Expression: '1.a'.convertsToDecimal().not()
+
+[PASS] testTypes/testStringDecimalLiteralConvertsToDecimal
+       Expression: '1.0'.convertsToDecimal()
+
+[PASS] testTypes/testStringDecimalLiteralIsNotDecimal
+       Expression: '1.0'.is(Decimal).not()
+
+[PASS] testTypes/testBooleanLiteralConvertsToDecimal
+       Expression: true.convertsToDecimal()
+
+[PASS] testTypes/testBooleanLiteralIsNotDecimal
+       Expression: true.is(Decimal).not()
+
+[PASS] testTypes/testIntegerLiteralToDecimal
+       Expression: 1.toDecimal() = 1.0
+
+[PASS] testTypes/testIntegerLiteralToDeciamlEquivalent
+       Expression: 1.toDecimal() ~ 1.0
+
+[PASS] testTypes/testDecimalLiteralToDecimal
+       Expression: 1.0.toDecimal() = 1.0
+
+[PASS] testTypes/testDecimalLiteralToDecimalEqual
+       Expression: '1.1'.toDecimal() = 1.1
+
+[PASS] testTypes/testBooleanLiteralToDecimal
+       Expression: true.toDecimal() = 1
+
+[PASS] testTypes/testIntegerLiteralConvertsToQuantity
+       Expression: 1.convertsToQuantity()
+
+[PASS] testTypes/testIntegerLiteralIsNotQuantity
+       Expression: 1.is(Quantity).not()
+
+[PASS] testTypes/testDecimalLiteralConvertsToQuantity
+       Expression: 1.0.convertsToQuantity()
+
+[PASS] testTypes/testDecimalLiteralIsNotQuantity
+       Expression: 1.0.is(System.Quantity).not()
+
+[PASS] testTypes/testStringIntegerLiteralConvertsToQuantity
+       Expression: '1'.convertsToQuantity()
+
+[PASS] testTypes/testStringIntegerLiteralIsNotQuantity
+       Expression: '1'.is(System.Quantity).not()
+
+[PASS] testTypes/testStringQuantityLiteralConvertsToQuantity
+       Expression: '1 day'.convertsToQuantity()
+
+[PASS] testTypes/testStringQuantityWeekConvertsToQuantity
+       Expression: '1 \'wk\''.convertsToQuantity()
+
+[PASS] testTypes/testStringQuantityWeekConvertsToQuantityFalse
+       Expression: '1 wk'.convertsToQuantity().not()
+
+[PASS] testTypes/testStringDecimalLiteralConvertsToQuantityFalse
+       Expression: '1.a'.convertsToQuantity().not()
+
+[PASS] testTypes/testStringDecimalLiteralConvertsToQuantity
+       Expression: '1.0'.convertsToQuantity()
+
+[PASS] testTypes/testStringDecimalLiteralIsNotSystemQuantity
+       Expression: '1.0'.is(System.Quantity).not()
+
+[PASS] testTypes/testBooleanLiteralConvertsToQuantity
+       Expression: true.convertsToQuantity()
+
+[PASS] testTypes/testBooleanLiteralIsNotSystemQuantity
+       Expression: true.is(System.Quantity).not()
+
+[PASS] testTypes/testIntegerLiteralToQuantity
+       Expression: 1.toQuantity() = 1 '1'
+
+[PASS] testTypes/testDecimalLiteralToQuantity
+       Expression: 1.0.toQuantity() = 1.0 '1'
+
+[PASS] testTypes/testStringIntegerLiteralToQuantity
+       Expression: '1'.toQuantity()
+
+[PASS] testTypes/testStringQuantityLiteralToQuantity
+       Expression: '1 day'.toQuantity() = 1 day
+
+[PASS] testTypes/testStringQuantityDayLiteralToQuantity
+       Expression: '1 day'.toQuantity() = 1 'd'
+
+[PASS] testTypes/testStringQuantityWeekLiteralToQuantity
+       Expression: '1 \'wk\''.toQuantity() = 1 week
+
+[FAIL] testTypes/testStringQuantityMonthLiteralToQuantity
+       Expression: '1 \'mo\''.toQuantity() = 1 month
+       Error: Expected empty, got: [True]
+       Actual: [True]
+
+[FAIL] testTypes/testStringQuantityYearLiteralToQuantity
+       Expression: '1 \'a\''.toQuantity() = 1 year
+       Error: Expected empty, got: [True]
+       Actual: [True]
+
+[PASS] testTypes/testStringDecimalLiteralToQuantity
+       Expression: '1.0'.toQuantity() ~ 1 '1'
+
+[PASS] testTypes/testIntegerLiteralConvertsToBoolean
+       Expression: 1.convertsToBoolean()
+
+[PASS] testTypes/testIntegerLiteralConvertsToBooleanFalse
+       Expression: 2.convertsToBoolean()
+
+[PASS] testTypes/testNegativeIntegerLiteralConvertsToBooleanFalse
+       Expression: (-1).convertsToBoolean()
+
+[PASS] testTypes/testIntegerLiteralFalseConvertsToBoolean
+       Expression: 0.convertsToBoolean()
+
+[PASS] testTypes/testDecimalLiteralConvertsToBoolean
+       Expression: 1.0.convertsToBoolean()
+
+[PASS] testTypes/testStringTrueLiteralConvertsToBoolean
+       Expression: 'true'.convertsToBoolean()
+
+[PASS] testTypes/testStringFalseLiteralConvertsToBoolean
+       Expression: 'false'.convertsToBoolean()
+
+[PASS] testTypes/testStringFalseLiteralAlsoConvertsToBoolean
+       Expression: 'False'.convertsToBoolean()
+
+[PASS] testTypes/testTrueLiteralConvertsToBoolean
+       Expression: true.convertsToBoolean()
+
+[PASS] testTypes/testFalseLiteralConvertsToBoolean
+       Expression: false.convertsToBoolean()
+
+[PASS] testTypes/testIntegerLiteralToBoolean
+       Expression: 1.toBoolean()
+
+[PASS] testTypes/testIntegerLiteralToBooleanEmpty
+       Expression: 2.toBoolean()
+
+[PASS] testTypes/testIntegerLiteralToBooleanFalse
+       Expression: 0.toBoolean()
+
+[PASS] testTypes/testStringTrueToBoolean
+       Expression: 'true'.toBoolean()
+
+[PASS] testTypes/testStringFalseToBoolean
+       Expression: 'false'.toBoolean()
+
+[PASS] testTypes/testIntegerLiteralConvertsToString
+       Expression: 1.convertsToString()
+
+[PASS] testTypes/testIntegerLiteralIsNotString
+       Expression: 1.is(String).not()
+
+[PASS] testTypes/testNegativeIntegerLiteralConvertsToString
+       Expression: (-1).convertsToString()
+
+[PASS] testTypes/testDecimalLiteralConvertsToString
+       Expression: 1.0.convertsToString()
+
+[PASS] testTypes/testStringLiteralConvertsToString
+       Expression: 'true'.convertsToString()
+
+[PASS] testTypes/testBooleanLiteralConvertsToString
+       Expression: true.convertsToString()
+
+[PASS] testTypes/testQuantityLiteralConvertsToString
+       Expression: 1 'wk'.convertsToString()
+
+[PASS] testTypes/testIntegerLiteralToString
+       Expression: 1.toString()
+
+[PASS] testTypes/testNegativeIntegerLiteralToString
+       Expression: (-1).toString()
+
+[PASS] testTypes/testDecimalLiteralToString
+       Expression: 1.0.toString()
+
+[PASS] testTypes/testStringLiteralToString
+       Expression: 'true'.toString()
+
+[PASS] testTypes/testBooleanLiteralToString
+       Expression: true.toString()
+
+[PASS] testTypes/testQuantityLiteralWkToString
+       Expression: 1 'wk'.toString()
+
+[PASS] testTypes/testQuantityLiteralWeekToString
+       Expression: 1 week.toString()
+
+[PASS] testExists/testExists1
+       Expression: Patient.name.exists()
+
+[PASS] testExists/testExists2
+       Expression: Patient.name.exists(use = 'nickname')
+
+[PASS] testExists/testExists3
+       Expression: Patient.name.exists(use = 'official')
+
+[PASS] testExists/testExists4
+       Expression: Patient.maritalStatus.coding.exists(code = 'P' and system = 'http://terminology.hl7.org/CodeSystem/v3-MaritalStatus')
+			or Patient.maritalStatus.coding.exists(code = 'A' and system = 'http://terminology.hl7.org/CodeSystem/v3-MaritalStatus')
+
+[PASS] testExists/testExists5
+       Expression: (1 | 2).exists()
+
+[PASS] testAll/testAllTrue1
+       Expression: Patient.name.select(given.exists()).allTrue()
+
+[PASS] testAll/testAllTrue2
+       Expression: Patient.name.select(period.exists()).allTrue()
+
+[PASS] testAll/testAllTrue3
+       Expression: Patient.name.all(given.exists())
+
+[PASS] testAll/testAllTrue4
+       Expression: Patient.name.all(period.exists())
+
+[PASS] testSubSetOf/testSubSetOf1
+       Expression: Patient.name.first().subsetOf($this.name)
+
+[PASS] testSubSetOf/testSubSetOf2
+       Expression: Patient.name.subsetOf($this.name.first()).not()
+
+[PASS] testSubSetOf/testSubSetOf3
+       Expression: supportingInfo.where(category.coding.code = 'additionalbodysite').sequence.subsetOf($this.item.informationSequence)
+
+[PASS] testSuperSetOf/testSuperSetOf1
+       Expression: Patient.name.first().supersetOf($this.name).not()
+
+[PASS] testSuperSetOf/testSuperSetOf2
+       Expression: Patient.name.supersetOf($this.name.first())
+
+[PASS] testQuantity/testQuantity1
+       Expression: 4.0000 'g' = 4000.0 'mg'
+
+[PASS] testQuantity/testQuantity2
+       Expression: 4 'g' ~ 4000 'mg'
+
+[PASS] testQuantity/testQuantity3
+       Expression: 4 'g' != 4040 'mg'
+
+[PASS] testQuantity/testQuantity4
+       Expression: 4 'g' ~ 4040 'mg'
+
+[PASS] testQuantity/testQuantity5
+       Expression: 7 days = 1 week
+
+[PASS] testQuantity/testQuantity6
+       Expression: 7 days = 1 'wk'
+
+[PASS] testQuantity/testQuantity7
+       Expression: 6 days < 1 week
+
+[PASS] testQuantity/testQuantity8
+       Expression: 8 days > 1 week
+
+[FAIL] testQuantity/testQuantity9
+       Expression: 2.0 'cm' * 2.0 'm' = 0.040 'm2'
+       Error: Expected (boolean): true, Got: [False]
+       Actual: [False]
+       Expected: [('boolean', 'true')]
+
+[FAIL] testQuantity/testQuantity10
+       Expression: 4.0 'g' / 2.0 'm' = 2 'g/m'
+       Error: Expected (boolean): true, Got: [False]
+       Actual: [False]
+       Expected: [('boolean', 'true')]
+
+[PASS] testQuantity/testQuantity11
+       Expression: 1.0 'm' / 1.0 'm' = 1 '1'
+
+[PASS] testCollectionBoolean/testCollectionBoolean1
+       Expression: iif(1 | 2 | 3, true, false)
+
+[PASS] testCollectionBoolean/testCollectionBoolean2
+       Expression: iif({}, true, false)
+
+[PASS] testCollectionBoolean/testCollectionBoolean3
+       Expression: iif(true, true, false)
+
+[PASS] testCollectionBoolean/testCollectionBoolean4
+       Expression: iif({} | true, true, false)
+
+[PASS] testCollectionBoolean/testCollectionBoolean5
+       Expression: iif(true, true, 1/0)
+
+[PASS] testCollectionBoolean/testCollectionBoolean6
+       Expression: iif(false, 1/0, true)
+
+[PASS] testDistinct/testDistinct1
+       Expression: (1 | 2 | 3).isDistinct()
+
+[PASS] testDistinct/testDistinct2
+       Expression: Questionnaire.descendants().linkId.isDistinct()
+
+[PASS] testDistinct/testDistinct3
+       Expression: Questionnaire.descendants().linkId.select(substring(0,1)).isDistinct().not()
+
+[PASS] testDistinct/testDistinct4
+       Expression: (1 | 2 | 3).distinct()
+
+[PASS] testDistinct/testDistinct5
+       Expression: Questionnaire.descendants().linkId.distinct().count()
+
+[PASS] testDistinct/testDistinct6
+       Expression: Questionnaire.descendants().linkId.select(substring(0,1)).distinct().count()
+
+[PASS] testCount/testCount1
+       Expression: Patient.name.count()
+
+[PASS] testCount/testCount2
+       Expression: Patient.name.count() = 3
+
+[PASS] testCount/testCount3
+       Expression: Patient.name.first().count()
+
+[PASS] testCount/testCount4
+       Expression: Patient.name.first().count() = 1
+
+[PASS] testWhere/testWhere1
+       Expression: Patient.name.count() = 3
+
+[PASS] testWhere/testWhere2
+       Expression: Patient.name.where(given = 'Jim').count() = 1
+
+[PASS] testWhere/testWhere3
+       Expression: Patient.name.where(given = 'X').count() = 0
+
+[PASS] testWhere/testWhere4
+       Expression: Patient.name.where($this.given = 'Jim').count() = 1
+
+[PASS] testSelect/testSelect1
+       Expression: Patient.name.select(given).count() = 5
+
+[PASS] testSelect/testSelect2
+       Expression: Patient.name.select(given | family).count() = 7
+
+[PASS] testSelect/testSelect3
+       Expression: name.select(use.contains('i')).count()
+
+[PASS] testRepeat/testRepeat1
+       Expression: ValueSet.expansion.repeat(contains).count() = 10
+
+[PASS] testRepeat/testRepeat2
+       Expression: Questionnaire.repeat(item).code.count() = 11
+
+[PASS] testRepeat/testRepeat3
+       Expression: Questionnaire.descendants().code.count() = 23
+
+[PASS] testRepeat/testRepeat4
+       Expression: Questionnaire.children().code.count() = 2
+
+[PASS] testRepeat/testRepeat5
+       Expression: Patient.name.repeat('test')
+
+[PASS] testAggregate/testAggregate1
+       Expression: (1|2|3|4|5|6|7|8|9).aggregate($this+$total, 0) = 45
+
+[PASS] testAggregate/testAggregate2
+       Expression: (1|2|3|4|5|6|7|8|9).aggregate($this+$total, 2) = 47
+
+[PASS] testAggregate/testAggregate3
+       Expression: (1|2|3|4|5|6|7|8|9).aggregate(iif($total.empty(), $this, iif($this < $total, $this, $total))) = 1
+
+[PASS] testAggregate/testAggregate4
+       Expression: (1|2|3|4|5|6|7|8|9).aggregate(iif($total.empty(), $this, iif($this > $total, $this, $total))) = 9
+
+[PASS] testIndexer/testIndexer1
+       Expression: Patient.name[0].given = 'Peter' | 'James'
+
+[PASS] testIndexer/testIndexer2
+       Expression: Patient.name[1].given = 'Jim'
+
+[PASS] testSingle/testSingle1
+       Expression: Patient.name.first().single().exists()
+
+[PASS] testSingle/testSingle2
+       Expression: Patient.name.single().exists()
+
+[PASS] testFirstLast/testFirstLast1
+       Expression: Patient.name.first().given = 'Peter' | 'James'
+
+[PASS] testFirstLast/testFirstLast2
+       Expression: Patient.name.last().given = 'Peter' | 'James'
+
+[PASS] testTail/testTail1
+       Expression: (0 | 1 | 2).tail() = 1 | 2
+
+[PASS] testTail/testTail2
+       Expression: Patient.name.tail().given = 'Jim' | 'Peter' | 'James'
+
+[PASS] testSkip/testSkip1
+       Expression: (0 | 1 | 2).skip(1) = 1 | 2
+
+[PASS] testSkip/testSkip2
+       Expression: (0 | 1 | 2).skip(2) = 2
+
+[PASS] testSkip/testSkip3
+       Expression: Patient.name.skip(1).given.trace('test') = 'Jim' | 'Peter' | 'James'
+
+[PASS] testSkip/testSkip4
+       Expression: Patient.name.skip(3).given.exists() = false
+
+[PASS] testTake/testTake1
+       Expression: (0 | 1 | 2).take(1) = 0
+
+[PASS] testTake/testTake2
+       Expression: (0 | 1 | 2).take(2) = 0 | 1
+
+[PASS] testTake/testTake3
+       Expression: Patient.name.take(1).given = 'Peter' | 'James'
+
+[PASS] testTake/testTake4
+       Expression: Patient.name.take(2).given = 'Peter' | 'James' | 'Jim'
+
+[PASS] testTake/testTake5
+       Expression: Patient.name.take(3).given.count() = 5
+
+[PASS] testTake/testTake6
+       Expression: Patient.name.take(4).given.count() = 5
+
+[PASS] testTake/testTake7
+       Expression: Patient.name.take(0).given.exists() = false
+
+[PASS] testIif/testIif1
+       Expression: iif(Patient.name.exists(), 'named', 'unnamed') = 'named'
+
+[PASS] testIif/testIif2
+       Expression: iif(Patient.name.empty(), 'unnamed', 'named') = 'named'
+
+[PASS] testIif/testIif3
+       Expression: iif(true, true, (1 | 2).toString())
+
+[PASS] testIif/testIif4
+       Expression: iif(false, (1 | 2).toString(), true)
+
+[PASS] testIif/testIif5
+       Expression: iif(false, 'true-result').empty()
+
+[PASS] testIif/testIif6
+       Expression: iif('non boolean criteria', 'true-result', 'true-result')
+
+[PASS] testIif/testIif7
+       Expression: {}.iif(true, 'true-result', 'false-result')
+
+[PASS] testIif/testIif8
+       Expression: ('item').iif(true, 'true-result', 'false-result')
+
+[PASS] testIif/testIif9
+       Expression: ('context').iif(true, select($this), 'false-result')
+
+[PASS] testIif/testIif10
+       Expression: ('item1' | 'item2').iif(true, 'true-result', 'false-result')
+
+[PASS] testIif/testIif11
+       Expression: ('context').iif($this = 'context','true-result', 'false-result')
+
+[PASS] testToInteger/testToInteger1
+       Expression: '1'.toInteger() = 1
+
+[PASS] testToInteger/testToInteger2
+       Expression: '-1'.toInteger() = -1
+
+[PASS] testToInteger/testToInteger3
+       Expression: '0'.toInteger() = 0
+
+[PASS] testToInteger/testToInteger4
+       Expression: '0.0'.toInteger().empty()
+
+[PASS] testToInteger/testToInteger5
+       Expression: 'st'.toInteger().empty()
+
+[PASS] testToDecimal/testToDecimal1
+       Expression: '1'.toDecimal() = 1
+
+[PASS] testToDecimal/testToDecimal2
+       Expression: '-1'.toInteger() = -1
+
+[PASS] testToDecimal/testToDecimal3
+       Expression: '0'.toDecimal() = 0
+
+[PASS] testToDecimal/testToDecimal4
+       Expression: '0.0'.toDecimal() = 0.0
+
+[PASS] testToDecimal/testToDecimal5
+       Expression: 'st'.toDecimal().empty()
+
+[PASS] testToString/testToString1
+       Expression: 1.toString() = '1'
+
+[PASS] testToString/testToString2
+       Expression: '-1'.toInteger() = -1
+
+[PASS] testToString/testToString3
+       Expression: 0.toString() = '0'
+
+[PASS] testToString/testToString4
+       Expression: 0.0.toString() = '0.0'
+
+[PASS] testToString/testToString5
+       Expression: @2014-12-14.toString() = '2014-12-14'
+
+[PASS] testCase/testCase1
+       Expression: 't'.upper() = 'T'
+
+[PASS] testCase/testCase2
+       Expression: 't'.lower() = 't'
+
+[PASS] testCase/testCase3
+       Expression: 'T'.upper() = 'T'
+
+[PASS] testCase/testCase4
+       Expression: 'T'.lower() = 't'
+
+[PASS] testToChars/testToChars1
+       Expression: 't2'.toChars() = 't' | '2'
+
+[PASS] testIndexOf/testIndexOf1
+       Expression: 'LogicalModel-Person'.indexOf('-')
+
+[PASS] testIndexOf/testIndexOf2
+       Expression: 'LogicalModel-Person'.indexOf('z')
+
+[PASS] testIndexOf/testIndexOf3
+       Expression: 'LogicalModel-Person'.indexOf('')
+
+[PASS] testIndexOf/testIndexOf5
+       Expression: 'LogicalModel-Person'.indexOf({}).empty() = true
+
+[PASS] testIndexOf/testIndexOf4
+       Expression: {}.indexOf('-').empty() = true
+
+[PASS] testIndexOf/testIndexOf6
+       Expression: {}.indexOf({}).empty() = true
+
+[PASS] testSubstring/testSubstring1
+       Expression: '12345'.substring(2) = '345'
+
+[PASS] testSubstring/testSubstring2
+       Expression: '12345'.substring(2,1) = '3'
+
+[PASS] testSubstring/testSubstring3
+       Expression: '12345'.substring(2,5) = '345'
+
+[PASS] testSubstring/testSubstring4
+       Expression: '12345'.substring(25).empty()
+
+[PASS] testSubstring/testSubstring5
+       Expression: '12345'.substring(-1).empty()
+
+[PASS] testSubstring/testSubstring7
+       Expression: 'LogicalModel-Person'.substring(0, 12)
+
+[PASS] testSubstring/testSubstring8
+       Expression: 'LogicalModel-Person'.substring(0, 'LogicalModel-Person'.indexOf('-'))
+
+[PASS] testSubstring/testSubstring9
+       Expression: {}.substring(25).empty() = true
+
+[PASS] testStartsWith/testStartsWith1
+       Expression: '12345'.startsWith('2') = false
+
+[PASS] testStartsWith/testStartsWith2
+       Expression: '12345'.startsWith('1') = true
+
+[PASS] testStartsWith/testStartsWith3
+       Expression: '12345'.startsWith('12') = true
+
+[PASS] testStartsWith/testStartsWith4
+       Expression: '12345'.startsWith('13') = false
+
+[PASS] testStartsWith/testStartsWith5
+       Expression: '12345'.startsWith('12345') = true
+
+[PASS] testStartsWith/testStartsWith6
+       Expression: '12345'.startsWith('123456') = false
+
+[PASS] testStartsWith/testStartsWith7
+       Expression: '12345'.startsWith('') = true
+
+[PASS] testStartsWith/testStartsWith8
+       Expression: {}.startsWith('1').empty() = true
+
+[PASS] testStartsWith/testStartsWith9
+       Expression: {}.startsWith('').empty() = true
+
+[PASS] testStartsWith/testStartsWith10
+       Expression: ''.startsWith('') = true
+
+[PASS] testStartsWith/testStartsWith11
+       Expression: {}.startsWith('').exists() = false
+
+[PASS] testStartsWith/testStartsWithNonString1
+       Expression: Appointment.identifier.startsWith('rand')
+
+[PASS] testEndsWith/testEndsWith1
+       Expression: '12345'.endsWith('2') = false
+
+[PASS] testEndsWith/testEndsWith2
+       Expression: '12345'.endsWith('5') = true
+
+[PASS] testEndsWith/testEndsWith3
+       Expression: '12345'.endsWith('45') = true
+
+[PASS] testEndsWith/testEndsWith4
+       Expression: '12345'.endsWith('35') = false
+
+[PASS] testEndsWith/testEndsWith5
+       Expression: '12345'.endsWith('12345') = true
+
+[PASS] testEndsWith/testEndsWith6
+       Expression: '12345'.endsWith('012345') = false
+
+[PASS] testEndsWith/testEndsWith7
+       Expression: '12345'.endsWith('') = true
+
+[PASS] testEndsWith/testEndsWith8
+       Expression: {}.endsWith('1').empty() = true
+
+[PASS] testEndsWith/testEndsWith9
+       Expression: {}.endsWith('').empty() = true
+
+[PASS] testEndsWith/testEndsWithNonString1
+       Expression: Appointment.identifier.endsWith('rand')
+
+[PASS] testContainsString/testContainsString1
+       Expression: '12345'.contains('6') = false
+
+[PASS] testContainsString/testContainsString2
+       Expression: '12345'.contains('5') = true
+
+[PASS] testContainsString/testContainsString3
+       Expression: '12345'.contains('45') = true
+
+[PASS] testContainsString/testContainsString4
+       Expression: '12345'.contains('35') = false
+
+[PASS] testContainsString/testContainsString5
+       Expression: '12345'.contains('12345') = true
+
+[PASS] testContainsString/testContainsString6
+       Expression: '12345'.contains('012345') = false
+
+[PASS] testContainsString/testContainsString7
+       Expression: '12345'.contains('') = true
+
+[PASS] testContainsString/testContainsString8
+       Expression: {}.contains('a').empty() = true
+
+[PASS] testContainsString/testContainsString9
+       Expression: {}.contains('').empty() = true
+
+[PASS] testContainsString/testContainsNonString1
+       Expression: Appointment.identifier.contains('rand')
+
+[PASS] testMatches/testMatchesCaseSensitive1
+       Expression: 'FHIR'.matches('FHIR')
+
+[PASS] testMatches/testMatchesCaseSensitive2
+       Expression: 'FHIR'.matches('fhir')
+
+[PASS] testMatches/testMatchesEmpty
+       Expression: 'FHIR'.matches({}).empty() = true
+
+[PASS] testMatches/testMatchesEmpty2
+       Expression: {}.matches('FHIR').empty() = true
+
+[PASS] testMatches/testMatchesEmpty3
+       Expression: {}.matches({}).empty() = true
+
+[PASS] testMatches/testMatchesSingleLineMode1
+       Expression: 'A
+			B'.matches('A.*B')
+
+[PASS] testMatches/testMatchesWithinUrl1
+       Expression: 'http://fhir.org/guides/cqf/common/Library/FHIR-ModelInfo|4.0.1'.matches('library')
+
+[PASS] testMatches/testMatchesWithinUrl2
+       Expression: 'http://fhir.org/guides/cqf/common/Library/FHIR-ModelInfo|4.0.1'.matches('Library')
+
+[PASS] testMatches/testMatchesWithinUrl3
+       Expression: 'http://fhir.org/guides/cqf/common/Library/FHIR-ModelInfo|4.0.1'.matches('^Library$')
+
+[PASS] testMatches/testMatchesWithinUrl1a
+       Expression: 'http://fhir.org/guides/cqf/common/Library/FHIR-ModelInfo|4.0.1'.matches('.*Library.*')
+
+[PASS] testMatches/testMatchesWithinUrl4
+       Expression: 'http://fhir.org/guides/cqf/common/Library/FHIR-ModelInfo|4.0.1'.matches('Measure')
+
+[PASS] testMatches/testMatchesFullWithinUrl1
+       Expression: 'http://fhir.org/guides/cqf/common/Library/FHIR-ModelInfo|4.0.1'.matchesFull('library')
+
+[PASS] testMatches/testMatchesFullWithinUrl3
+       Expression: 'http://fhir.org/guides/cqf/common/Library/FHIR-ModelInfo|4.0.1'.matchesFull('Library')
+
+[PASS] testMatches/testMatchesFullWithinUrl4
+       Expression: 'http://fhir.org/guides/cqf/common/Library/FHIR-ModelInfo|4.0.1'.matchesFull('^Library$')
+
+[PASS] testMatches/testMatchesFullWithinUrl1a
+       Expression: 'http://fhir.org/guides/cqf/common/Library/FHIR-ModelInfo|4.0.1'.matchesFull('.*Library.*')
+
+[PASS] testMatches/testMatchesFullWithinUrl2
+       Expression: 'http://fhir.org/guides/cqf/common/Library/FHIR-ModelInfo|4.0.1'.matchesFull('Measure')
+
+[PASS] testReplaceMatches/testReplaceMatches1
+       Expression: '123456'.replaceMatches('234', 'X')
+
+[PASS] testReplaceMatches/testReplaceMatches2
+       Expression: 'abc'.replaceMatches('', 'x')
+
+[PASS] testReplaceMatches/testReplaceMatches3
+       Expression: '123456'.replaceMatches('234', '')
+
+[PASS] testReplaceMatches/testReplaceMatches4
+       Expression: {}.replaceMatches('234', 'X').empty() = true
+
+[PASS] testReplaceMatches/testReplaceMatches5
+       Expression: '123'.replaceMatches({}, 'X').empty() = true
+
+[PASS] testReplaceMatches/testReplaceMatches6
+       Expression: '123'.replaceMatches('2', {}).empty() = true
+
+[PASS] testReplaceMatches/testReplaceMatches7
+       Expression: 'abc123'.replaceMatches('[0-9]', '-')
+
+[PASS] testReplace/testReplace1
+       Expression: '123456'.replace('234', 'X')
+
+[PASS] testReplace/testReplace2
+       Expression: 'abc'.replace('', 'x')
+
+[PASS] testReplace/testReplace3
+       Expression: '123456'.replace('234', '')
+
+[PASS] testReplace/testReplace4
+       Expression: {}.replace('234', 'X').empty() = true
+
+[PASS] testReplace/testReplace5
+       Expression: '123'.replace({}, 'X').empty() = true
+
+[PASS] testReplace/testReplace6
+       Expression: '123'.replace('2', {}).empty() = true
+
+[PASS] testLength/testLength1
+       Expression: '123456'.length() = 6
+
+[PASS] testLength/testLength2
+       Expression: '12345'.length() = 5
+
+[PASS] testLength/testLength3
+       Expression: '123'.length() = 3
+
+[PASS] testLength/testLength4
+       Expression: '1'.length() = 1
+
+[PASS] testLength/testLength5
+       Expression: ''.length() = 0
+
+[PASS] testLength/testLength6
+       Expression: {}.length().empty() = true
+
+[PASS] testEncodeDecode/testEncodeBase64A
+       Expression: 'test'.encode('base64')
+
+[PASS] testEncodeDecode/testEncodeHex
+       Expression: 'test'.encode('hex')
+
+[PASS] testEncodeDecode/testEncodeBase64B
+       Expression: 'subjects?_d'.encode('base64')
+
+[PASS] testEncodeDecode/testEncodeUrlBase64
+       Expression: 'subjects?_d'.encode('urlbase64')
+
+[PASS] testEncodeDecode/testDecodeBase64A
+       Expression: 'dGVzdA=='.decode('base64')
+
+[PASS] testEncodeDecode/testDecodeHex
+       Expression: '74657374'.decode('hex')
+
+[PASS] testEncodeDecode/testDecodeBase64B
+       Expression: 'c3ViamVjdHM/X2Q='.decode('base64')
+
+[PASS] testEncodeDecode/testDecodeUrlBase64
+       Expression: 'c3ViamVjdHM_X2Q='.decode('urlbase64')
+
+[PASS] testEscapeUnescape/testEscapeHtml
+       Expression: '"1<2"'.escape('html')
+
+[PASS] testEscapeUnescape/testEscapeJson
+       Expression: '"1<2"'.escape('json')
+
+[PASS] testEscapeUnescape/testUnescapeHtml
+       Expression: '&quot;1&lt;2&quot;'.unescape('html')
+
+[PASS] testEscapeUnescape/testUnescapeJson
+       Expression: '\"1<2\"'.unescape('json')
+
+[PASS] testTrim/testTrim1
+       Expression: '123456'.trim().length() = 6
+
+[PASS] testTrim/testTrim2
+       Expression: '123 456'.trim().length() = 7
+
+[PASS] testTrim/testTrim3
+       Expression: ' 123456 '.trim().length() = 6
+
+[PASS] testTrim/testTrim4
+       Expression: '  '.trim().length() = 0
+
+[PASS] testTrim/testTrim5
+       Expression: {}.trim().empty() = true
+
+[PASS] testTrim/testTrim6
+       Expression: '      '.trim() = ''
+
+[PASS] testSplit/testSplit1
+       Expression: 'Peter,James,Jim,Peter,James'.split(',').count() = 5
+
+[PASS] testSplit/testSplit2
+       Expression: 'A,,C'.split(',').join(',') = 'A,,C'
+
+[PASS] testSplit/testSplit3
+       Expression: '[stop]ONE[stop][stop]TWO[stop][stop][stop]THREE[stop][stop]'.split('[stop]').trace('n').count() = 9
+
+[PASS] testSplit/testSplit4
+       Expression: '[stop]ONE[stop][stop]TWO[stop][stop][stop]THREE[stop][stop]'.split('[stop]').join('[stop]')
+
+[PASS] testJoin/testJoin
+       Expression: name.given.join(',')
+
+[PASS] testTrace/testTrace1
+       Expression: name.given.trace('test').count() = 5
+
+[PASS] testTrace/testTrace2
+       Expression: name.trace('test', given).count() = 3
+
+[PASS] testToday/testToday1
+       Expression: Patient.birthDate < today()
+
+[PASS] testToday/testToday2
+       Expression: today().toString().length() = 10
+
+[PASS] testNow/testNow1
+       Expression: Patient.birthDate < now()
+
+[PASS] testNow/testNow2
+       Expression: now().toString().length() > 10
+
+[PASS] testSort/testSort1
+       Expression: (1 | 2 | 3).sort() = (1 | 2 | 3)
+
+[PASS] testSort/testSort2
+       Expression: (3 | 2 | 1).sort() = (1 | 2 | 3)
+
+[PASS] testSort/testSort3
+       Expression: (1 | 2 | 3).sort($this) = (1 | 2 | 3)
+
+[PASS] testSort/testSort4
+       Expression: (3 | 2 | 1).sort($this) = (1 | 2 | 3)
+
+[PASS] testSort/testSort5
+       Expression: (1 | 2 | 3).sort(-$this) = (3 | 2 | 1)
+
+[PASS] testSort/testSort6
+       Expression: ('a' | 'b' | 'c').sort($this) = ('a' | 'b' | 'c')
+
+[PASS] testSort/testSort7
+       Expression: ('c' | 'b' | 'a').sort($this) = ('a' | 'b' | 'c')
+
+[PASS] testSort/testSort8
+       Expression: ('a' | 'b' | 'c').sort(-$this) = ('c' | 'b' | 'a')
+
+[PASS] testSort/testSort9
+       Expression: Patient.name[0].given.sort() = ('James' | 'Peter')
+
+[PASS] testSort/testSort10
+       Expression: Patient.name.sort(-family, -given.first()).first().use = 'usual'
+
+[PASS] testEquality/testEquality1
+       Expression: 1 = 1
+
+[PASS] testEquality/testEquality2
+       Expression: {} = {}
+
+[PASS] testEquality/testEquality3
+       Expression: true = {}
+
+[PASS] testEquality/testEquality4
+       Expression: (1) = (1)
+
+[PASS] testEquality/testEquality5
+       Expression: (1 | 2) = (1 | 2)
+
+[PASS] testEquality/testEquality6
+       Expression: (1 | 2 | 3) = (1 | 2 | 3)
+
+[PASS] testEquality/testEquality7
+       Expression: (1 | 1) = (1 | 2 | {})
+
+[PASS] testEquality/testEquality8
+       Expression: 1 = 2
+
+[PASS] testEquality/testEquality9
+       Expression: 'a' = 'a'
+
+[PASS] testEquality/testEquality10
+       Expression: 'a' = 'A'
+
+[PASS] testEquality/testEquality11
+       Expression: 'a' = 'b'
+
+[PASS] testEquality/testEquality12
+       Expression: 1.1 = 1.1
+
+[PASS] testEquality/testEquality13
+       Expression: 1.1 = 1.2
+
+[PASS] testEquality/testEquality14
+       Expression: 1.10 = 1.1
+
+[PASS] testEquality/testEquality15
+       Expression: 0 = 0
+
+[PASS] testEquality/testEquality16
+       Expression: 0.0 = 0
+
+[PASS] testEquality/testEquality17
+       Expression: @2012-04-15 = @2012-04-15
+
+[PASS] testEquality/testEquality18
+       Expression: @2012-04-15 = @2012-04-16
+
+[PASS] testEquality/testEquality19
+       Expression: @2012-04-15 = @2012-04-15T10:00:00
+
+[PASS] testEquality/testEquality20
+       Expression: @2012-04-15T15:00:00 = @2012-04-15T10:00:00
+
+[PASS] testEquality/testEquality21
+       Expression: @2012-04-15T15:30:31 = @2012-04-15T15:30:31.0
+
+[PASS] testEquality/testEquality22
+       Expression: @2012-04-15T15:30:31 = @2012-04-15T15:30:31.1
+
+[PASS] testEquality/testEquality23
+       Expression: @2012-04-15T15:00:00Z = @2012-04-15T10:00:00
+
+[PASS] testEquality/testEquality24
+       Expression: @2012-04-15T15:00:00+02:00 = @2012-04-15T16:00:00+03:00
+
+[PASS] testEquality/testEquality25
+       Expression: name = name
+
+[PASS] testEquality/testEquality26
+       Expression: name.take(2) = name.take(2).first() | name.take(2).last()
+
+[PASS] testEquality/testEquality27
+       Expression: name.take(2) = name.take(2).last() | name.take(2).first()
+
+[PASS] testEquality/testEquality28
+       Expression: Observation.value = 185 '[lb_av]'
+
+[PASS] testNEquality/testNEquality1
+       Expression: 1 != 1
+
+[PASS] testNEquality/testNEquality2
+       Expression: {} != {}
+
+[PASS] testNEquality/testNEquality3
+       Expression: 1 != 2
+
+[PASS] testNEquality/testNEquality4
+       Expression: 'a' != 'a'
+
+[PASS] testNEquality/testNEquality5
+       Expression: 'a' != 'b'
+
+[PASS] testNEquality/testNEquality6
+       Expression: 1.1 != 1.1
+
+[PASS] testNEquality/testNEquality7
+       Expression: 1.1 != 1.2
+
+[PASS] testNEquality/testNEquality8
+       Expression: 1.10 != 1.1
+
+[PASS] testNEquality/testNEquality9
+       Expression: 0 != 0
+
+[PASS] testNEquality/testNEquality10
+       Expression: 0.0 != 0
+
+[PASS] testNEquality/testNEquality11
+       Expression: @2012-04-15 != @2012-04-15
+
+[PASS] testNEquality/testNEquality12
+       Expression: @2012-04-15 != @2012-04-16
+
+[PASS] testNEquality/testNEquality13
+       Expression: @2012-04-15 != @2012-04-15T10:00:00
+
+[PASS] testNEquality/testNEquality14
+       Expression: @2012-04-15T15:00:00 != @2012-04-15T10:00:00
+
+[PASS] testNEquality/testNEquality15
+       Expression: @2012-04-15T15:30:31 != @2012-04-15T15:30:31.0
+
+[PASS] testNEquality/testNEquality16
+       Expression: @2012-04-15T15:30:31 != @2012-04-15T15:30:31.1
+
+[PASS] testNEquality/testNEquality17
+       Expression: @2012-04-15T15:00:00Z != @2012-04-15T10:00:00
+
+[PASS] testNEquality/testNEquality18
+       Expression: @2012-04-15T15:00:00+02:00 != @2012-04-15T16:00:00+03:00
+
+[PASS] testNEquality/testNEquality19
+       Expression: name != name
+
+[PASS] testNEquality/testNEquality20
+       Expression: name.take(2) != name.take(2).first() | name.take(2).last()
+
+[PASS] testNEquality/testNEquality21
+       Expression: name.take(2) != name.take(2).last() | name.take(2).first()
+
+[PASS] testNEquality/testNEquality22
+       Expression: (1.2 / 1.8).round(2) != 0.6666667
+
+[PASS] testNEquality/testNEquality23
+       Expression: (1.2 / 1.8).round(2) != 0.67
+
+[PASS] testNEquality/testNEquality24
+       Expression: Observation.value != 185 'kg'
+
+[PASS] testEquivalent/testEquivalent1
+       Expression: 1 ~ 1
+
+[PASS] testEquivalent/testEquivalent2
+       Expression: {} ~ {}
+
+[PASS] testEquivalent/testEquivalent3
+       Expression: 1 ~ {}
+
+[PASS] testEquivalent/testEquivalent4
+       Expression: 1 ~ 2
+
+[PASS] testEquivalent/testEquivalent5
+       Expression: 'a' ~ 'a'
+
+[PASS] testEquivalent/testEquivalent6
+       Expression: 'a' ~ 'A'
+
+[PASS] testEquivalent/testEquivalent7
+       Expression: 'a' ~ 'b'
+
+[PASS] testEquivalent/testEquivalent8
+       Expression: 1.1 ~ 1.1
+
+[PASS] testEquivalent/testEquivalent9
+       Expression: 1.1 ~ 1.2
+
+[PASS] testEquivalent/testEquivalent10
+       Expression: 1.10 ~ 1.1
+
+[PASS] testEquivalent/testEquivalent11
+       Expression: 1.2 / 1.8 ~ 0.67
+
+[PASS] testEquivalent/testEquivalent12
+       Expression: 0 ~ 0
+
+[PASS] testEquivalent/testEquivalent13
+       Expression: 0.0 ~ 0
+
+[PASS] testEquivalent/testEquivalent14
+       Expression: @2012-04-15 ~ @2012-04-15
+
+[PASS] testEquivalent/testEquivalent15
+       Expression: @2012-04-15 ~ @2012-04-16
+
+[PASS] testEquivalent/testEquivalent16
+       Expression: @2012-04-15 ~ @2012-04-15T10:00:00
+
+[PASS] testEquivalent/testEquivalent17
+       Expression: @2012-04-15T15:30:31 ~ @2012-04-15T15:30:31.0
+
+[PASS] testEquivalent/testEquivalent18
+       Expression: @2012-04-15T15:30:31 ~ @2012-04-15T15:30:31.1
+
+[PASS] testEquivalent/testEquivalent19
+       Expression: name ~ name
+
+[PASS] testEquivalent/testEquivalent20
+       Expression: name.take(2).given ~ name.take(2).first().given | name.take(2).last().given
+
+[PASS] testEquivalent/testEquivalent21
+       Expression: name.take(2).given ~ name.take(2).last().given | name.take(2).first().given
+
+[PASS] testEquivalent/testEquivalent22
+       Expression: Observation.value ~ 185 '[lb_av]'
+
+[PASS] testEquivalent/testEquivalent23
+       Expression: (1 | 2 | 3) ~ (1 | 2 | 3)
+
+[PASS] testEquivalent/testEquivalent23
+       Expression: (1 | 2 | 3) ~ (3 | 2 | 1)
+
+[PASS] testNotEquivalent/testNotEquivalent1
+       Expression: 1 !~ 1
+
+[PASS] testNotEquivalent/testNotEquivalent2
+       Expression: {} !~ {}
+
+[PASS] testNotEquivalent/testNotEquivalent3
+       Expression: {} !~ 1
+
+[PASS] testNotEquivalent/testNotEquivalent4
+       Expression: 1 !~ 2
+
+[PASS] testNotEquivalent/testNotEquivalent5
+       Expression: 'a' !~ 'a'
+
+[PASS] testNotEquivalent/testNotEquivalent6
+       Expression: 'a' !~ 'A'
+
+[PASS] testNotEquivalent/testNotEquivalent7
+       Expression: 'a' !~ 'b'
+
+[PASS] testNotEquivalent/testNotEquivalent8
+       Expression: 1.1 !~ 1.1
+
+[PASS] testNotEquivalent/testNotEquivalent9
+       Expression: 1.1 !~ 1.2
+
+[PASS] testNotEquivalent/testNotEquivalent10
+       Expression: 1.10 !~ 1.1
+
+[PASS] testNotEquivalent/testNotEquivalent11
+       Expression: 0 !~ 0
+
+[PASS] testNotEquivalent/testNotEquivalent12
+       Expression: 0.0 !~ 0
+
+[PASS] testNotEquivalent/testNotEquivalent13
+       Expression: 1.2 / 1.8 !~ 0.6
+
+[PASS] testNotEquivalent/testNotEquivalent14
+       Expression: @2012-04-15 !~ @2012-04-15
+
+[PASS] testNotEquivalent/testNotEquivalent15
+       Expression: @2012-04-15 !~ @2012-04-16
+
+[PASS] testNotEquivalent/testNotEquivalent16
+       Expression: @2012-04-15 !~ @2012-04-15T10:00:00
+
+[PASS] testNotEquivalent/testNotEquivalent17
+       Expression: @2012-04-15T15:30:31 !~ @2012-04-15T15:30:31.0
+
+[PASS] testNotEquivalent/testNotEquivalent18
+       Expression: @2012-04-15T15:30:31 !~ @2012-04-15T15:30:31.1
+
+[PASS] testNotEquivalent/testNotEquivalent19
+       Expression: name !~ name
+
+[PASS] testNotEquivalent/testNotEquivalent20
+       Expression: name.take(2).given !~ name.take(2).first().given | name.take(2).last().given
+
+[PASS] testNotEquivalent/testNotEquivalent21
+       Expression: name.take(2).given !~ name.take(2).last().given | name.take(2).first().given
+
+[PASS] testNotEquivalent/testNotEquivalent22
+       Expression: Observation.value !~ 185 'kg'
+
+[PASS] testLessThan/testLessThan1
+       Expression: 1 < 2
+
+[PASS] testLessThan/testLessThan2
+       Expression: 1.0 < 1.2
+
+[PASS] testLessThan/testLessThan3
+       Expression: 'a' < 'b'
+
+[PASS] testLessThan/testLessThan4
+       Expression: 'A' < 'a'
+
+[PASS] testLessThan/testLessThan5
+       Expression: @2014-12-12 < @2014-12-13
+
+[PASS] testLessThan/testLessThan6
+       Expression: @2014-12-13T12:00:00 < @2014-12-13T12:00:01
+
+[PASS] testLessThan/testLessThan7
+       Expression: @T12:00:00 < @T14:00:00
+
+[PASS] testLessThan/testLessThan8
+       Expression: 1 < 1
+
+[PASS] testLessThan/testLessThan9
+       Expression: 1.0 < 1.0
+
+[PASS] testLessThan/testLessThan10
+       Expression: 'a' < 'a'
+
+[PASS] testLessThan/testLessThan11
+       Expression: 'A' < 'A'
+
+[PASS] testLessThan/testLessThan12
+       Expression: @2014-12-12 < @2014-12-12
+
+[PASS] testLessThan/testLessThan13
+       Expression: @2014-12-13T12:00:00 < @2014-12-13T12:00:00
+
+[PASS] testLessThan/testLessThan14
+       Expression: @T12:00:00 < @T12:00:00
+
+[PASS] testLessThan/testLessThan15
+       Expression: 2 < 1
+
+[PASS] testLessThan/testLessThan16
+       Expression: 1.1 < 1.0
+
+[PASS] testLessThan/testLessThan17
+       Expression: 'b' < 'a'
+
+[PASS] testLessThan/testLessThan18
+       Expression: 'B' < 'A'
+
+[PASS] testLessThan/testLessThan19
+       Expression: @2014-12-13 < @2014-12-12
+
+[PASS] testLessThan/testLessThan20
+       Expression: @2014-12-13T12:00:01 < @2014-12-13T12:00:00
+
+[PASS] testLessThan/testLessThan21
+       Expression: @T12:00:01 < @T12:00:00
+
+[PASS] testLessThan/testLessThan22
+       Expression: Observation.value < 200 '[lb_av]'
+
+[PASS] testLessThan/testLessThan23
+       Expression: @2018-03 < @2018-03-01
+
+[PASS] testLessThan/testLessThan24
+       Expression: @2018-03-01T10:30 < @2018-03-01T10:30:00
+
+[PASS] testLessThan/testLessThan25
+       Expression: @T10:30 < @T10:30:00
+
+[PASS] testLessThan/testLessThan26
+       Expression: @2018-03-01T10:30:00 < @2018-03-01T10:30:00.0
+
+[PASS] testLessThan/testLessThan27
+       Expression: @T10:30:00 < @T10:30:00.0
+
+[PASS] testLessOrEqual/testLessOrEqual1
+       Expression: 1 <= 2
+
+[PASS] testLessOrEqual/testLessOrEqual2
+       Expression: 1.0 <= 1.2
+
+[PASS] testLessOrEqual/testLessOrEqual3
+       Expression: 'a' <= 'b'
+
+[PASS] testLessOrEqual/testLessOrEqual4
+       Expression: 'A' <= 'a'
+
+[PASS] testLessOrEqual/testLessOrEqual5
+       Expression: @2014-12-12 <= @2014-12-13
+
+[PASS] testLessOrEqual/testLessOrEqual6
+       Expression: @2014-12-13T12:00:00 <= @2014-12-13T12:00:01
+
+[PASS] testLessOrEqual/testLessOrEqual7
+       Expression: @T12:00:00 <= @T14:00:00
+
+[PASS] testLessOrEqual/testLessOrEqual8
+       Expression: 1 <= 1
+
+[PASS] testLessOrEqual/testLessOrEqual9
+       Expression: 1.0 <= 1.0
+
+[PASS] testLessOrEqual/testLessOrEqual10
+       Expression: 'a' <= 'a'
+
+[PASS] testLessOrEqual/testLessOrEqual11
+       Expression: 'A' <= 'A'
+
+[PASS] testLessOrEqual/testLessOrEqual12
+       Expression: @2014-12-12 <= @2014-12-12
+
+[PASS] testLessOrEqual/testLessOrEqual13
+       Expression: @2014-12-13T12:00:00 <= @2014-12-13T12:00:00
+
+[PASS] testLessOrEqual/testLessOrEqual14
+       Expression: @T12:00:00 <= @T12:00:00
+
+[PASS] testLessOrEqual/testLessOrEqual15
+       Expression: 2 <= 1
+
+[PASS] testLessOrEqual/testLessOrEqual16
+       Expression: 1.1 <= 1.0
+
+[PASS] testLessOrEqual/testLessOrEqual17
+       Expression: 'b' <= 'a'
+
+[PASS] testLessOrEqual/testLessOrEqual18
+       Expression: 'B' <= 'A'
+
+[PASS] testLessOrEqual/testLessOrEqual19
+       Expression: @2014-12-13 <= @2014-12-12
+
+[PASS] testLessOrEqual/testLessOrEqual20
+       Expression: @2014-12-13T12:00:01 <= @2014-12-13T12:00:00
+
+[PASS] testLessOrEqual/testLessOrEqual21
+       Expression: @T12:00:01 <= @T12:00:00
+
+[PASS] testLessOrEqual/testLessOrEqual22
+       Expression: Observation.value <= 200 '[lb_av]'
+
+[PASS] testLessOrEqual/testLessOrEqual23
+       Expression: @2018-03 <= @2018-03-01
+
+[PASS] testLessOrEqual/testLessOrEqual24
+       Expression: @2018-03-01T10:30 <= @2018-03-01T10:30:00
+
+[PASS] testLessOrEqual/testLessOrEqual25
+       Expression: @T10:30 <= @T10:30:00
+
+[PASS] testLessOrEqual/testLessOrEqual26
+       Expression: @2018-03-01T10:30:00  <= @2018-03-01T10:30:00.0
+
+[PASS] testLessOrEqual/testLessOrEqual27
+       Expression: @T10:30:00 <= @T10:30:00.0
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual1
+       Expression: 1 >= 2
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual2
+       Expression: 1.0 >= 1.2
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual3
+       Expression: 'a' >= 'b'
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual4
+       Expression: 'A' >= 'a'
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual5
+       Expression: @2014-12-12 >= @2014-12-13
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual6
+       Expression: @2014-12-13T12:00:00 >= @2014-12-13T12:00:01
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual7
+       Expression: @T12:00:00 >= @T14:00:00
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual8
+       Expression: 1 >= 1
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual9
+       Expression: 1.0 >= 1.0
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual10
+       Expression: 'a' >= 'a'
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual11
+       Expression: 'A' >= 'A'
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual12
+       Expression: @2014-12-12 >= @2014-12-12
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual13
+       Expression: @2014-12-13T12:00:00 >= @2014-12-13T12:00:00
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual14
+       Expression: @T12:00:00 >= @T12:00:00
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual15
+       Expression: 2 >= 1
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual16
+       Expression: 1.1 >= 1.0
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual17
+       Expression: 'b' >= 'a'
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual18
+       Expression: 'B' >= 'A'
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual19
+       Expression: @2014-12-13 >= @2014-12-12
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual20
+       Expression: @2014-12-13T12:00:01 >= @2014-12-13T12:00:00
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual21
+       Expression: @T12:00:01 >= @T12:00:00
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual22
+       Expression: Observation.value >= 100 '[lb_av]'
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual23
+       Expression: @2018-03 >= @2018-03-01
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual24
+       Expression: @2018-03-01T10:30 >= @2018-03-01T10:30:00
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual25
+       Expression: @T10:30 >= @T10:30:00
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual26
+       Expression: @2018-03-01T10:30:00 >= @2018-03-01T10:30:00.0
+
+[PASS] testGreatorOrEqual/testGreatorOrEqual27
+       Expression: @T10:30:00 >= @T10:30:00.0
+
+[PASS] testGreaterThan/testGreaterThan1
+       Expression: 1 > 2
+
+[PASS] testGreaterThan/testGreaterThan2
+       Expression: 1.0 > 1.2
+
+[PASS] testGreaterThan/testGreaterThan3
+       Expression: 'a' > 'b'
+
+[PASS] testGreaterThan/testGreaterThan4
+       Expression: 'A' > 'a'
+
+[PASS] testGreaterThan/testGreaterThan5
+       Expression: @2014-12-12 > @2014-12-13
+
+[PASS] testGreaterThan/testGreaterThan6
+       Expression: @2014-12-13T12:00:00 > @2014-12-13T12:00:01
+
+[PASS] testGreaterThan/testGreaterThan7
+       Expression: @T12:00:00 > @T14:00:00
+
+[PASS] testGreaterThan/testGreaterThan8
+       Expression: 1 > 1
+
+[PASS] testGreaterThan/testGreaterThan9
+       Expression: 1.0 > 1.0
+
+[PASS] testGreaterThan/testGreaterThan10
+       Expression: 'a' > 'a'
+
+[PASS] testGreaterThan/testGreaterThan11
+       Expression: 'A' > 'A'
+
+[PASS] testGreaterThan/testGreaterThan12
+       Expression: @2014-12-12 > @2014-12-12
+
+[PASS] testGreaterThan/testGreaterThan13
+       Expression: @2014-12-13T12:00:00 > @2014-12-13T12:00:00
+
+[PASS] testGreaterThan/testGreaterThan14
+       Expression: @T12:00:00 > @T12:00:00
+
+[PASS] testGreaterThan/testGreaterThan15
+       Expression: 2 > 1
+
+[PASS] testGreaterThan/testGreaterThan16
+       Expression: 1.1 > 1.0
+
+[PASS] testGreaterThan/testGreaterThan17
+       Expression: 'b' > 'a'
+
+[PASS] testGreaterThan/testGreaterThan18
+       Expression: 'B' > 'A'
+
+[PASS] testGreaterThan/testGreaterThan19
+       Expression: @2014-12-13 > @2014-12-12
+
+[PASS] testGreaterThan/testGreaterThan20
+       Expression: @2014-12-13T12:00:01 > @2014-12-13T12:00:00
+
+[PASS] testGreaterThan/testGreaterThan21
+       Expression: @T12:00:01 > @T12:00:00
+
+[PASS] testGreaterThan/testGreaterThan22
+       Expression: Observation.value > 100 '[lb_av]'
+
+[PASS] testGreaterThan/testGreaterThan23
+       Expression: @2018-03 > @2018-03-01
+
+[PASS] testGreaterThan/testGreaterThan24
+       Expression: @2018-03-01T10:30 > @2018-03-01T10:30:00
+
+[PASS] testGreaterThan/testGreaterThan25
+       Expression: @T10:30 > @T10:30:00
+
+[PASS] testGreaterThan/testGreaterThan26
+       Expression: @2018-03-01T10:30:00 > @2018-03-01T10:30:00.0
+
+[PASS] testGreaterThan/testGreaterThan27
+       Expression: @T10:30:00 > @T10:30:00.0
+
+[PASS] testCombine()/testCombine1
+       Expression: concept.code.combine($this.descendants().concept.code).isDistinct()
+
+[PASS] testCombine()/testCombine2
+       Expression: name.given.combine(name.family).exclude('Jim')
+
+[PASS] testCombine()/testCombine3
+       Expression: name.given.combine($this.name.family).exclude('Jim')
+
+[PASS] testUnion/testUnion1
+       Expression: (1 | 2 | 3).count() = 3
+
+[PASS] testUnion/testUnion2
+       Expression: (1 | 2 | 2).count() = 2
+
+[PASS] testUnion/testUnion3
+       Expression: (1|1).count() = 1
+
+[PASS] testUnion/testUnion4
+       Expression: 1.union(2).union(3).count() = 3
+
+[PASS] testUnion/testUnion5
+       Expression: 1.union(2.union(3)).count() = 3
+
+[PASS] testUnion/testUnion6
+       Expression: (1 | 2).combine(2).count() = 3
+
+[PASS] testUnion/testUnion7
+       Expression: 1.combine(1).count() = 2
+
+[PASS] testUnion/testUnion8
+       Expression: 1.combine(1).union(2).count() = 2
+
+[PASS] testUnion/testUnion9
+       Expression: name.select(use | given).count()
+
+[PASS] testUnion/testUnion10
+       Expression: name.select(use.union($this.given)).count()
+
+[PASS] testUnion/testUnion11
+       Expression: name.select(use.union(given)).count()
+
+[PASS] testIntersect/testIntersect1
+       Expression: (1 | 2 | 3).intersect(2 | 4) = 2
+
+[PASS] testIntersect/testIntersect2
+       Expression: (1 | 2).intersect(4).empty()
+
+[PASS] testIntersect/testIntersect3
+       Expression: (1 | 2).intersect({}).empty()
+
+[PASS] testIntersect/testIntersect4
+       Expression: 1.combine(1).intersect(1).count() = 1
+
+[PASS] testExclude/testExclude1
+       Expression: (1 | 2 | 3).exclude(2 | 4) = 1 | 3
+
+[PASS] testExclude/testExclude2
+       Expression: (1 | 2).exclude(4) = 1 | 2
+
+[PASS] testExclude/testExclude3
+       Expression: (1 | 2).exclude({}) = 1 | 2
+
+[PASS] testExclude/testExclude4
+       Expression: 1.combine(1).exclude(2).count() = 2
+
+[PASS] testIn/testIn1
+       Expression: 1 in (1 | 2 | 3)
+
+[PASS] testIn/testIn2
+       Expression: 1 in (2 | 3)
+
+[PASS] testIn/testIn3
+       Expression: 'a' in ('a' | 'c' | 'd')
+
+[PASS] testIn/testIn4
+       Expression: 'b' in ('a' | 'c' | 'd')
+
+[PASS] testContainsCollection/testContainsCollection1
+       Expression: (1 | 2 | 3) contains 1
+
+[PASS] testContainsCollection/testContainsCollection2
+       Expression: (2 | 3) contains 1
+
+[PASS] testContainsCollection/testContainsCollection3
+       Expression: ('a' | 'c' | 'd') contains 'a'
+
+[PASS] testContainsCollection/testContainsCollection4
+       Expression: ('a' | 'c' | 'd') contains 'b'
+
+[PASS] testBooleanLogicAnd/testBooleanLogicAnd1
+       Expression: (true and true) = true
+
+[PASS] testBooleanLogicAnd/testBooleanLogicAnd2
+       Expression: (true and false) = false
+
+[PASS] testBooleanLogicAnd/testBooleanLogicAnd3
+       Expression: (true and {}).empty()
+
+[PASS] testBooleanLogicAnd/testBooleanLogicAnd4
+       Expression: (false and true) = false
+
+[PASS] testBooleanLogicAnd/testBooleanLogicAnd5
+       Expression: (false and false) = false
+
+[PASS] testBooleanLogicAnd/testBooleanLogicAnd6
+       Expression: (false and {}) = false
+
+[PASS] testBooleanLogicAnd/testBooleanLogicAnd7
+       Expression: ({} and true).empty()
+
+[PASS] testBooleanLogicAnd/testBooleanLogicAnd8
+       Expression: ({} and false) = false
+
+[PASS] testBooleanLogicAnd/testBooleanLogicAnd9
+       Expression: ({} and {}).empty()
+
+[PASS] testBooleanLogicOr/testBooleanLogicOr1
+       Expression: (true or true) = true
+
+[PASS] testBooleanLogicOr/testBooleanLogicOr2
+       Expression: (true or false) = true
+
+[PASS] testBooleanLogicOr/testBooleanLogicOr3
+       Expression: (true or {}) = true
+
+[PASS] testBooleanLogicOr/testBooleanLogicOr4
+       Expression: (false or true) = true
+
+[PASS] testBooleanLogicOr/testBooleanLogicOr5
+       Expression: (false or false) = false
+
+[PASS] testBooleanLogicOr/testBooleanLogicOr6
+       Expression: (false or {}).empty()
+
+[PASS] testBooleanLogicOr/testBooleanLogicOr7
+       Expression: ({} or true) = true
+
+[PASS] testBooleanLogicOr/testBooleanLogicOr8
+       Expression: ({} or false).empty()
+
+[PASS] testBooleanLogicOr/testBooleanLogicOr9
+       Expression: ({} or {}).empty()
+
+[PASS] testBooleanLogicXOr/testBooleanLogicXOr1
+       Expression: (true xor true) = false
+
+[PASS] testBooleanLogicXOr/testBooleanLogicXOr2
+       Expression: (true xor false) = true
+
+[PASS] testBooleanLogicXOr/testBooleanLogicXOr3
+       Expression: (true xor {}).empty()
+
+[PASS] testBooleanLogicXOr/testBooleanLogicXOr4
+       Expression: (false xor true) = true
+
+[PASS] testBooleanLogicXOr/testBooleanLogicXOr5
+       Expression: (false xor false) = false
+
+[PASS] testBooleanLogicXOr/testBooleanLogicXOr6
+       Expression: (false xor {}).empty()
+
+[PASS] testBooleanLogicXOr/testBooleanLogicXOr7
+       Expression: ({} xor true).empty()
+
+[PASS] testBooleanLogicXOr/testBooleanLogicXOr8
+       Expression: ({} xor false).empty()
+
+[PASS] testBooleanLogicXOr/testBooleanLogicXOr9
+       Expression: ({} xor {}).empty()
+
+[PASS] testBooleanImplies/testBooleanImplies1
+       Expression: (true implies true) = true
+
+[PASS] testBooleanImplies/testBooleanImplies2
+       Expression: (true implies false) = false
+
+[PASS] testBooleanImplies/testBooleanImplies3
+       Expression: (true implies {}).empty()
+
+[PASS] testBooleanImplies/testBooleanImplies4
+       Expression: (false implies true) = true
+
+[PASS] testBooleanImplies/testBooleanImplies5
+       Expression: (false implies false) = true
+
+[PASS] testBooleanImplies/testBooleanImplies6
+       Expression: (false implies {}) = true
+
+[PASS] testBooleanImplies/testBooleanImplies7
+       Expression: ({} implies true) = true
+
+[PASS] testBooleanImplies/testBooleanImplies8
+       Expression: ({} implies false).empty()
+
+[PASS] testBooleanImplies/testBooleanImplies9
+       Expression: ({} implies {}).empty()
+
+[PASS] testPlus/testPlus1
+       Expression: 1 + 1 = 2
+
+[PASS] testPlus/testPlus2
+       Expression: 1 + 0 = 1
+
+[PASS] testPlus/testPlus3
+       Expression: 1.2 + 1.8 = 3.0
+
+[PASS] testPlus/testPlus4
+       Expression: 'a'+'b' = 'ab'
+
+[PASS] testPlus/testPlusDate1
+       Expression: @1973-12-25 + 7 days
+
+[PASS] testPlus/testPlusDate2
+       Expression: @1973-12-25 + 7.7 days
+
+[PASS] testPlus/testPlusDate3
+       Expression: @1973-12-25T00:00:00.000+10:00 + 7 days
+
+[PASS] testPlus/testPlusDate4
+       Expression: @1973-12-25T00:00:00.000+10:00 + 7.7 days
+
+[PASS] testPlus/testPlusDate5
+       Expression: @1973-12-25T00:00:00.000+10:00 + 1 second
+
+[PASS] testPlus/testPlusDate6
+       Expression: @1973-12-25T00:00:00.000+10:00 + 10 millisecond
+
+[PASS] testPlus/testPlusDate7
+       Expression: @1973-12-25T00:00:00.000+10:00 + 1 minute
+
+[PASS] testPlus/testPlusDate8
+       Expression: @1973-12-25T00:00:00.000+10:00 + 1 hour
+
+[PASS] testPlus/testPlusDate9
+       Expression: @1973-12-25 + 1 day
+
+[PASS] testPlus/testPlusDate10
+       Expression: @1973-12-25 + 1 month
+
+[PASS] testPlus/testPlusDate11
+       Expression: @1973-12-25 + 1 week
+
+[PASS] testPlus/testPlusDate12
+       Expression: @1973-12-25 + 1 year
+
+[PASS] testPlus/testPlusDate13
+       Expression: @1973-12-25 + 1 'd'
+
+[PASS] testPlus/testPlusDate14
+       Expression: @1973-12-25 + 1 'mo'
+
+[PASS] testPlus/testPlusDate15
+       Expression: @1973-12-25 + 1 'wk'
+
+[PASS] testPlus/testPlusDate16
+       Expression: @1973-12-25 + 1 'a'
+
+[PASS] testPlus/testPlusDate17
+       Expression: @1975-12-25 + 1 'a'
+
+[PASS] testPlus/testPlusDate18
+       Expression: @1973-12-25T00:00:00.000+10:00 + 1 's'
+
+[PASS] testPlus/testPlusDate19
+       Expression: @1973-12-25T00:00:00.000+10:00 + 0.1 's'
+
+[PASS] testPlus/testPlusDate20
+       Expression: @1973-12-25T00:00:00.000+10:00 + 10 'ms'
+
+[PASS] testPlus/testPlusDate21
+       Expression: @1973-12-25T00:00:00.000+10:00 + 1 'min'
+
+[PASS] testPlus/testPlusDate22
+       Expression: @1973-12-25T00:00:00.000+10:00 + 1 'h'
+
+[PASS] testPlus/testPlus6
+       Expression: @1974-12-25 + 7
+
+[PASS] testConcatenate/testConcatenate1
+       Expression: 'a' & 'b' = 'ab'
+
+[PASS] testConcatenate/testConcatenate2
+       Expression: '1' & {} = '1'
+
+[PASS] testConcatenate/testConcatenate3
+       Expression: {} & 'b' = 'b'
+
+[PASS] testConcatenate/testConcatenate4
+       Expression: (1 | 2 | 3) & 'b' = '1,2,3b'
+
+[PASS] testMinus/testMinus1
+       Expression: 1 - 1 = 0
+
+[PASS] testMinus/testMinus2
+       Expression: 1 - 0 = 1
+
+[PASS] testMinus/testMinus3
+       Expression: 1.8 - 1.2 = 0.6
+
+[PASS] testMinus/testMinus4
+       Expression: 'a'-'b' = 'ab'
+
+[PASS] testMinus/testMinus5
+       Expression: @1974-12-25 - 1 'month'
+
+[PASS] testMinus/testMinus6
+       Expression: @1974-12-25 - 1 'cm'
+
+[PASS] testMultiply/testMultiply1
+       Expression: 1 * 1 = 1
+
+[PASS] testMultiply/testMultiply2
+       Expression: 1 * 0 = 0
+
+[PASS] testMultiply/testMultiply3
+       Expression: 1.2 * 1.8 = 2.16
+
+[PASS] testDivide/testDivide1
+       Expression: 1 / 1 = 1
+
+[PASS] testDivide/testDivide2
+       Expression: 4 / 2 = 2
+
+[PASS] testDivide/testDivide3
+       Expression: 4.0 / 2.0 = 2.0
+
+[PASS] testDivide/testDivide4
+       Expression: 1 / 2 = 0.5
+
+[PASS] testDivide/testDivide5
+       Expression: (1.2 / 1.8).round(2) = 0.67
+
+[PASS] testDivide/testDivide6
+       Expression: 1 / 0
+
+[PASS] testDiv/testDiv1
+       Expression: 1 div 1 = 1
+
+[PASS] testDiv/testDiv2
+       Expression: 4 div 2 = 2
+
+[PASS] testDiv/testDiv3
+       Expression: 5 div 2 = 2
+
+[PASS] testDiv/testDiv4
+       Expression: 2.2 div 1.8 = 1
+
+[PASS] testDiv/testDiv5
+       Expression: 5 div 0
+
+[PASS] testMod/testMod1
+       Expression: 1 mod 1 = 0
+
+[PASS] testMod/testMod2
+       Expression: 4 mod 2 = 0
+
+[PASS] testMod/testMod3
+       Expression: 5 mod 2 = 1
+
+[PASS] testMod/testMod4
+       Expression: 2.2 mod 1.8 = 0.4
+
+[PASS] testMod/testMod5
+       Expression: 5 mod 0
+
+[PASS] testRound/testRound1
+       Expression: 1.round() = 1
+
+[PASS] testRound/testRound2
+       Expression: 3.14159.round(3) = 3.142
+
+[PASS] testSqrt/testSqrt1
+       Expression: 81.sqrt() = 9.0
+
+[PASS] testSqrt/testSqrt2
+       Expression: (-1).sqrt()
+
+[PASS] testAbs/testAbs1
+       Expression: (-5).abs() = 5
+
+[PASS] testAbs/testAbs2
+       Expression: (-5.5).abs() = 5.5
+
+[PASS] testAbs/testAbs3
+       Expression: (-5.5 'mg').abs() = 5.5 'mg'
+
+[PASS] testCeiling/testCeiling1
+       Expression: 1.ceiling() = 1
+
+[PASS] testCeiling/testCeiling2
+       Expression: (-1.1).ceiling() = -1
+
+[PASS] testCeiling/testCeiling3
+       Expression: 1.1.ceiling() = 2
+
+[PASS] testExp/testExp1
+       Expression: 0.exp() = 1
+
+[PASS] testExp/testExp2
+       Expression: (-0.0).exp() = 1
+
+[PASS] testExp/testExp3
+       Expression: {}.exp().empty() = true
+
+[PASS] testFloor/testFloor1
+       Expression: 1.floor() = 1
+
+[PASS] testFloor/testFloor2
+       Expression: 2.1.floor() = 2
+
+[PASS] testFloor/testFloor3
+       Expression: (-2.1).floor() = -3
+
+[PASS] testLn/testLn1
+       Expression: 1.ln() = 0.0
+
+[PASS] testLn/testLn2
+       Expression: 1.0.ln() = 0.0
+
+[PASS] testLog/testLog1
+       Expression: 16.log(2) = 4.0
+
+[PASS] testLog/testLog2
+       Expression: 100.0.log(10.0) = 2.0
+
+[PASS] testPower/testPower1
+       Expression: 2.power(3) = 8
+
+[PASS] testPower/testPower2
+       Expression: 2.5.power(2) = 6.25
+
+[PASS] testPower/testPower3
+       Expression: (-1).power(0.5)
+
+[PASS] testTruncate/testTruncate1
+       Expression: 101.truncate() = 101
+
+[PASS] testTruncate/testTruncate2
+       Expression: 1.00000001.truncate() = 1
+
+[PASS] testTruncate/testTruncate3
+       Expression: (-1.56).truncate() = -1
+
+[FAIL] testPrecedence/testPrecedence1
+       Expression: -1.convertsToInteger()
+       Error: Expected error (execution) but got result
+       Actual: [DescendingSortMarker(True)]
+
+[PASS] testPrecedence/testPrecedence2
+       Expression: 1+2*3+4 = 11
+
+[FAIL] testPrecedence/testPrecedence3
+       Expression: 1 > 2 is Boolean
+       Error: Expected error (execution) but got result
+       Actual: [True]
+       Expected: [('boolean', 'true')]
+
+[FAIL] testPrecedence/testPrecedence4
+       Expression: (1 | 1 is Integer).count()
+       Error: Expected (integer): 2, Got: [1]
+       Actual: [1]
+       Expected: [('integer', '2')]
+
+[PASS] testPrecedence/testPrecedence5
+       Expression: true and '0215' in ('0215' | '0216')
+
+[PASS] testPrecedence/testPrecedence6
+       Expression: category.exists(coding.exists(system = 'http://terminology.hl7.org/CodeSystem/observation-category' and code.trace('c') in ('vital-signs' | 'vital-signs2').trace('codes')))
+
+[PASS] testVariables/testVariables1
+       Expression: %sct = 'http://snomed.info/sct'
+
+[PASS] testVariables/testVariables2
+       Expression: %loinc = 'http://loinc.org'
+
+[PASS] testVariables/testVariables3
+       Expression: %ucum = 'http://unitsofmeasure.org'
+
+[FAIL] testVariables/testVariables4
+       Expression: %`vs-administrative-gender` = 'http://hl7.org/fhir/ValueSet/administrative-gender'
+       Error: Attempting to access an undefined environment variable: vs-administrative-gender
+       Expected: [('boolean', 'true')]
+
+[PASS] testExtension/testExtension1
+       Expression: Patient.birthDate.extension('http://hl7.org/fhir/StructureDefinition/patient-birthTime').exists()
+
+[FAIL] testExtension/testExtension2
+       Expression: Patient.birthDate.extension(%`ext-patient-birthTime`).exists()
+       Error: Attempting to access an undefined environment variable: ext-patient-birthTime
+       Expected: [('boolean', 'true')]
+
+[PASS] testExtension/testExtension3
+       Expression: Patient.birthDate.extension('http://hl7.org/fhir/StructureDefinition/patient-birthTime1').empty()
+
+[PASS] testType/testType1
+       Expression: 1.type().namespace = 'System'
+
+[PASS] testType/testType1a
+       Expression: 1.type().name = 'Integer'
+
+[PASS] testType/testType2
+       Expression: '1'.type().namespace = 'System'
+
+[PASS] testType/testType2a
+       Expression: '1'.type().name = 'String'
+
+[PASS] testType/testType3
+       Expression: true.type().namespace = 'System'
+
+[PASS] testType/testType4
+       Expression: true.type().name = 'Boolean'
+
+[PASS] testType/testType5
+       Expression: true.is(Boolean)
+
+[PASS] testType/testType6
+       Expression: true.is(System.Boolean)
+
+[PASS] testType/testType7
+       Expression: true is Boolean
+
+[PASS] testType/testType8
+       Expression: true is System.Boolean
+
+[PASS] testType/testType9
+       Expression: Patient.active.type().namespace = 'FHIR'
+
+[PASS] testType/testType10
+       Expression: Patient.active.type().name = 'boolean'
+
+[PASS] testType/testType11
+       Expression: Patient.active.is(boolean)
+
+[PASS] testType/testType12
+       Expression: Patient.active.is(Boolean).not()
+
+[PASS] testType/testType13
+       Expression: Patient.active.is(FHIR.boolean)
+
+[FAIL] testType/testType14
+       Expression: Patient.active.is(System.Boolean).not()
+       Error: Expected (boolean): true, Got: [False]
+       Actual: [False]
+       Expected: [('boolean', 'true')]
+
+[PASS] testType/testType15
+       Expression: Patient.type().namespace = 'FHIR'
+
+[PASS] testType/testType16
+       Expression: Patient.type().name = 'Patient'
+
+[PASS] testType/testType17
+       Expression: Patient.is(Patient)
+
+[PASS] testType/testType18
+       Expression: Patient.is(FHIR.Patient)
+
+[PASS] testType/testType19
+       Expression: Patient.is(FHIR.`Patient`)
+
+[PASS] testType/testType20
+       Expression: Patient.ofType(Patient).type().name
+
+[PASS] testType/testType21
+       Expression: Patient.ofType(FHIR.Patient).type().name
+
+[FAIL] testType/testType22
+       Expression: Patient.is(System.Patient).not()
+       Error: Expected (boolean): true, Got: [False]
+       Actual: [False]
+       Expected: [('boolean', 'true')]
+
+[PASS] testType/testType23
+       Expression: Patient.ofType(FHIR.`Patient`).type().name
+
+[PASS] testType/testTypeA1
+       Expression: Parameters.parameter[0].value.is(FHIR.string)
+
+[PASS] testType/testTypeA2
+       Expression: Parameters.parameter[1].value.is(FHIR.integer)
+
+[PASS] testType/testTypeA3
+       Expression: Parameters.parameter[2].value.is(FHIR.uuid)
+
+[FAIL] testType/testTypeA4
+       Expression: Parameters.parameter[2].value.is(FHIR.uri)
+       Error: Expected (boolean): true, Got: [False]
+       Actual: [False]
+       Expected: [('boolean', 'true')]
+
+[PASS] testType/testTypeA
+       Expression: Parameters.parameter[3].value.is(FHIR.decimal)
+
+[PASS] testConformsTo/testConformsTo1
+       Expression: conformsTo('http://hl7.org/fhir/StructureDefinition/Patient')
+
+[PASS] testConformsTo/testConformsTo2
+       Expression: conformsTo('http://hl7.org/fhir/StructureDefinition/Person')
+
+[PASS] testConformsTo/testConformsTo3
+       Expression: conformsTo('http://trash')
+
+[PASS] LowBoundary/LowBoundaryDecimalDefault
+       Expression: 1.587.lowBoundary()
+
+[PASS] LowBoundary/LowBoundaryDecimal1
+       Expression: 1.587.lowBoundary(6)
+
+[PASS] LowBoundary/LowBoundaryDecimal2
+       Expression: 1.587.lowBoundary(2)
+
+[PASS] LowBoundary/LowBoundaryDecimal3
+       Expression: 1.587.lowBoundary(-1)
+
+[PASS] LowBoundary/LowBoundaryDecimal4
+       Expression: 1.587.lowBoundary(0)
+
+[PASS] LowBoundary/LowBoundaryDecimal5
+       Expression: 1.587.lowBoundary(32)
+
+[PASS] LowBoundary/LowBoundaryNegDecimalDefault
+       Expression: (-1.587).lowBoundary()
+
+[PASS] LowBoundary/LowBoundaryNegDecimal1
+       Expression: (-1.587).lowBoundary(6)
+
+[PASS] LowBoundary/LowBoundaryNegDecimal2
+       Expression: (-1.587).lowBoundary(2)
+
+[PASS] LowBoundary/LowBoundaryNegDecimal3
+       Expression: (-1.587).lowBoundary(-1)
+
+[PASS] LowBoundary/LowBoundaryNegDecimal4
+       Expression: (-1.587).lowBoundary(0)
+
+[PASS] LowBoundary/LowBoundaryNegDecimal5
+       Expression: (-1.587).lowBoundary(32)
+
+[PASS] LowBoundary/LowBoundaryDecimal6
+       Expression: 1.587.lowBoundary(39)
+
+[PASS] LowBoundary/LowBoundaryDecimal7
+       Expression: 1.toDecimal().lowBoundary()
+
+[PASS] LowBoundary/LowBoundaryDecimal8
+       Expression: 1.lowBoundary(0)
+
+[PASS] LowBoundary/LowBoundaryDecimal9
+       Expression: 1.lowBoundary(5)
+
+[PASS] LowBoundary/LowBoundaryDecimal10
+       Expression: 12.587.lowBoundary(2)
+
+[PASS] LowBoundary/LowBoundaryDecimal11
+       Expression: 12.500.lowBoundary(4)
+
+[PASS] LowBoundary/LowBoundaryDecimal12
+       Expression: 120.lowBoundary(2)
+
+[PASS] LowBoundary/LowBoundaryDecimal13
+       Expression: (-120).lowBoundary(2)
+
+[PASS] LowBoundary/LowBoundaryDecimal14
+       Expression: 0.0034.lowBoundary(1)
+
+[PASS] LowBoundary/LowBoundaryDecimal15
+       Expression: (-0.0034).lowBoundary(1)
+
+[PASS] LowBoundary/LowBoundaryQuantity
+       Expression: 1.587 'cm'.lowBoundary(8)
+
+[PASS] LowBoundary/LowBoundaryDateMonth
+       Expression: @2014.lowBoundary(6)
+
+[PASS] LowBoundary/LowBoundaryDateTimeMillisecond1
+       Expression: @2014-01-01T08.lowBoundary(17)
+
+[PASS] LowBoundary/LowBoundaryDateTimeMillisecond2
+       Expression: @2014-01-01T08:05+08:00.lowBoundary(17)
+
+[PASS] LowBoundary/LowBoundaryDateTimeMillisecond3
+       Expression: @2014-01-01T08.lowBoundary(8)
+
+[PASS] LowBoundary/LowBoundaryTimeMillisecond
+       Expression: @T10:30.lowBoundary(9)
+
+[PASS] HighBoundary/HighBoundaryDecimalDefault
+       Expression: 1.587.highBoundary()
+
+[PASS] HighBoundary/HighBoundaryDecimal1
+       Expression: 1.587.highBoundary(2)
+
+[PASS] HighBoundary/HighBoundaryDecimal2
+       Expression: 1.587.highBoundary(6)
+
+[PASS] HighBoundary/HighBoundaryDecimal3
+       Expression: 1.587.highBoundary(-1)
+
+[PASS] HighBoundary/HighBoundaryDecimal4
+       Expression: (-1.587).highBoundary()
+
+[PASS] HighBoundary/HighBoundaryDecimal5
+       Expression: (-1.587).highBoundary(2)
+
+[PASS] HighBoundary/HighBoundaryDecimal6
+       Expression: (-1.587).highBoundary(6)
+
+[PASS] HighBoundary/HighBoundaryDecimal7
+       Expression: 1.587.highBoundary(39)
+
+[PASS] HighBoundary/HighBoundaryDecimal8
+       Expression: 1.highBoundary()
+
+[PASS] HighBoundary/HighBoundaryDecimal9
+       Expression: 1.highBoundary(0)
+
+[PASS] HighBoundary/HighBoundaryDecimal10
+       Expression: 1.highBoundary(5)
+
+[PASS] HighBoundary/HighBoundaryDecimal11
+       Expression: 12.587.highBoundary(2)
+
+[PASS] HighBoundary/HighBoundaryDecimal12
+       Expression: 12.500.highBoundary(4)
+
+[PASS] HighBoundary/HighBoundaryDecimal13
+       Expression: 120.highBoundary(2)
+
+[PASS] HighBoundary/HighBoundaryDecimal14
+       Expression: -120.highBoundary(2)
+
+[PASS] HighBoundary/HighBoundaryDecimal15
+       Expression: 0.0034.highBoundary(1)
+
+[PASS] HighBoundary/HighBoundaryDecimal16
+       Expression: -0.0034.highBoundary(1)
+
+[PASS] HighBoundary/HighBoundaryDecimal
+       Expression: 1.587.highBoundary(8)
+
+[PASS] HighBoundary/HighBoundaryQuantity
+       Expression: 1.587 'm'.highBoundary(8)
+
+[PASS] HighBoundary/HighBoundaryDateMonth
+       Expression: @2014.highBoundary(6)
+
+[PASS] HighBoundary/HighBoundaryDateTimeMillisecond1
+       Expression: @2014-01-01T08.highBoundary(17)
+
+[PASS] HighBoundary/HighBoundaryDateTimeMillisecond2
+       Expression: @2014-01-01T08:05-05:00.highBoundary(17)
+
+[PASS] HighBoundary/HighBoundaryDateTimeMillisecond3
+       Expression: @2014-01-01T08.highBoundary(17)
+
+[PASS] HighBoundary/HighBoundaryTimeMillisecond
+       Expression: @T10:30.highBoundary(9)
+
+[PASS] Comparable/Comparable1
+       Expression: 1 'cm'.comparable(1 '[in_i]')
+
+[PASS] Comparable/Comparable2
+       Expression: 1 'cm'.comparable(1 '[s]')
+
+[PASS] Comparable/Comparable3
+       Expression: 1 'cm'.comparable(1 's')
+
+[PASS] Precision/PrecisionDecimal
+       Expression: 1.58700.precision()
+
+[PASS] Precision/PrecisionYear
+       Expression: @2014.precision()
+
+[PASS] Precision/PrecisionDateTimeMilliseconds
+       Expression: @2014-01-05T10:30:00.000.precision()
+
+[PASS] Precision/PrecisionTimeMinutes
+       Expression: @T10:30.precision()
+
+[PASS] Precision/PrecisionTimeMilliseconds
+       Expression: @T10:30:00.000.precision()
+
+[PASS] from-Zulip/from-zulip-1
+       Expression: (true and 'foo').empty()
+
+[PASS] from-Zulip/from-zulip-2
+       Expression: (true | 'foo').allTrue()
+
+[PASS] polymorphics/testPolymorphicsA
+       Expression: Observation.value.exists()
+
+[FAIL] polymorphics/testPolymorphicsB
+       Expression: Observation.valueQuantity.exists()
+       Error: Expected error (semantic) but got result
+       Actual: [True]
+       Expected: [('boolean', 'false')]
+
+[PASS] index-part/testIndex
+       Expression: Patient.telecom.select(iif(value='(03) 3410 5613', $index, {} ))
+
+[FAIL] period/testPeriodInvariantOld
+       Expression: Patient.identifier.period.all(start.hasValue().not() or end.hasValue().not() or (start <= end))
+       Error: Expected (boolean): false, Got: [True]
+       Actual: [True]
+       Expected: [('boolean', 'false')]
+
+[PASS] period/testPeriodInvariantNew
+       Expression: Patient.identifier.period.all(start.empty() or end.empty() or (start.lowBoundary() < end.highBoundary()))
+
+[PASS] testInheritance/testFHIRPathIsFunction1
+       Expression: Patient.gender.is(code)
+
+[PASS] testInheritance/testFHIRPathIsFunction2
+       Expression: Patient.gender.is(string)
+
+[PASS] testInheritance/testFHIRPathIsFunction3
+       Expression: Patient.gender.is(id)
+
+[PASS] testInheritance/testFHIRPathIsFunction4
+       Expression: Questionnaire.url.is(uri)
+
+[PASS] testInheritance/testFHIRPathIsFunction5
+       Expression: Questionnaire.url.is(url)
+
+[PASS] testInheritance/testFHIRPathIsFunction6
+       Expression: ValueSet.version.is(string)
+
+[PASS] testInheritance/testFHIRPathIsFunction7
+       Expression: ValueSet.version.is(code)
+
+[PASS] testInheritance/testFHIRPathIsFunction8
+       Expression: Observation.extension('http://example.com/fhir/StructureDefinition/patient-age').value is Age
+
+[PASS] testInheritance/testFHIRPathIsFunction9
+       Expression: Observation.extension('http://example.com/fhir/StructureDefinition/patient-age').value is Quantity
+
+[PASS] testInheritance/testFHIRPathIsFunction10
+       Expression: Observation.extension('http://example.com/fhir/StructureDefinition/patient-age').value is Duration
+
+[PASS] testInheritance/testFHIRPathAsFunction11
+       Expression: Patient.gender.as(string)
+
+[PASS] testInheritance/testFHIRPathAsFunction12
+       Expression: Patient.gender.as(code)
+
+[PASS] testInheritance/testFHIRPathAsFunction13
+       Expression: Patient.gender.as(id)
+
+[PASS] testInheritance/testFHIRPathAsFunction14
+       Expression: ValueSet.version.as(string)
+
+[PASS] testInheritance/testFHIRPathAsFunction15
+       Expression: ValueSet.version.as(code)
+
+[PASS] testInheritance/testFHIRPathAsFunction16
+       Expression: Patient.gender.ofType(string)
+
+[PASS] testInheritance/testFHIRPathAsFunction17
+       Expression: Patient.gender.ofType(code)
+
+[PASS] testInheritance/testFHIRPathAsFunction18
+       Expression: Patient.gender.ofType(id)
+
+[PASS] testInheritance/testFHIRPathAsFunction19
+       Expression: ValueSet.version.ofType(string)
+
+[PASS] testInheritance/testFHIRPathAsFunction20
+       Expression: ValueSet.version.ofType(code)
+
+[PASS] testInheritance/testFHIRPathAsFunction21
+       Expression: Patient.name.as(HumanName).use
+
+[PASS] testInheritance/testFHIRPathAsFunction22
+       Expression: Patient.name.ofType(HumanName).use
+
+[PASS] testInheritance/testFHIRPathAsFunction23
+       Expression: Patient.gender.as(string1)
+
+[PASS] testInheritance/testFHIRPathAsFunction24
+       Expression: Patient.gender.ofType(string1)
+
+[PASS] miscEngineTests/testContainedId
+       Expression: contained.id
+
+[PASS] miscEngineTests/testPrimitiveExtensions
+       Expression: Patient.name.given.select($this.hasValue())

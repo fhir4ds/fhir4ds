@@ -1,0 +1,9 @@
+{
+  "layer": "qicore",
+  "version": "4.1.1",
+  "source_package": "hl7.fhir.us.qicore",
+  "source_version": "4.1.1",
+  "download_url": "https://packages.fhir.org/hl7.fhir.us.qicore/4.1.1",
+  "downloaded_at": "2026-03-06",
+  "status": "active"
+}

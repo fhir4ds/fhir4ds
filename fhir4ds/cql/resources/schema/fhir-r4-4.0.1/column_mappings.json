@@ -1,0 +1,21 @@
+{
+  "_comment": "Maps FHIRPath property paths to precomputed SQL column names",
+  "onsetDateTime": "onset_date",
+  "abatementDateTime": "abatement_date",
+  "abatementPeriod.end": "abatement_end_date",
+  "recordedDate": "recorded_date",
+  "effectiveDateTime": "effective_date",
+  "effectivePeriod.start": "effective_date",
+  "verificationStatus.coding.code": "verification_status",
+  "verificationStatus": "verification_status",
+  "clinicalStatus.coding.code": "clinical_status",
+  "clinicalStatus": "clinical_status",
+  "status": "status",
+  "code.coding.code": "code",
+  "valueQuantity.value": "value_quantity",
+  "performedDateTime": "performed_date",
+  "performedPeriod.start": "performed_date",
+  "authoredOn": "authored_date",
+  "subject": "subject",
+  "encounter": "encounter"
+}

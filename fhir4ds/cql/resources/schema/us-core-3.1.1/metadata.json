@@ -1,0 +1,9 @@
+{
+  "layer": "us-core",
+  "version": "3.1.1",
+  "source_package": "hl7.fhir.us.core",
+  "source_version": "3.1.1",
+  "download_url": "https://packages.fhir.org/hl7.fhir.us.core/3.1.1",
+  "downloaded_at": "2026-03-06",
+  "status": "active"
+}

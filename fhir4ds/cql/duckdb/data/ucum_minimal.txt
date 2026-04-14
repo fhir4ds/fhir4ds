@@ -1,0 +1,58 @@
+# UCUM Minimal Definitions for DuckDB CQL
+# Common medical units used in clinical quality measures
+# Note: Uses Pint-compatible syntax with proper dimension system
+
+# === Base Dimensions (Pint standard) ===
+# These are already defined in Pint's default_en.txt
+# We just reference them here
+
+# === Length (meter is base) ===
+m = meter
+cm = centimeter = 0.01 * m
+inch = 2.54 * cm
+ft = foot = 12 * inch
+
+# === Mass (gram is derived from kg) ===
+kg = kilogram
+g = gram = 0.001 * kg
+mg = milligram = 0.001 * g
+ug = microgram = 0.000001 * g
+lb = pound = 0.45359237 * kg
+
+# === Time (second is base) ===
+s = second
+minute = 60 * s
+h = hour = 60 * minute
+d = day = 24 * h
+wk = week = 7 * d
+month = 30.4375 * d
+year = 365.25 * d
+
+# === Pressure (pascal = kg/m/s2) ===
+Pa = pascal = kg / m / s ** 2
+millimeter_of_mercury = 133.322 * Pa
+centimeter_of_water = 98.0665 * Pa
+
+# === Volume (liter = cubic decimeter) ===
+L = liter = dm ** 3
+mL = milliliter = 0.001 * L
+dL = deciliter = 0.1 * L
+
+# === Substance (mole is base) ===
+mol = mole
+mmol = millimole = 0.001 * mol
+
+# === Temperature ===
+degC = degree_Celsius
+degF = degree_Fahrenheit
+
+# === Area ===
+m2 = m ** 2
+cm2 = cm ** 2
+
+# === Concentration (compound units) ===
+# These are defined programmatically in quantity.py
+# mg_per_dL = mg / dL
+# g_per_dL = g / dL
+# mmol_per_L = mmol / L
+# ug_per_mL = ug / mL

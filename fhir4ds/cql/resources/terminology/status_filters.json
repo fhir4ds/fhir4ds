@@ -1,0 +1,254 @@
+{
+  "isObservationBP": {
+    "resource_type": "Observation",
+    "status_field": "status",
+    "allowed": [
+      "final",
+      "amended",
+      "corrected"
+    ]
+  },
+  "isProcedurePerformed": {
+    "resource_type": "Procedure",
+    "status_field": "status",
+    "allowed": [
+      "completed"
+    ]
+  },
+  "isActive": {
+    "resource_type": "Condition",
+    "status_field": "clinicalStatus.coding.code",
+    "allowed": [
+      "active",
+      "recurrence",
+      "relapse"
+    ]
+  },
+  "verified": {
+    "resource_type": "Condition",
+    "status_field": "verificationStatus.coding.code",
+    "allowed": [
+      "confirmed",
+      "unconfirmed",
+      "provisional",
+      "differential"
+    ],
+    "null_passes": true
+  },
+  "isEncounterPerformed": {
+    "resource_type": "Encounter",
+    "status_field": "status",
+    "allowed": [
+      "finished"
+    ]
+  },
+  "isAssessmentPerformed": {
+    "resource_type": "Observation",
+    "status_field": "status",
+    "allowed": [
+      "final",
+      "amended",
+      "corrected"
+    ]
+  },
+  "isLaboratoryTestPerformed": {
+    "resource_type": "Observation",
+    "status_field": "status",
+    "allowed": [
+      "final",
+      "amended",
+      "corrected"
+    ]
+  },
+  "isDiagnosticStudyPerformed": {
+    "resource_type": "Observation",
+    "status_field": "status",
+    "allowed": [
+      "final",
+      "amended",
+      "corrected"
+    ]
+  },
+  "isPhysicalExamPerformed": {
+    "resource_type": "Observation",
+    "status_field": "status",
+    "allowed": [
+      "final",
+      "amended",
+      "corrected"
+    ]
+  },
+  "isInterventionPerformed": {
+    "resource_type": "Procedure",
+    "status_field": "status",
+    "allowed": [
+      "completed"
+    ]
+  },
+  "isImmunizationAdministered": {
+    "resource_type": "Immunization",
+    "status_field": "status",
+    "allowed": [
+      "completed"
+    ]
+  },
+  "isInterventionOrder": {
+    "resource_type": "ServiceRequest",
+    "status_field": "status",
+    "allowed": [
+      "active",
+      "completed"
+    ],
+    "intent_field": "intent",
+    "intent_allowed": [
+      "order",
+      "original-order",
+      "reflex-order",
+      "filler-order",
+      "instance-order"
+    ]
+  },
+  "isDiagnosticStudyOrder": {
+    "resource_type": "ServiceRequest",
+    "status_field": "status",
+    "allowed": [
+      "active",
+      "completed"
+    ],
+    "intent_field": "intent",
+    "intent_allowed": [
+      "order",
+      "original-order",
+      "reflex-order",
+      "filler-order",
+      "instance-order"
+    ]
+  },
+  "isLaboratoryTestOrder": {
+    "resource_type": "ServiceRequest",
+    "status_field": "status",
+    "allowed": [
+      "active",
+      "completed"
+    ],
+    "intent_field": "intent",
+    "intent_allowed": [
+      "order",
+      "original-order",
+      "reflex-order",
+      "filler-order",
+      "instance-order"
+    ]
+  },
+  "isDeviceOrderPersonalUseDevices": {
+    "resource_type": "DeviceRequest",
+    "status_field": "status",
+    "allowed": [
+      "active",
+      "completed"
+    ],
+    "intent_field": "intent",
+    "intent_allowed": [
+      "order",
+      "original-order",
+      "reflex-order",
+      "filler-order",
+      "instance-order"
+    ]
+  },
+  "isMedicationActive": {
+    "resource_type": "MedicationRequest",
+    "status_field": "status",
+    "allowed": [
+      "active"
+    ],
+    "intent_field": "intent",
+    "intent_allowed": [
+      "order",
+      "original-order",
+      "reflex-order",
+      "filler-order",
+      "instance-order"
+    ]
+  },
+  "isMedicationOrder": {
+    "resource_type": "MedicationRequest",
+    "status_field": "status",
+    "allowed": [
+      "active",
+      "completed"
+    ],
+    "intent_field": "intent",
+    "intent_allowed": [
+      "order",
+      "original-order",
+      "reflex-order",
+      "filler-order",
+      "instance-order"
+    ]
+  },
+  "isMedicationDispensed": {
+    "resource_type": "MedicationDispense",
+    "status_field": "status",
+    "allowed": [
+      "completed",
+      "in-progress",
+      "on-hold"
+    ]
+  },
+  "isObservationBodyHeight": {
+    "resource_type": "Observation",
+    "status_field": "status",
+    "allowed": [
+      "final",
+      "amended",
+      "corrected"
+    ]
+  },
+  "isObservationBodyWeight": {
+    "resource_type": "Observation",
+    "status_field": "status",
+    "allowed": [
+      "final",
+      "amended",
+      "corrected"
+    ]
+  },
+  "isObservationBMI": {
+    "resource_type": "Observation",
+    "status_field": "status",
+    "allowed": [
+      "final",
+      "amended",
+      "corrected"
+    ]
+  },
+  "isObservationPediatricBMI": {
+    "resource_type": "Observation",
+    "status_field": "status",
+    "allowed": [
+      "final",
+      "amended",
+      "corrected"
+    ]
+  },
+  "isObservationSmokingStatus": {
+    "resource_type": "Observation",
+    "status_field": "status",
+    "allowed": [
+      "final",
+      "amended",
+      "corrected"
+    ]
+  },
+  "isSymptom": {
+    "resource_type": "Observation",
+    "status_field": "status",
+    "allowed": [
+      "preliminary",
+      "final",
+      "amended",
+      "corrected"
+    ]
+  }
+}

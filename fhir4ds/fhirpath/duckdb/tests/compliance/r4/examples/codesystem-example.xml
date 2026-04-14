@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CodeSystem xmlns="http://hl7.org/fhir">
+  <id value="example"/>
+  <status value="active"/>
+  <concept>
+    <code value="code1"/>
+    <concept>
+      <code value="code1"/>
+    </concept>
+  </concept>
+</CodeSystem>

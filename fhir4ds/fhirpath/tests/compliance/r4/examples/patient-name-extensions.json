@@ -1,0 +1,9 @@
+{
+  "resourceType": "Patient",
+  "id": "name-extensions",
+  "name": [{
+    "given": [null, "Test"],
+    "_given": [{"extension": [{"url": "http://example.org/ext", "valueString": "ext"}]}, null],
+    "family": "Patient"
+  }]
+}

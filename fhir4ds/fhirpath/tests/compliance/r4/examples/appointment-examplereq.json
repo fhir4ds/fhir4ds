@@ -1,0 +1,11 @@
+{
+  "resourceType": "Appointment",
+  "id": "examplereq",
+  "status": "proposed",
+  "identifier": [
+    {
+      "system": "http://example.org/appointment",
+      "value": "123"
+    }
+  ]
+}

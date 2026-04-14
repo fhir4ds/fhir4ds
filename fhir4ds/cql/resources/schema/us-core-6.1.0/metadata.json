@@ -1,0 +1,6 @@
+{
+  "layer": "us-core",
+  "version": "6.1.0",
+  "status": "not-implemented",
+  "notes": "Pending support. Requires QI Core 6.0.0. See PLAN-SCHEMA-REGISTRY-VERSIONING.md §6."
+}

@@ -1,0 +1,119 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fhir4ds-v2"
+version = "0.0.1"
+description = "FHIR for Data Science — unified package for FHIRPath, CQL, and SQL-on-FHIR analytics"
+readme = "README.md"
+license = {text = "AGPL-3.0-only"}
+requires-python = ">=3.10"
+authors = [
+    {name = "FHIR4DS Team"}
+]
+keywords = ["fhir", "fhirpath", "cql", "duckdb", "healthcare", "sql", "analytics", "hl7"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Healthcare Industry",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+dependencies = [
+    "duckdb>=0.9.0",
+    "antlr4-python3-runtime>=4.10,<5.0",
+    "python-dateutil>=2.8,<3.0",
+    "pyarrow>=14.0.0",
+    "orjson>=3.9.0",
+]
+
+[project.optional-dependencies]
+measures = [
+    "pint>=0.21.0",
+    "numpy",
+    "pandas",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://fhir4ds.com"
+Documentation = "https://fhir4ds.com/docs/getting-started/installation"
+Repository = "https://github.com/fhir4ds/fhir4ds"
+Issues = "https://github.com/fhir4ds/fhir4ds/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["fhir4ds"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/fhir4ds",
+    "/README.md",
+    "/pyproject.toml",
+    "/hatch_build.py",
+]
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
+# Test configuration
+[tool.pytest.ini_options]
+testpaths = ["fhir4ds"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+markers = [
+    "slow: marks tests as slow",
+    "compliance: FHIRPath compliance tests",
+]
+norecursedirs = ["_archived_v1", "cql-tests", "spec_tests", "fixtures", "data"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["duckdb.*", "pyarrow.*", "fhirpath.*", "antlr4.*", "fhirpathpy.*", "orjson.*", "pint.*", "numpy.*", "pandas.*"]
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # function call in default argument
+]
+
+[tool.ruff.isort]
+known-first-party = ["fhir4ds"]
+
+[tool.black]
+target-version = ["py310", "py311", "py312"]
+line-length = 100

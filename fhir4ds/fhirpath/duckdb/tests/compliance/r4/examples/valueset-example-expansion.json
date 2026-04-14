@@ -1,0 +1,74 @@
+{
+  "resourceType": "ValueSet",
+  "id": "example-expansion",
+  "url": "http://hl7.org/fhir/ValueSet/example-expansion",
+  "version": "20150622",
+  "status": "active",
+  "expansion": {
+    "identifier": "urn:uuid:example-expansion-id",
+    "timestamp": "2024-01-15T10:30:00Z",
+    "total": 10,
+    "contains": [
+      {
+        "system": "http://example.org/system",
+        "code": "code1",
+        "display": "Code 1",
+        "contains": [
+          {
+            "system": "http://example.org/system",
+            "code": "code2",
+            "display": "Code 2",
+            "contains": [
+              {
+                "system": "http://example.org/system",
+                "code": "code3",
+                "display": "Code 3"
+              }
+            ]
+          },
+          {
+            "system": "http://example.org/system",
+            "code": "code4",
+            "display": "Code 4"
+          }
+        ]
+      },
+      {
+        "system": "http://example.org/system",
+        "code": "code5",
+        "display": "Code 5",
+        "contains": [
+          {
+            "system": "http://example.org/system",
+            "code": "code6",
+            "display": "Code 6",
+            "contains": [
+              {
+                "system": "http://example.org/system",
+                "code": "code7",
+                "display": "Code 7"
+              },
+              {
+                "system": "http://example.org/system",
+                "code": "code8",
+                "display": "Code 8"
+              }
+            ]
+          },
+          {
+            "system": "http://example.org/system",
+            "code": "code9",
+            "display": "Code 9",
+            "contains": [
+              {
+                "system": "http://example.org/system",
+                "code": "code10",
+                "display": "Code 10"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

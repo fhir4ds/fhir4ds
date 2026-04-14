@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Parameters xmlns="http://hl7.org/fhir">
+  <id value="example-types"/>
+  <parameter>
+    <name value="stringParam"/>
+    <valueString value="string value"/>
+  </parameter>
+  <parameter>
+    <name value="integerParam"/>
+    <valueInteger value="42"/>
+  </parameter>
+  <parameter>
+    <name value="uuidParam"/>
+    <valueUuid value="urn:uuid:c757873d-ec9a-4e36-990b-37b30a13a3d3"/>
+  </parameter>
+  <parameter>
+    <name value="decimalParam"/>
+    <valueDecimal value="3.14159"/>
+  </parameter>
+</Parameters>

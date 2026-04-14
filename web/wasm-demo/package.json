@@ -1,0 +1,32 @@
+{
+  "name": "fhir4ds-wasm-demo",
+  "private": true,
+  "version": "0.0.1",
+  "description": "FHIR4DS Interactive Demo — CQL authoring, translation, and execution in the browser",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "postbuild": "rm -rf ../website/static/wasm-app/* && cp -r dist/* ../website/static/wasm-app/",
+    "preview": "vite preview",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
+  },
+  "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.33.1-dev41.0",
+    "@monaco-editor/react": "^4.7.0",
+    "apache-arrow": "^21.1.0",
+    "monaco-editor": "^0.52.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "dotenv": "^17.4.1",
+    "typescript": "~5.8.0",
+    "vite": "^6.3.0"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "_comment": "Maps LOINC codes to component column information for blood pressure and similar composite observations",
+  "8480-6": {
+    "name": "systolic",
+    "column": "systolic_value",
+    "fhirpath": "component.where(code.coding.exists(code = '8480-6')).valueQuantity.value",
+    "description": "Systolic blood pressure"
+  },
+  "8462-4": {
+    "name": "diastolic",
+    "column": "diastolic_value",
+    "fhirpath": "component.where(code.coding.exists(code = '8462-4')).valueQuantity.value",
+    "description": "Diastolic blood pressure"
+  }
+}

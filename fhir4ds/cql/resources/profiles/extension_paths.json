@@ -1,0 +1,8 @@
+{
+  "_comment": "Maps profile-specific virtual properties to FHIRPath extension expressions. Keyed by resource type, then property name.",
+  "Patient": {
+    "sex": "extension.where(url='http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex').valueCode",
+    "race": "extension.where(url='http://hl7.org/fhir/us/core/StructureDefinition/us-core-race').extension.where(url='ombCategory').valueCoding.code",
+    "ethnicity": "extension.where(url='http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity').extension.where(url='ombCategory').valueCoding.code"
+  }
+}

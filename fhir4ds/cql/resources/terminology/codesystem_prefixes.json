@@ -1,0 +1,12 @@
+{
+    "_comment": "Maps common code system name abbreviations to their canonical URLs",
+    "LOINC": "http://loinc.org",
+    "SNOMED-CT": "http://snomed.info/sct",
+    "SNOMED": "http://snomed.info/sct",
+    "ICD-10": "http://hl7.org/fhir/sid/icd-10",
+    "ICD-10-CM": "http://hl7.org/fhir/sid/icd-10-cm",
+    "ICD-9": "http://hl7.org/fhir/sid/icd-9",
+    "CPT": "http://www.ama-assn.org/go/cpt",
+    "RXNORM": "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "RxNorm": "http://www.nlm.nih.gov/research/umls/rxnorm"
+}

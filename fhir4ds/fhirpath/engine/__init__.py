@@ -1,0 +1,232 @@
+import json
+import numbers
+from ..engine import util as util
+from ..engine.nodes import TypeInfo, FP_Quantity
+from ..engine.evaluators import evaluators
+from ..engine.invocations import (
+    invocation_registry as base_invocation_registry,
+)
+from .errors import FHIRPathError
+
+
+def check_integer_param(val):
+    data = util.get_data(val)
+    if int(data) != data:
+        raise FHIRPathError("Expected integer, got: " + json.dumps(data))
+    return data
+
+
+def check_number_param(val):
+    data = util.get_data(val)
+    # Accept numbers or FP_Quantity objects (quantities can participate in math)
+    if not isinstance(data, numbers.Number) and not isinstance(data, FP_Quantity):
+        raise FHIRPathError("Expected number or quantity, got: " + str(type(data).__name__))
+    return data
+
+
+def check_boolean_param(val):
+    data = util.get_data(val)
+    if data is True or data is False:
+        return data
+    raise FHIRPathError("Expected boolean, got: " + json.dumps(data))
+
+
+def check_string_param(val):
+    data = util.get_data(val)
+    if not isinstance(data, str):
+        raise FHIRPathError("Expected string, got: " + json.dumps(data))
+    return data
+
+
+def do_eval(ctx, parentData, node):
+    node_type = node["type"]
+
+    if node_type in evaluators:
+        evaluator = evaluators.get(node_type)
+        return evaluator(ctx, parentData, node)
+
+    raise FHIRPathError("No " + node_type + " evaluator ")
+
+
+def doInvoke(ctx, fn_name, data, raw_params):
+    user_table = ctx.get("userInvocationTable")
+    if user_table:
+        invocation_registry = {**base_invocation_registry, **user_table}
+    else:
+        invocation_registry = base_invocation_registry
+
+    if isinstance(fn_name, list) and len(fn_name) == 1:
+        fn_name = fn_name[0]
+
+    if not isinstance(fn_name, str) or fn_name not in invocation_registry:
+        raise NotImplementedError("Not implemented: " + str(fn_name))
+
+    invocation = invocation_registry[fn_name]
+
+    if "nullable_input" in invocation and util.is_nullable(data):
+        return []
+
+    if "arity" not in invocation:
+        if raw_params is None or util.is_empty(raw_params):
+            res = invocation["fn"](ctx, util.arraify(data))
+            return util.arraify(res)
+
+        raise FHIRPathError(fn_name + " expects no params")
+
+    if invocation["fn"].__name__ == "trace_fn" and raw_params is not None:
+        raw_params = raw_params[:1]
+
+    paramsNumber = 0
+    if isinstance(raw_params, list):
+        paramsNumber = len(raw_params)
+
+    if paramsNumber not in invocation["arity"]:
+        raise FHIRPathError(fn_name + " wrong arity: got " + str(paramsNumber))
+
+    params = []
+    argTypes = invocation["arity"][paramsNumber]
+
+    thisValue = ctx["$this"] if "$this" in ctx else ctx["dataRoot"]
+    for i in range(0, paramsNumber):
+        tp = argTypes[i]
+        pr = raw_params[i]
+        params.append(make_param(ctx, thisValue, tp, pr))
+
+    params.insert(0, data)
+    params.insert(0, ctx)
+
+    if "nullable" in invocation:
+        if any(util.is_nullable(x) for x in params):
+            return []
+
+    res = invocation["fn"](*params)
+
+    return util.arraify(res)
+
+
+def type_specifier(ctx, parent_data, node):
+    identifiers = node["text"].replace("`", "").split(".")
+    namespace = None
+    name = None
+
+    if len(identifiers) == 2:
+        namespace, name = identifiers
+    elif len(identifiers) == 1:
+        (name,) = identifiers
+    else:
+        raise FHIRPathError(f"Expected TypeSpecifier node, got {node}")
+
+    # Validate that the type is a known FHIR type or System type
+    # This catches typos like "string1" instead of "string"
+    valid_types = TypeInfo.get_valid_types()
+    if name not in valid_types:
+        raise ValueError(f"Unknown type: {name}")
+
+    # Infer namespace from casing when unqualified:
+    # Capitalized names matching System type map with a DIFFERENT FHIR equivalent
+    # → System namespace (e.g., Boolean → System.Boolean since FHIR uses "boolean")
+    # Types with the SAME name in both namespaces (e.g., Quantity) stay unqualified
+    if namespace is None and name in TypeInfo.SYSTEM_TO_FHIR_TYPE:
+        fhir_name = TypeInfo.SYSTEM_TO_FHIR_TYPE[name]
+        if fhir_name != name:
+            namespace = TypeInfo.System
+
+    return TypeInfo(name=name, namespace=namespace)
+
+
+param_check_table = {
+    "Integer": check_integer_param,
+    "Number": check_number_param,
+    "Boolean": check_boolean_param,
+    "String": check_string_param,
+}
+
+
+def make_param(ctx, parentData, node_type, param):
+    if node_type == "Expr":
+
+        def func(data):
+            ctx["$this"] = util.arraify(data)
+            return do_eval(ctx, ctx["$this"], param)
+
+        return func
+
+    if node_type == "AnyAtRoot":
+        ctx["$this"] = ctx["$this"] if "$this" in ctx else ctx["dataRoot"]
+        return do_eval(ctx, ctx["$this"], param)
+
+    if node_type == "Identifier":
+        if param["type"] == "TermExpression":
+            return param["text"]
+
+        raise FHIRPathError("Expected identifier node, got " + json.dumps(param))
+
+    if node_type == "TypeSpecifier":
+        return type_specifier(ctx, parentData, param)
+
+    ctx["$this"] = parentData
+    res = do_eval(ctx, parentData, param)
+
+    if node_type == "Any":
+        return res
+
+    if isinstance(node_type, list):
+        if len(res) == 0:
+            return []
+        else:
+            node_type = node_type[0]
+            # After unwrapping, check if it's Any
+            if node_type == "Any":
+                return res
+
+    if len(res) > 1:
+        raise FHIRPathError(
+            "Unexpected collection"
+            + json.dumps(res)
+            + "; expected singleton of type "
+            + node_type
+        )
+
+    if len(res) == 0:
+        return []
+
+    if node_type not in param_check_table:
+        raise FHIRPathError("Implement me for " + node_type)
+
+    check = param_check_table[node_type]
+
+    return check(res[0])
+
+
+def infix_invoke(ctx, fn_name, data, raw_params):
+    invocation_registry = {
+        **base_invocation_registry,
+        **(ctx.get("userInvocationTable") or {}),
+    }
+    if fn_name not in invocation_registry or "fn" not in invocation_registry[fn_name]:
+        raise NotImplementedError("Not implemented " + fn_name)
+
+    invocation = invocation_registry[fn_name]
+    paramsNumber = len(raw_params)
+
+    if paramsNumber != 2:
+        raise NotImplementedError("Infix invoke should have arity 2")
+
+    argTypes = invocation["arity"][paramsNumber]
+
+    if argTypes is not None:
+        params = [ctx]
+
+        for i in range(0, paramsNumber):
+            argType = argTypes[i]
+            rawParam = raw_params[i]
+            params.append(make_param(ctx, data, argType, rawParam))
+
+        if "nullable" in invocation:
+            if any(util.is_nullable(x) for x in params):
+                return []
+
+        res = invocation["fn"](*params)
+        return util.arraify(res)
+
+    raise ValueError(fn_name + " wrong arity: got " + str(paramsNumber))
