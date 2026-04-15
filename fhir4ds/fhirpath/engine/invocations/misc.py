@@ -30,8 +30,9 @@ def trace_fn(ctx, x, label=""):
     if "traceFn" in ctx and callable(ctx["traceFn"]):
         ctx["traceFn"](label, x)
     else:
-        # Fall back to console output if no callback is provided
-        print("TRACE:[" + label + "]", str(x))
+        # Extract underlying FHIR data from ResourceNode wrappers
+        display = [util.get_data(item) for item in x] if isinstance(x, list) else x
+        print("TRACE:[" + label + "]", str(display))
     return x
 
 
@@ -49,13 +50,17 @@ def to_integer(ctx, coll):
 
     if util.is_number(value):
         if int(value) == value:
-            return value
-
+            int_val = int(value)
+            # FHIRPath Integer is 32-bit signed
+            if -2147483648 <= int_val <= 2147483647:
+                return int_val
         return []
 
     if isinstance(value, str):
         if re.match(intRegex, value) is not None:
-            return int(value)
+            int_val = int(value)
+            if -2147483648 <= int_val <= 2147483647:
+                return int_val
 
     return []
 
@@ -225,7 +230,7 @@ def to_boolean(ctx, coll):
     if len(coll) != 1:
         return []
 
-    val = coll[0]
+    val = util.get_data(coll[0])
     var_type = type(val).__name__
 
     if var_type == "bool":

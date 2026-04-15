@@ -245,6 +245,29 @@ class Quantity(Expression):
 
 
 @dataclass
+class CodeSelector(Expression):
+    """
+    Represents an inline Code selector in CQL expressions.
+
+    Code selectors define specific clinical codes inline in expressions,
+    as opposed to CodeDefinition which defines named codes in the library header.
+
+    Examples:
+        Code '73211009' from "SNOMED-CT"
+        Code '73211009' from "SNOMED-CT" display 'Diabetes mellitus'
+
+    Attributes:
+        code: The code value string.
+        system: The code system name (identifier reference or string).
+        display: Optional display string for the code.
+    """
+
+    code: str
+    system: str
+    display: Optional[str] = None
+
+
+@dataclass
 class DateTimeLiteral(Expression):
     """
     Represents a date/time literal in CQL.

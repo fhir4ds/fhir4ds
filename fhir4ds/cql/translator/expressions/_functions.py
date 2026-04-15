@@ -482,8 +482,31 @@ class FunctionsMixin:
         if agg_func is None:
             return None
 
-        from ...parser.ast_nodes import Query as CQLQuery, ListExpression
+        from ...parser.ast_nodes import Query as CQLQuery, ListExpression, Retrieve
         arg = func.arguments[0]
+
+        # Retrieve sources (e.g. Count([Encounter])) need a correlated subquery
+        # because the Retrieve translates to a RetrievePlaceholder that Phase 3
+        # resolves to a CTE reference.  _wrap_list_aggregate cannot handle
+        # placeholders, so we build the subquery directly.
+        if isinstance(arg, Retrieve):
+            placeholder = self.translate(arg, usage=ExprUsage.LIST)
+            agg_col = (
+                SQLFunctionCall(name=agg_func, args=[SQLIdentifier(name="*")])
+                if agg_func == "COUNT"
+                else SQLFunctionCall(name=agg_func, args=[SQLQualifiedIdentifier(parts=["_agg_src", "resource"])])
+            )
+            _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+            correlated = SQLSubquery(query=SQLSelect(
+                columns=[agg_col],
+                from_clause=SQLAlias(expr=placeholder, alias="_agg_src"),
+                where=SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=["_agg_src", "patient_id"]),
+                    right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+                ),
+            ))
+            return correlated
 
         if isinstance(arg, CQLQuery):
             source_sql = self.translate(arg, usage=ExprUsage.LIST)
@@ -522,6 +545,20 @@ class FunctionsMixin:
             if isinstance(source_sql, SQLArray):
                 list_func = "list_min" if name.lower() == "min" else "list_max"
                 return SQLFunctionCall(name=list_func, args=[source_sql])
+
+        # Count/Sum/Avg on list literals — use DuckDB list functions
+        if isinstance(arg, ListExpression):
+            source_sql = self.translate(arg, usage=ExprUsage.SCALAR)
+            if isinstance(source_sql, SQLArray):
+                if name.lower() == "count":
+                    return SQLFunctionCall(name="len", args=[source_sql])
+                _list_agg = {"sum": "sum", "avg": "avg", "median": "median",
+                             "mode": "mode"}.get(name.lower())
+                if _list_agg:
+                    return SQLFunctionCall(
+                        name="list_aggregate",
+                        args=[source_sql, SQLLiteral(value=_list_agg)],
+                    )
 
         return None  # Fall through to standard translation
 

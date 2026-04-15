@@ -1501,11 +1501,12 @@ class TestStatisticalFunctions:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "MEDIAN"
-        assert len(result.args) == 1
+        # List literal → list_aggregate (DuckDB's MEDIAN is a column aggregate)
+        assert result.name == "list_aggregate"
+        assert len(result.args) == 2
 
     def test_mode_function(self, translator: ExpressionTranslator):
-        """Test Mode function: Mode(values) -> MODE(...)."""
+        """Test Mode function: Mode(values) -> list_aggregate(values, 'mode')."""
         from ...parser.ast_nodes import FunctionRef, ListExpression
         result = translator.translate(
             FunctionRef(
@@ -1516,8 +1517,8 @@ class TestStatisticalFunctions:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "MODE"
-        assert len(result.args) == 1
+        assert result.name == "list_aggregate"
+        assert len(result.args) == 2
 
     def test_variance_function(self, translator: ExpressionTranslator):
         """Test Variance function: Variance(values) -> VARIANCE(...)."""

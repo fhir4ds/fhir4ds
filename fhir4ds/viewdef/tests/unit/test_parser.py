@@ -545,7 +545,8 @@ class TestValidation:
         assert any("duplicate" in w.lower() for w in warnings)
 
     def test_validate_foreach_and_foreachornull(self):
-        """Test validation catches forEach and forEachOrNull together."""
+        """Test validation raises error for forEach and forEachOrNull together."""
+        from fhir4ds.viewdef.errors import ValidationError
         vd = ViewDefinition(
             resource="Patient",
             select=[
@@ -556,8 +557,8 @@ class TestValidation:
                 )
             ]
         )
-        warnings = validate_view_definition(vd)
-        assert any("foreach" in w.lower() and "foreachornull" in w.lower() for w in warnings)
+        with pytest.raises(ValidationError, match="(?i)foreach.*foreachornull|foreachornull.*foreach"):
+            validate_view_definition(vd)
 
 
 class TestCollectColumnNames:

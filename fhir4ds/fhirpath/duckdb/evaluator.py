@@ -119,6 +119,23 @@ class FHIRPathEvaluator:
 
         return False
 
+    # Pattern matching numeric literals directly followed by letters without a
+    # dot separator. Valid: "123.convertsToInteger()", Invalid: "123abc".
+    _INVALID_TOKEN_RE = re.compile(
+        r'(?<![a-zA-Z_.])(\d+)([a-zA-Z_])'
+    )
+
+    # FHIRPath §3 — Reject structurally malformed path expressions that the
+    # underlying parser may silently accept.
+    _INVALID_EXPR_PATTERNS = re.compile(
+        r'(?:'
+        r'\.\s*$'        # trailing dot (e.g. "Patient.")
+        r'|\.\.'         # consecutive dots (e.g. "Patient..name")
+        r'|\(\s*$'       # unclosed paren at end
+        r'|^\s*[+*/|&]'  # leading binary operator
+        r')'
+    )
+
     def compile(self, expression: str) -> None:
         """
         Compile a FHIRPath expression.
@@ -134,6 +151,28 @@ class FHIRPathEvaluator:
         """
         if not expression or not isinstance(expression, str):
             raise FHIRPathSyntaxError("Expression must be a non-empty string")
+
+        self._expression = expression
+
+        # Validate: reject expressions where a numeric literal is directly followed
+        # by alphabetic characters (e.g., "123abc"), which indicates garbage after
+        # a valid prefix that many parsers silently accept.
+        stripped = expression.strip()
+        # Strip string literals before checking (they can contain anything)
+        no_strings = re.sub(r"'[^']*'", '', stripped)
+        m = self._INVALID_TOKEN_RE.search(no_strings)
+        if m:
+            pos = m.start()
+            raise FHIRPathSyntaxError(
+                f"Invalid FHIRPath expression: unexpected characters at position {pos} "
+                f"in '{expression}'"
+            )
+
+        # Reject structurally malformed expressions (trailing dot, double dots, etc.)
+        if self._INVALID_EXPR_PATTERNS.search(no_strings):
+            raise FHIRPathSyntaxError(
+                f"Invalid FHIRPath expression: '{expression}'"
+            )
 
         self._expression = expression
 
@@ -226,7 +265,9 @@ class FHIRPathEvaluator:
 
         except FHIRPathError:
             raise
-        except (ValueError, TypeError, KeyError, AttributeError, IndexError, NotImplementedError) as e:
+        except NotImplementedError:
+            raise
+        except (ValueError, TypeError, KeyError, AttributeError, IndexError) as e:
             _logger.warning("FHIRPath evaluation error for '%s': %s", self._expression, e)
             raise FHIRPathError(f"Evaluation error: {e}") from e
 

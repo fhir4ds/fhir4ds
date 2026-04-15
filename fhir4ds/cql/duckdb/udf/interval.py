@@ -19,7 +19,7 @@ Interval format: JSON string {"low": "2024-01-01", "high": "2024-12-31", "lowClo
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import orjson
@@ -32,6 +32,52 @@ if TYPE_CHECKING:
 import logging
 
 _logger = logging.getLogger(__name__)
+
+
+def _successor(value: Any) -> Any:
+    """CQL successor: smallest value greater than the given value."""
+    if isinstance(value, int):
+        return value + 1
+    if isinstance(value, float):
+        import math
+        return math.nextafter(value, float('inf'))
+    if isinstance(value, datetime):
+        return value + timedelta(milliseconds=1)
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value + timedelta(days=1)
+    return None
+
+
+def _predecessor(value: Any) -> Any:
+    """CQL predecessor: largest value less than the given value."""
+    if isinstance(value, int):
+        return value - 1
+    if isinstance(value, float):
+        import math
+        return math.nextafter(value, float('-inf'))
+    if isinstance(value, datetime):
+        return value - timedelta(milliseconds=1)
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value - timedelta(days=1)
+    return None
+
+
+def _effective_end(iv: dict) -> Any:
+    """Get the last value contained in the interval (handles open/closed)."""
+    if iv["high"] is None:
+        return None
+    if iv.get("high_closed", True):
+        return iv["high"]
+    return _predecessor(iv["high"])
+
+
+def _effective_start(iv: dict) -> Any:
+    """Get the first value contained in the interval (handles open/closed)."""
+    if iv["low"] is None:
+        return None
+    if iv.get("low_closed", True):
+        return iv["low"]
+    return _successor(iv["low"])
 # Pattern matching valid point values: dates, datetimes, numbers
 _POINT_VALUE_RE = re.compile(
     r'^\d{4}(-\d{2}(-\d{2}(T\d{2}:\d{2}(:\d{2})?)?)?)?([+-]\d{2}:\d{2}|Z)?$'
@@ -40,12 +86,57 @@ _POINT_VALUE_RE = re.compile(
 
 
 def _parse_interval_bound(value: Any) -> Any:
-    """Parse string/date-like interval bounds, preserving non-string scalars."""
+    """Parse string/date-like interval bounds, preserving non-string scalars.
+
+    Handles numeric strings (integers/decimals) in addition to dates/datetimes.
+    Date parsing is tried first so that year-only strings like "2024" are not
+    misinterpreted as integers.
+    """
     if value is None:
         return None
-    if isinstance(value, (str, date, datetime)):
-        return _parse_date_or_datetime(value)
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        # Try date/datetime first so year-only dates like "2024" aren't
+        # mistaken for integers.
+        parsed = _parse_date_or_datetime(value)
+        if parsed is not None:
+            return parsed
+        # Then try numeric parsing (integers/decimals)
+        try:
+            if '.' in value and 'T' not in value and '-' not in value[1:]:
+                return float(value)
+            stripped = value.strip()
+            if stripped.lstrip('-').isdigit():
+                return int(stripped)
+        except (ValueError, OverflowError):
+            pass
     return value
+
+
+def _parse_point(value: str | None) -> Any:
+    """Parse a point value which may be a date, datetime, integer, or decimal."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    if not stripped:
+        return None
+    # Try numeric first
+    try:
+        if '.' in stripped and 'T' not in stripped and '-' not in stripped[1:]:
+            return float(stripped)
+        if stripped.lstrip('-').isdigit():
+            return int(stripped)
+    except (ValueError, OverflowError):
+        pass
+    # Then try date/datetime
+    return _parse_date_or_datetime(stripped)
 
 
 def _parse_interval(value: str) -> dict | None:
@@ -167,14 +258,18 @@ def intervalEnd(interval: str | None) -> str | None:
     return v.isoformat() if isinstance(v, (date, datetime)) else str(v)
 
 
-def intervalWidth(interval: str | None) -> int | None:
-    """Get the width of an interval in days."""
+def intervalWidth(interval: str | None) -> int | float | None:
+    """Get the width of an interval (days for dates, numeric difference for numbers)."""
     iv = _parse_interval(interval)
     if not iv or iv["low"] is None or iv["high"] is None:
         return None
 
     low = iv["low"]
     high = iv["high"]
+
+    # Numeric intervals
+    if isinstance(low, (int, float)) and isinstance(high, (int, float)):
+        return high - low
 
     # Convert to date for calculation
     if isinstance(low, datetime):
@@ -209,22 +304,22 @@ def intervalContains(interval: str | None, point: str | None) -> bool | None:
         return intervalIncludes(interval, point)
 
     iv = _parse_interval(interval)
-    pt = _parse_date_or_datetime(point)
+    pt = _parse_point(point)
 
     if not iv or pt is None:
         return None
 
     low, high = iv["low"], iv["high"]
-    if low is None or high is None:
-        return None
 
-    # Check bounds
-    # Closed bound: point must be >= low (inclusive)
-    # Open bound: point must be > low (exclusive)
-    low_n, pt_low = _normalize_for_compare(low, pt)
-    pt_high, high_n = _normalize_for_compare(pt, high)
-    low_ok = pt_low >= low_n if iv["low_closed"] else pt_low > low_n
-    high_ok = pt_high <= high_n if iv["high_closed"] else pt_high < high_n
+    # Check bounds — None means unbounded (always satisfies that side)
+    low_ok = True
+    if low is not None:
+        low_n, pt_low = _normalize_for_compare(low, pt)
+        low_ok = pt_low >= low_n if iv["low_closed"] else pt_low > low_n
+    high_ok = True
+    if high is not None:
+        pt_high, high_n = _normalize_for_compare(pt, high)
+        high_ok = pt_high <= high_n if iv["high_closed"] else pt_high < high_n
 
     return low_ok and high_ok
 
@@ -245,19 +340,23 @@ def intervalProperlyContains(interval: str | None, point: str | None) -> bool | 
         return intervalProperlyIncludes(interval, point)
 
     iv = _parse_interval(interval)
-    pt = _parse_date_or_datetime(point)
+    pt = _parse_point(point)
 
     if not iv or pt is None:
         return None
 
     low, high = iv["low"], iv["high"]
-    if low is None or high is None:
-        return None
 
-    # Proper contains = strict comparison
-    low_n, pt_low = _normalize_for_compare(low, pt)
-    pt_high, high_n = _normalize_for_compare(pt, high)
-    return pt_low > low_n and pt_high < high_n
+    # Proper contains = strict comparison; None bound means unbounded (strict always true)
+    low_ok = True
+    if low is not None:
+        low_n, pt_low = _normalize_for_compare(low, pt)
+        low_ok = pt_low > low_n
+    high_ok = True
+    if high is not None:
+        pt_high, high_n = _normalize_for_compare(pt, high)
+        high_ok = pt_high < high_n
+    return low_ok and high_ok
 
 
 def _normalize_for_compare(a, b):
@@ -267,6 +366,13 @@ def _normalize_for_compare(a, b):
     comparison is done at the precision of the less precise operand. So when one is
     a date and the other is a datetime, we truncate the datetime to date precision.
     """
+    # Guard: incompatible types (e.g. datetime vs int) cannot be compared.
+    # Coerce the int to a date (treating it as a year) when the other is a date/datetime.
+    if isinstance(a, (date, datetime)) and isinstance(b, int):
+        b = date(b, 1, 1)
+    elif isinstance(b, (date, datetime)) and isinstance(a, int):
+        a = date(a, 1, 1)
+
     if isinstance(a, datetime) and isinstance(b, date) and not isinstance(b, datetime):
         a = a.date() if isinstance(a, datetime) else a
     elif isinstance(b, datetime) and isinstance(a, date) and not isinstance(a, datetime):
@@ -298,12 +404,13 @@ def intervalOverlaps(interval1: str | None, interval2: str | None) -> bool | Non
         end1_after_start2 = True
     else:
         h1, l2 = _normalize_for_compare(iv1["high"], iv2["low"])
-        end1_after_start2 = h1 > l2 if not iv1["high_closed"] else h1 >= l2
+        # Both boundaries must be closed for equality to count as overlap
+        end1_after_start2 = h1 > l2 if not (iv1["high_closed"] and iv2["low_closed"]) else h1 >= l2
     if iv2["high"] is None or iv1["low"] is None:
         end2_after_start1 = True
     else:
         h2, l1 = _normalize_for_compare(iv2["high"], iv1["low"])
-        end2_after_start1 = h2 > l1 if not iv2["high_closed"] else h2 >= l1
+        end2_after_start1 = h2 > l1 if not (iv2["high_closed"] and iv1["low_closed"]) else h2 >= l1
 
     return end1_after_start2 and end2_after_start1
 
@@ -351,7 +458,10 @@ def intervalAfter(interval1: str | None, interval2: str | None) -> bool | None:
 
 
 def intervalMeets(interval1: str | None, interval2: str | None) -> bool | None:
-    """Check if interval1 ends exactly when interval2 starts.
+    """Check if two intervals are contiguous (no gap, no overlap).
+
+    Per CQL spec, meets is true when successor(end of X) == start of Y
+    OR successor(end of Y) == start of X.
 
     Returns None (NULL) for null/unparseable inputs per CQL three-valued logic.
     """
@@ -361,27 +471,49 @@ def intervalMeets(interval1: str | None, interval2: str | None) -> bool | None:
     if not iv1 or not iv2:
         return None
 
-    # iv1.high == iv2.low
-    if iv1["high"] is None or iv2["low"] is None:
-        return None
-    h1, l2 = _normalize_for_compare(iv1["high"], iv2["low"])
-    return h1 == l2
+    # Check iv1 meets iv2: successor(effective end of iv1) == effective start of iv2
+    end1 = _effective_end(iv1)
+    start2 = _effective_start(iv2)
+    if end1 is not None and start2 is not None:
+        succ = _successor(end1)
+        if succ is not None:
+            s, t = _normalize_for_compare(succ, start2)
+            if s == t:
+                return True
+
+    # Check iv2 meets iv1: successor(effective end of iv2) == effective start of iv1
+    end2 = _effective_end(iv2)
+    start1 = _effective_start(iv1)
+    if end2 is not None and start1 is not None:
+        succ = _successor(end2)
+        if succ is not None:
+            s, t = _normalize_for_compare(succ, start1)
+            if s == t:
+                return True
+
+    return False
 
 
 def intervalIncludes(interval1: str | None, interval2: str | None) -> bool | None:
-    """Check if interval1 fully includes interval2 (A.start <= B.start and A.end >= B.end).
+    """Check if interval1 fully includes interval2.
 
+    Respects open/closed boundaries per CQL spec.
     Returns None (NULL) for null/unparseable inputs per CQL three-valued logic.
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
     if not iv1 or not iv2:
         return None
-    if iv1["low"] is None or iv1["high"] is None or iv2["low"] is None or iv2["high"] is None:
+    # Use effective boundaries (accounts for open/closed)
+    start1 = _effective_start(iv1)
+    end1 = _effective_end(iv1)
+    start2 = _effective_start(iv2)
+    end2 = _effective_end(iv2)
+    if start1 is None or end1 is None or start2 is None or end2 is None:
         return None
-    l1, l2 = _normalize_for_compare(iv1["low"], iv2["low"])
-    h1, h2 = _normalize_for_compare(iv1["high"], iv2["high"])
-    return l1 <= l2 and h1 >= h2
+    s1, s2 = _normalize_for_compare(start1, start2)
+    e1, e2 = _normalize_for_compare(end1, end2)
+    return s1 <= s2 and e1 >= e2
 
 
 def intervalIncludedIn(interval1: str | None, interval2: str | None) -> bool:
@@ -392,19 +524,23 @@ def intervalIncludedIn(interval1: str | None, interval2: str | None) -> bool:
 def intervalProperlyIncludes(interval1: str | None, interval2: str | None) -> bool | None:
     """Check if interval1 properly includes interval2 (includes AND not equal).
 
+    Respects open/closed boundaries per CQL spec.
     Returns None (NULL) for null/unparseable inputs per CQL three-valued logic.
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
     if not iv1 or not iv2:
         return None
-    if iv1["low"] is None or iv1["high"] is None or iv2["low"] is None or iv2["high"] is None:
+    start1 = _effective_start(iv1)
+    end1 = _effective_end(iv1)
+    start2 = _effective_start(iv2)
+    end2 = _effective_end(iv2)
+    if start1 is None or end1 is None or start2 is None or end2 is None:
         return None
-    l1, l2 = _normalize_for_compare(iv1["low"], iv2["low"])
-    h1, h2 = _normalize_for_compare(iv1["high"], iv2["high"])
-    # Must include AND not be equal
-    includes = l1 <= l2 and h1 >= h2
-    is_equal = l1 == l2 and h1 == h2
+    s1, s2 = _normalize_for_compare(start1, start2)
+    e1, e2 = _normalize_for_compare(end1, end2)
+    includes = s1 <= s2 and e1 >= e2
+    is_equal = s1 == s2 and e1 == e2
     return includes and not is_equal
 
 
@@ -458,17 +594,24 @@ def intervalOverlapsAfter(interval1: str | None, interval2: str | None) -> bool 
 
 
 def intervalMeetsBefore(interval1: str | None, interval2: str | None) -> bool | None:
-    """Check if interval1 ends exactly when interval2 starts (iv1 meets iv2 from before).
+    """Check if interval1 meets interval2 from before (successor(end1) == start2).
 
+    Uses CQL successor semantics for contiguity.
     Returns None (NULL) for null/unparseable inputs per CQL three-valued logic.
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
     if not iv1 or not iv2:
         return None
-    if iv1["high"] is None or iv2["low"] is None:
+    end1 = _effective_end(iv1)
+    start2 = _effective_start(iv2)
+    if end1 is None or start2 is None:
         return None
-    return iv1["high"] == iv2["low"]
+    succ = _successor(end1)
+    if succ is None:
+        return None
+    s, t = _normalize_for_compare(succ, start2)
+    return s == t
 
 
 def intervalMeetsAfter(interval1: str | None, interval2: str | None) -> bool:

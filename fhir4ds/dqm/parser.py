@@ -101,7 +101,13 @@ class MeasureParser:
     ) -> PopulationEntry | None:
         """Parse a single population element."""
         code = self._extract_population_code(pop)
-        if code is None or code not in self.POPULATION_CODES:
+        if code is None:
+            return None
+        if code not in self.POPULATION_CODES:
+            _logger.warning(
+                "Skipping unrecognized population code '%s' in group '%s'",
+                code, group_id,
+            )
             return None
 
         cql_expr = self._extract_cql_expression(pop)

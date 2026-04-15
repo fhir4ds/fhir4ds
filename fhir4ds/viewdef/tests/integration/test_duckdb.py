@@ -8,6 +8,7 @@ These tests verify the end-to-end flow:
 4. Verify results match expected output
 """
 
+import datetime
 import json
 import pytest
 import sys
@@ -127,7 +128,7 @@ class TestSimplePatientView:
         result = connection.execute(sql).fetchall()
         assert len(result) == 1
         assert result[0][0] == "patient-1"
-        assert result[0][1] == "1990-01-15"
+        assert result[0][1] == datetime.date(1990, 1, 15)
 
 
 class TestForEach:

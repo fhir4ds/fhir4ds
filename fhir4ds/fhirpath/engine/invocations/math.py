@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from ...engine.invocations.equality import remove_duplicate_extension
 from ...engine import util as util
 from ...engine import nodes as nodes
@@ -57,6 +57,14 @@ def minus(ctx, xs_, ys_):
     if util.is_number(x) and util.is_number(y):
         return x - y
 
+    if isinstance(x, nodes.FP_Quantity) and isinstance(y, nodes.FP_Quantity):
+        if x.unit == y.unit:
+            return nodes.FP_Quantity(x.value - y.value, x.unit)
+        converted = nodes.FP_Quantity.conv_unit_to(y.unit, y.value, x.unit)
+        if converted is not None:
+            return nodes.FP_Quantity(x.value - converted.value, x.unit)
+        return []
+
     if isinstance(x, nodes.FP_TimeBase) and isinstance(y, nodes.FP_Quantity):
         return x.plus(nodes.FP_Quantity(-y.value, y.unit))
 
@@ -88,7 +96,12 @@ def mod(ctx, x, y):
     if y == 0:
         return []
 
-    return x % y
+    # FHIRPath §6.6: mod uses truncated division (not floor division)
+    import math as _math
+    result = _math.fmod(float(x), float(y))
+    if isinstance(x, int) and isinstance(y, int):
+        return int(result)
+    return result
 
 
 # HACK: for only polymorphic function
@@ -114,6 +127,14 @@ def plus(ctx, xs_, ys_):
 
     if util.is_number(x) and util.is_number(y):
         return x + y
+
+    if isinstance(x, nodes.FP_Quantity) and isinstance(y, nodes.FP_Quantity):
+        if x.unit == y.unit:
+            return nodes.FP_Quantity(x.value + y.value, x.unit)
+        converted = nodes.FP_Quantity.conv_unit_to(y.unit, y.value, x.unit)
+        if converted is not None:
+            return nodes.FP_Quantity(x.value + converted.value, x.unit)
+        return []
 
     if isinstance(x, nodes.FP_TimeBase) and isinstance(y, nodes.FP_Quantity):
         return x.plus(y)
@@ -162,10 +183,13 @@ def floor(ctx, x):
 
 
 def ln(ctx, x):
+    """FHIRPath §5.7.2 — ln() returns empty for undefined inputs (<=0)."""
     if is_empty(x):
         return []
 
     num = ensure_number_singleton(x)
+    if num <= 0:
+        return []
     return Decimal(num).ln()
 
 
@@ -180,13 +204,16 @@ def log(ctx, x, base):
 
 
 def power(ctx, x, degree):
+    """FHIRPath §5.7.2 — power() returns empty for undefined results."""
     if is_empty(x) or is_empty(degree):
         return []
 
     num = Decimal(ensure_number_singleton(x))
     num2 = Decimal(ensure_number_singleton(degree))
 
-    if num < 0 or num2.to_integral_value(rounding="ROUND_FLOOR") != num2:
+    if num == 0 and num2 <= 0:
+        return []
+    if num < 0 and num2.to_integral_value(rounding="ROUND_FLOOR") != num2:
         return []
 
     return pow(num, num2)
@@ -198,12 +225,15 @@ def rround(ctx, x, acc=None):
 
     num = Decimal(ensure_number_singleton(x))
     if acc is None or is_empty(acc):
-        return round(num)
+        # FHIRPath §5.5: ties round towards positive infinity (ROUND_HALF_UP)
+        return int(num.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
 
     num2 = ensure_number_singleton(acc)
     degree = 10 ** Decimal(num2)
 
-    return round(num * degree) / degree
+    # Use ROUND_HALF_UP for spec-compliant rounding
+    scaled = num * degree
+    return Decimal(scaled.quantize(Decimal('1'), rounding=ROUND_HALF_UP)) / degree
 
 
 def sqrt(ctx, x):

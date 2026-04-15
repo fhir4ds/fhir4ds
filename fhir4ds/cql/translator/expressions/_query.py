@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Optional
 
 from ...parser.ast_nodes import (
     BinaryExpression,
+    CodeSelector,
     Identifier,
     MethodInvocation,
     Property,
@@ -401,6 +402,10 @@ class QueryMixin:
         if terminology:
             if isinstance(terminology, str):
                 valueset_name = terminology
+            elif isinstance(terminology, CodeSelector):
+                cs_url = self.context.codesystems.get(terminology.system, terminology.system)
+                valueset = f"urn:cql:code:{cs_url}|{terminology.code}"
+                valueset_name = None
             else:
                 if isinstance(terminology, Identifier):
                     valueset_name = terminology.name
@@ -418,10 +423,11 @@ class QueryMixin:
                 else:
                     valueset_name = str(terminology)
 
-            # Get valueset URL from context
-            valueset = self.context.valuesets.get(valueset_name, None)
+            if valueset is None and valueset_name is not None:
+                # Get valueset URL from context
+                valueset = self.context.valuesets.get(valueset_name, None)
 
-            if valueset is None:
+            if valueset is None and valueset_name is not None:
                 # Check if it's a code reference instead of a valueset
                 code_info = self.context.codes.get(valueset_name)
                 if code_info:
@@ -1199,6 +1205,8 @@ class QueryMixin:
                 _interval_type = "quantity"
         if _interval_type == "datetime":
             # Period JSON: {"start": "...", "end": "..."}
+            # Use CASE WHEN to guard json_extract_string — DuckDB doesn't
+            # short-circuit AND, so bare strings would crash json_extract.
             is_json = SQLFunctionCall(
                 name="starts_with",
                 args=[
@@ -1225,7 +1233,10 @@ class QueryMixin:
                     right=SQLNull(),
                 ),
             )
-            return SQLBinaryOp(operator="AND", left=is_json, right=has_start_or_end)
+            return SQLCase(
+                when_clauses=[(is_json, has_start_or_end)],
+                else_clause=SQLLiteral(value=False),
+            )
         if _interval_type == "quantity":
             # Range JSON: {"low": {...}, "high": {...}}
             is_json = SQLFunctionCall(
@@ -1257,26 +1268,94 @@ class QueryMixin:
             return SQLBinaryOp(operator="AND", left=is_json, right=has_low_or_high)
 
         # --- Strategy 2: Complex data types without resourceType ---
-        if bare_type in ("Quantity", "quantity"):
-            # Quantity JSON has a "value" field. Guard with starts_with to
-            # avoid json_extract_string on bare strings.
-            return SQLBinaryOp(
-                operator="AND",
-                left=SQLFunctionCall(
-                    name="starts_with",
-                    args=[
-                        SQLFunctionCall(name="LTRIM", args=[resource_expr]),
-                        SQLLiteral(value="{"),
-                    ],
+        if bare_type in ("Period", "period"):
+            # Period JSON: {"start": "...", "end": "..."}
+            # Use CASE WHEN to guard json_extract_string — DuckDB doesn't
+            # short-circuit AND, so bare date strings would crash json_extract.
+            is_json = SQLFunctionCall(
+                name="starts_with",
+                args=[
+                    SQLFunctionCall(name="LTRIM", args=[resource_expr]),
+                    SQLLiteral(value="{"),
+                ],
+            )
+            has_start_or_end = SQLBinaryOp(
+                operator="OR",
+                left=SQLBinaryOp(
+                    operator="IS NOT",
+                    left=SQLFunctionCall(
+                        name="json_extract_string",
+                        args=[resource_expr, SQLLiteral(value="$.start")],
+                    ),
+                    right=SQLNull(),
                 ),
                 right=SQLBinaryOp(
+                    operator="IS NOT",
+                    left=SQLFunctionCall(
+                        name="json_extract_string",
+                        args=[resource_expr, SQLLiteral(value="$.end")],
+                    ),
+                    right=SQLNull(),
+                ),
+            )
+            return SQLCase(
+                when_clauses=[(is_json, has_start_or_end)],
+                else_clause=SQLLiteral(value=False),
+            )
+
+        if bare_type in ("Range", "range"):
+            # Range JSON: {"low": {...}, "high": {...}}
+            is_json = SQLFunctionCall(
+                name="starts_with",
+                args=[
+                    SQLFunctionCall(name="LTRIM", args=[resource_expr]),
+                    SQLLiteral(value="{"),
+                ],
+            )
+            has_low_or_high = SQLBinaryOp(
+                operator="OR",
+                left=SQLBinaryOp(
+                    operator="IS NOT",
+                    left=SQLFunctionCall(
+                        name="json_extract_string",
+                        args=[resource_expr, SQLLiteral(value="$.low")],
+                    ),
+                    right=SQLNull(),
+                ),
+                right=SQLBinaryOp(
+                    operator="IS NOT",
+                    left=SQLFunctionCall(
+                        name="json_extract_string",
+                        args=[resource_expr, SQLLiteral(value="$.high")],
+                    ),
+                    right=SQLNull(),
+                ),
+            )
+            return SQLCase(
+                when_clauses=[(is_json, has_low_or_high)],
+                else_clause=SQLLiteral(value=False),
+            )
+
+        if bare_type in ("Quantity", "quantity"):
+            # Quantity JSON has a "value" field. Use CASE WHEN to guard
+            # json_extract_string from bare string values.
+            is_json = SQLFunctionCall(
+                name="starts_with",
+                args=[
+                    SQLFunctionCall(name="LTRIM", args=[resource_expr]),
+                    SQLLiteral(value="{"),
+                ],
+            )
+            return SQLCase(
+                when_clauses=[(is_json, SQLBinaryOp(
                     operator="IS NOT",
                     left=SQLFunctionCall(
                         name="json_extract_string",
                         args=[resource_expr, SQLLiteral(value="$.value")],
                     ),
                     right=SQLNull(),
-                ),
+                ))],
+                else_clause=SQLLiteral(value=False),
             )
 
         if bare_type in ("Timing", "timing"):

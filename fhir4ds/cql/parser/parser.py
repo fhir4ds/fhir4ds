@@ -689,6 +689,31 @@ class CQLParser:
                     right = self.parse_type_expression()
                     op = f"on or after {precision} of" if precision else "on or after"
                     left = BinaryExpression(operator=f"starts {op}", left=left, right=right)
+                # Handle "starts within N unit of EXPR" timing operator
+                elif self.match(TokenType.IDENTIFIER) and self.current().value.lower() == "within":
+                    self.advance()  # consume 'within'
+                    if self.match(TokenType.INTEGER, TokenType.DECIMAL):
+                        quantity_value = self.advance().value
+                        if self.match(TokenType.YEAR, TokenType.MONTH, TokenType.DAY,
+                                      TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND,
+                                      TokenType.MILLISECOND, TokenType.WEEK, TokenType.YEARS,
+                                      TokenType.MONTHS, TokenType.DAYS, TokenType.HOURS,
+                                      TokenType.MINUTES, TokenType.SECONDS, TokenType.MILLISECONDS,
+                                      TokenType.WEEKS):
+                            unit = self.advance().value
+                            self.expect(TokenType.OF, "Expected 'of' after unit in 'starts within N unit of'")
+                            right = self.parse_type_expression()
+                            left = BinaryExpression(
+                                operator=f"starts within {quantity_value} {unit} of",
+                                left=left,
+                                right=right,
+                            )
+                        else:
+                            right = self.parse_type_expression()
+                            left = BinaryExpression(operator="starts", left=left, right=right)
+                    else:
+                        right = self.parse_type_expression()
+                        left = BinaryExpression(operator="starts", left=left, right=right)
                 else:
                     # Check for complex temporal comparison pattern:
                     # starts <quantity> or less/or more on or after/on or before <precision> of start of/end of <expr>
@@ -727,6 +752,31 @@ class CQLParser:
                     right = self.parse_type_expression()
                     op = f"on or after {precision} of" if precision else "on or after"
                     left = BinaryExpression(operator=f"ends {op}", left=left, right=right)
+                # Handle "ends within N unit of EXPR" timing operator
+                elif self.match(TokenType.IDENTIFIER) and self.current().value.lower() == "within":
+                    self.advance()  # consume 'within'
+                    if self.match(TokenType.INTEGER, TokenType.DECIMAL):
+                        quantity_value = self.advance().value
+                        if self.match(TokenType.YEAR, TokenType.MONTH, TokenType.DAY,
+                                      TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND,
+                                      TokenType.MILLISECOND, TokenType.WEEK, TokenType.YEARS,
+                                      TokenType.MONTHS, TokenType.DAYS, TokenType.HOURS,
+                                      TokenType.MINUTES, TokenType.SECONDS, TokenType.MILLISECONDS,
+                                      TokenType.WEEKS):
+                            unit = self.advance().value
+                            self.expect(TokenType.OF, "Expected 'of' after unit in 'ends within N unit of'")
+                            right = self.parse_type_expression()
+                            left = BinaryExpression(
+                                operator=f"ends within {quantity_value} {unit} of",
+                                left=left,
+                                right=right,
+                            )
+                        else:
+                            right = self.parse_type_expression()
+                            left = BinaryExpression(operator="ends", left=left, right=right)
+                    else:
+                        right = self.parse_type_expression()
+                        left = BinaryExpression(operator="ends", left=left, right=right)
                 else:
                     # Same pattern for ends
                     right = self._try_parse_complex_interval_comparison("ends")
@@ -1257,6 +1307,12 @@ class CQLParser:
         if self.match(TokenType.TIME):
             return self.parse_time_literal()
 
+        # Code selector: Code '73211009' from "SNOMED-CT" [display 'text']
+        if self.match(TokenType.CODE_TYPE):
+            next_type = self.peek().type
+            if next_type == TokenType.STRING:
+                return self.parse_code_selector()
+
         # Interval literal: only if followed by a bracket/paren delimiter
         if self.match(TokenType.INTERVAL):
             next_type = self.peek().type
@@ -1464,6 +1520,32 @@ class CQLParser:
         """Parse a time literal."""
         token = self.advance()
         return TimeLiteral(value=token.value)
+
+    def parse_code_selector(self) -> "CodeSelector":
+        """Parse a Code selector expression.
+
+        Grammar: 'Code' STRING 'from' (identifier) ('display' STRING)?
+
+        Examples:
+            Code '73211009' from "SNOMED-CT"
+            Code '73211009' from "SNOMED-CT" display 'Diabetes'
+        """
+        from .ast_nodes import CodeSelector
+
+        self.expect(TokenType.CODE_TYPE, "Expected 'Code'")
+
+        code_token = self.expect(TokenType.STRING, "Expected code value string after 'Code'")
+        code_value = code_token.value
+
+        self.expect(TokenType.FROM, "Expected 'from' after code value")
+        system_name = self._parse_identifier_name()
+
+        display = None
+        if self.match_and_advance(TokenType.DISPLAY):
+            display_token = self.expect(TokenType.STRING, "Expected display string after 'display'")
+            display = display_token.value
+
+        return CodeSelector(code=code_value, system=system_name, display=display)
 
     def parse_interval(self) -> Interval:
         """Parse an interval expression."""
@@ -2593,7 +2675,11 @@ class CQLParser:
                         TokenType.SECOND, TokenType.SECONDS,
                         TokenType.MILLISECOND, TokenType.MILLISECONDS,
                         TokenType.IS, TokenType.AS,
-                        TokenType.START, TokenType.STARTING):
+                        TokenType.START, TokenType.STARTING,
+                        TokenType.EXISTS, TokenType.CONTAINS,
+                        TokenType.OVERLAPS, TokenType.BEFORE, TokenType.AFTER,
+                        TokenType.MEETS, TokenType.STARTS, TokenType.ENDS,
+                        TokenType.DURING, TokenType.INCLUDES, TokenType.PROPERLY):
             return self.advance().value
         else:
             token = self.current()

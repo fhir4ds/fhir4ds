@@ -146,9 +146,6 @@ class ExpressionTranslator(
 
         # === Simple renames: CQL name → DuckDB name, args passed through ===
         _RENAMES = {
-            "today": "CURRENT_DATE",
-            "now": "CURRENT_TIMESTAMP",
-            "timeofday": "CURRENT_TIME",
             "length": "LENGTH",
             "upper": "UPPER",
             "lower": "LOWER",
@@ -170,6 +167,12 @@ class ExpressionTranslator(
         }
         for cql, sql in _RENAMES.items():
             registry.register_rename(cql, sql)
+
+        # === SQL keywords that must not have parentheses ===
+        from ...translator.types import SQLRaw
+        registry.register("today", lambda args, ctx: SQLRaw(raw_sql="CURRENT_DATE"), arity=0)
+        registry.register("now", lambda args, ctx: SQLRaw(raw_sql="CURRENT_TIMESTAMP"), arity=0)
+        registry.register("timeofday", lambda args, ctx: SQLRaw(raw_sql="CURRENT_TIME"), arity=0)
 
         # === Parameterized translations: need arg manipulation ===
 

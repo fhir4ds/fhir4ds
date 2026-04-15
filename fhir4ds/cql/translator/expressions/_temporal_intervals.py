@@ -93,6 +93,17 @@ class IntervalMixin:
         left_start, left_end, left_low_closed, left_high_closed = left_bounds
         right_start, right_end, right_low_closed, right_high_closed = right_bounds
 
+        # This decomposition is DATE/TIMESTAMP-specific (uses COALESCE with
+        # '9999-12-31' sentinel and CAST AS DATE).  Bail out for non-temporal
+        # bounds (e.g., integer interval literals) and let the caller fall
+        # through to the generic intervalOverlaps UDF.
+        def _is_numeric_literal(e: SQLExpression) -> bool:
+            return isinstance(e, SQLLiteral) and isinstance(e.value, (int, float))
+
+        all_bounds = [left_start, left_end, right_start, right_end]
+        if any(_is_numeric_literal(b) for b in all_bounds if b is not None):
+            return None
+
         # Ensure interval bounds from fhirpath UDFs are cast to DATE
         # fhirpath_date/fhirpath_text and COALESCE of those return VARCHAR
         left_start = self._ensure_date_cast(left_start)
@@ -273,8 +284,12 @@ class IntervalMixin:
 
         Also detects CASE expressions produced by ToInterval translation
         where one branch contains a fhirpath_text of a period property,
-        and intervalFromBounds() calls which always produce intervals.
+        intervalFromBounds() calls which always produce intervals, and
+        SQLInterval AST nodes from CQL Interval literals.
         """
+        # SQLInterval nodes from CQL Interval literals are always intervals
+        if isinstance(expr, SQLInterval):
+            return True
         if isinstance(expr, SQLFunctionCall):
             if expr.name == "fhirpath_text" and len(expr.args) >= 2:
                 path_arg = expr.args[1]

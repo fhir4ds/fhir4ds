@@ -28,8 +28,12 @@ class TestIntervalOverlapDecomposition:
         return ExpressionTranslator(context)
 
     def test_interval_literal_overlaps_decomposes(self, translator: ExpressionTranslator):
-        """Test that Interval[A, B) overlaps Interval[C, D) decomposes to simple comparisons."""
-        # Interval[1, 10) overlaps Interval[5, 15)
+        """Test that Interval[A, B) overlaps Interval[C, D) with date-like values decomposes.
+
+        Integer intervals fall back to the generic intervalOverlaps UDF because
+        the decomposition uses COALESCE with date sentinels ('0001-01-01' / '9999-12-31').
+        """
+        # Integer interval overlaps should use the generic UDF
         left_interval = Interval(
             low=Literal(value=1),
             high=Literal(value=10),
@@ -50,18 +54,9 @@ class TestIntervalOverlapDecomposition:
 
         result = translator.translate(expr)
 
-        # Should decompose to: left_start < right_end AND left_end >= right_start
-        # For [1, 10) overlaps [5, 15): 1 < 15 AND 10 >= 5
-        assert isinstance(result, SQLBinaryOp)
-        assert result.operator == "AND"
-
-        sql = result.to_sql()
-        # Should have simple comparisons, not UDF calls
-        assert "intervalOverlaps" not in sql
-        # Should have the start < end comparison
-        assert "<" in sql
-        # Should have the end >= start comparison
-        assert ">=" in sql
+        # Integer intervals use the generic UDF (not decomposed)
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "intervalOverlaps"
 
     def test_interval_overlaps_with_closed_bounds(self, translator: ExpressionTranslator):
         """Test that closed intervals use <= and >= operators."""
@@ -86,12 +81,10 @@ class TestIntervalOverlapDecomposition:
 
         result = translator.translate(expr)
 
-        assert isinstance(result, SQLBinaryOp)
-        assert result.operator == "AND"
-
-        sql = result.to_sql()
-        # Should NOT have UDF calls
-        assert "intervalOverlaps" not in sql
+        # Integer intervals bail out to the generic UDF (decomposition uses
+        # DATE-specific sentinels that are incorrect for numeric types).
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "intervalOverlaps"
 
     def test_interval_overlaps_half_open(self, translator: ExpressionTranslator):
         """Test half-open intervals [a, b) overlaps [c, d)."""
@@ -116,10 +109,9 @@ class TestIntervalOverlapDecomposition:
 
         result = translator.translate(expr)
 
-        assert isinstance(result, SQLBinaryOp)
-        sql = result.to_sql()
-        # For [a, b) overlaps [c, d): a < d AND b >= c
-        assert "intervalOverlaps" not in sql
+        # Integer intervals bail out to the generic UDF
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "intervalOverlaps"
 
     def test_interval_overlaps_no_overlap_non_overlapping(self, translator: ExpressionTranslator):
         """Test that non-overlapping intervals produce correct comparisons."""
@@ -144,11 +136,9 @@ class TestIntervalOverlapDecomposition:
 
         result = translator.translate(expr)
 
-        # Should still produce the decomposition (the SQL evaluation will return FALSE)
-        assert isinstance(result, SQLBinaryOp)
-        assert result.operator == "AND"
-        sql = result.to_sql()
-        assert "intervalOverlaps" not in sql
+        # Integer intervals use the generic UDF (decomposition is DATE-specific)
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "intervalOverlaps"
 
 
 class TestIntervalBoundsExtraction:
@@ -223,9 +213,9 @@ class TestIntervalOverlapEdgeCases:
 
         result = translator.translate(expr)
 
-        assert isinstance(result, SQLBinaryOp)
-        sql = result.to_sql()
-        assert "intervalOverlaps" not in sql
+        # Integer intervals use the generic UDF
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "intervalOverlaps"
 
 
 class TestIntervalOverlapWithNullEnd:
@@ -295,11 +285,7 @@ class TestIntervalOverlapWithNullEnd:
 
         result = translator.translate(expr)
 
-        assert isinstance(result, SQLBinaryOp)
-        sql = result.to_sql()
-
-        # Should NOT have UDF calls
-        assert "intervalOverlaps" not in sql
-        # Should have COALESCE for NULL handling
-        assert "COALESCE" in sql
-        assert "9999-12-31" in sql
+        # Integer intervals with NULL bounds also use the generic UDF —
+        # decomposition COALESCE sentinels ('9999-12-31') are DATE-specific.
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "intervalOverlaps"

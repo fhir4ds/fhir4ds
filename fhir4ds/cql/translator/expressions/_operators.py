@@ -30,6 +30,7 @@ from ...parser.ast_nodes import (
     BinaryExpression,
     CaseExpression,
     CaseItem,
+    CodeSelector,
     ConditionalExpression,
     DateComponent,
     DateTimeLiteral,
@@ -666,8 +667,12 @@ class OperatorsMixin:
                 left_op = SQLSubquery(query=left) if isinstance(left, SQLSelect) else left
                 right_op = SQLSubquery(query=right) if isinstance(right, SQLSelect) else right
                 return SQLExcept(operands=[left_op, right_op])
-            # Fallback: CQL except for literal lists -> list_except in DuckDB
-            return SQLFunctionCall(name="list_except", args=[left, right])
+            # Fallback: CQL except for literal lists
+            # DuckDB doesn't have list_except; use list_filter with NOT list_contains
+            return SQLFunctionCall(
+                name="list_filter",
+                args=[left, SQLRaw(raw_sql=f"x -> NOT list_contains({right.to_sql()}, x)")],
+            )
 
         # Interval operators - call UDFs
         if operator == "overlaps":
@@ -842,23 +847,11 @@ class OperatorsMixin:
                 left=right,
                 right=left,
             )
-        # String contains
-        return SQLBinaryOp(
-            operator="LIKE",
-            left=right,
-            right=SQLBinaryOp(
-                operator="||",
-                left=SQLLiteral(value="%"),
-                right=SQLBinaryOp(
-                    operator="||",
-                    left=left,
-                    right=SQLLiteral(value="%"),
-                    precedence=PRECEDENCE["||"],
-                ),
-                precedence=PRECEDENCE["||"],
-            ),
-            precedence=PRECEDENCE["LIKE"],
-        )
+        # Check if left is a list/array-returning expression
+        if _is_list_returning_sql(left):
+            return SQLFunctionCall(name="list_contains", args=[left, right])
+        # String contains: CQL 'left contains right' → contains(left, right)
+        return SQLFunctionCall(name="system.contains", args=[left, right])
 
 
     def _translate_in_op(self, operator, left, right, expr, boolean_context) -> SQLExpression:
@@ -1189,8 +1182,12 @@ class OperatorsMixin:
                 use_distinct = not self._check_union_disjointness(operands)
                 return SQLUnion(operands=operands, distinct=use_distinct)
 
-        # Fallback: use jsonConcat for literal lists or mixed types
-        return SQLFunctionCall(name="jsonConcat", args=[left, right])
+        # Fallback: use jsonConcat UDF which handles scalars, lists, and JSON
+        # values from subqueries. Wrap in list_distinct for CQL dedup semantics.
+        return SQLFunctionCall(
+            name="list_distinct",
+            args=[SQLFunctionCall(name="jsonConcat", args=[left, right])],
+        )
 
     def _translate_intersect_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
@@ -1906,7 +1903,10 @@ class OperatorsMixin:
         resource_expr = None
 
         def _resolve_code_ref(operand_ast):
-            """Try to resolve a code reference from Identifier, QualifiedIdentifier, Property, or ParameterPlaceholder."""
+            """Try to resolve a code reference from Identifier, QualifiedIdentifier, Property, CodeSelector, or ParameterPlaceholder."""
+            if isinstance(operand_ast, CodeSelector):
+                system_url = self.context.codesystems.get(operand_ast.system, operand_ast.system)
+                return {"code": operand_ast.code, "codesystem": system_url}
             if isinstance(operand_ast, Identifier):
                 return self.context.get_code(operand_ast.name)
             if isinstance(operand_ast, QualifiedIdentifier) and len(operand_ast.parts) >= 2:
@@ -2108,6 +2108,16 @@ class OperatorsMixin:
         _simple_starts_ends = self._translate_simple_starts_ends_temporal(operator, left, right)
         if _simple_starts_ends is not None:
             return _simple_starts_ends
+
+        # "starts within N unit of" / "ends within N unit of" operators
+        # Extract the interval boundary, then delegate to within operator
+        for _prefix, _boundary_fn in (("starts within ", "intervalStart"), ("ends within ", "intervalEnd")):
+            if operator.startswith(_prefix):
+                _rest = operator[len(_prefix):]
+                within_components = self._parse_within_operator(f"within {_rest}")
+                if within_components is not None:
+                    boundary_expr = SQLFunctionCall(name=_boundary_fn, args=[left])
+                    return self._translate_within_operator(within_components, boundary_expr, right)
 
         # Complex temporal operators with quantity: "starts 1 day or less on or after day of", etc.
         # Pattern: <starts|ends> <quantity> <or less|or more> <on or before|on or after> [<precision> of]
@@ -2351,6 +2361,22 @@ class OperatorsMixin:
 
         # Handle precedence
         precedence = PRECEDENCE.get(sql_op.upper(), PRECEDENCE["PRIMARY"])
+
+        # CQL '+' on strings is concatenation → DuckDB '||'
+        if sql_op == "+":
+            def _is_string_typed(e):
+                if isinstance(e, SQLLiteral) and isinstance(e.value, str):
+                    return True
+                if isinstance(e, SQLFunctionCall) and e.name in (
+                    'fhirpath_text', 'fhirpath_scalar', 'UPPER', 'LOWER',
+                    'REPLACE', 'CONCAT', 'SUBSTRING', 'LTRIM', 'RTRIM', 'TRIM',
+                ):
+                    return True
+                if isinstance(e, SQLCast) and e.target_type in ('VARCHAR', 'TEXT'):
+                    return True
+                return False
+            if _is_string_typed(left) or _is_string_typed(right):
+                return SQLBinaryOp(operator="||", left=left, right=right)
 
         # Cast fhirpath_text results to DOUBLE for arithmetic operators
         if sql_op in ("+", "-", "*", "/", "%"):

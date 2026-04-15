@@ -59,6 +59,7 @@ from ..translator.types import (
     SQLBinaryOp,
     SQLCase,
     SQLCast,
+    SQLExists,
     SQLExpression,
     SQLFragment,
     SQLFunctionCall,
@@ -685,6 +686,11 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # definition_ctes maps name -> (quoted_name, has_resource)
         definition_ctes: Dict[str, tuple] = {}
 
+        # Include retrieve CTEs so identity passthrough works for bare retrieves
+        for cte_name in phase2_result.ctes:
+            quoted_name = f'"{cte_name}"'
+            definition_ctes[cte_name] = (quoted_name, True)
+
         # Include included library definitions in existing_ctes so identity passthrough works
         for prefixed_name in included_ordered:
             quoted_name = f'"{prefixed_name}"'
@@ -751,9 +757,32 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             internal name for the base patient reference table.
         """
         where_condition: SQLExpression = SQLBinaryOp(
-            operator="IS NOT",
-            left=SQLIdentifier(name="patient_ref"),
-            right=SQLNull(),
+            operator="AND",
+            left=SQLBinaryOp(
+                operator="IS NOT",
+                left=SQLQualifiedIdentifier(parts=["_outer", "patient_ref"]),
+                right=SQLNull(),
+            ),
+            right=SQLExists(subquery=SQLSubquery(query=SQLSelect(
+                columns=[SQLLiteral(value=1)],
+                from_clause=SQLAlias(
+                    expr=SQLIdentifier(name="resources"),
+                    alias="_pt",
+                ),
+                where=SQLBinaryOp(
+                    operator="AND",
+                    left=SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["_pt", "resourceType"]),
+                        right=SQLLiteral(value="Patient"),
+                    ),
+                    right=SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["_pt", "id"]),
+                        right=SQLQualifiedIdentifier(parts=["_outer", "patient_ref"]),
+                    ),
+                ),
+            ))),
         )
         if patient_ids is not None and len(patient_ids) > 0:
             id_literals = [
@@ -764,14 +793,17 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 left=where_condition,
                 right=SQLBinaryOp(
                     operator="IN",
-                    left=SQLIdentifier(name="patient_ref"),
+                    left=SQLQualifiedIdentifier(parts=["_outer", "patient_ref"]),
                     right=SQLList(items=id_literals),
                 ),
             )
         return SQLSelect(
             distinct=True,
-            columns=[SQLAlias(expr=SQLIdentifier(name="patient_ref"), alias="patient_id")],
-            from_clause=SQLIdentifier(name="resources"),
+            columns=[SQLAlias(expr=SQLQualifiedIdentifier(parts=["_outer", "patient_ref"]), alias="patient_id")],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name="resources"),
+                alias="_outer",
+            ),
             where=where_condition,
         )
 

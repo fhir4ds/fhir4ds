@@ -384,3 +384,74 @@ def test_resource_json_stored_correctly(loader, duckdb_con):
     stored_resource = json.loads(result[2])
     assert stored_resource["name"][0]["family"] == "Test"
     assert stored_resource["birthDate"] == "1990-01-01"
+
+
+# ── CRITICAL-9 regression tests: duplicate resource deduplication ──
+
+
+def test_duplicate_resource_same_type_deduplicated(loader, duckdb_con):
+    """Loading the same (id, resourceType) twice keeps only the latest version.
+
+    Regression test for CRITICAL-9: duplicate resource IDs must be
+    deduplicated to prevent data integrity corruption in measure results.
+
+    Per FHIR spec, each resource is uniquely identified by its
+    resourceType and id within a server.
+    """
+    loader.load_resource({"resourceType": "Patient", "id": "dup1", "name": [{"family": "V1"}]})
+    loader.load_resource({"resourceType": "Patient", "id": "dup1", "name": [{"family": "V2"}]})
+
+    # Should be exactly 1 row
+    count = duckdb_con.execute(
+        "SELECT COUNT(*) FROM resources WHERE id = 'dup1' AND resourceType = 'Patient'"
+    ).fetchone()[0]
+    assert count == 1, f"Expected 1 row for (dup1, Patient), got {count}"
+
+    # Latest version should be kept
+    resource = duckdb_con.execute(
+        "SELECT resource FROM resources WHERE id = 'dup1' AND resourceType = 'Patient'"
+    ).fetchone()[0]
+    data = json.loads(resource)
+    assert data["name"][0]["family"] == "V2", "Latest version should overwrite previous"
+
+
+def test_same_id_different_type_both_kept(loader, duckdb_con):
+    """Same id with different resourceTypes should both be kept.
+
+    FHIR identity is (resourceType, id), not just id alone.
+    """
+    loader.load_resource({"resourceType": "Patient", "id": "shared1"})
+    loader.load_resource({"resourceType": "Observation", "id": "shared1"})
+
+    total = duckdb_con.execute(
+        "SELECT COUNT(*) FROM resources WHERE id = 'shared1'"
+    ).fetchone()[0]
+    assert total == 2, f"Expected 2 rows for different types with same id, got {total}"
+
+
+def test_null_id_resources_not_deduplicated(loader, duckdb_con):
+    """Resources without an id (e.g., contained) should not be deduplicated."""
+    loader.load_resource({"resourceType": "Patient"})
+    loader.load_resource({"resourceType": "Patient"})
+
+    null_count = duckdb_con.execute(
+        "SELECT COUNT(*) FROM resources WHERE id IS NULL"
+    ).fetchone()[0]
+    assert null_count >= 2, "Null-id resources should not be deduplicated"
+
+
+def test_bundle_deduplication(loader, duckdb_con):
+    """Bundles containing duplicate entries should deduplicate them."""
+    bundle = {
+        "resourceType": "Bundle",
+        "type": "collection",
+        "entry": [
+            {"resource": {"resourceType": "Patient", "id": "bp1"}},
+            {"resource": {"resourceType": "Patient", "id": "bp1"}},
+            {"resource": {"resourceType": "Observation", "id": "bo1"}},
+        ]
+    }
+    loader.load_bundle(bundle)
+
+    assert loader.count("Patient") == 1
+    assert loader.count("Observation") == 1

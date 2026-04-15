@@ -81,8 +81,8 @@ def duckdb_connection():
 
 @pytest.fixture
 def generator():
-    """Create a SQL generator."""
-    return SQLGenerator()
+    """Create a SQL generator with spec-strict collection validation."""
+    return SQLGenerator(strict_collection=True)
 
 
 def normalize_value(val: Any) -> Any:
@@ -201,7 +201,7 @@ class TestSpecSQLGeneration:
 
     @pytest.fixture
     def generator(self):
-        return SQLGenerator()
+        return SQLGenerator(strict_collection=True)
 
     @pytest.mark.parametrize("test_info", get_all_spec_tests(), ids=lambda t: f"{t['file']}:{t['test_title']}")
     def test_generate_sql(self, test_info, generator):

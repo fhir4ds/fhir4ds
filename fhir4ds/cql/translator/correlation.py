@@ -26,6 +26,7 @@ from ..translator.types import (
 from ..translator.ast_utils import ast_has_patient_id_correlation
 
 
+
 class CorrelationMixin:
     """Mixin providing correlation and patient ID methods for CQLToSQLTranslator."""
 
@@ -519,6 +520,26 @@ class CorrelationMixin:
                 operand = expr.left
                 if isinstance(operand, SQLSelect):
                     operand = SQLSubquery(query=operand)
+                # Handle bare CTE identifier references (e.g., "Condition" IS NOT NULL)
+                # Convert to correlated EXISTS / NOT EXISTS subquery
+                if isinstance(operand, SQLIdentifier) and operand.quoted:
+                    correlation = SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=[outer_alias, "patient_id"]),
+                    )
+                    exists_select = SQLSelect(
+                        columns=[SQLLiteral(value=1)],
+                        from_clause=SQLAlias(
+                            expr=SQLIdentifier(name=operand.name, quoted=True),
+                            alias="sub",
+                        ),
+                        where=correlation,
+                    )
+                    exists_expr = SQLExists(subquery=SQLSubquery(query=exists_select))
+                    if expr.operator.upper() == "IS":  # IS NULL → NOT EXISTS
+                        return SQLUnaryOp(operator="NOT", operand=exists_expr, prefix=True)
+                    return exists_expr  # IS NOT NULL → EXISTS
                 if isinstance(operand, SQLSubquery):
                     exists_expr = self._correlate_exists_ast(operand, outer_alias)
                     if expr.operator.upper() == "IS":  # IS NULL → NOT EXISTS
@@ -633,6 +654,25 @@ class CorrelationMixin:
                 operand = expr.operand
                 if isinstance(operand, SQLSelect):
                     operand = SQLSubquery(query=operand)
+                # Handle bare CTE identifier references (e.g., "Condition" IS NOT NULL)
+                if isinstance(operand, SQLIdentifier) and operand.quoted:
+                    correlation = SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=[outer_alias, "patient_id"]),
+                    )
+                    exists_select = SQLSelect(
+                        columns=[SQLLiteral(value=1)],
+                        from_clause=SQLAlias(
+                            expr=SQLIdentifier(name=operand.name, quoted=True),
+                            alias="sub",
+                        ),
+                        where=correlation,
+                    )
+                    exists_expr = SQLExists(subquery=SQLSubquery(query=exists_select))
+                    if expr.operator.upper() == "IS NULL":
+                        return SQLUnaryOp(operator="NOT", operand=exists_expr, prefix=True)
+                    return exists_expr
                 if isinstance(operand, SQLSubquery):
                     exists_expr = self._correlate_exists_ast(operand, outer_alias)
                     # If recursive call didn't convert to EXISTS (complex FROM clause),

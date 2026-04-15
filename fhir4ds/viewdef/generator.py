@@ -86,15 +86,35 @@ class SQLGenerator:
         "unsignedInt": "fhirpath_number",
     }
 
-    def __init__(self, dialect: str = "duckdb"):
+    # Post-UDF SQL type casts for proper SQL typing
+    _TYPE_CAST = {
+        "date": "DATE",
+        "dateTime": "TIMESTAMP",
+        "instant": "TIMESTAMP",
+        "integer": "INTEGER",
+        "positiveInt": "INTEGER",
+        "unsignedInt": "INTEGER",
+    }
+
+    def __init__(self, dialect: str = "duckdb", *, strict_collection: bool = False,
+                 source_table: str | None = None):
         """Initialize SQL generator.
 
         Args:
             dialect: SQL dialect (currently only 'duckdb' supported)
+            strict_collection: If True, raise ValidationError when
+                collection=false columns use multi-value paths (spec-strict).
+                If False, log a warning and proceed (default).
+            source_table: Override the source table name. When set, this table
+                is used directly (with a ``resource_type = 'X'`` filter) instead
+                of the default pluralized per-type table (e.g., ``patients``).
+                Use ``"resources"`` to match the FHIRDataLoader default schema.
         """
         if dialect != "duckdb":
             raise ValueError(f"Unsupported dialect: {dialect}. Only 'duckdb' is supported.")
         self.dialect = dialect
+        self._source_table = source_table
+        self.strict_collection = strict_collection
         self.table_alias = "t"  # Base table alias
         self._alias_counter = 0
         self._constant_resolver = None
@@ -116,15 +136,40 @@ class SQLGenerator:
         _logger.warning("Unknown column type '%s', defaulting to fhirpath_text", type_str)
         return "fhirpath_text"
 
+    def _get_sql_cast(self, column_type) -> str | None:
+        """Return the SQL type to TRY_CAST the UDF result to, or None."""
+        if column_type is None:
+            return None
+        type_str = column_type.value if isinstance(column_type, ColumnType) else str(column_type)
+        return self._TYPE_CAST.get(type_str)
+
+    # Regex for validating FHIR resource type names (PascalCase alphanumeric)
+    _VALID_RESOURCE_TYPE_RE = re.compile(r'^[A-Z][a-zA-Z0-9]*$')
+
     def _get_table_name(self, resource: str) -> str:
-        """Convert resource type to table name (pluralized, lowercase).
+        """Convert resource type to table name.
+
+        When ``source_table`` was provided at construction, returns that table
+        and stores the resource type for a WHERE filter.  Otherwise returns the
+        pluralized, lowercase form (e.g., "patients").
 
         Args:
             resource: FHIR resource type (e.g., "Patient", "Observation")
 
         Returns:
-            Table name (e.g., "patients", "observations")
+            Table name
+
+        Raises:
+            ValidationError: If resource type contains invalid characters
         """
+        if not resource or not self._VALID_RESOURCE_TYPE_RE.match(resource):
+            raise ValidationError(
+                f"Invalid FHIR resource type: {resource!r}. "
+                "Resource types must be PascalCase alphanumeric (e.g., 'Patient', 'Observation')."
+            )
+        if self._source_table is not None:
+            self._current_resource_type = resource
+            return self._source_table
         return pluralize_resource(resource)
 
     def _resolve_path(self, path: str) -> str:
@@ -178,12 +223,16 @@ class SQLGenerator:
             return f"fhirpath({resource_var}, '{escaped_path}') as {quoted_name}"
 
         udf_func = self._get_udf_for_type(column.type)
+        sql_cast = self._get_sql_cast(column.type)
 
         # Escape single quotes in path for SQL string literal
         escaped_path = resolved_path.replace("'", "''")
         quoted_name = _quote_identifier(column.name)
 
-        return f"{udf_func}({resource_var}, '{escaped_path}') as {quoted_name}"
+        udf_call = f"{udf_func}({resource_var}, '{escaped_path}')"
+        if sql_cast:
+            return f"TRY_CAST({udf_call} AS {sql_cast}) as {quoted_name}"
+        return f"{udf_call} as {quoted_name}"
 
     def generate_columns(self, columns: List[Column], resource_var: str = "resource") -> str:
         """Generate comma-separated column expressions.
@@ -450,59 +499,119 @@ class SQLGenerator:
         return False
 
     def _validate_collection_columns(self, view_definition: ViewDefinition) -> None:
-        """Validate that collection=false columns don't use multi-value paths.
+        """Validate collection=false columns against multi-value paths.
 
-        Per SQL-on-FHIR spec: "If collection is false and the path returns
-        multiple values, this is an error."
+        Per SQL-on-FHIR spec, when collection is false the engine returns
+        only the first value. Uses heuristics to detect paths that traverse
+        FHIR array elements without singleton accessors.
 
-        Uses heuristics to detect likely multi-value paths:
-        - Paths containing known FHIR array elements (name, identifier, etc.)
-        - Without singleton accessors (.first(), [n], .where(), etc.)
+        In strict mode (strict_collection=True), raises ValidationError.
+        In permissive mode (default), logs a warning and proceeds.
 
         When columns are inside a forEach/forEachOrNull context, validation
-        is skipped because paths are relative to unnested elements and the
-        heuristic cannot reliably determine cardinality in that context.
+        is skipped because paths are relative to unnested elements.
 
         Args:
             view_definition: The ViewDefinition to validate
-
-        Raises:
-            ValidationError: If collection=false with likely multi-value path
         """
-        # Recursively validate columns from selects
         def validate_select_columns(selects: List[Select], in_foreach: bool = False) -> None:
             for select in selects:
                 current_in_foreach = in_foreach or bool(select.forEach) or bool(select.forEachOrNull)
 
                 if not current_in_foreach:
                     for column in select.column:
-                        # Skip if collection is explicitly true
                         if column.collection:
                             continue
 
-                        # Check if this column's path likely returns multiple values
                         if self._path_likely_returns_collection(column.path):
-                            raise ValidationError(
-                                f"Column '{column.name}' has collection=false but path "
-                                f"'{column.path}' likely returns multiple values. "
-                                f"Either set collection=true or use a singleton accessor "
-                                f"(e.g., .first(), [0], .where())",
-                                details={
-                                    "column_name": column.name,
-                                    "path": column.path,
-                                    "hint": "Set collection=true or use .first(), [n], or .where()"
-                                }
-                            )
+                            if self.strict_collection:
+                                raise ValidationError(
+                                    f"Column '{column.name}' has collection=false but path "
+                                    f"'{column.path}' likely returns multiple values. "
+                                    f"Either set collection=true or use a singleton accessor "
+                                    f"(e.g., .first(), [0], .where())",
+                                    details={
+                                        "column_name": column.name,
+                                        "path": column.path,
+                                        "hint": "Set collection=true or use .first(), [n], or .where()"
+                                    }
+                                )
+                            else:
+                                _logger.warning(
+                                    "Column '%s' has collection=false but path '%s' may "
+                                    "return multiple values; only the first will be used. "
+                                    "Set collection=true to return all values.",
+                                    column.name, column.path,
+                                )
 
-                # Recursively validate nested selects
                 if select.select:
                     validate_select_columns(select.select, current_in_foreach)
 
-                # Validate unionAll branches
                 if select.unionAll:
                     validate_select_columns(select.unionAll, current_in_foreach)
 
         validate_select_columns(view_definition.select)
+
+    def _validate_unique_column_names(self, view_definition: ViewDefinition) -> None:
+        """Validate that column names are unique within a single select scope.
+
+        Per SQL-on-FHIR v2 spec, column names in a ViewDefinition's output
+        must be unique within each select scope. Names within unionAll branches
+        are expected to match (they contribute to the same UNION ALL output).
+        Sibling selects with unionAll at the top level may share names across
+        their branches as they produce independent column groups.
+
+        This validates within each individual select's direct columns plus
+        nested selects (non-unionAll) for duplicates.
+
+        Args:
+            view_definition: The ViewDefinition to validate
+
+        Raises:
+            ValidationError: If duplicate column names are found within a single select
+        """
+        def validate_select(sel: Select, path: str = "select") -> None:
+            """Check for duplicates within a single select's own columns."""
+            names: List[str] = [col.name for col in sel.column]
+            seen: Set[str] = set()
+            duplicates: Set[str] = set()
+            for name in names:
+                if name in seen:
+                    duplicates.add(name)
+                seen.add(name)
+            if duplicates:
+                raise ValidationError(
+                    f"Duplicate column names in {path}: {sorted(duplicates)}. "
+                    f"Column names must be unique per the SQL-on-FHIR v2 specification.",
+                    details={"duplicate_names": sorted(duplicates), "path": path}
+                )
+            # Recurse into nested selects
+            for i, nested in enumerate(sel.select):
+                validate_select(nested, f"{path}.select[{i}]")
+            # Recurse into unionAll branches
+            for i, branch in enumerate(sel.unionAll):
+                validate_select(branch, f"{path}.unionAll[{i}]")
+
+        for i, sel in enumerate(view_definition.select):
+            validate_select(sel, f"select[{i}]")
+
+    def _validate_foreach_mutual_exclusion(self, selects: List[Select]) -> None:
+        """Validate that no select uses both forEach and forEachOrNull.
+
+        Per SQL-on-FHIR v2 spec, these are mutually exclusive.
+        """
+        def _check(sels: List[Select], path: str = "select") -> None:
+            for i, sel in enumerate(sels):
+                if sel.forEach and sel.forEachOrNull:
+                    raise ValidationError(
+                        f"{path}[{i}]: Both forEach and forEachOrNull specified "
+                        "(they are mutually exclusive per the SQL-on-FHIR v2 specification)"
+                    )
+                if sel.select:
+                    _check(sel.select, f"{path}[{i}].select")
+                if sel.unionAll:
+                    _check(sel.unionAll, f"{path}[{i}].unionAll")
+        _check(selects)
 
     def _next_alias(self, path: str) -> str:
         """Generate a unique SQL alias for a forEach/forEachOrNull unnested element."""
@@ -609,6 +718,12 @@ class SQLGenerator:
         columns_sql = ",\n    ".join(column_exprs)
         from_sql = f"FROM {table_name} {self.table_alias}"
 
+        # When using a shared source_table, filter by resourceType
+        if self._source_table is not None and hasattr(self, '_current_resource_type'):
+            where_conditions.insert(
+                0, f"{self.table_alias}.\"resourceType\" = '{self._current_resource_type}'"
+            )
+
         parts = [f"SELECT\n    {columns_sql}", from_sql]
         parts.extend(join_clauses)
         if where_conditions:
@@ -680,6 +795,57 @@ class SQLGenerator:
 
         return "\nUNION ALL\n".join(branch_sqls)
 
+    def _generate_multi_resource_union(self, view_definition: ViewDefinition) -> str:
+        """Generate UNION ALL query across multiple resource types.
+
+        When resource is a list (e.g., ["Patient", "Practitioner"]),
+        generates a separate query for each type and combines with UNION ALL.
+
+        Args:
+            view_definition: ViewDefinition with list resource field
+
+        Returns:
+            UNION ALL SQL combining queries for each resource type
+        """
+        from dataclasses import replace
+        queries = []
+        for res_type in view_definition.resource:
+            single_vd = replace(view_definition, resource=res_type)
+            self._alias_counter = 0
+            queries.append(self._generate_single_resource(single_vd))
+        return "\nUNION ALL\n".join(queries)
+
+    def _generate_single_resource(self, view_definition: ViewDefinition) -> str:
+        """Generate SQL for a single-resource ViewDefinition (internal)."""
+        base_resource_var = f"{self.table_alias}.resource"
+        table_name = self._get_table_name(view_definition.resource)
+        root_where = list(view_definition.where)
+
+        union_selects: List[Select] = []
+        sibling_selects: List[Select] = []
+        for s in view_definition.select:
+            if s.unionAll:
+                union_selects.append(s)
+            else:
+                sibling_selects.append(s)
+
+        if union_selects:
+            union_queries = [
+                self._build_union_all_query(
+                    union_select,
+                    sibling_selects,
+                    table_name,
+                    base_resource_var,
+                    root_where,
+                )
+                for union_select in union_selects
+            ]
+            return "\nUNION ALL\n".join(union_queries)
+
+        return self._build_single_query(
+            view_definition.select, table_name, base_resource_var, root_where
+        )
+
     def generate(self, view_definition: ViewDefinition) -> str:
         """Generate complete SQL query from a ViewDefinition.
 
@@ -716,40 +882,17 @@ class SQLGenerator:
         """
         self._validate_constants(view_definition)
         self._validate_collection_columns(view_definition)
+        self._validate_unique_column_names(view_definition)
+        self._validate_foreach_mutual_exclusion(view_definition.select)
         self._alias_counter = 0
         self._constant_resolver = ConstantResolver.from_view_definition(view_definition)
 
-        base_resource_var = f"{self.table_alias}.resource"
-        table_name = self._get_table_name(view_definition.resource)
-        root_where = list(view_definition.where)
+        # Handle resource-as-list (multi-resource union)
+        resource = view_definition.resource
+        if isinstance(resource, list):
+            return self._generate_multi_resource_union(view_definition)
 
-        # Check for top-level sibling selects that each introduce UNION ALL branches.
-        # All such branch groups must be included; keeping only the last one silently
-        # drops valid output rows.
-        union_selects: List[Select] = []
-        sibling_selects: List[Select] = []
-        for s in view_definition.select:
-            if s.unionAll:
-                union_selects.append(s)
-            else:
-                sibling_selects.append(s)
-
-        if union_selects:
-            union_queries = [
-                self._build_union_all_query(
-                    union_select,
-                    sibling_selects,
-                    table_name,
-                    base_resource_var,
-                    root_where,
-                )
-                for union_select in union_selects
-            ]
-            return "\nUNION ALL\n".join(union_queries)
-
-        return self._build_single_query(
-            view_definition.select, table_name, base_resource_var, root_where
-        )
+        return self._generate_single_resource(view_definition)
 
     def generate_from_json(self, json_str: str) -> str:
         """Generate SQL directly from a JSON ViewDefinition string.

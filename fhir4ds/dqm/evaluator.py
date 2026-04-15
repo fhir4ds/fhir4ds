@@ -105,8 +105,7 @@ class MeasureEvaluator:
             raise FileNotFoundError(f"CQL library not found: {cql_library_path}")
 
         try:
-            from fhir4ds.cql.parser import parse_cql
-            from fhir4ds.cql.translator import CQLToSQLTranslator
+            from fhir4ds.cql import parse_cql, CQLToSQLTranslator
         except ImportError as e:
             raise DQMError(f"cql-py is required: {e}") from e
 
@@ -229,6 +228,9 @@ class MeasureEvaluator:
     def to_csv(self, result: pd.DataFrame | MeasureResult, path: str | Path) -> Path:
         """Export evaluation results to CSV.
 
+        Dict/list columns (e.g., audit structs) are serialized as JSON strings
+        to ensure round-trip fidelity.
+
         Args:
             result: MeasureResult or DataFrame from evaluate().
             path: Destination file path.
@@ -238,7 +240,15 @@ class MeasureEvaluator:
         """
         out = Path(path)
         df = result.dataframe if isinstance(result, MeasureResult) else result
-        df.to_csv(out, index=False)
+        # Serialize complex columns (dicts/lists) as JSON, not Python repr
+        df_out = df.copy()
+        for col in df_out.columns:
+            sample = df_out[col].dropna().head(1)
+            if not sample.empty and isinstance(sample.iloc[0], (dict, list)):
+                df_out[col] = df_out[col].apply(
+                    lambda x: json.dumps(x, default=str) if isinstance(x, (dict, list)) else x
+                )
+        df_out.to_csv(out, index=False)
         return out
 
     def to_measure_report(
@@ -403,8 +413,14 @@ class MeasureEvaluator:
             return self.conn.execute(sql).df()
         except (DQMError, KeyboardInterrupt):
             raise
-        except (duckdb.Error, ValueError, FileNotFoundError, RuntimeError) as e:
+        except (duckdb.Error, ValueError, FileNotFoundError, RuntimeError,
+                SyntaxError, TypeError) as e:
             raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
+        except Exception as e:
+            # Catch CQL ParseError, TranslationError, and other downstream errors
+            if type(e).__name__ in ('ParseError', 'TranslationError'):
+                raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
+            raise
 
     def _filter_to_initial_population(
         self, df: pd.DataFrame, audit_mode: AuditMode,
@@ -461,18 +477,22 @@ class MeasureEvaluator:
         since silent fallback would produce incorrect measure results.
         """
         def loader(alias: str):
-            for path in include_paths:
-                base = Path(path)
-                # Try exact name first, then versioned filenames (e.g. FHIRHelpers-4.4.000.cql)
-                candidates = [base / f"{alias}.cql"] + sorted(base.glob(f"{alias}-*.cql"))
-                for lib_file in candidates:
-                    if lib_file.exists():
-                        try:
-                            return parse_cql(lib_file.read_text())
-                        except (SyntaxError, ValueError, KeyError) as e:
-                            raise DQMError(
-                                f"Failed to parse included library '{lib_file}': {e}"
-                            ) from e
+            # Resolve canonical URLs to simple filenames.
+            # e.g. "hl7.fhir.uv.cql.FHIRHelpers" → "FHIRHelpers"
+            resolved_alias = alias.rsplit(".", 1)[-1] if "." in alias else alias
+            for search_alias in dict.fromkeys([alias, resolved_alias]):
+                for path in include_paths:
+                    base = Path(path)
+                    # Try exact name first, then versioned filenames (e.g. FHIRHelpers-4.4.000.cql)
+                    candidates = [base / f"{search_alias}.cql"] + sorted(base.glob(f"{search_alias}-*.cql"))
+                    for lib_file in candidates:
+                        if lib_file.exists():
+                            try:
+                                return parse_cql(lib_file.read_text())
+                            except (SyntaxError, ValueError, KeyError) as e:
+                                raise DQMError(
+                                    f"Failed to parse included library '{lib_file}': {e}"
+                                ) from e
             return None
         return loader
 

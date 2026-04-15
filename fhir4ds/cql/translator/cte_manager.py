@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from ..translator.context import DefinitionMeta
 
 
+
 def _flatten_audit_tree(expr: "SQLExpression") -> "SQLExpression":
     """Flatten nested audit_or/audit_and chains into a single flat struct_pack.
 
@@ -1433,6 +1434,8 @@ class CTEManagerMixin:
                     direct_ref = inner.from_clause
             if isinstance(direct_ref, SQLIdentifier) and direct_ref.quoted:
                 target_name = direct_ref.name
+                # Check both definition CTEs and retrieve CTEs
+                _is_retrieve_cte = any(c.name == target_name for c in self._retrieve_ctes)
                 if target_name in existing_ctes:
                     identity_select = SQLSelect(
                         from_clause=SQLIdentifier(name=target_name, quoted=True),
@@ -1442,6 +1445,13 @@ class CTEManagerMixin:
                     _, target_has_resource = existing_ctes[target_name]
                     has_resource = target_has_resource
                     return (identity_select, has_resource)
+                elif _is_retrieve_cte:
+                    # Bare retrieve without WHERE clause (e.g., define 'X': [Condition])
+                    # Retrieve CTEs always have resource columns.
+                    identity_select = SQLSelect(
+                        from_clause=SQLIdentifier(name=target_name, quoted=True),
+                    )
+                    return (identity_select, True)
 
             if meta.tracked_refs and len(meta.tracked_refs) == 1:
                 ref_key = next(iter(meta.tracked_refs))

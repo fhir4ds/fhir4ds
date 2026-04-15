@@ -24,8 +24,10 @@ from ...parser.ast_nodes import (
     Expression,
     FirstExpression,
     LastExpression,
+    ListExpression,
     Query,
     QuerySource,
+    Retrieve,
     SortClause,
 )
 from ...translator.types import (
@@ -317,6 +319,26 @@ class AggregationTranslator:
             right=SQLNull(),
         )
 
+    # Map CQL aggregates to DuckDB list_aggregate names
+    _LIST_AGGREGATE_MAP = {
+        "SUM": "sum",
+        "AVG": "avg",
+        "MIN": "min",
+        "MAX": "max",
+        "MEDIAN": "median",
+        "MODE": "mode",
+        "STDDEV": "stddev_samp",
+        "STDDEV_SAMP": "stddev_samp",
+        "STDDEV_POP": "stddev_pop",
+        "VARIANCE": "var_samp",
+        "VAR_SAMP": "var_samp",
+        "VAR_POP": "var_pop",
+    }
+
+    def _is_row_source(self, source: Expression) -> bool:
+        """Return True if source is a row-producing expression (Retrieve/Query)."""
+        return isinstance(source, (Retrieve, Query))
+
     def translate_aggregate(
         self,
         agg_func: str,
@@ -349,7 +371,19 @@ class AggregationTranslator:
         if func_upper == "COUNT" and self._should_count_star(source):
             return SQLFunctionCall(name="COUNT", args=[SQLLiteral(value="*")])
 
-        # Build the aggregate function call
+        # For non-row sources (list literals, property accesses, etc.)
+        # use DuckDB list aggregate functions instead of SQL aggregates
+        if not self._is_row_source(source):
+            if func_upper == "COUNT":
+                return SQLFunctionCall(name="len", args=[source_sql])
+            list_agg = self._LIST_AGGREGATE_MAP.get(func_upper)
+            if list_agg:
+                return SQLFunctionCall(
+                    name="list_aggregate",
+                    args=[source_sql, SQLLiteral(value=list_agg)],
+                )
+
+        # Build the aggregate function call (row-based queries)
         agg_call = SQLFunctionCall(
             name=func_upper,
             args=[source_sql],
@@ -694,13 +728,7 @@ class AggregationTranslator:
 
         COUNT(*) is used when counting all rows, not specific values.
         """
-        # For retrieve expressions and queries, use COUNT(*)
-        from ...parser.ast_nodes import Retrieve, Query
-
-        if isinstance(source, (Retrieve, Query)):
-            return True
-
-        return False
+        return self._is_row_source(source)
 
 
 __all__ = [

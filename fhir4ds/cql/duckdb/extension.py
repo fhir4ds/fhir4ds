@@ -37,7 +37,8 @@ def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
     if not ext_path.exists():
         return False
     try:
-        con.execute(f"LOAD '{ext_path}'")
+        escaped_path = str(ext_path).replace("'", "''")
+        con.execute(f"LOAD '{escaped_path}'")
         _logger.debug("duckdb_cql_py: loaded bundled C++ extension from %s", ext_path)
         return True
     except duckdb.Error as exc:
@@ -45,7 +46,21 @@ def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
         if "already loaded" in msg:
             _logger.debug("duckdb_cql_py: C++ extension already loaded")
             return True
-        _logger.debug("duckdb_cql_py: failed to load bundled C++ extension: %s", exc)
+        if "unsigned" in msg or "signature" in msg:
+            # Try enabling unsigned extensions and retrying
+            try:
+                con.execute("SET allow_unsigned_extensions = true")
+                con.execute(f"LOAD '{escaped_path}'")
+                _logger.debug("duckdb_cql_py: loaded unsigned C++ extension from %s", ext_path)
+                return True
+            except duckdb.Error:
+                _logger.info(
+                    "duckdb_cql_py: C++ extension found but not loaded (unsigned dev build). "
+                    "Use duckdb.connect(config={'allow_unsigned_extensions': True}) to enable. "
+                    "Falling back to Python UDFs."
+                )
+        else:
+            _logger.warning("duckdb_cql_py: failed to load bundled C++ extension: %s", exc)
         return False
     except OSError as exc:
         _logger.debug("duckdb_cql_py: OS error loading C++ extension: %s", exc)
@@ -70,6 +85,17 @@ def register(con: "duckdb.DuckDBPyConnection", include_fhirpath: bool = True) ->
     # Try the bundled C++ extension first (bundled at wheel-build time when available)
     if _try_load_bundled_cpp_extension(con):
         return
+
+    # Idempotency guard: if CQL UDFs already exist, skip registration
+    try:
+        con.execute("SELECT AgeInYears(NULL)").fetchone()
+        # If we get here, CQL UDFs are already registered; just ensure FHIRPath
+        if include_fhirpath:
+            from fhir4ds.fhirpath.duckdb.extension import register_fhirpath
+            register_fhirpath(con)
+        return
+    except duckdb.Error:
+        pass  # not yet registered, proceed
 
     if include_fhirpath:
         from fhir4ds.fhirpath.duckdb.extension import register_fhirpath

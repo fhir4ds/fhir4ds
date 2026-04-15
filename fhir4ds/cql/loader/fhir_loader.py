@@ -53,7 +53,15 @@ class FHIRDataLoader:
             self._create_table()
 
     def _create_table(self) -> None:
-        """Create the resources table if it doesn't exist."""
+        """Create the resources table if it doesn't exist.
+
+        Deduplication is handled at the application level by
+        ``load_resource()``, which performs delete-before-insert for
+        resources with matching (id, resourceType).  No UNIQUE index
+        is added because external callers (e.g., the benchmark runner)
+        may legitimately insert rows with the same (id, resourceType)
+        but different context (e.g., source_measure scoping).
+        """
         self.con.execute(f"""
             CREATE TABLE IF NOT EXISTS {self.table_name} (
                 id VARCHAR,
@@ -81,6 +89,9 @@ class FHIRDataLoader:
             if ref_obj and isinstance(ref_obj, dict):
                 reference = ref_obj.get("reference", "")
                 if reference:
+                    # Strip urn:uuid: prefix for bundle-local references
+                    if reference.startswith("urn:uuid:"):
+                        return reference[9:]  # len("urn:uuid:") == 9
                     if "/" in reference:
                         return reference.split("/")[-1]
                     return reference
@@ -88,16 +99,44 @@ class FHIRDataLoader:
         return None
 
     def load_resource(self, resource: dict) -> None:
-        """Load a single FHIR resource."""
+        """Load a single FHIR resource.
+
+        If a resource with the same (id, resourceType) already exists,
+        it is replaced with the new version.  Resources without an id
+        are inserted without deduplication.
+
+        Raises:
+            TypeError: If resource is not a dict.
+            ValueError: If resource lacks a valid 'resourceType' field.
+        """
+        if not isinstance(resource, dict):
+            raise TypeError(
+                f"Expected dict, got {type(resource).__name__}"
+            )
+        resource_type = resource.get("resourceType")
+        if not resource_type:
+            raise ValueError(
+                "Resource must have a 'resourceType' field. "
+                f"Got keys: {sorted(resource.keys())}"
+            )
+        if not isinstance(resource_type, str):
+            raise ValueError(
+                f"'resourceType' must be a string, got {type(resource_type).__name__}: "
+                f"{resource_type!r}"
+            )
+        resource_id = resource.get("id")
         patient_ref = self._extract_patient_ref(resource)
+        resource_json = json.dumps(resource)
+
+        if resource_id is not None and resource_type is not None:
+            # Delete existing resource with same identity, then insert
+            self.con.execute(
+                f"DELETE FROM {self.table_name} WHERE id = ? AND resourceType = ?",
+                [resource_id, resource_type],
+            )
         self.con.execute(
             f"INSERT INTO {self.table_name} VALUES (?, ?, ?, ?)",
-            [
-                resource.get("id"),
-                resource.get("resourceType"),
-                json.dumps(resource),
-                patient_ref,
-            ]
+            [resource_id, resource_type, resource_json, patient_ref],
         )
 
     def load_bundle(self, bundle: dict) -> int:
@@ -111,6 +150,8 @@ class FHIRDataLoader:
 
         count = 0
         for entry in bundle.get("entry", []):
+            if entry is None:
+                continue
             resource = entry.get("resource")
             if resource:
                 self.load_resource(resource)
@@ -139,16 +180,25 @@ class FHIRDataLoader:
         Load from an NDJSON file (one resource per line).
 
         Returns the number of resources loaded.
+
+        Raises:
+            ValueError: If any line contains malformed JSON (no partial loads).
         """
-        count = 0
+        # Parse all lines first to avoid partial loads on malformed input
+        resources = []
         with open(path) as f:
-            for line in f:
+            for line_num, line in enumerate(f, 1):
                 line = line.strip()
                 if line:
-                    resource = json.loads(line)
-                    self.load_resource(resource)
-                    count += 1
-        return count
+                    try:
+                        resources.append(json.loads(line))
+                    except json.JSONDecodeError as e:
+                        raise ValueError(
+                            f"Malformed JSON at line {line_num} in {path}: {e}"
+                        ) from e
+        for resource in resources:
+            self.load_resource(resource)
+        return len(resources)
 
     def load_directory(
         self,
@@ -354,9 +404,12 @@ class FHIRDataLoader:
             rows = self.con.execute(
                 f"SELECT valueset_url, system, code FROM {table_name}"
             ).fetchall()
-        except Exception as e:
+        except (duckdb.CatalogException, duckdb.BinderException) if duckdb else () as e:
             _logger.warning("Failed to query valueset table '%s': %s", table_name, e)
             return
+        except Exception as e:
+            _logger.error("Unexpected error querying valueset table '%s': %s", table_name, e)
+            raise
 
         # Update the instance-level cache dict IN-PLACE so the already-registered
         # UDF closure sees the new values without requiring re-registration.
@@ -383,5 +436,8 @@ class FHIRDataLoader:
                 "CREATE OR REPLACE MACRO fhirpath_in_valueset(res, path, vs_url) AS "
                 "_in_valueset_python(res, path, vs_url)"
             )
-        except Exception as e:
+        except (duckdb.CatalogException, duckdb.InvalidInputException) if duckdb else () as e:
             _logger.warning("Failed to refresh valueset UDF macros: %s", e)
+        except Exception as e:
+            _logger.error("Unexpected error refreshing valueset UDF macros: %s", e)
+            raise

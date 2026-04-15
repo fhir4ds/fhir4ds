@@ -24,6 +24,7 @@ from ..translator.types import (
     SQLIdentifier,
     SQLLiteral,
     SQLNull,
+    SQLRaw,
     SQLUnaryOp,
 )
 
@@ -360,7 +361,7 @@ class FunctionTranslator:
         - date_diff(unit, start, end)  -- Between functions
         """
         if name == "now":
-            return SQLFunctionCall(name="CURRENT_TIMESTAMP", args=[])
+            return SQLRaw(raw_sql="CURRENT_TIMESTAMP")
 
         if name == "today":
             return SQLFunctionCall(name="CURRENT_DATE", args=[])

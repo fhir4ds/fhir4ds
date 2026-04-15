@@ -1,5 +1,4 @@
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN, ROUND_FLOOR, ROUND_CEILING, getcontext, localcontext
-from ...engine.invocations.constants import Constants
 from ...engine.nodes import FP_DateTime, FP_Time, FP_Date, FP_Quantity
 from ...engine.util import get_data
 
@@ -391,7 +390,7 @@ def precision(ctx, coll):
 
 
 def now(ctx, data):
-    c = ctx.get("_constants") or Constants()
+    c = ctx["_constants"]
     if not c.now:
         _now = c.systemtime.now()
         if not _now.tzinfo:
@@ -402,7 +401,7 @@ def now(ctx, data):
 
 
 def today(ctx, data):
-    c = ctx.get("_constants") or Constants()
+    c = ctx["_constants"]
     if not c.today:
         _now = c.systemtime.now()
         isoStr = _now.date().isoformat()
@@ -411,7 +410,7 @@ def today(ctx, data):
 
 
 def timeOfDay(ctx, data):
-    c = ctx.get("_constants") or Constants()
+    c = ctx["_constants"]
     if not c.timeOfDay:
         _now = c.systemtime.now()
         isoStr = _now.time().isoformat()

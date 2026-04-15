@@ -278,11 +278,12 @@ def create_reduce_member_invocation(model, key):
         if actualTypes and isinstance(res.data, abc.Mapping):
             # Use actualTypes to find the field's value
             for actualType in actualTypes:
-                field = f"{key}{actualType}"
+                # FHIR choice types use TitleCase suffix (e.g., deceasedBoolean)
+                field = f"{key}{actualType[0].upper()}{actualType[1:]}"
                 toAdd = res.data.get(field)
                 toAdd_ = res.data.get(f"_{field}")
                 if toAdd is not None or toAdd_ is not None:
-                    childPath += actualType
+                    childPath += f"{actualType[0].upper()}{actualType[1:]}"
                     break
         elif isinstance(res.data, abc.Mapping):
             toAdd = res.data.get(key)

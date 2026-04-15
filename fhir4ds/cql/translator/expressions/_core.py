@@ -14,6 +14,7 @@ from ...parser.ast_nodes import (
     BinaryExpression,
     CaseExpression,
     CaseItem,
+    CodeSelector,
     ConditionalExpression,
     DateComponent,
     DateTimeLiteral,
@@ -184,6 +185,16 @@ class CoreMixin:
         )
         result.result_type = "Quantity"
         return result
+
+    def _translate_code_selector(self, cs: CodeSelector, boolean_context: bool = False) -> SQLExpression:
+        """Translate a CQL Code selector to SQL.
+
+        Code selectors (e.g., Code '73211009' from "SNOMED-CT") resolve
+        the system name through codesystem definitions and produce a
+        system|code literal string.
+        """
+        system_url = self.context.codesystems.get(cs.system, cs.system)
+        return SQLLiteral(value=f"{system_url}|{cs.code}")
 
     def _translate_identifier(self, ident: Identifier, usage: ExprUsage = ExprUsage.LIST) -> SQLExpression:
         """Translate a CQL identifier to SQL.

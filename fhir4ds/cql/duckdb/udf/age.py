@@ -31,14 +31,25 @@ _USE_ARROW = os.environ.get("CQL_USE_ARROW_UDFS", "1") == "1"
 
 
 def _extract_birthdate(resource: str) -> date | None:
-    """Extract birthDate from a FHIR Patient resource."""
+    """Extract birthDate from a FHIR Patient resource.
+
+    Handles partial dates per FHIR/CQL: year-only ('1990') assumes Jan 1,
+    year-month ('1990-03') assumes day 1.
+    """
     if not resource:
         return None
     try:
         data = orjson.loads(resource)
         birth_date_str = data.get("birthDate")
-        if birth_date_str:
-            return date.fromisoformat(birth_date_str)
+        if not birth_date_str:
+            return None
+        # Handle partial dates: YYYY or YYYY-MM
+        if len(birth_date_str) == 4:
+            return date(int(birth_date_str), 1, 1)
+        if len(birth_date_str) == 7:
+            parts = birth_date_str.split("-")
+            return date(int(parts[0]), int(parts[1]), 1)
+        return date.fromisoformat(birth_date_str)
     except (orjson.JSONDecodeError, ValueError) as e:
         _logger.warning("_extract_birthdate failed: %s", e)
     return None
@@ -135,7 +146,7 @@ def ageInYearsAt_scalar(resource: str | None, as_of: str) -> int | None:
     age = as_of_date.year - birth.year
     if (as_of_date.month, as_of_date.day) < (birth.month, birth.day):
         age -= 1
-    return max(0, age)
+    return age if age >= 0 else None
 
 
 def ageInMonthsAt_scalar(resource: str | None, as_of: str) -> int | None:
@@ -151,7 +162,7 @@ def ageInMonthsAt_scalar(resource: str | None, as_of: str) -> int | None:
     months = (as_of_date.year - birth.year) * 12 + (as_of_date.month - birth.month)
     if as_of_date.day < birth.day:
         months -= 1
-    return max(0, months)
+    return months if months >= 0 else None
 
 
 def ageInDaysAt_scalar(resource: str | None, as_of: str) -> int | None:
@@ -164,7 +175,8 @@ def ageInDaysAt_scalar(resource: str | None, as_of: str) -> int | None:
     except (ValueError, TypeError) as e:
         _logger.warning("UDF ageInDaysAt failed to parse date: %s", e)
         return None
-    return max(0, (as_of_date - birth).days)
+    days = (as_of_date - birth).days
+    return days if days >= 0 else None
 
 
 # ========================================

@@ -1163,6 +1163,12 @@ class ResourceNode:
         path_hash = hash(self.path)
         return hash((data_hash, path_hash))
 
+    def __repr__(self):
+        data_preview = str(self.data)
+        if len(data_preview) > 60:
+            data_preview = data_preview[:57] + "..."
+        return f"ResourceNode({self.path!r}, {data_preview})"
+
     def get_type_info(self):
         namespace = TypeInfo.FHIR
 
@@ -1285,28 +1291,22 @@ class TypeInfo:
 
         return False
 
+    @staticmethod
+    def _normalize_type_name(namespace, name):
+        """Normalize a type name for cross-namespace comparison (FHIRPath §5.8)."""
+        if namespace == TypeInfo.System:
+            return TypeInfo.SYSTEM_TO_FHIR_TYPE.get(name, name)
+        if namespace == TypeInfo.FHIR:
+            normalized = TypeInfo.FHIR_TO_SYSTEM_TYPE.get(name, name)
+            return TypeInfo.SYSTEM_TO_FHIR_TYPE.get(normalized, normalized)
+        return name
+
     def is_(self, other, model=None):
         if not isinstance(other, TypeInfo):
             return False
 
-        # Normalize names for comparison (handle System.String vs FHIR.string)
-        self_name = self.name
-        other_name = other.name
-
-        # When both namespaces are explicitly specified and differ, no match.
-        # System.Boolean ≠ FHIR.boolean (different type systems).
-        if self.namespace and other.namespace and self.namespace != other.namespace:
-            return False
-
-        # Same namespace or one is unspecified
-        self_name = self.name
-        other_name = other.name
-
-        # Normalize System type names to FHIR equivalents for comparison
-        if self.namespace == TypeInfo.System:
-            self_name = TypeInfo.SYSTEM_TO_FHIR_TYPE.get(self.name, self.name)
-        if other.namespace == TypeInfo.System:
-            other_name = TypeInfo.SYSTEM_TO_FHIR_TYPE.get(other.name, other.name)
+        self_name = TypeInfo._normalize_type_name(self.namespace, self.name)
+        other_name = TypeInfo._normalize_type_name(other.namespace, other.name)
 
         return TypeInfo.is_type(self_name, other_name, model=model)
 
@@ -1315,16 +1315,8 @@ class TypeInfo:
         if not isinstance(other, TypeInfo):
             return False
 
-        if self.namespace and other.namespace and self.namespace != other.namespace:
-            return False
-
-        self_name = self.name
-        other_name = other.name
-
-        if self.namespace == TypeInfo.System:
-            self_name = TypeInfo.SYSTEM_TO_FHIR_TYPE.get(self.name, self.name)
-        if other.namespace == TypeInfo.System:
-            other_name = TypeInfo.SYSTEM_TO_FHIR_TYPE.get(other.name, other.name)
+        self_name = TypeInfo._normalize_type_name(self.namespace, self.name)
+        other_name = TypeInfo._normalize_type_name(other.namespace, other.name)
 
         return self_name == other_name
 

@@ -10,7 +10,7 @@ import json
 import logging
 
 from .types import Column, Select, Constant, Join, JoinType, ViewDefinition
-from .errors import ParseError
+from .errors import ParseError, ValidationError
 
 _logger = logging.getLogger(__name__)
 
@@ -44,16 +44,28 @@ def _parse_column(col_data: Dict[str, Any]) -> Column:
 def _parse_where(where_data: List[Any]) -> List[Dict[str, str]]:
     """Parse where conditions from JSON.
 
+    Accepts both spec-compliant dict format ({"path": "expr"}) and
+    convenience string format ("expr") which is wrapped automatically.
+
     Args:
-        where_data: List of where condition objects
+        where_data: List of where condition objects or strings
 
     Returns:
-        List of condition dictionaries
+        List of condition dictionaries with 'path' keys
+
+    Raises:
+        ParseError: If a where condition has an unsupported type
     """
     result = []
     for w in where_data:
         if isinstance(w, dict):
             result.append(dict(w))
+        elif isinstance(w, str):
+            result.append({"path": w})
+        else:
+            raise ParseError(
+                f"Where condition must be a string or object, got {type(w).__name__}: {w!r}"
+            )
     return result
 
 
@@ -192,22 +204,30 @@ def _parse_join(join_data: Dict[str, Any]) -> Join:
     )
 
 
-def parse_view_definition(json_str: str) -> ViewDefinition:
-    """Parse a JSON string into a ViewDefinition dataclass.
+def parse_view_definition(json_str_or_dict) -> ViewDefinition:
+    """Parse a JSON string or dict into a ViewDefinition dataclass.
 
     Args:
-        json_str: JSON string containing a ViewDefinition
+        json_str_or_dict: JSON string or dict containing a ViewDefinition
 
     Returns:
         ViewDefinition dataclass instance
 
     Raises:
         ParseError: If JSON is invalid or required fields are missing
+        TypeError: If the input type is not supported
     """
-    try:
-        data = json.loads(json_str)
-    except json.JSONDecodeError as e:
-        raise ParseError(f"Invalid JSON: {e}")
+    if isinstance(json_str_or_dict, dict):
+        data = json_str_or_dict
+    elif isinstance(json_str_or_dict, str):
+        try:
+            data = json.loads(json_str_or_dict)
+        except json.JSONDecodeError as e:
+            raise ParseError(f"Invalid JSON: {e}")
+    else:
+        raise TypeError(
+            f"Expected str or dict, got {type(json_str_or_dict).__name__}"
+        )
 
     if not isinstance(data, dict):
         raise ParseError("ViewDefinition must be a JSON object")
@@ -216,6 +236,17 @@ def parse_view_definition(json_str: str) -> ViewDefinition:
     resource = data.get('resource', '')
     if not resource:
         raise ParseError("ViewDefinition missing required 'resource' field")
+
+    # Validate resource type(s) — accept string or list of strings
+    if isinstance(resource, list):
+        if not all(isinstance(r, str) for r in resource):
+            raise ParseError("'resource' list must contain only strings")
+        if len(resource) == 0:
+            raise ParseError("'resource' list must not be empty")
+    elif not isinstance(resource, str):
+        raise ParseError(
+            f"'resource' must be a string or list of strings, got {type(resource).__name__}"
+        )
 
     # Parse select structures
     selects = []
@@ -228,8 +259,19 @@ def parse_view_definition(json_str: str) -> ViewDefinition:
 
     # Parse constants (spec uses 'constant' singular, also accept 'constants')
     constants = []
-    for const in data.get('constant', data.get('constants', [])):
-        constants.append(_parse_constant(const))
+    const_raw = data.get('constant', data.get('constants', []))
+    if isinstance(const_raw, list):
+        for const in const_raw:
+            if isinstance(const, dict):
+                constants.append(_parse_constant(const))
+            else:
+                raise ParseError(
+                    f"Each constant must be a JSON object, got {type(const).__name__}: {const!r}"
+                )
+    elif const_raw:
+        raise ParseError(
+            f"'constant' must be a JSON array, got {type(const_raw).__name__}"
+        )
 
     # Parse joins
     joins = []
@@ -328,11 +370,11 @@ def _validate_selects(selects: List[Select], path: str) -> List[str]:
     for i, sel in enumerate(selects):
         current_path = f"{path}[{i}]"
 
-        # Check for both forEach and forEachOrNull (mutually exclusive)
+        # Check for both forEach and forEachOrNull (mutually exclusive per spec)
         if sel.forEach and sel.forEachOrNull:
-            warnings.append(
+            raise ValidationError(
                 f"{current_path}: Both forEach and forEachOrNull specified "
-                "(they are mutually exclusive)"
+                "(they are mutually exclusive per the SQL-on-FHIR v2 specification)"
             )
 
         # Check for empty select (no columns, no nested selects, no unionAll)

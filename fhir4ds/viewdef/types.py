@@ -10,7 +10,7 @@ importing from parser.py for dataclasses and from types.py for enums.
 import warnings
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 
 class ColumnType(Enum):
@@ -310,7 +310,8 @@ class ViewDefinition:
     a FHIR resource into a SQL view.
 
     Attributes:
-        resource: The FHIR resource type this view is based on.
+        resource: The FHIR resource type (string), or a list of types
+            for multi-resource union ViewDefinitions.
         select: List of select structures defining the columns.
         name: Optional name for the view.
         description: Optional human-readable description.
@@ -319,7 +320,7 @@ class ViewDefinition:
         where: List of filter conditions applied to the root.
     """
 
-    resource: str
+    resource: Union[str, List[str]]
     select: List[Select] = field(default_factory=list)
     name: Optional[str] = None
     description: Optional[str] = None

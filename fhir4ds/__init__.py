@@ -21,28 +21,61 @@ Subpackages::
     fhir4ds.dqm            - Digital Quality Measures
 """
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 # Core convenience functions
 from .core import register, register_fhirpath, register_cql
 from .measure import evaluate_measure
 from .connection import create_connection
+from .cql.loader import FHIRDataLoader
 
 # Lazy imports for viewdef convenience functions
-def generate_view_sql(view_definition_or_json):
-    """Generate DuckDB SQL from a SQL-on-FHIR v2 ViewDefinition."""
+def generate_view_sql(view_definition_or_json, *, source_table=None):
+    """Generate DuckDB SQL from a SQL-on-FHIR v2 ViewDefinition.
+
+    Args:
+        view_definition_or_json: A ViewDefinition object, JSON string,
+            or dict representing a ViewDefinition.
+        source_table: Override the source table name. When set, the
+            generated SQL reads from this table (with a ``resource_type``
+            filter) instead of per-type pluralized tables. Use
+            ``"resources"`` to match the FHIRDataLoader default schema.
+
+    Returns:
+        Complete SQL query string.
+
+    Raises:
+        TypeError: If the input type is not supported.
+        ParseError: If the input cannot be parsed as a ViewDefinition.
+    """
     from .viewdef.generator import SQLGenerator
     from .viewdef.parser import parse_view_definition as _parse
+    from .viewdef.types import ViewDefinition
 
-    if isinstance(view_definition_or_json, str):
+    if isinstance(view_definition_or_json, ViewDefinition):
+        pass  # already a ViewDefinition
+    elif isinstance(view_definition_or_json, str):
         view_definition_or_json = _parse(view_definition_or_json)
-    return SQLGenerator().generate(view_definition_or_json)
+    elif isinstance(view_definition_or_json, dict):
+        view_definition_or_json = _parse(view_definition_or_json)
+    else:
+        raise TypeError(
+            f"Expected ViewDefinition, str, or dict, got {type(view_definition_or_json).__name__}"
+        )
+    return SQLGenerator(source_table=source_table).generate(view_definition_or_json)
 
 
-def parse_view_definition(json_str: str):
-    """Parse a SQL-on-FHIR v2 ViewDefinition from a JSON string."""
+def parse_view_definition(json_or_dict):
+    """Parse a SQL-on-FHIR v2 ViewDefinition from a JSON string or dict.
+
+    Args:
+        json_or_dict: A JSON string or dict representing a ViewDefinition.
+
+    Returns:
+        ViewDefinition dataclass instance.
+    """
     from .viewdef.parser import parse_view_definition as _parse
-    return _parse(json_str)
+    return _parse(json_or_dict)
 
 
 __all__ = [
@@ -54,6 +87,8 @@ __all__ = [
     "register_cql",
     # CQL measure evaluation
     "evaluate_measure",
+    # FHIR data loading
+    "FHIRDataLoader",
     # SQL-on-FHIR v2
     "generate_view_sql",
     "parse_view_definition",

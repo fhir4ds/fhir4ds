@@ -651,13 +651,17 @@ class ListsMixin:
         # index directly — it must first be parsed into a native list type.
         _json_string_funcs = {
             'json_extract_string', 'json_extract',
-            'fhirpath', 'fhirpath_text', 'fhirpath_json',
         }
         if isinstance(source, SQLFunctionCall) and source.name in _json_string_funcs:
             source = SQLFunctionCall(
                 name="from_json",
                 args=[source, SQLLiteral(value='["VARCHAR"]')],
             )
+        elif isinstance(source, SQLFunctionCall) and source.name == 'fhirpath_text':
+            # fhirpath_text returns a single value, not an array — switch to
+            # fhirpath() which returns VARCHAR[] for proper indexing
+            source = SQLFunctionCall(name='fhirpath', args=source.args)
+        # fhirpath/fhirpath_json already return arrays — no conversion needed
 
         return SQLFunctionCall(name="LIST_EXTRACT", args=[source, adjusted_index])
 

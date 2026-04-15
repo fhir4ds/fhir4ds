@@ -70,7 +70,14 @@ def substring(ctx, coll, start, length=None):
         return []
 
     start = int(start)
-    if start < 0 or start >= len(string):
+    if start < 0:
+        # FHIRPath §5.7.3: negative start → start=0, length reduced by |start|
+        if length is not None and length != []:
+            length = int(length) + start  # start is negative, so this reduces length
+            if length <= 0:
+                return []
+        start = 0
+    if start >= len(string):
         return []
 
     if length is None or length == []:
@@ -180,8 +187,8 @@ def join(ctx, coll, separator=""):
     return separator.join(stringValues)
 
 
-# test function
 def matches(ctx, coll, regex):
+    """FHIRPath matches() — partial regex match (R4 semantics)."""
     if not regex or not coll:
         return []
 

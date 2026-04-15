@@ -32,6 +32,7 @@ Example:
 
 from __future__ import annotations
 
+import duckdb as _duckdb_mod
 import logging
 from datetime import date, datetime, time
 from pathlib import Path
@@ -42,6 +43,19 @@ from .paths import get_resource_path
 _logger = logging.getLogger(__name__)
 
 __version__ = "0.0.1"
+
+
+def parse_cql(cql_text: str):
+    """Parse CQL text into a library AST.
+
+    Args:
+        cql_text: CQL source code string.
+
+    Returns:
+        Parsed CQL library object.
+    """
+    from .parser import parse_cql as _parse_cql
+    return _parse_cql(cql_text)
 
 
 def register_udfs(
@@ -62,21 +76,21 @@ def register_udfs(
         ``True`` if CQL C++ extension was loaded, ``False`` if Python UDFs were
         used instead.
     """
-    # Check if fhirpath UDF is already registered – skip if so.
+    # Check if CQL UDFs are already registered (not just fhirpath).
     try:
-        conn.execute("SELECT fhirpath(NULL, 'test') LIMIT 1").fetchone()
-        return None  # already registered
-    except Exception:
+        conn.execute("SELECT AgeInYears(NULL)").fetchone()
+        return None  # CQL UDFs already registered
+    except _duckdb_mod.Error:
         pass
 
     if use_cpp_extensions:
         from fhir4ds.core import register_cql
         try:
             return register_cql(conn)
-        except Exception as e:
+        except (ImportError, OSError, _duckdb_mod.Error) as e:
             _logger.warning("Failed to load C++ extensions via register_cql: %s", e)
 
-    # Fallback to pure-Python UDFs
+    # Fallback to pure-Python UDFs (registers both fhirpath + CQL)
     from fhir4ds.cql.duckdb import register as _register_cql
     _register_cql(conn)
     return False
@@ -99,6 +113,57 @@ from .loader import FHIRDataLoader
 
 # Evaluation contexts
 from .evaluator import EvaluationContext, PatientContext, PopulationContext
+
+
+def _validate_parameters(library, parameters: Dict[str, Any]) -> None:
+    """Validate runtime parameter values against CQL parameter declarations.
+
+    Raises TypeError for clear type mismatches (e.g., a string where an
+    Interval is expected).
+    """
+    from .parser.ast_nodes import ParameterDefinition
+
+    param_defs: Dict[str, "ParameterDefinition"] = {}
+    for stmt in getattr(library, "parameters", []):
+        if isinstance(stmt, ParameterDefinition):
+            param_defs[stmt.name] = stmt
+
+    for name, value in parameters.items():
+        pdef = param_defs.get(name)
+        if pdef is None:
+            continue
+        type_spec = pdef.type
+        if type_spec is None or value is None:
+            continue
+        type_name = getattr(type_spec, "name", None) or ""
+        type_str = str(type_spec).lower()
+
+        if "interval" in type_str:
+            if isinstance(value, str):
+                raise TypeError(
+                    f"Parameter '{name}' is declared as {type_spec} but received "
+                    f"a plain string '{value}'. Interval parameters must be passed "
+                    f"as a dict {{'start': ..., 'end': ...}} or a tuple (start, end)."
+                )
+            if isinstance(value, dict):
+                if "start" not in value or "end" not in value:
+                    raise TypeError(
+                        f"Parameter '{name}' is declared as {type_spec}. "
+                        f"Dict must contain both 'start' and 'end' keys, "
+                        f"got: {sorted(value.keys())}"
+                    )
+        elif type_name.lower() in ("integer", "int"):
+            if not isinstance(value, (int, bool)):
+                raise TypeError(
+                    f"Parameter '{name}' is declared as {type_spec} but received "
+                    f"{type(value).__name__}: {value!r}"
+                )
+        elif type_name.lower() == "decimal":
+            if not isinstance(value, (int, float)):
+                raise TypeError(
+                    f"Parameter '{name}' is declared as {type_spec} but received "
+                    f"{type(value).__name__}: {value!r}"
+                )
 
 
 def _build_parameterized_query(
@@ -187,7 +252,7 @@ def evaluate_measure(
     patient_ids: Optional[List[str]] = None,
     verbose: bool = False,
     include_paths: Optional[List[str]] = None,
-) -> "duckdb.DuckDBPyRelation":
+) -> Any:
     """
     Evaluate a CQL measure against all patients in a single query.
 
@@ -253,21 +318,45 @@ def evaluate_measure(
     from .parser import parse_cql
     from .translator import CQLToSQLTranslator
 
+    # Validate connection
+    try:
+        conn.execute("SELECT 1").fetchone()
+    except _duckdb_mod.ConnectionException:
+        raise _duckdb_mod.ConnectionException(
+            "Cannot evaluate measure: DuckDB connection is closed"
+        ) from None
+    except _duckdb_mod.Error:
+        pass  # connection is alive, other DuckDB errors are expected
+
+    # Validate library_path
+    if not library_path:
+        raise ValueError("library_path must be a non-empty path to a CQL library file")
+
     # Handle empty patient_ids early
     if patient_ids is not None and len(patient_ids) == 0:
         # Return empty result with correct schema
         # This is a placeholder that returns no rows
-        return conn.execute("SELECT NULL AS patient_id WHERE FALSE").rel
+        return conn.sql("SELECT NULL AS patient_id WHERE FALSE")
 
     # Load and parse CQL library
     lib_path = Path(library_path)
     if not lib_path.exists():
         raise FileNotFoundError(f"CQL library not found: {library_path}")
+    if not lib_path.is_file():
+        raise ValueError(f"library_path must be a file, not a directory: {library_path}")
 
     cql_text = lib_path.read_text()
     library = parse_cql(cql_text)
 
-    # Create translator and translate library
+    # Validate runtime parameter types against CQL declarations
+    if parameters:
+        _validate_parameters(library, parameters)
+
+    # Create translator — translate_library_to_population_sql() handles the full
+    # three-phase optimization pipeline internally.  Do NOT call translate_library()
+    # first: it pollutes mutable translator state (column registries, component-code
+    # maps) that causes Phase 2 of the population SQL builder to emit retrieve CTEs
+    # without the precomputed property columns that property-filter WHERE clauses need.
     translator = CQLToSQLTranslator(connection=conn)
 
     # Set up library loader if include_paths provided
@@ -281,38 +370,18 @@ def evaluate_measure(
                     try:
                         lib_text = lib_file.read_text()
                         return parse_cql(lib_text)
-                    except Exception as e:
+                    except (OSError, ValueError, SyntaxError) as e:
                         _logger.warning("Failed to parse library file '%s': %s", lib_file, e)
             return None
 
         translator.set_library_loader(library_loader)
 
-    definitions = translator.translate_library(library)
-
-    if not definitions:
-        # No definitions - return just patient_id
-        return conn.execute(
-            "SELECT DISTINCT patient_ref AS patient_id FROM resources WHERE patient_ref IS NOT NULL"
-        ).rel
-
-    # Determine which definitions to include in output
-    if output_columns is None:
-        # Include all definitions
-        definition_names = list(definitions.keys())
-        column_mapping = {name: name for name in definition_names}
-    elif len(output_columns) == 0:
-        # Empty dict - return patient_id only
-        definition_names = []
-        column_mapping = {}
-    else:
-        # Use specified mapping
-        column_mapping = output_columns
-        definition_names = list(output_columns.values())
-
-    # Build population SQL
+    # Build population SQL — this method handles empty-definition and
+    # output_columns logic internally, so no pre-translation is needed.
+    # Pass output_columns as-is: None → include all definitions, {} → patient_id only.
     sql = translator.translate_library_to_population_sql(
         library=library,
-        output_columns=column_mapping,
+        output_columns=output_columns,
         parameters=parameters or {},
         patient_ids=patient_ids,
     )
@@ -321,11 +390,20 @@ def evaluate_measure(
         print(f"-- Generated SQL --\n{sql}\n-- End SQL --")
 
     # Execute with parameters if any
-    if parameters:
-        sql, param_values = _build_parameterized_query(sql, parameters)
-        return conn.execute(sql, param_values).rel
-    else:
-        return conn.execute(sql).rel
+    try:
+        if parameters:
+            sql, param_values = _build_parameterized_query(sql, parameters)
+            return conn.execute(sql, param_values).fetchdf()
+        else:
+            return conn.sql(sql)
+    except _duckdb_mod.CatalogException as exc:
+        if "resources" in str(exc).lower():
+            raise ValueError(
+                "No FHIR data loaded. The generated SQL references the 'resources' "
+                "table which does not exist. Load data first with "
+                "FHIRDataLoader(conn).load_resource() or load_directory()."
+            ) from exc
+        raise
 
 
 def evaluate_measure_legacy(
@@ -372,8 +450,7 @@ def evaluate_measure_legacy(
 
     # Create connection if not provided
     if connection is None:
-        import duckdb
-        connection = duckdb.connect(":memory:")
+        connection = _duckdb_mod.connect(":memory:")
 
     # Auto-register CQL UDFs (prefer C++ extensions, fall back to Python)
     register_udfs(connection)
@@ -504,6 +581,8 @@ __all__ = [
     "__version__",
     # UDF registration
     "register_udfs",
+    # Parser API
+    "parse_cql",
     # Translator API (main public API)
     "CQLToSQLTranslator",
     "translate_cql",

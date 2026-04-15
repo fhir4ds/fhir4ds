@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from functools import lru_cache
 
 import orjson
@@ -58,13 +59,42 @@ def _get_compiled_evaluator(expression: str) -> FHIRPathEvaluator:
     Get a cached FHIRPathEvaluator with a compiled expression.
 
     Uses LRU cache to avoid re-parsing the same expressions repeatedly.
+    Rejects known-invalid patterns before attempting parse.
 
     Args:
         expression: A FHIRPath expression string.
 
     Returns:
         A FHIRPathEvaluator with the expression compiled.
+
+    Raises:
+        FHIRPathSyntaxError: If the expression matches a known-invalid pattern.
     """
+    stripped = expression.strip()
+    if _INVALID_EXPR_PATTERNS.search(stripped):
+        raise FHIRPathSyntaxError(
+            f"Invalid FHIRPath expression: rejected by pattern check: '{expression}'"
+        )
+    # Reject unbalanced parentheses and brackets
+    depth_paren = 0
+    depth_bracket = 0
+    for ch in stripped:
+        if ch == '(':
+            depth_paren += 1
+        elif ch == ')':
+            depth_paren -= 1
+        elif ch == '[':
+            depth_bracket += 1
+        elif ch == ']':
+            depth_bracket -= 1
+        if depth_paren < 0 or depth_bracket < 0:
+            raise FHIRPathSyntaxError(
+                f"Invalid FHIRPath expression: unbalanced delimiters in '{expression}'"
+            )
+    if depth_paren != 0 or depth_bracket != 0:
+        raise FHIRPathSyntaxError(
+            f"Invalid FHIRPath expression: unbalanced delimiters in '{expression}'"
+        )
     evaluator = FHIRPathEvaluator()
     evaluator.compile(expression)
     return evaluator
@@ -137,6 +167,14 @@ def fhirpath_udf(
     - Proper error handling and empty collection propagation
     - Null handling for invalid resources or expressions
 
+    Error handling policy:
+    - FHIRPathSyntaxError, FHIRPathError, NotImplementedError: always propagate
+      (expression-level errors that apply to all rows).
+    - orjson.JSONDecodeError: return [] for the row (data-dependent; one bad
+      resource must not abort the entire batch). In STRICT_MODE, propagate.
+    - ValueError/TypeError/KeyError/AttributeError/IndexError: return [] for
+      the row (data-dependent evaluation failures). In STRICT_MODE, propagate.
+
     Example:
         >>> import pyarrow as pa
         >>> resources = pa.array(['{"id":"123"}', '{"id":"456"}'])
@@ -188,6 +226,8 @@ def fhirpath_udf(
                 for item in result:
                     if isinstance(item, (dict, list)):
                         serialized.append(_json_serialize(item))
+                    elif isinstance(item, bool):
+                        serialized.append("true" if item else "false")
                     elif isinstance(item, str):
                         serialized.append(item)
                     else:
@@ -197,15 +237,23 @@ def fhirpath_udf(
                 results.append([result])
 
         except orjson.JSONDecodeError:
-            # Invalid JSON - return empty collection
+            # Invalid JSON — data-dependent error. In batch queries, one bad
+            # resource should not abort the entire query.
+            if _STRICT_MODE:
+                raise
             results.append([])
         except FHIRPathSyntaxError:
-            # Invalid expression - return empty collection
-            results.append([])
+            # Syntax errors are never valid "no data" — always propagate.
+            # The expression is constant across all rows, so the error
+            # represents a user mistake, not a data-dependent condition.
+            raise
         except FHIRPathError:
-            # Evaluation error - return empty collection (FHIRPath semantics)
-            results.append([])
-        except (ValueError, TypeError, KeyError, AttributeError, IndexError, NotImplementedError) as e:
+            # FHIRPathError represents spec-mandated evaluation errors (e.g., single()
+            # on multi-element collections). These must always propagate per spec.
+            raise
+        except NotImplementedError:
+            raise
+        except (ValueError, TypeError, KeyError, AttributeError, IndexError) as e:
             _logger.warning("FHIRPath evaluation failed for '%s': %s", expression, e)
             if _STRICT_MODE:
                 raise
@@ -316,6 +364,8 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         if isinstance(result, list):
             # Convert all items to strings for consistent return type
             def _to_str(item):
+                if isinstance(item, bool):
+                    return "true" if item else "false"
                 if isinstance(item, str):
                     return item
                 if isinstance(item, (dict, list)):
@@ -327,15 +377,21 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         return [str(result)]
 
     except orjson.JSONDecodeError:
-        # Invalid JSON - return empty collection
+        # Invalid JSON — data-dependent error. In scalar context, return empty.
+        if _STRICT_MODE:
+            raise
         return []
     except FHIRPathSyntaxError:
-        # Invalid expression - return empty collection
-        return []
+        # Syntax errors are never valid "no data" — always propagate.
+        raise
     except FHIRPathError:
-        # Evaluation error - return empty collection (FHIRPath semantics)
-        return []
-    except (ValueError, TypeError, KeyError, AttributeError, IndexError, NotImplementedError) as e:
+        # FHIRPathError represents spec-mandated evaluation errors (e.g., single()
+        # on multi-element collections). These must always propagate per spec.
+        raise
+    except NotImplementedError:
+        # Unimplemented functions should be visible to users
+        raise
+    except (ValueError, TypeError, KeyError, AttributeError, IndexError) as e:
         _logger.warning("FHIRPath scalar evaluation failed for '%s': %s", expression, e)
         if _STRICT_MODE:
             raise
@@ -343,15 +399,50 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         return []
 
 
+
+_INVALID_EXPR_PATTERNS = re.compile(
+    r'(?:'
+    r'\.\s*$'           # trailing dot
+    r'|\.\.'            # double dot
+    r'|\(\s*$'          # unclosed paren at end
+    r'|^\s*[+*/|&]'    # leading operator
+    r'|\$\$'            # invalid $$ prefix
+    r'|\$(?!this\b|total\b|index\b|that\b)[a-zA-Z]'  # $ not followed by valid env variable
+    r')'
+)
+
+
 def fhirpath_is_valid_udf(expression: str | None) -> bool:
-    """Check if a FHIRPath expression is valid."""
+    """Check if a FHIRPath expression is syntactically valid.
+
+    Validates by compiling AND evaluating against a minimal resource,
+    plus rejects common malformed patterns the parser may accept.
+    """
     if not expression or not isinstance(expression, str):
         return False
+    stripped = expression.strip()
+    if not stripped:
+        return False
+    # Reject common invalid patterns that fhirpathpy may accept
+    if _INVALID_EXPR_PATTERNS.search(stripped):
+        return False
+    # Check for unbalanced parentheses
+    depth = 0
+    for ch in stripped:
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth -= 1
+        if depth < 0:
+            return False
+    if depth != 0:
+        return False
     try:
-        _get_compiled_evaluator(expression)
+        evaluator = _get_compiled_evaluator(expression)
+        evaluator.evaluate({"resourceType": "Patient", "id": "_validation"})
         return True
-    except (ValueError, TypeError, KeyError, AttributeError, NotImplementedError,
-            FHIRPathSyntaxError, FHIRPathError):
+    except Exception:
+        # Catch all exceptions — a validation function must never throw
         return False
 
 
@@ -371,12 +462,17 @@ def fhirpath_text_udf(resource: str | None, expression: str | None) -> str | Non
         >>> print(result)
         '123'
     """
-    result = fhirpath_scalar(resource, expression)
+    try:
+        result = fhirpath_scalar(resource, expression)
+    except NotImplementedError:
+        return None
     if not result:
         return None
     val = result[0]
     if isinstance(val, (dict, list)):
         return _json_serialize(val)
+    if isinstance(val, bool):
+        return "true" if val else "false"
     return str(val) if val is not None else None
 
 
@@ -396,7 +492,10 @@ def fhirpath_date_udf(resource: str | None, expression: str | None) -> str | Non
         >>> print(result)
         '1970-01-01'
     """
-    result = fhirpath_scalar(resource, expression)
+    try:
+        result = fhirpath_scalar(resource, expression)
+    except NotImplementedError:
+        return None
     if not result:
         return None
 
@@ -446,7 +545,11 @@ def fhirpath_bool_udf(resource: str | None, expression: str | None) -> bool | No
         >>> print(result)
         True
     """
-    result = fhirpath_scalar(resource, expression)
+    try:
+        result = fhirpath_scalar(resource, expression)
+    except NotImplementedError:
+        # Unimplemented functions return NULL in boolean context (used by ViewDef)
+        return None
     if not result:
         return None
     val = result[0]
@@ -456,24 +559,24 @@ def fhirpath_bool_udf(resource: str | None, expression: str | None) -> bool | No
         low = val.lower()
         if low not in _VALID_BOOL_STRINGS:
             _logger.warning(
-                "Unexpected boolean string '%s' for expression '%s'; treating as False",
+                "Unexpected boolean string '%s' for expression '%s'; returning NULL",
                 val, expression,
             )
-            return False
+            return None
         return low in ("true", "1")
     if isinstance(val, (int, float)):
         if val in (0, 1, 0.0, 1.0):
             return bool(val)
         _logger.warning(
-            "Unexpected numeric boolean value %r for expression '%s'; treating as bool",
+            "Unexpected numeric boolean value %r for expression '%s'; returning NULL",
             val, expression,
         )
-        return bool(val)
+        return None
     _logger.warning(
-        "Unexpected type %s for boolean expression '%s'; treating as False",
+        "Unexpected type %s for boolean expression '%s'; returning NULL",
         type(val).__name__, expression,
     )
-    return False
+    return None
 
 
 def fhirpath_number_udf(resource: str | None, expression: str | None) -> float | None:
@@ -492,7 +595,10 @@ def fhirpath_number_udf(resource: str | None, expression: str | None) -> float |
         >>> print(result)
         42.0
     """
-    result = fhirpath_scalar(resource, expression)
+    try:
+        result = fhirpath_scalar(resource, expression)
+    except NotImplementedError:
+        return None
     if not result:
         return None
     try:
@@ -517,7 +623,10 @@ def fhirpath_json_udf(resource: str | None, expression: str | None) -> str | Non
         >>> print(result)
         '["John", "Jane"]'
     """
-    result = fhirpath_scalar(resource, expression)
+    try:
+        result = fhirpath_scalar(resource, expression)
+    except NotImplementedError:
+        return None
     if result is None:
         return None
     return _json_serialize(result)
@@ -545,10 +654,7 @@ def fhirpath_timestamp_udf(resource: str | None, expression: str | None) -> str 
             val = result[0] if isinstance(result, list) else result
             return str(val) if val is not None else None
         return None
-    except (ValueError, TypeError, KeyError, AttributeError, IndexError, NotImplementedError) as e:
-        _logger.warning("FHIRPath timestamp evaluation failed for '%s': %s", expression, e)
-        if _STRICT_MODE:
-            raise
+    except NotImplementedError:
         return None
 
 
@@ -573,7 +679,9 @@ def fhirpath_quantity_udf(resource: str | None, expression: str | None) -> str |
             val = result[0] if isinstance(result, list) else result
             return str(val) if val is not None else None
         return None
-    except (ValueError, TypeError, KeyError, AttributeError, IndexError, NotImplementedError) as e:
+    except NotImplementedError:
+        return None
+    except (ValueError, TypeError, KeyError, AttributeError, IndexError) as e:
         _logger.warning("FHIRPath quantity evaluation failed for '%s': %s", expression, e)
         if _STRICT_MODE:
             raise

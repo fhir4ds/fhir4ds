@@ -1826,9 +1826,23 @@ FPCollection Evaluator::fn_substring(const FPCollection &input, const FPCollecti
 		start_idx = static_cast<int64_t>(toNumber(start[0]));
 	}
 
-	// Negative start index → empty
+	// FHIRPath §5.7.3: negative start → clamp to 0, reduce length by |start|
 	if (start_idx < 0) {
-		return {};
+		if (length && !length->empty()) {
+			int64_t len = 0;
+			if ((*length)[0].type == FPValue::Type::Integer) {
+				len = (*length)[0].int_val;
+			} else {
+				len = static_cast<int64_t>(toNumber((*length)[0]));
+			}
+			len = len + start_idx;  // start_idx is negative, so this reduces len
+			if (len <= 0) {
+				return {};
+			}
+			start_idx = 0;
+			return {FPValue::FromString(s.substr(0, static_cast<size_t>(len)))};
+		}
+		start_idx = 0;
 	}
 	// Start beyond string → empty
 	if (static_cast<size_t>(start_idx) >= s.size()) {
