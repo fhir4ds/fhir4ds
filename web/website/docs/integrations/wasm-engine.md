@@ -11,7 +11,7 @@ To integrate the engine, you will need to host the following assets on your web 
 1.  **DuckDB Extensions**: `fhirpath.duckdb_extension.wasm` and `cql.duckdb_extension.wasm`.
 2.  **Translator Wheel**: `fhir4ds_v2-0.0.1-py3-none-any.whl` (the CQL-to-SQL translation module for Pyodide).
 
-You can find these files in the [FHIR4DS GitHub Repository](https://github.com/joelmontavon/fhir4ds-v2/tree/main/web/wasm-demo/public).
+You can find these files in the [FHIR4DS GitHub Repository](https://github.com/fhir4ds/fhir4ds/tree/main/web/wasm-demo/public).
 
 ## Loading C++ Extensions
 

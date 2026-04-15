@@ -14,7 +14,7 @@ The project uses a unified namespace `fhir4ds`. To set up your local environment
 
 ```bash
 # Clone and enter the repo
-git clone https://github.com/joelmontavon/fhir4ds-v2.git
+git clone https://github.com/fhir4ds/fhir4ds.git
 cd fhir4ds
 
 # Install in editable mode with development dependencies

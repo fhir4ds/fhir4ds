@@ -30,7 +30,7 @@ jupyter notebook docs/notebooks/
 Or clone the repository for the latest development version:
 
 ```bash
-git clone https://github.com/joelmontavon/fhir4ds-v2.git
+git clone https://github.com/fhir4ds/fhir4ds.git
 cd fhir4ds
 pip install -e ".[measures]"
 jupyter notebook docs/notebooks/

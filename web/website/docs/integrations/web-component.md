@@ -68,4 +68,4 @@ customElements.define('clinical-widget', ClinicalWidget);
 
 ## Reference Implementation
 
-For a comprehensive example of this pattern—including how to handle complex React state, Monaco editors, and scenario-based routing—see the [FHIR4DS Reference Web Component](https://github.com/joelmontavon/fhir4ds-v2/blob/main/web/wasm-demo/src/web-component.tsx) on GitHub.
+For a comprehensive example of this pattern—including how to handle complex React state, Monaco editors, and scenario-based routing—see the [FHIR4DS Reference Web Component](https://github.com/fhir4ds/fhir4ds/blob/main/web/wasm-demo/src/web-component.tsx) on GitHub.

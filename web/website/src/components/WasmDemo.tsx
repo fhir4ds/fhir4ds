@@ -104,7 +104,7 @@ export default function WasmDemo({ type = 'playground' }: WasmDemoProps): ReactN
           <p>
             Try Chrome, Firefox, or Edge with cross-origin isolation headers.
             Alternatively,{' '}
-            <a href="https://github.com/joelmontavon/fhir4ds-v2" target="_blank" rel="noopener noreferrer">
+            <a href="https://github.com/fhir4ds/fhir4ds" target="_blank" rel="noopener noreferrer">
               run the demo locally
             </a>.
           </p>

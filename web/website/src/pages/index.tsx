@@ -294,7 +294,7 @@ function CtaSection() {
           </Link>
           <Link
             className="button button--secondary button--lg"
-            href="https://github.com/joelmontavon/fhir4ds-v2">
+            href="https://github.com/fhir4ds/fhir4ds">
             ⭐ GitHub
           </Link>
         </div>

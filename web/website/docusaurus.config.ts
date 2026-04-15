@@ -52,7 +52,7 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          editUrl: 'https://github.com/joelmontavon/fhir4ds-v2/edit/main/web/website/',
+          editUrl: 'https://github.com/fhir4ds/fhir4ds/edit/main/web/website/',
         },
         blog: false,
         theme: {
@@ -86,7 +86,7 @@ const config: Config = {
         {to: '/docs/api-reference/fhir4ds', label: 'API', position: 'left'},
         {to: '/docs/examples/cql-playground', label: 'Examples', position: 'left'},
         {
-          href: 'https://github.com/joelmontavon/fhir4ds-v2',
+          href: 'https://github.com/fhir4ds/fhir4ds',
         },
       ],
     },
@@ -119,7 +119,7 @@ const config: Config = {
         {
           title: 'Resources',
           items: [
-            {label: 'GitHub', href: 'https://github.com/joelmontavon/fhir4ds-v2'},
+            {label: 'GitHub', href: 'https://github.com/fhir4ds/fhir4ds'},
             {label: 'API Reference', to: '/docs/api-reference/fhir4ds'},
           ],
         },

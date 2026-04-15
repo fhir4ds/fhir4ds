@@ -138,7 +138,7 @@ The project follows a **Feature-First** hierarchy:
 
 ```bash
 # Clone the repository
-git clone https://github.com/joelmontavon/fhir4ds-v2.git
+git clone https://github.com/fhir4ds/fhir4ds.git
 cd fhir4ds
 
 # Install in editable mode with development dependencies
