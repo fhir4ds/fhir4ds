@@ -18,6 +18,7 @@ from ...parser.ast_nodes import (
     DateComponent,
     DateTimeLiteral,
     DifferenceBetween,
+    DistinctExpression,
     DurationBetween,
     ExistsExpression,
     FirstExpression,
@@ -716,6 +717,57 @@ class ListsMixin:
         # For non-Query sources, use list_extract (pre-sorted list)
         source = self.translate(node.source, boolean_context=False)
         return SQLFunctionCall(name="LIST_EXTRACT", args=[source, SQLLiteral(value=-1)])
+
+    def _translate_distinct_expression(self, node: DistinctExpression) -> SQLExpression:
+        """Translate CQL prefix 'distinct expr' to DuckDB list_distinct.
+
+        For definition references, builds a correlated subquery that collects
+        values into a list and applies list_distinct.
+        """
+        from ...parser.ast_nodes import Identifier as CQLIdentifier
+
+        if isinstance(node.source, CQLIdentifier):
+            name = node.source.name
+            meta = self.context.definition_meta.get(name)
+            col = "value"
+            if meta:
+                col = meta.value_column or "value"
+            _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+            # Build: list_distinct((SELECT COALESCE(LIST(cte.col), []) FROM cte WHERE cte.patient_id = outer.patient_id))
+            # Wrap the SELECT in SQLSubquery inside SQLFunctionCall so the CTE builder
+            # does not unwrap it (it only unwraps top-level SQLSubquery → SQLSelect).
+            inner_select = SQLSelect(
+                columns=[SQLFunctionCall(
+                    name="COALESCE",
+                    args=[
+                        SQLFunctionCall(
+                            name="LIST",
+                            args=[SQLQualifiedIdentifier(parts=["_dq", col])]
+                        ),
+                        SQLArray(elements=[]),
+                    ]
+                )],
+                from_clause=SQLAlias(
+                    expr=SQLIdentifier(name=name, quoted=True),
+                    alias="_dq",
+                ),
+                where=SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=["_dq", "patient_id"]),
+                    right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+                ),
+            )
+            return SQLFunctionCall(
+                name="list_distinct",
+                args=[SQLSubquery(query=inner_select)]
+            )
+
+        # Generic fallback: translate source as list, apply list_distinct
+        source = self.translate(node.source, usage=ExprUsage.LIST)
+        if _is_list_returning_sql(source):
+            return SQLFunctionCall(name="list_distinct", args=[source])
+        return SQLFunctionCall(name="list_distinct",
+                               args=[SQLFunctionCall(name="LIST", args=[source])])
 
     def _translate_first_last_with_window(self, query: Query, direction: str = "ASC") -> SQLExpression:
         """Translate First/Last on a Query using ROW_NUMBER() window function.

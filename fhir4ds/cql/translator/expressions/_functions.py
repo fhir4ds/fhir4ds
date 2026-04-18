@@ -1193,36 +1193,49 @@ class FunctionsMixin:
         return op
 
     def _translate_age_function(self, name: str, args: List[SQLExpression]) -> SQLExpression:
-        """Translate an age calculation function."""
+        """Translate AgeInYears/AgeInMonths/etc. using calendar-duration macros.
+
+        Uses the demographics CTE to access Patient.birthDate and the
+        YearsBetween/MonthsBetween/DaysBetween macros for CQL-compliant
+        calendar duration semantics (CQL §2.3, §18.4).
+        """
         name_lower = name.lower()
 
-        # Map to date_diff function
-        unit_map = {
-            "ageinyears": "year",
-            "ageinmonths": "month",
-            "ageindays": "day",
-            "ageinhours": "hour",
-            "ageinminutes": "minute",
-            "ageinseconds": "second",
+        # Map to calendar-duration macro names
+        macro_map = {
+            "ageinyears": "YearsBetween",
+            "ageinmonths": "MonthsBetween",
+            "ageindays": "DaysBetween",
+            "ageinhours": "HoursBetween",
+            "ageinminutes": "MinutesBetween",
+            "ageinseconds": "SecondsBetween",
         }
 
-        unit = unit_map.get(name_lower, "year")
+        macro_name = macro_map.get(name_lower, "YearsBetween")
 
-        # If no birthDate provided, use the current resource's birthDate
         if args:
             birth_date = args[0]
         else:
-            # Use property access on current resource
-            resource_alias = self.context.resource_alias or "resource"
-            birth_date = self._make_fhirpath_call(
-                SQLQualifiedIdentifier(parts=[resource_alias, "resource"]) if self.context.resource_alias else SQLIdentifier(name="resource"),
-                "birthDate",
-                boolean_context=False,
-            )
+            # Use demographics CTE for birthDate access (mirrors _translate_age_at_function)
+            self.context._needs_demographics = True
+            _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+            birth_date = SQLSubquery(query=SQLSelect(
+                columns=[SQLQualifiedIdentifier(parts=["_pd", "birth_date"])],
+                from_clause=SQLAlias(
+                    expr=SQLIdentifier(name="_patient_demographics"),
+                    alias="_pd",
+                ),
+                where=SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=["_pd", "patient_id"]),
+                    right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+                ),
+                limit=1,
+            ))
 
         return SQLFunctionCall(
-            name="date_diff",
-            args=[SQLLiteral(value=unit), birth_date, SQLFunctionCall(name="CURRENT_DATE", args=[])],
+            name=macro_name,
+            args=[birth_date, SQLFunctionCall(name="CURRENT_DATE", args=[])],
         )
 
     def _translate_age_at_function(self, name: str, args: List[SQLExpression]) -> SQLExpression:

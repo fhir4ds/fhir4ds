@@ -745,11 +745,16 @@ class InferenceMixin:
         from ..parser.ast_nodes import (
             Retrieve, ExistsExpression, FunctionRef, Literal,
             BinaryExpression, Property, UnaryExpression, Identifier,
-            FirstExpression, LastExpression, ConditionalExpression
+            FirstExpression, LastExpression, ConditionalExpression,
+            DurationBetween, DifferenceBetween,
         )
 
         if ast_node is None:
             return "Any"
+
+        # DurationBetween / DifferenceBetween return Integer (years/months/days/etc. between)
+        if isinstance(ast_node, (DurationBetween, DifferenceBetween)):
+            return "Integer"
 
         # Retrieve returns List<ResourceType>
         if isinstance(ast_node, Retrieve):
@@ -806,6 +811,14 @@ class InferenceMixin:
         # Binary comparisons and temporal operators return Boolean
         if isinstance(ast_node, BinaryExpression):
             op = getattr(ast_node, 'operator', '').lower()
+            # "duration in X between" is parsed as BinaryExpression(op='in',
+            # left=Identifier('duration'), right=DurationBetween(...)).
+            # This is a duration computation, not a membership test — return Integer.
+            if (op == 'in'
+                    and isinstance(ast_node.left, Identifier)
+                    and ast_node.left.name.lower() == 'duration'
+                    and isinstance(ast_node.right, DurationBetween)):
+                return "Integer"
             if op in ('=', '!=', '<>', '<', '>', '<=', '>=',
                       'and', 'or', 'xor', 'implies',
                       'on or before', 'on or after', 'before', 'after',

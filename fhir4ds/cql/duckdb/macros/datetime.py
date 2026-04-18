@@ -51,11 +51,29 @@ def registerDateTimeMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute("CREATE MACRO IF NOT EXISTS MakeDateTime(yr, mo, dy) AS system.make_timestamp(yr, mo, dy, 0, 0, 0)")
 
     # ============================================
-    # Date differences (using DATE_DIFF)
-    # Note: Cast to DATE/TIMESTAMP to handle string inputs
+    # Date differences — CQL calendar duration semantics
+    # CQL §5.6.2: duration-between counts whole calendar units,
+    # adjusting when the sub-unit components of end < start.
+    # DuckDB date_diff counts boundary crossings, which over-counts
+    # when the birthday/day-of-month has not yet been reached.
     # ============================================
-    con.execute("CREATE MACRO IF NOT EXISTS YearsBetween(start_dt, end_dt) AS system.date_diff('year', CAST(start_dt AS DATE), CAST(end_dt AS DATE))")
-    con.execute("CREATE MACRO IF NOT EXISTS MonthsBetween(start_dt, end_dt) AS system.date_diff('month', CAST(start_dt AS DATE), CAST(end_dt AS DATE))")
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS YearsBetween(start_dt, end_dt) AS "
+        "CASE WHEN CAST(start_dt AS DATE) IS NULL OR CAST(end_dt AS DATE) IS NULL THEN NULL ELSE "
+        "EXTRACT(YEAR FROM CAST(end_dt AS DATE)) - EXTRACT(YEAR FROM CAST(start_dt AS DATE)) "
+        "- CASE WHEN EXTRACT(MONTH FROM CAST(end_dt AS DATE)) < EXTRACT(MONTH FROM CAST(start_dt AS DATE)) "
+        "OR (EXTRACT(MONTH FROM CAST(end_dt AS DATE)) = EXTRACT(MONTH FROM CAST(start_dt AS DATE)) "
+        "AND EXTRACT(DAY FROM CAST(end_dt AS DATE)) < EXTRACT(DAY FROM CAST(start_dt AS DATE))) "
+        "THEN 1 ELSE 0 END END"
+    )
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS MonthsBetween(start_dt, end_dt) AS "
+        "CASE WHEN CAST(start_dt AS DATE) IS NULL OR CAST(end_dt AS DATE) IS NULL THEN NULL ELSE "
+        "(EXTRACT(YEAR FROM CAST(end_dt AS DATE)) * 12 + EXTRACT(MONTH FROM CAST(end_dt AS DATE))) "
+        "- (EXTRACT(YEAR FROM CAST(start_dt AS DATE)) * 12 + EXTRACT(MONTH FROM CAST(start_dt AS DATE))) "
+        "- CASE WHEN EXTRACT(DAY FROM CAST(end_dt AS DATE)) < EXTRACT(DAY FROM CAST(start_dt AS DATE)) "
+        "THEN 1 ELSE 0 END END"
+    )
     con.execute("CREATE MACRO IF NOT EXISTS DaysBetween(start_dt, end_dt) AS system.date_diff('day', CAST(start_dt AS DATE), CAST(end_dt AS DATE))")
     con.execute("CREATE MACRO IF NOT EXISTS HoursBetween(start_dt, end_dt) AS system.date_diff('hour', CAST(start_dt AS TIMESTAMP), CAST(end_dt AS TIMESTAMP))")
     con.execute("CREATE MACRO IF NOT EXISTS MinutesBetween(start_dt, end_dt) AS system.date_diff('minute', CAST(start_dt AS TIMESTAMP), CAST(end_dt AS TIMESTAMP))")

@@ -1091,9 +1091,9 @@ class CQLParser:
             operand = self.parse_unary_expression()
             return ExistsExpression(source=operand)
 
-        if self.match_and_advance(TokenType.DISTINCT):
+        if self.match_and_advance(TokenType.DISTINCT) or self.match_and_advance(TokenType.DISTINCT_FN):
             operand = self.parse_unary_expression()
-            return UnaryExpression(operator="distinct", operand=operand)
+            return DistinctExpression(source=operand)
 
         # Interval operators: start of, end of, point from
         if self.match(TokenType.START):

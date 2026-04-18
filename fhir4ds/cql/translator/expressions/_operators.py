@@ -2056,6 +2056,17 @@ class OperatorsMixin:
                 return SQLUnaryOp(operator="NOT", operand=result_expr)
             return result_expr
 
+        # CodeableConcept ~ string literal: compare against coding.code values.
+        # When one operand is a CodeableConcept-typed property and the other is a
+        # bare string literal (no system), we cannot use the code-reference path
+        # above (which requires system+code). Instead, check if any coding.code
+        # in the CodeableConcept matches the string value.
+        _cc_result = self._try_codeable_concept_string_equiv(expr, left, right)
+        if _cc_result is not None:
+            if is_negated:
+                return SQLUnaryOp(operator="NOT", operand=_cc_result)
+            return _cc_result
+
         equiv_case = SQLCase(
             when_clauses=[
                 (
@@ -2081,6 +2092,76 @@ class OperatorsMixin:
         if is_negated:
             return SQLUnaryOp(operator="NOT", operand=equiv_case)
         return equiv_case
+
+    def _try_codeable_concept_string_equiv(self, expr, left, right) -> "Optional[SQLExpression]":
+        """Handle CodeableConcept/Coding ~ string-literal by checking code values.
+
+        Returns an SQLExpression if one operand is a CodeableConcept or Coding
+        property and the other is a bare string literal; None otherwise (fall
+        through to generic equivalence).
+        """
+        from ...parser.ast_nodes import Literal, Property, Identifier
+        from ...translator.types import SQLFunctionCall, SQLLiteral, SQLQualifiedIdentifier
+
+        # Identify which side is the property and which is the string literal
+        prop_ast, str_val, resource_sql = None, None, None
+        if isinstance(expr.right, Literal) and getattr(expr.right, 'type', None) == 'String':
+            prop_ast = expr.left
+            str_val = expr.right.value
+            resource_sql = left
+        elif isinstance(expr.left, Literal) and getattr(expr.left, 'type', None) == 'String':
+            prop_ast = expr.right
+            str_val = expr.left.value
+            resource_sql = right
+        if prop_ast is None or str_val is None:
+            return None
+
+        # Resolve the property path and resource type
+        if not isinstance(prop_ast, Property):
+            return None
+        parts = []
+        current = prop_ast
+        while isinstance(current, Property):
+            parts.append(current.path)
+            current = current.source
+        parts.reverse()
+        base_path = ".".join(parts)
+
+        # Determine resource type from alias
+        source_ast = prop_ast
+        while isinstance(source_ast, Property) and source_ast.source:
+            source_ast = source_ast.source
+        res_type = None
+        if isinstance(source_ast, Identifier):
+            res_type = self.context._alias_resource_types.get(source_ast.name)
+        if not res_type:
+            res_type = self.context.resource_type
+
+        if not res_type or not self.context.fhir_schema:
+            return None
+
+        el_type = self.context.fhir_schema.get_element_type(res_type, base_path.split(".")[0])
+        safe_val = str_val.replace("'", "\\'")
+        if el_type == "CodeableConcept":
+            fhirpath_expr = f"{base_path}.coding.code = '{safe_val}'"
+        elif el_type == "Coding":
+            fhirpath_expr = f"{base_path}.code = '{safe_val}'"
+        else:
+            return None
+
+        # Extract the resource reference from the translated expression
+        if (isinstance(resource_sql, SQLFunctionCall)
+                and resource_sql.name in ("fhirpath_text", "fhirpath_date", "fhirpath_bool")):
+            resource_ref = resource_sql.args[0]
+        elif isinstance(resource_sql, SQLQualifiedIdentifier) and len(resource_sql.parts) >= 2:
+            resource_ref = SQLQualifiedIdentifier(parts=resource_sql.parts[:-1] + ["resource"])
+        else:
+            resource_ref = resource_sql
+
+        return SQLFunctionCall(
+            name="fhirpath_bool",
+            args=[resource_ref, SQLLiteral(value=fhirpath_expr)],
+        )
 
     @staticmethod
     def _build_scaled_quantity(qty_expr: "SQLExpression", scalar: "SQLExpression", operator: str) -> "SQLExpression":

@@ -336,7 +336,7 @@ def evaluate_measure(
     if patient_ids is not None and len(patient_ids) == 0:
         # Return empty result with correct schema
         # This is a placeholder that returns no rows
-        return conn.sql("SELECT NULL AS patient_id WHERE FALSE")
+        return conn.execute("SELECT NULL AS patient_id WHERE FALSE").fetchdf()
 
     # Load and parse CQL library
     lib_path = Path(library_path)
@@ -393,9 +393,10 @@ def evaluate_measure(
     try:
         if parameters:
             sql, param_values = _build_parameterized_query(sql, parameters)
-            return conn.execute(sql, param_values).fetchdf()
+            result = conn.execute(sql, param_values)
         else:
-            return conn.sql(sql)
+            result = conn.execute(sql)
+        return result.fetchdf()
     except _duckdb_mod.CatalogException as exc:
         if "resources" in str(exc).lower():
             raise ValueError(

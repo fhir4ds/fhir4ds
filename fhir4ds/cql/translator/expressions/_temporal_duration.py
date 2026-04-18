@@ -16,6 +16,7 @@ from ...translator.context import ExprUsage
 from ...translator.expressions._temporal_utils import BINARY_OPERATOR_MAP
 from ...translator.types import (
     SQLBinaryOp,
+    SQLCast,
     SQLExpression,
     SQLFunctionCall,
     SQLLiteral,
@@ -154,6 +155,9 @@ class DurationMixin:
         left = self.translate(node.operand_left, usage=ExprUsage.SCALAR)
         right = self.translate(node.operand_right, usage=ExprUsage.SCALAR)
         func_name = precision_map.get(node.precision.lower(), 'differenceInDays')
+        # The differenceIn* UDFs expect VARCHAR arguments; cast DATE/TIMESTAMP to VARCHAR
+        left = SQLCast(expression=left, target_type="VARCHAR")
+        right = SQLCast(expression=right, target_type="VARCHAR")
         return SQLFunctionCall(name=func_name, args=[left, right])
 
     def _translate_duration_between_func(self, name: str, args: List[SQLExpression]) -> SQLExpression:
