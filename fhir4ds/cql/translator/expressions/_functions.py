@@ -482,7 +482,7 @@ class FunctionsMixin:
         if agg_func is None:
             return None
 
-        from ...parser.ast_nodes import Query as CQLQuery, ListExpression, Retrieve
+        from ...parser.ast_nodes import Query as CQLQuery, ListExpression, Retrieve, DistinctExpression
         arg = func.arguments[0]
 
         # Retrieve sources (e.g. Count([Encounter])) need a correlated subquery
@@ -507,6 +507,23 @@ class FunctionsMixin:
                 ),
             ))
             return correlated
+
+        # Aggregate on distinct(query) — e.g., Count(distinct(query)) (CMS117).
+        # Translate the inner query and wrap with COUNT(DISTINCT col) instead of
+        # letting DistinctExpression produce list_distinct(LIST(...)) which puts
+        # an aggregate inside WHERE clauses and breaks DuckDB.
+        if isinstance(arg, DistinctExpression) and isinstance(arg.source, CQLQuery):
+            source_sql = self.translate(arg.source, usage=ExprUsage.LIST)
+            result = self._wrap_list_aggregate(agg_func, source_sql)
+            if result is not None:
+                # Inject DISTINCT into the aggregate function
+                if isinstance(result, SQLSubquery) and isinstance(result.query, SQLSelect):
+                    for i, col in enumerate(result.query.columns):
+                        if isinstance(col, SQLFunctionCall) and col.name == agg_func:
+                            result.query.columns[i] = SQLFunctionCall(
+                                name=col.name, args=col.args, distinct=True
+                            )
+                return result
 
         if isinstance(arg, CQLQuery):
             source_sql = self.translate(arg, usage=ExprUsage.LIST)
