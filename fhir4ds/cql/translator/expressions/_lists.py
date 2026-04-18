@@ -729,9 +729,10 @@ class ListsMixin:
         if isinstance(node.source, CQLIdentifier):
             name = node.source.name
             meta = self.context.definition_meta.get(name)
+            # Use 'resource' for resource CTEs, 'value' for value CTEs
             col = "value"
             if meta:
-                col = meta.value_column or "value"
+                col = "resource" if meta.has_resource else (meta.value_column or "value")
             _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
             # Build: list_distinct((SELECT COALESCE(LIST(cte.col), []) FROM cte WHERE cte.patient_id = outer.patient_id))
             # Wrap the SELECT in SQLSubquery inside SQLFunctionCall so the CTE builder

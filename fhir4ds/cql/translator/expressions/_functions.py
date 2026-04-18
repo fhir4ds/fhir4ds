@@ -625,6 +625,13 @@ class FunctionsMixin:
             args = args[0].args
             use_distinct = True
 
+        # list_distinct(subquery) from _translate_distinct_expression —
+        # use len() to count elements of the already-deduplicated list.
+        # This avoids wrapping with COUNT() which breaks when the inner
+        # subquery contains LIST() aggregates (e.g., in WHERE clauses).
+        if args and isinstance(args[0], SQLFunctionCall) and args[0].name == 'list_distinct':
+            return SQLFunctionCall(name="len", args=args)
+
         if args and not use_distinct:
             inner = args[0]
             if isinstance(inner, SQLSubquery) and isinstance(inner.query, SQLSelect):
