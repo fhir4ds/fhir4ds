@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "baca065f-69bb-49d1-84c3-74cdedca429e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-01-01T00:00:00.000Z"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "90672",
+      "display": "Influenza virus vaccine, quadrivalent, live (LAIV4), for intranasal use"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/15067a1f-bfa9-4dbc-b622-b2da823bea79"
+  },
+  "performedPeriod": {
+    "start": "2026-01-01T00:00:00.000Z",
+    "end": "2026-01-01T23:59:59.000Z"
+  }
+}

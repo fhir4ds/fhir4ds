@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "6f4b3287-63ce-40a5-8a40-fc24fe9ef13b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "75304-6",
+      "display": "Nutrition status observation panel",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/240aca16-2f20-4213-b02a-232cec686fe4"
+  },
+  "effectiveDateTime": "2026-08-25T10:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "772791006",
+      "display": "Sarcopenia (disorder)",
+      "userSelected": true
+    } ]
+  }
+}

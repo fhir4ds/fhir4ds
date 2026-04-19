@@ -1,0 +1,42 @@
+{
+  "resourceType": "Claim",
+  "id": "145c09c1-1187-490e-89d2-79889bc7d8fe",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-claim" ]
+  },
+  "status": "active",
+  "type": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/claim-type",
+      "code": "institutional",
+      "display": "Institutional"
+    } ]
+  },
+  "use": "claim",
+  "patient": {
+    "reference": "Patient/02d5c5f5-9487-42af-bb5e-dfc3aaeb70eb"
+  },
+  "created": "2026-10-22",
+  "priority": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/processpriority",
+      "code": "normal"
+    } ]
+  },
+  "diagnosis": [ {
+    "sequence": 1,
+    "diagnosisCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "14047009"
+      } ]
+    }
+  } ],
+  "item": [ {
+    "sequence": 1,
+    "diagnosisSequence": [ 1, 2 ],
+    "encounter": [ {
+      "reference": "Encounter/ef488622-d61b-4baf-adb6-8c506aaa93f3"
+    } ]
+  } ]
+}

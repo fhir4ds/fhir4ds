@@ -1,0 +1,25 @@
+{
+  "resourceType": "Coverage",
+  "id": "1eda69bd-700a-4ea3-bd76-e8a21099e42e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+  },
+  "status": "active",
+  "type": {
+    "coding": [ {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "code": "512",
+      "display": "Commercial Managed Care - PPO"
+    } ]
+  },
+  "beneficiary": {
+    "reference": "Patient/143372f5-cf0d-420f-a55c-63e0c74e8013"
+  },
+  "period": {
+    "start": "2024-12-01T00:00:00.000+00:00"
+  },
+  "payor": [ {
+    "reference": "Organization/475eb217-1fc0-4cd6-a608-9e0b632ba9a5"
+  } ]
+}

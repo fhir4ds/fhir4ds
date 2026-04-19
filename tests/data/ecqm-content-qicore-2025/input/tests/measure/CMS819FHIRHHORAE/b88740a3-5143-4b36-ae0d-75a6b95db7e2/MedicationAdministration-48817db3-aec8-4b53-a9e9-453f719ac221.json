@@ -1,0 +1,38 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "48817db3-aec8-4b53-a9e9-453f719ac221",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1191222",
+      "display": "Opioid Antagonist"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b88740a3-5143-4b36-ae0d-75a6b95db7e2"
+  },
+  "context": {
+    "reference": "Encounter/0c0287ba-89f4-432d-952d-b5bff2294697"
+  },
+  "effectiveDateTime": "2026-10-31T08:16:00.000+00:00",
+  "note": [ {
+    "text": "Administered opioid antagonist intravenously as prescribed."
+  } ],
+  "dosage": {
+    "route": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-RouteOfAdministration",
+        "code": "26643006",
+        "display": "Intravenous"
+      } ]
+    },
+    "rateQuantity": {
+      "value": 2,
+      "unit": "mg"
+    }
+  }
+}

@@ -1,0 +1,260 @@
+{
+  "resourceType": "Bundle",
+  "id": "c1f044ef3e654daa9102",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/172cf64c-b5a3-4245-bd62-d7cd7473eb94",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "172cf64c-b5a3-4245-bd62-d7cd7473eb94",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2054-5",
+            "display": "Black or African American",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Black or African American"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248152002"
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "c1f044ef3e654daa9102"
+      } ],
+      "name": [ {
+        "family": "DENEXCL1PASS",
+        "given": [ "AnginaPectorisWithDocumentedSpasmStartsWithin24hoursBeforeEnd" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1991-08-07"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/172cf64c-b5a3-4245-bd62-d7cd7473eb94"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/bc4206ea-26e2-4b37-a17a-61df4129cb40",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "bc4206ea-26e2-4b37-a17a-61df4129cb40",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMER",
+        "display": "emergency",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2020-09",
+          "code": "4525004",
+          "display": "Emergency department patient visit",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/172cf64c-b5a3-4245-bd62-d7cd7473eb94"
+      },
+      "period": {
+        "start": "2026-10-09T05:00:00.000+00:00",
+        "end": "2026-10-13T05:00:00.000+00:00"
+      },
+      "reasonCode": [ {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "code": "I21.21",
+          "display": "ST elevation (STEMI) myocardial infarction involving left circumflex coronary artery",
+          "userSelected": true
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/bc4206ea-26e2-4b37-a17a-61df4129cb40"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/cc531fb8-06de-45c0-ab79-a43cb831a478",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "cc531fb8-06de-45c0-ab79-a43cb831a478",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "Active",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "code": "I20.1",
+          "display": "Angina pectoris with documented spasm",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/172cf64c-b5a3-4245-bd62-d7cd7473eb94"
+      },
+      "onsetPeriod": {
+        "start": "2026-10-08T05:00:00.000+00:00",
+        "end": "2026-10-22T12:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/cc531fb8-06de-45c0-ab79-a43cb831a478"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/966c1543-2c35-413b-82b9-86580fdbc06d",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "966c1543-2c35-413b-82b9-86580fdbc06d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "f78247f8-4d61-4e04-9efe-db44cbe40d47-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "172cf64c-b5a3-4245-bd62-d7cd7473eb94"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#f78247f8-4d61-4e04-9efe-db44cbe40d47-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient has angina pectoris with documented spasm that started within 24 hours before start of ED encounter"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS996FHIRAptTxforSTEMI",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/172cf64c-b5a3-4245-bd62-d7cd7473eb94"
+      }, {
+        "reference": "Encounter/bc4206ea-26e2-4b37-a17a-61df4129cb40"
+      }, {
+        "reference": "Condition/cc531fb8-06de-45c0-ab79-a43cb831a478"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/966c1543-2c35-413b-82b9-86580fdbc06d"
+    }
+  } ]
+}

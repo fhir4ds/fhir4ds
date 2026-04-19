@@ -1,0 +1,29 @@
+{
+  "resourceType": "Condition",
+  "id": "2416e183-dc13-4c86-b788-7bad0a732311",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition" ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "87605005",
+      "display": "Cornual Ectopic Pregnancy",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c2f10a34-81ed-4bf0-93ac-fed868ada54b"
+  },
+  "encounter": {
+    "reference": "Encounter/b148da17-9c07-472c-8378-aaeab6f58114"
+  },
+  "recordedDate": "2026-12-01T08:00:00.000+00:00"
+}

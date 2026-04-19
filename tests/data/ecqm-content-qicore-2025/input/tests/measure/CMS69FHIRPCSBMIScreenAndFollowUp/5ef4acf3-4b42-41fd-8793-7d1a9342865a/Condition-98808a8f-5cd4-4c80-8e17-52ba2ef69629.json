@@ -1,0 +1,39 @@
+{
+  "resourceType": "Condition",
+  "id": "98808a8f-5cd4-4c80-8e17-52ba2ef69629",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    }, {
+      "system": "http://snomed.info/sct",
+      "code": "439401001",
+      "display": "Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "170936009",
+      "display": "Shared care - hospice and general practitioner (finding)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/5ef4acf3-4b42-41fd-8793-7d1a9342865a"
+  },
+  "onsetDateTime": "2024-07-25T08:00:00.000+00:00"
+}

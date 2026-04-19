@@ -1,0 +1,22 @@
+{
+  "resourceType": "Location",
+  "id": "7ac917cb-fef9-4e3c-bf7f-8125fe3034e8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-location" ]
+  },
+  "identifier": [ {
+    "use": "usual",
+    "system": "http://exampleoflocation.com",
+    "value": "ED-1.R3"
+  } ],
+  "name": "Emergency Department, first floor",
+  "type": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
+      "version": "2019",
+      "code": "ER",
+      "display": "Emergency room",
+      "userSelected": true
+    } ]
+  } ]
+}

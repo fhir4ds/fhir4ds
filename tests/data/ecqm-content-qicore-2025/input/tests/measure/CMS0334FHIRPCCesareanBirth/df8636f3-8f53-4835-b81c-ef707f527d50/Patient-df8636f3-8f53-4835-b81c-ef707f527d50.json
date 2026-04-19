@@ -1,0 +1,58 @@
+{
+  "resourceType": "Patient",
+  "id": "df8636f3-8f53-4835-b81c-ef707f527d50",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "text": {
+    "status": "generated",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">AssessPerfNotAbnPres<b>DENEXFAIL</b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>db09244543fe550232b604cb7d87decbeb851047882e641e3fe736fdce398a0a</td></tr><tr><td>Date of birth</td><td><span>14 February 1985</span></td></tr></tbody></table></div>"
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "1002-5",
+        "display": "American Indian or Alaska Native",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "American Indian or Alaska Native"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Hispanic or Latino"
+    } ]
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://bonnie-fhir.healthit.gov/",
+    "value": "63487c300968f801225401c0"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "family": "DENEXFail",
+    "given": [ "AssessPerfNotAbnPres" ]
+  } ],
+  "gender": "female",
+  "birthDate": "1998-02-14"
+}

@@ -1,0 +1,109 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "50b67193-9023-4f06-bef0-bcb3d22fd963",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "898b366d-2e8a-4445-b42a-7cc5df96b877-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "831a0ba9-8b96-4414-901c-70add57d2cc4"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#898b366d-2e8a-4445-b42a-7cc5df96b877-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Age 18+, encounter last day of MP, systolic 160 mm[Hg], but no diastolic documented. Follow up within 4 wks recommended and referred to dietician "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS22FHIRPCSBPScreeningFollowUp",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/831a0ba9-8b96-4414-901c-70add57d2cc4"
+  }, {
+    "reference": "Encounter/e57734f3-fad4-4b0f-9bc7-7e4f3f03ae6f"
+  }, {
+    "reference": "Observation/63521ac9-aa24-48a2-a692-9236610088f3"
+  }, {
+    "reference": "ServiceRequest/fad19d4f-015a-4cb4-9928-879254e1a5c6"
+  }, {
+    "reference": "ServiceRequest/6bd76da6-a9e5-4f4b-bd29-11d9a18ff82c"
+  }, {
+    "reference": "Coverage/6730aecf-0944-496b-b531-a200171835a2"
+  }, {
+    "reference": "Organization/32b57f85-f95a-45fc-a2fb-f103875fe306"
+  }, {
+    "reference": "Practitioner/a4b4a8f4-b978-4be6-867a-98bdcca95094"
+  } ]
+}

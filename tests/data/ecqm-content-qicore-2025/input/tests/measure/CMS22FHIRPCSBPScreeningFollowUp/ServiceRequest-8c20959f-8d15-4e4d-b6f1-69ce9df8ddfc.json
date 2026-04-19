@@ -1,0 +1,22 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "8c20959f-8d15-4e4d-b6f1-69ce9df8ddfc",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "20093000",
+      "display": "Alcohol rehabilitation and detoxification (regime/therapy)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c3f55d79-b10c-4d2b-8699-a7538867159d"
+  },
+  "authoredOn": "2026-01-01T08:30:00.000+00:00"
+}

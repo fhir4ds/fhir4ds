@@ -1,0 +1,27 @@
+{
+  "resourceType": "Condition",
+  "id": "b885bbe1-2e52-42d5-b19e-d345f39119e2",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "10349009",
+      "display": "Multi-infarct dementia with delirium (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a8c0ccf4-e672-4c1f-9f33-fbf4464a5fe5"
+  },
+  "onsetPeriod": {
+    "start": "2025-08-05T08:00:00.000+00:00",
+    "end": "2025-08-11T08:15:00.000+00:00"
+  }
+}

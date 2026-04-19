@@ -1,0 +1,94 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1170.4",
+  "meta": {
+    "versionId": "5",
+    "lastUpdated": "2026-02-09T15:15:39.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2021-10-07"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2021-10-07"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1170.4",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1170.4"
+    }
+  ],
+  "version": "20211007",
+  "name": "ThrombolyticTherapyAllergen",
+  "title": "Thrombolytic Therapy Allergen",
+  "status": "active",
+  "experimental": false,
+  "date": "2021-10-07T01:00:28-04:00",
+  "publisher": "Acumen OP Steward",
+  "expansion": {
+    "identifier": "urn:uuid:981517c1-03d5-472c-8fa8-4fb674881165",
+    "timestamp": "2026-03-13T12:53:30-04:00",
+    "total": 6,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "10106",
+        "display": "streptokinase"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "11055",
+        "display": "urokinase"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "259280",
+        "display": "tenecteplase"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "40028",
+        "display": "anistreplase"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "76895",
+        "display": "reteplase"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "8410",
+        "display": "alteplase"
+      }
+    ]
+  }
+}

@@ -1,0 +1,397 @@
+{
+  "resourceType": "Bundle",
+  "id": "6323489059967e30c06d0774",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/5c316557-a562-48e4-94fd-76c02ddc388f",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "5c316557-a562-48e4-94fd-76c02ddc388f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "6323489059967e30c06d0774"
+      } ],
+      "name": [ {
+        "family": "NUMERPass",
+        "given": [ "2OpioidsAtDischarge" ]
+      } ],
+      "gender": "male",
+      "birthDate": "2006-09-15"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/5c316557-a562-48e4-94fd-76c02ddc388f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/9080450b-6048-45f0-a766-e4966d9959a9",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "9080450b-6048-45f0-a766-e4966d9959a9",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "183452005",
+          "display": "Emergency hospital admission (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/5c316557-a562-48e4-94fd-76c02ddc388f"
+      },
+      "period": {
+        "start": "2026-01-01T00:00:00.000+00:00",
+        "end": "2026-01-03T00:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/9080450b-6048-45f0-a766-e4966d9959a9"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationRequest/020b5344-8d1c-470b-9ff4-3fff4ab4d7ae",
+    "resource": {
+      "resourceType": "MedicationRequest",
+      "id": "020b5344-8d1c-470b-9ff4-3fff4ab4d7ae",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+      },
+      "status": "active",
+      "intent": "order",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+          "code": "discharge",
+          "display": "Discharge",
+          "userSelected": true
+        } ]
+      } ],
+      "doNotPerform": false,
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "1014632",
+          "display": "acetaminophen 300 MG / oxycodone hydrochloride 7.5 MG Oral Tablet",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/5c316557-a562-48e4-94fd-76c02ddc388f"
+      },
+      "authoredOn": "2026-01-03T00:15:00.000+00:00",
+      "requester": {
+        "reference": "Practitioner/f0808f26-2d4e-4da8-8d7b-cc20eedde23e"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationRequest/020b5344-8d1c-470b-9ff4-3fff4ab4d7ae"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/f0808f26-2d4e-4da8-8d7b-cc20eedde23e",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "f0808f26-2d4e-4da8-8d7b-cc20eedde23e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "9999999896"
+      } ],
+      "active": true,
+      "name": [ {
+        "family": "Ramires",
+        "given": [ "Alma" ],
+        "prefix": [ "Dr" ]
+      } ],
+      "address": [ {
+        "use": "home",
+        "line": [ "534 Erewhon St" ],
+        "city": "Netherville",
+        "state": "IN",
+        "postalCode": "46131"
+      } ],
+      "qualification": [ {
+        "identifier": [ {
+          "system": "http://goodhealth.org/prIdentifier",
+          "value": "12345"
+        } ],
+        "code": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0360|2.7",
+            "code": "BS",
+            "display": "Bachelor of Science"
+          } ],
+          "text": "Bachelor of Science"
+        },
+        "period": {
+          "start": "1995"
+        },
+        "issuer": {
+          "display": "Example University"
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/f0808f26-2d4e-4da8-8d7b-cc20eedde23e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationRequest/ea46518a-508f-4345-a1d1-b46fe59213cd",
+    "resource": {
+      "resourceType": "MedicationRequest",
+      "id": "ea46518a-508f-4345-a1d1-b46fe59213cd",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+      },
+      "status": "active",
+      "intent": "order",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+          "code": "discharge",
+          "display": "Discharge",
+          "userSelected": true
+        } ]
+      } ],
+      "doNotPerform": false,
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "863845",
+          "display": "Abuse-Deterrent morphine sulfate 100 MG / naltrexone hydrochloride 4 MG Extended Release Oral Capsule",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/5c316557-a562-48e4-94fd-76c02ddc388f"
+      },
+      "authoredOn": "2026-01-03T00:10:00.000+00:00",
+      "requester": {
+        "reference": "Practitioner/f0808f26-2d4e-4da8-8d7b-cc20eedde23e"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationRequest/ea46518a-508f-4345-a1d1-b46fe59213cd"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/618e9463-16ec-430e-886e-f5ebb4aa21b9",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "618e9463-16ec-430e-886e-f5ebb4aa21b9",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "subscriberId": "523435",
+      "beneficiary": {
+        "reference": "Patient/5c316557-a562-48e4-94fd-76c02ddc388f"
+      },
+      "relationship": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+          "code": "self"
+        } ]
+      },
+      "payor": [ {
+        "reference": "Organization/06b90bec-f675-4ab1-9b99-98239ad4e6be"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/618e9463-16ec-430e-886e-f5ebb4aa21b9"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/06b90bec-f675-4ab1-9b99-98239ad4e6be",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "06b90bec-f675-4ab1-9b99-98239ad4e6be",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/06b90bec-f675-4ab1-9b99-98239ad4e6be"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/38eed96e-62e2-40ca-9f4a-cdda9c2493ba",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "38eed96e-62e2-40ca-9f4a-cdda9c2493ba",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "f797bfc5-7aae-41fe-8f7b-35caab3d9eb2-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "5c316557-a562-48e4-94fd-76c02ddc388f"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#f797bfc5-7aae-41fe-8f7b-35caab3d9eb2-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Encounter 1/1,  00:00- 1/3,  00:00;  age 18, 2 opioids at discharge 1/3,  00:00"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS506FHIRSafeUseofOpioids",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/5c316557-a562-48e4-94fd-76c02ddc388f"
+      }, {
+        "reference": "Encounter/9080450b-6048-45f0-a766-e4966d9959a9"
+      }, {
+        "reference": "MedicationRequest/020b5344-8d1c-470b-9ff4-3fff4ab4d7ae"
+      }, {
+        "reference": "Practitioner/f0808f26-2d4e-4da8-8d7b-cc20eedde23e"
+      }, {
+        "reference": "MedicationRequest/ea46518a-508f-4345-a1d1-b46fe59213cd"
+      }, {
+        "reference": "Coverage/618e9463-16ec-430e-886e-f5ebb4aa21b9"
+      }, {
+        "reference": "Organization/06b90bec-f675-4ab1-9b99-98239ad4e6be"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/38eed96e-62e2-40ca-9f4a-cdda9c2493ba"
+    }
+  } ]
+}

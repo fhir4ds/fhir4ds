@@ -1,0 +1,109 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "136c9b93-b74c-4d0c-84ca-13193b1ffb3b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "f9b07cd2-0ff7-412a-aedc-04fef925f802-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "39baa108-b124-4300-b71c-dc21cc509d64"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#f9b07cd2-0ff7-412a-aedc-04fef925f802-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Device GCS applied on 1 Day After Anesthesia sug "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS190VTEProphylaxisICUFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/39baa108-b124-4300-b71c-dc21cc509d64"
+  }, {
+    "reference": "Encounter/6ad82314-0912-4b83-adbf-bbc4289c3755"
+  }, {
+    "reference": "Coverage/496578e2-e067-4746-9029-38780ec3bbd8"
+  }, {
+    "reference": "Procedure/a8c5da10-c946-48e8-9842-efc0f20997a8"
+  }, {
+    "reference": "Procedure/660d455b-61bb-48b5-b52c-aea7866c22d4"
+  }, {
+    "reference": "Organization/aa583aca-269e-42c7-bf20-a488309d90d9"
+  }, {
+    "reference": "Practitioner/1c1dd6e0-5aec-4d6f-a9dc-391858c34774"
+  }, {
+    "reference": "Location/5131d56e-abf8-4394-a1a8-8f0484fcbdf1"
+  } ]
+}

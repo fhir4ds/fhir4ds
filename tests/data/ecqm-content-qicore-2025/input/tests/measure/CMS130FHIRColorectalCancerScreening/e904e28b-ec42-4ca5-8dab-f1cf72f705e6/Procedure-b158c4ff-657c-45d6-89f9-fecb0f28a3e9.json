@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "b158c4ff-657c-45d6-89f9-fecb0f28a3e9",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2021-01-01T01:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "1217117008",
+      "display": "Endoscopic examination of lower bowel and sampling for bacterial overgrowth (procedure)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/e904e28b-ec42-4ca5-8dab-f1cf72f705e6"
+  },
+  "performedPeriod": {
+    "start": "2022-01-01T01:00:00.000+00:00",
+    "end": "2022-01-01T01:15:00.000+00:00"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "91148cfb-b750-4e5d-b9e4-857b5a7a7c7c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "2025-01",
+      "code": "752884",
+      "display": "0.375 ML leuprolide acetate 120 MG/ML Prefilled Syringe",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/72a0fde9-7145-4b6c-ac08-75d41d04f910"
+  },
+  "authoredOn": "2026-03-03T08:00:00.000+00:00",
+  "requester": {
+    "reference": "http://myGoodHealthcare.com/fhir/Practitioner/646346"
+  },
+  "dosageInstruction": [ {
+    "timing": {
+      "event": [ "2027-01-03T08:00:00.000+00:00", "2026-12-03T08:00:00.000+00:00" ]
+    }
+  } ]
+}

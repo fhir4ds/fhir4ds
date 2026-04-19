@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "a0de3a70-5053-4454-8347-cdb73aeffd15",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "10637031000119106",
+      "display": "Pressure injury of buttock stage I (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/84ebbde4-0ea8-42ae-908b-ef1721748290"
+  },
+  "onsetDateTime": "2025-12-31T23:59:59.000+00:00"
+}

@@ -1,0 +1,392 @@
+{
+  "resourceType": "Group",
+  "id": "CMS506FHIRSafeUseofOpioids",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS506FHIRSafeUseofOpioids"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/81dc5bb4-3273-492a-beff-2f7b0394f3c8",
+      "display": "HasCancerPainHealthConcern DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/81dc5bb4-3273-492a-beff-2f7b0394f3c8",
+      "display": "HasCancerPainHealthConcern DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c9d33132-11ce-455c-9fda-92c433d8c499",
+      "display": "EncounterWithBenzo DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c9d33132-11ce-455c-9fda-92c433d8c499",
+      "display": "EncounterWithBenzo DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d1355827-93ec-465f-b776-b9129495acb7",
+      "display": "EncounterAndBenzoAfterMP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d1355827-93ec-465f-b776-b9129495acb7",
+      "display": "EncounterAndBenzoAfterMP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5e76e39a-8a30-4035-8d44-3362f4826aa7",
+      "display": "CancerRelatedPainProblemList DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5e76e39a-8a30-4035-8d44-3362f4826aa7",
+      "display": "CancerRelatedPainProblemList DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dde136d4-fa51-4b59-9bef-21dc51caf3d5",
+      "display": "2Opioids1MissingCategory NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dde136d4-fa51-4b59-9bef-21dc51caf3d5",
+      "display": "2Opioids1MissingCategory NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/26b12d5b-823a-4a45-9f1d-d52aa26d27a7",
+      "display": "OpioidDuringEncBenzoAtDC NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/26b12d5b-823a-4a45-9f1d-d52aa26d27a7",
+      "display": "OpioidDuringEncBenzoAtDC NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/90d1df13-46fe-4dbf-b934-6eff4f884a72",
+      "display": "HasCancer DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/90d1df13-46fe-4dbf-b934-6eff4f884a72",
+      "display": "HasCancer DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b07a53d3-c3a2-4cf8-ad34-3a4615dfe3d3",
+      "display": "OpioidCommunityNoEncounterAge18 IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b07a53d3-c3a2-4cf8-ad34-3a4615dfe3d3",
+      "display": "OpioidCommunityNoEncounterAge18 IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c76109c0-69a9-4e18-9edf-0419890e09e6",
+      "display": "EncounterNoOpioid IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c76109c0-69a9-4e18-9edf-0419890e09e6",
+      "display": "EncounterNoOpioid IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cbf21555-f64b-427a-b274-111b94523cf7",
+      "display": "EncounterWithOpioid DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cbf21555-f64b-427a-b274-111b94523cf7",
+      "display": "EncounterWithOpioid DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3425eac5-be2b-457f-8db1-cdc0c9f01f5e",
+      "display": "ProcedurePalliativeCareAfterEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3425eac5-be2b-457f-8db1-cdc0c9f01f5e",
+      "display": "ProcedurePalliativeCareAfterEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/59c3a231-ef45-424a-89f7-8e9e8b037633",
+      "display": "CancerEncounterDx DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/59c3a231-ef45-424a-89f7-8e9e8b037633",
+      "display": "CancerEncounterDx DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e93adc7d-9d31-4279-9f76-644668f4d3c9",
+      "display": "HospiceCodeFromOtherVS DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e93adc7d-9d31-4279-9f76-644668f4d3c9",
+      "display": "HospiceCodeFromOtherVS DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c274077a-5842-4b93-afeb-b4cb17d680bb",
+      "display": "Age17DayOfEnc IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c274077a-5842-4b93-afeb-b4cb17d680bb",
+      "display": "Age17DayOfEnc IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b92d0b5a-a019-4023-9e0b-50a0e5248d07",
+      "display": "ProcedurePalliativeCare DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b92d0b5a-a019-4023-9e0b-50a0e5248d07",
+      "display": "ProcedurePalliativeCare DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0e3be52f-723e-4df4-a584-337daa19e259",
+      "display": "HospiceCareReferral DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0e3be52f-723e-4df4-a584-337daa19e259",
+      "display": "HospiceCareReferral DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8e2e72d9-194d-4031-83a3-51dbd703de36",
+      "display": "DischargeAgainstMedicalAdvice DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8e2e72d9-194d-4031-83a3-51dbd703de36",
+      "display": "DischargeAgainstMedicalAdvice DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/26aeca6a-53c4-4934-9598-e91888f4c696",
+      "display": "OpioidStatusEnteredInError NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/26aeca6a-53c4-4934-9598-e91888f4c696",
+      "display": "OpioidStatusEnteredInError NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6bbda026-cf4e-4843-91cd-30e8e052fc43",
+      "display": "OpioidAndBenzodiazepine NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6bbda026-cf4e-4843-91cd-30e8e052fc43",
+      "display": "OpioidAndBenzodiazepine NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5c316557-a562-48e4-94fd-76c02ddc388f",
+      "display": "2OpioidsAtDischarge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5c316557-a562-48e4-94fd-76c02ddc388f",
+      "display": "2OpioidsAtDischarge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a867ae5f-879a-4b8b-9215-dc83b55b442f",
+      "display": "OrderForPalliativeCare DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a867ae5f-879a-4b8b-9215-dc83b55b442f",
+      "display": "OrderForPalliativeCare DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6b3b4271-63af-4a6b-a724-7009935b8820",
+      "display": "PatientExpired DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6b3b4271-63af-4a6b-a724-7009935b8820",
+      "display": "PatientExpired DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f8bc4adf-30b1-405a-89a2-385b302e0106",
+      "display": "OrderForPalliativeCareB4Enc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f8bc4adf-30b1-405a-89a2-385b302e0106",
+      "display": "OrderForPalliativeCareB4Enc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fa4e4971-3ff2-44f0-bfd6-0821a89a3f84",
+      "display": "CancerRelatedPainEncounterDx DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fa4e4971-3ff2-44f0-bfd6-0821a89a3f84",
+      "display": "CancerRelatedPainEncounterDx DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cdb80ca8-b110-436d-83e8-b339ebc09a44",
+      "display": "SickleDisease DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cdb80ca8-b110-436d-83e8-b339ebc09a44",
+      "display": "SickleDisease DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/031889e2-0353-4c2e-82c0-f422e15aacaa",
+      "display": "OpioidTreatment DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/031889e2-0353-4c2e-82c0-f422e15aacaa",
+      "display": "OpioidTreatment DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b792f3b9-b8f5-4d5c-ad66-f580b47ebffd",
+      "display": "MedicationIntentPlan NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b792f3b9-b8f5-4d5c-ad66-f580b47ebffd",
+      "display": "MedicationIntentPlan NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d2a44b64-1c9e-4e36-855b-8451803afcf2",
+      "display": "EncounterInProgress IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d2a44b64-1c9e-4e36-855b-8451803afcf2",
+      "display": "EncounterInProgress IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0a9ce53d-32ec-45be-b981-0fae3d3e91f5",
+      "display": "EncounterAndOpioidBeforeMP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0a9ce53d-32ec-45be-b981-0fae3d3e91f5",
+      "display": "EncounterAndOpioidBeforeMP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/55a556cf-2cfa-4bc1-99cf-b3faa7a554ba",
+      "display": "2OpioidsSameCode NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/55a556cf-2cfa-4bc1-99cf-b3faa7a554ba",
+      "display": "2OpioidsSameCode NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f049e76a-aef1-4e8f-a8bd-dfdb419de551",
+      "display": "DischargeToAcuteCare DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f049e76a-aef1-4e8f-a8bd-dfdb419de551",
+      "display": "DischargeToAcuteCare DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6bf6194c-6151-4cbe-8860-52d5566863f3",
+      "display": "EDInptPalliativeCare DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6bf6194c-6151-4cbe-8860-52d5566863f3",
+      "display": "EDInptPalliativeCare DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1f3afad8-e147-4a67-a47a-059f1e13ab1a",
+      "display": "Age17Years IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1f3afad8-e147-4a67-a47a-059f1e13ab1a",
+      "display": "Age17Years IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/57da77da-de92-4ef5-9311-1d86e67c9de4",
+      "display": "OpioidUseDisorder DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/57da77da-de92-4ef5-9311-1d86e67c9de4",
+      "display": "OpioidUseDisorder DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/412e213e-a1ef-4e5d-ac46-fa7e741cf160",
+      "display": "2OpioidsLastMinuteOfMP NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/412e213e-a1ef-4e5d-ac46-fa7e741cf160",
+      "display": "2OpioidsLastMinuteOfMP NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3dfa6b2c-e7e1-46a4-a2cc-54602538c44e",
+      "display": "2Benzodiazepines NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3dfa6b2c-e7e1-46a4-a2cc-54602538c44e",
+      "display": "2Benzodiazepines NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ab0bc2a3-9d3d-4c0a-88f4-5abc2b4499d6",
+      "display": "CancerOneDayAfterEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ab0bc2a3-9d3d-4c0a-88f4-5abc2b4499d6",
+      "display": "CancerOneDayAfterEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aecf5ae9-e02d-43cd-a1ca-3fd653cd4508",
+      "display": "MultEncountersBothWithOpioid DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aecf5ae9-e02d-43cd-a1ca-3fd653cd4508",
+      "display": "MultEncountersBothWithOpioid DENOMPass"
+    }
+  } ]
+}

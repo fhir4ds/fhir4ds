@@ -1,0 +1,48 @@
+{
+  "resourceType": "Condition",
+  "id": "d0007f70-3fbe-4f3f-b727-22e2a0a7f7a7",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "severity": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "24484000",
+      "display": "Severe (severity modifier) (qualifier value)"
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "134401001"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/bfacfb96-e784-4346-bf29-a20359dc0ba5"
+  },
+  "onsetPeriod": {
+    "start": "2026-01-21T07:00:00.000+00:00"
+  }
+}

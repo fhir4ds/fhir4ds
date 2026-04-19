@@ -1,0 +1,28 @@
+{
+  "resourceType": "Encounter",
+  "id": "1a7fb5ac-260d-4888-8b6c-224564ae5886",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "EMER",
+    "display": "emergency"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "448951000124107",
+      "display": "Admission to observation unit (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/6252a858-2362-4c63-8d7d-6db0b7ac9299"
+  },
+  "period": {
+    "start": "2027-05-01T02:01:00.000+00:00",
+    "end": "2027-05-01T05:59:00.000+00:00"
+  }
+}

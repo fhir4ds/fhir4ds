@@ -1,0 +1,30 @@
+{
+  "resourceType": "Procedure",
+  "id": "b6ce2595-705c-4dfb-931d-8376175f9900",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-02-23T11:30:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "103699006",
+      "display": "Referral to dietitian (procedure)"
+    } ],
+    "text": "Referral to dietitian (procedure)"
+  },
+  "subject": {
+    "reference": "Patient/f06bb07a-3410-410d-a859-8bd57a79cf51"
+  },
+  "encounter": {
+    "reference": "Encounter/NoscreRefAsseModDxCp2MSROBSPass4"
+  },
+  "performedPeriod": {
+    "start": "2026-02-23T11:30:00.000+00:00",
+    "end": "2026-02-25T08:15:00.000+00:00"
+  }
+}

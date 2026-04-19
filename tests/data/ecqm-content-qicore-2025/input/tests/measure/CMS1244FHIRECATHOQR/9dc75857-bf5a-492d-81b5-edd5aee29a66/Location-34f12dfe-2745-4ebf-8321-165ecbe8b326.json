@@ -1,0 +1,22 @@
+{
+  "resourceType": "Location",
+  "id": "34f12dfe-2745-4ebf-8321-165ecbe8b326",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-location" ]
+  },
+  "identifier": [ {
+    "use": "usual",
+    "system": "http://exampleoflocation.com",
+    "value": "B1-S.F2"
+  } ],
+  "name": "Local ED",
+  "type": [ {
+    "coding": [ {
+      "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+      "version": "2022",
+      "code": "1108-0",
+      "display": "Emergency Department",
+      "userSelected": true
+    } ]
+  } ]
+}

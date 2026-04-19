@@ -1,0 +1,95 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "7ff97bb6-6c0e-4cdf-beaf-38ae44c6201d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "afc52363-57bc-4586-b805-7b0b1e39f8d5-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "9b4f7024-eb2e-4896-90e7-13638aefbe92"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#afc52363-57bc-4586-b805-7b0b1e39f8d5-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient has a Major Depressive Dx and PHQ-9>9 during the denom ID period. Patient has Hospice procedure during MP. Should be in denominator exclusion for Strat 2. "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS159FHIRDepressionRemissionatTwelveMonths",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/9b4f7024-eb2e-4896-90e7-13638aefbe92"
+  }, {
+    "reference": "Encounter/9d42715a-e1fd-419d-b6b2-d9906b31c8a9"
+  }, {
+    "reference": "Observation/dc1626bc-b449-4f39-9d60-3b402df7da78"
+  }, {
+    "reference": "Observation/6a8fa03d-7373-46f1-bf21-96e53bed2b90"
+  }, {
+    "reference": "Condition/16f9f306-1af7-44ce-8078-4962c0e2f05b"
+  }, {
+    "reference": "Procedure/2e59db1b-2a4b-4cc1-89ad-f2e5813c70c2"
+  } ]
+}

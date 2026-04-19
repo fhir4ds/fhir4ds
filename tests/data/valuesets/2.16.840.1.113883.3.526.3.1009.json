@@ -1,0 +1,130 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.3.1009",
+  "meta": {
+    "versionId": "27",
+    "lastUpdated": "2023-12-21T17:43:03.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2017-05-04"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2017-05-04"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1009",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113883.3.526.3.1009"
+    }
+  ],
+  "version": "20170504",
+  "name": "SystemReason",
+  "title": "System Reason",
+  "status": "retired",
+  "experimental": false,
+  "date": "2022-03-03T18:46:01-05:00",
+  "publisher": "Mathematica",
+  "expansion": {
+    "identifier": "urn:uuid:a21f3655-f697-4833-9ac5-1b35ed9177c1",
+    "timestamp": "2026-03-13T13:04:59-04:00",
+    "total": 12,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "107724000",
+        "display": "Patient transfer (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "182856006",
+        "display": "Drug not available due to being out of stock (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "182857002",
+        "display": "Drug not available - off market (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "185335007",
+        "display": "Appointment canceled by hospital (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "224194003",
+        "display": "Not entitled to benefits (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "224198000",
+        "display": "Delay in receiving benefits (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "224199008",
+        "display": "Loss of benefits (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "242990004",
+        "display": "Drug not available for administration (event)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "266756008",
+        "display": "Medical care unavailable (situation)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "309017000",
+        "display": "Referred to doctor (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "419808006",
+        "display": "Finding related to health insurance issues (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "424553001",
+        "display": "Uninsured medical expenses (finding)"
+      }
+    ]
+  }
+}

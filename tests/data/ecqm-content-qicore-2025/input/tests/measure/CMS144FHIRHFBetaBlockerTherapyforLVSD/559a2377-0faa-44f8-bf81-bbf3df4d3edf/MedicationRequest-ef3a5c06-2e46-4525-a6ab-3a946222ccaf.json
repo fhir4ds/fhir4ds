@@ -1,0 +1,23 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "ef3a5c06-2e46-4525-a6ab-3a946222ccaf",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "cancelled",
+  "intent": "order",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "04012024",
+      "code": "200031"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/559a2377-0faa-44f8-bf81-bbf3df4d3edf"
+  },
+  "authoredOn": "2026-06-12T11:55:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/0a84a2b9-bc5a-46b4-a760-2010a8cf224a"
+  }
+}

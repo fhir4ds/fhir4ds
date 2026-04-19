@@ -1,0 +1,30 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "bf662dd2-1beb-46b0-805d-970c31d6085e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministrationnotdone" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-11-02T11:00:00.000+00:00"
+  } ],
+  "status": "not-done",
+  "statusReason": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183932001"
+    } ]
+  } ],
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "855288"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/208cb0f9-a6e9-4207-b6a4-3325fb463099"
+  },
+  "effectivePeriod": {
+    "start": "2026-11-02T11:00:00.000+00:00"
+  }
+}

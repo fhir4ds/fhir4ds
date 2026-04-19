@@ -1,0 +1,32 @@
+{
+  "resourceType": "Encounter",
+  "id": "e72f7d8a-5488-440b-93a4-37d824a931c8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "NONAC",
+    "display": "inpatient non-acute"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "207195004",
+      "display": "History and physical examination with evaluation and management of nursing facility patient (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/00cd231f-4460-4d84-8e04-d8b0a04d8afd"
+  },
+  "period": {
+    "start": "2026-07-20T11:50:00.000+00:00",
+    "end": "2026-07-20T11:50:00.000+00:00"
+  },
+  "length": {
+    "value": 0,
+    "unit": "days"
+  }
+}

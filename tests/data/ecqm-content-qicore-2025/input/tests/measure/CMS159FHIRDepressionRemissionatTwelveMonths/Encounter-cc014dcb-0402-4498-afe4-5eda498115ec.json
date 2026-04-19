@@ -1,0 +1,40 @@
+{
+  "resourceType": "Encounter",
+  "id": "cc014dcb-0402-4498-afe4-5eda498115ec",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "STRAT",
+    "display": "stratification"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "183452005"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/fa45f7d1-d257-4fcc-9bef-3188d13c92fe"
+  },
+  "period": {
+    "start": "2025-12-31T08:00:00+00:00",
+    "end": "2026-04-25T12:00:00+00:00"
+  },
+  "length": {
+    "value": 0,
+    "unit": "days"
+  },
+  "hospitalization": {
+    "dischargeDisposition": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20240301",
+        "code": "428371000124100"
+      } ]
+    }
+  }
+}

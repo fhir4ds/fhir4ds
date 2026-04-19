@@ -1,0 +1,28 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "44e1a56a-d607-4304-aeb2-db9979617eb1",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "2592953",
+      "display": "Nalmefene (opioid antagonist)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/bef27397-e972-46e8-8e92-b8d4fd7985dc"
+  },
+  "effectiveDateTime": "2026-01-04T09:00:00.000+00:00",
+  "dosage": {
+    "route": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "34206005",
+        "display": "Intravenous"
+      } ]
+    }
+  }
+}

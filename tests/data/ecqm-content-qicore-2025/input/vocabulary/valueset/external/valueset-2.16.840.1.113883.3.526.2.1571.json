@@ -1,0 +1,131 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1571-20250125",
+  "meta": {
+    "versionId": "38",
+    "lastUpdated": "2025-01-25T01:09:35.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-01-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1571",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1571"
+  } ],
+  "version": "20250125",
+  "name": "HypotonyOfEye",
+  "title": "Hypotony of Eye",
+  "status": "active",
+  "date": "2025-01-25T01:09:35-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of a diagnosis of hypotony of eye.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of hypotony of eye.),(Exclusion Criteria: Excludes concepts that represent a diagnosis for 'unspecified eye.')",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "19721008",
+        "display": "Hypotony of eye (disorder)"
+      }, {
+        "code": "2251002",
+        "display": "Primary hypotony of eye (disorder)"
+      }, {
+        "code": "424497004",
+        "display": "Optic disc edema due to hypotony (disorder)"
+      }, {
+        "code": "53885001",
+        "display": "Hypotony of eye co-occurrent and due to ocular fistula (disorder)"
+      }, {
+        "code": "677291000119105",
+        "display": "Hypotony of bilateral eyes due to ocular fistula (disorder)"
+      }, {
+        "code": "677301000119106",
+        "display": "Hypotony of left eye due to ocular fistula (disorder)"
+      }, {
+        "code": "677311000119109",
+        "display": "Hypotony of right eye due to ocular fistula (disorder)"
+      }, {
+        "code": "700280001",
+        "display": "Flat anterior chamber of eye with hypotony (disorder)"
+      }, {
+        "code": "95255005",
+        "display": "Secondary hypotony of eye (disorder)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:8e758ddb-7df3-45cd-8e1b-7518e04b461d",
+    "timestamp": "2025-06-20T16:53:31-04:00",
+    "total": 9,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "19721008",
+      "display": "Hypotony of eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "2251002",
+      "display": "Primary hypotony of eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "424497004",
+      "display": "Optic disc edema due to hypotony (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "53885001",
+      "display": "Hypotony of eye co-occurrent and due to ocular fistula (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "677291000119105",
+      "display": "Hypotony of bilateral eyes due to ocular fistula (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "677301000119106",
+      "display": "Hypotony of left eye due to ocular fistula (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "677311000119109",
+      "display": "Hypotony of right eye due to ocular fistula (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "700280001",
+      "display": "Flat anterior chamber of eye with hypotony (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "95255005",
+      "display": "Secondary hypotony of eye (disorder)"
+    } ]
+  }
+}

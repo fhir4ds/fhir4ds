@@ -1,0 +1,30 @@
+{
+  "resourceType": "Observation",
+  "id": "8550bc05-d5d9-455b-bce5-cedd0ba30de5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "laboratory",
+      "display": "laboratory",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.73",
+      "code": "71487-3"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/003b7002-84ee-4303-8030-8bc113f15e7e"
+  },
+  "effectiveDateTime": "2026-03-01T08:10:00.000+00:00",
+  "valueQuantity": {
+    "value": 0.8
+  }
+}

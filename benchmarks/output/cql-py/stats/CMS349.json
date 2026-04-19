@@ -1,0 +1,16 @@
+{
+  "measure_id": "CMS349",
+  "patient_count": 36,
+  "timings_ms": {
+    "cql_parse_ms": 7.867839012760669,
+    "sql_generation_ms": 1815.53225000971,
+    "sql_execution_ms": 48.28829798498191,
+    "total_ms": 1871.6883870074525
+  },
+  "patients_per_second": 19.233970916258432,
+  "comparison": {
+    "total_patients": 36,
+    "matching_patients": 36,
+    "accuracy_pct": 100.0
+  }
+}

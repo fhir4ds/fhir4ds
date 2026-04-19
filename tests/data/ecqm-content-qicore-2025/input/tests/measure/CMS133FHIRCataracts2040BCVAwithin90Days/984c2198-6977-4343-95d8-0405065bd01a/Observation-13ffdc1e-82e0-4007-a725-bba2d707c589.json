@@ -1,0 +1,28 @@
+{
+  "resourceType": "Observation",
+  "id": "13ffdc1e-82e0-4007-a725-bba2d707c589",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "exam",
+      "display": "exam"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "419775003"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/984c2198-6977-4343-95d8-0405065bd01a"
+  },
+  "effectivePeriod": {
+    "start": "2026-03-13T09:00:00+00:00",
+    "end": "2026-03-13T09:30:00+00:00"
+  }
+}

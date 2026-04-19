@@ -1,0 +1,257 @@
+{
+  "resourceType": "Bundle",
+  "id": "tests-NUMERFail-OpioidWithAntagNoRoute-bundle",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/MedicationAdministration/90a4d33b-82af-48ee-8d8f-75a59b074330",
+    "resource": {
+      "resourceType": "MedicationAdministration",
+      "id": "90a4d33b-82af-48ee-8d8f-75a59b074330",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+      },
+      "status": "completed",
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "1191222",
+          "display": "Opioid Antagonist"
+        }, {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "2592953",
+          "display": "Naloxone"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/8fc93696-e9a6-46a3-b8e9-7c7929e8ad36"
+      },
+      "context": {
+        "reference": "Encounter/b002103e-9a20-482f-9848-aff387aba3fa"
+      },
+      "effectiveDateTime": "2026-08-11T20:14:00.000+00:00",
+      "note": [ {
+        "text": "Administered opioid antagonist as prescribed."
+      } ],
+      "dosage": {
+        "rateQuantity": {
+          "value": 1,
+          "unit": "mg"
+        }
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationAdministration/90a4d33b-82af-48ee-8d8f-75a59b074330"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationAdministration/06cbacb9-f834-4ccb-afeb-a0f0de43661f",
+    "resource": {
+      "resourceType": "MedicationAdministration",
+      "id": "06cbacb9-f834-4ccb-afeb-a0f0de43661f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+      },
+      "status": "completed",
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "1010600",
+          "display": "Opioids, All"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/8fc93696-e9a6-46a3-b8e9-7c7929e8ad36"
+      },
+      "context": {
+        "reference": "Encounter/b002103e-9a20-482f-9848-aff387aba3fa"
+      },
+      "effectiveDateTime": "2026-08-11T08:00:00.000+00:00",
+      "note": [ {
+        "text": "Administered opioid medication as prescribed."
+      } ],
+      "dosage": {
+        "rateQuantity": {
+          "value": 1,
+          "unit": "mg"
+        }
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationAdministration/06cbacb9-f834-4ccb-afeb-a0f0de43661f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/b002103e-9a20-482f-9848-aff387aba3fa",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "b002103e-9a20-482f-9848-aff387aba3fa",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183452005",
+          "display": "Inpatient encounter"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/8fc93696-e9a6-46a3-b8e9-7c7929e8ad36"
+      },
+      "period": {
+        "start": "2026-08-11T08:00:00.000+00:00",
+        "end": "2026-08-14T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/b002103e-9a20-482f-9848-aff387aba3fa"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Patient/8fc93696-e9a6-46a3-b8e9-7c7929e8ad36",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "8fc93696-e9a6-46a3-b8e9-7c7929e8ad36",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2106-3",
+            "display": "White"
+          }
+        }, {
+          "url": "text",
+          "valueString": "White"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248153007"
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999999"
+      } ],
+      "name": [ {
+        "family": "Example",
+        "given": [ "Patient" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1956-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/8fc93696-e9a6-46a3-b8e9-7c7929e8ad36"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/8a8631c4-1f58-4219-9c0f-78afb822b296",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "8a8631c4-1f58-4219-9c0f-78afb822b296",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "97d4d437-4a82-4bbd-af22-e71bb6b354ae-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "8fc93696-e9a6-46a3-b8e9-7c7929e8ad36"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#97d4d437-4a82-4bbd-af22-e71bb6b354ae-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient given opioid 8:15AM. Antagonist is given 8:14PM,  11 hours and 59 minutes after opioid but no route provided. Must be IV, IM, nasal etc. (non oral) to meet num criteria."
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS819FHIRHHORAE",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "MedicationAdministration/90a4d33b-82af-48ee-8d8f-75a59b074330"
+      }, {
+        "reference": "MedicationAdministration/06cbacb9-f834-4ccb-afeb-a0f0de43661f"
+      }, {
+        "reference": "Encounter/b002103e-9a20-482f-9848-aff387aba3fa"
+      }, {
+        "reference": "Patient/8fc93696-e9a6-46a3-b8e9-7c7929e8ad36"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/8a8631c4-1f58-4219-9c0f-78afb822b296"
+    }
+  } ]
+}

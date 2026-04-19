@@ -1,0 +1,283 @@
+{
+  "resourceType": "Bundle",
+  "id": "64270cbea7ffa60ebe02488f",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/8f570399-4bd9-4c38-aa3d-e526d987109b",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "8f570399-4bd9-4c38-aa3d-e526d987109b",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://goodhealth.healthit.gov/",
+        "value": "64270cbea7ffa60ebe02488f"
+      } ],
+      "name": [ {
+        "family": "IPFail",
+        "given": [ "Encounter1DayAfterMPEdge" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1989-01-02"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/8f570399-4bd9-4c38-aa3d-e526d987109b"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/46aea347-de2a-4dfe-b9dc-f59dcd524f12",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "46aea347-de2a-4dfe-b9dc-f59dcd524f12",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "Active",
+          "userSelected": true
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "Confirmed",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "version": "2023",
+          "code": "G31.83",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/8f570399-4bd9-4c38-aa3d-e526d987109b"
+      },
+      "onsetPeriod": {
+        "start": "2025-12-31T08:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/46aea347-de2a-4dfe-b9dc-f59dcd524f12"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/74f44462-d9e1-46ee-9805-51f3af1accdd",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "74f44462-d9e1-46ee-9805-51f3af1accdd",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "version": "2023",
+          "code": "99212",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/8f570399-4bd9-4c38-aa3d-e526d987109b"
+      },
+      "period": {
+        "start": "2027-01-01T00:00:00.000+00:00",
+        "end": "2027-01-01T00:35:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/74f44462-d9e1-46ee-9805-51f3af1accdd"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/4aec3496-30a3-452e-9e44-461d2e85e5bf",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "4aec3496-30a3-452e-9e44-461d2e85e5bf",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/202303",
+          "code": "185463005",
+          "display": "Visit out of hours (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/8f570399-4bd9-4c38-aa3d-e526d987109b"
+      },
+      "period": {
+        "start": "2026-08-31T08:00:00.000+00:00",
+        "end": "2026-08-31T08:35:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/4aec3496-30a3-452e-9e44-461d2e85e5bf"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/a7d3a915-1f6e-4dfd-912d-5bb8739268e4",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "a7d3a915-1f6e-4dfd-912d-5bb8739268e4",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "f816a028-e03c-4070-9feb-1321a508df15-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "8f570399-4bd9-4c38-aa3d-e526d987109b"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#f816a028-e03c-4070-9feb-1321a508df15-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient with Dementia dx  has two visits of which one is non-qualifying for Initial population d/t effective period 1 day past Measurement Period"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS149FHIRDementiaCognitiveAssessment",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/8f570399-4bd9-4c38-aa3d-e526d987109b"
+      }, {
+        "reference": "Condition/46aea347-de2a-4dfe-b9dc-f59dcd524f12"
+      }, {
+        "reference": "Encounter/74f44462-d9e1-46ee-9805-51f3af1accdd"
+      }, {
+        "reference": "Encounter/4aec3496-30a3-452e-9e44-461d2e85e5bf"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/a7d3a915-1f6e-4dfd-912d-5bb8739268e4"
+    }
+  } ]
+}

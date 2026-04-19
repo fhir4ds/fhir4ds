@@ -1,0 +1,107 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "ae24f662-ab82-4479-9d98-89a50208e39c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "f8b96c39-13b1-4863-87f8-c34777a7bed9-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "52f08855-780f-4975-b505-ade45abba149"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#f8b96c39-13b1-4863-87f8-c34777a7bed9-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "meets IPP, meets Denominator, medication administered:Thrombin during ED, ED endTime less than 1 hour before Start of ICU"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS190VTEProphylaxisICUFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/52f08855-780f-4975-b505-ade45abba149"
+  }, {
+    "reference": "Encounter/2884f7c8-3a57-42b8-866c-b6052fc9dcb2"
+  }, {
+    "reference": "Encounter/af6661e6-a5d2-4bee-bc28-8c1766ac95a9"
+  }, {
+    "reference": "Coverage/d1ef0287-c134-48c4-9536-ce5c7c2f8326"
+  }, {
+    "reference": "MedicationAdministration/5747ccfe-d8d9-42c8-bde2-275d38f828bd"
+  }, {
+    "reference": "Location/7bd0569f-071a-459b-be37-997ec803d8ee"
+  }, {
+    "reference": "Organization/55d5c59f-4859-44d4-9c32-9363919dd4b2"
+  } ]
+}

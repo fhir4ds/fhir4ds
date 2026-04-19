@@ -1,0 +1,115 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.464.1003.101.11.1286-20240207",
+  "meta": {
+    "versionId": "31",
+    "lastUpdated": "2024-02-07T01:03:02.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "NCQA PHEMUR Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-03-10"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2024-02-07"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.11.1286",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.464.1003.101.11.1286"
+  } ],
+  "version": "20240207",
+  "name": "PalliativeEncounter",
+  "title": "Palliative Encounter",
+  "status": "active",
+  "date": "2024-02-07T01:03:02-05:00",
+  "publisher": "NCQA PHEMUR",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts for encounters for palliative care services.),(Data Element Scope: This value set may use a model element related to Encounter.),(Inclusion Criteria: Includes concepts that represent an encounter for admission and management for palliative care services.),(Exclusion Criteria: Excludes concepts that represent encounters for hospice and a referral to palliative care.)",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "305284002",
+        "display": "Admission by palliative care physician (procedure)"
+      }, {
+        "code": "305381007",
+        "display": "Admission to palliative care department (procedure)"
+      }, {
+        "code": "305686008",
+        "display": "Seen by palliative care physician (finding)"
+      }, {
+        "code": "305824005",
+        "display": "Seen by palliative care medicine service (finding)"
+      }, {
+        "code": "441874000",
+        "display": "Seen by palliative care service (finding)"
+      }, {
+        "code": "4901000124101",
+        "display": "Palliative care education (procedure)"
+      }, {
+        "code": "713281006",
+        "display": "Consultation for palliative care (procedure)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:06acb7c7-cd85-44b4-ac3b-ad5e44aaa743",
+    "timestamp": "2025-06-20T16:52:55-04:00",
+    "total": 7,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "305284002",
+      "display": "Admission by palliative care physician (procedure)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "305381007",
+      "display": "Admission to palliative care department (procedure)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "305686008",
+      "display": "Seen by palliative care physician (finding)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "305824005",
+      "display": "Seen by palliative care medicine service (finding)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "441874000",
+      "display": "Seen by palliative care service (finding)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "4901000124101",
+      "display": "Palliative care education (procedure)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "713281006",
+      "display": "Consultation for palliative care (procedure)"
+    } ]
+  }
+}

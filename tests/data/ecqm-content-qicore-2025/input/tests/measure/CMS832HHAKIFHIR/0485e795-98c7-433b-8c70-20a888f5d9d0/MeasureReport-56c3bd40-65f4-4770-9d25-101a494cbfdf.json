@@ -1,0 +1,99 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "56c3bd40-65f4-4770-9d25-101a494cbfdf",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "d0165583-0333-49e9-a1a1-b9a4a9dca1f9-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "212b0826-d939-4c4a-8c8f-c711bf5d9e44"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-inputParameters",
+    "valueReference": {
+      "reference": "#d0165583-0333-49e9-a1a1-b9a4a9dca1f9-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "DENOMPass-RVAllDiagnosesPOA E08.01 Diabetes mellitus due to underlying condition with hyperosmolarity with coma but POA logic/json not generating RV tuple"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS832HHAKIFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "67b50f879214df46de2f1fdb",
+    "population": [ {
+      "id": "DA0D3694-7F57-4FB9-8410-1F64E44CA01E",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "624D8554-9CB0-4BF0-882D-05C4F88BCC2C",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "000FF050-D4A2-4C8B-8123-4538D35D5441",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "01644D07-D9F8-403E-A66D-109ABA29BB6E",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/0485e795-98c7-433b-8c70-20a888f5d9d0"
+  }, {
+    "reference": "Encounter/9c45e493-d86e-4cc3-bd1f-a3a9141cb806"
+  }, {
+    "reference": "Condition/645a98cf-3424-4956-b319-254d080f44b0"
+  }, {
+    "reference": "Observation/dbacb21f-93b3-4be6-9077-a8b40b60ea7d"
+  }, {
+    "reference": "Observation/e90a3566-f7e1-42a1-9e39-9927d6cca6b0"
+  }, {
+    "reference": "Observation/3b48953d-71ad-4add-bf90-ae34a937a097"
+  }, {
+    "reference": "Coverage/1904d142-d453-4d0e-a0e7-bac192b974a6"
+  }, {
+    "reference": "Organization/21be4bd2-7186-40be-8327-46ad396ac732"
+  } ]
+}

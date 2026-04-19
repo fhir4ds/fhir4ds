@@ -1,0 +1,37 @@
+{
+  "resourceType": "Procedure",
+  "id": "b3a631e4-9e0d-49b0-85db-018569dbeee5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-05-05T13:35:00.000+00:00"
+  } ],
+  "status": "completed",
+  "category": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.73",
+      "code": "58151-2",
+      "display": "Prior assessment Brief Interview for Mental Status (BIMS) summary score [MDSv3]",
+      "userSelected": true
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "113024001",
+      "display": "Assessment and interpretation of higher cerebral function, cognitive testing (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a3867482-15a8-42fd-8d78-dff5db0d40f4"
+  },
+  "encounter": {
+    "reference": "Encounter/home-healthcare-services-8b61"
+  },
+  "performedDateTime": "2026-05-06T08:00:00.000+00:00"
+}

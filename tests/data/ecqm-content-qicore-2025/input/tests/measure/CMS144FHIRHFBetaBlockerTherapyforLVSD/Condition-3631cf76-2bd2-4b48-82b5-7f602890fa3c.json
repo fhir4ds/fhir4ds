@@ -1,0 +1,35 @@
+{
+  "resourceType": "Condition",
+  "id": "3631cf76-2bd2-4b48-82b5-7f602890fa3c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "entered-in-error",
+      "display": "entered in error"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "problem list item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "11849007",
+      "display": "Atrioventricular junctional rhythm (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/71dd3794-ce93-473b-8d90-9d68c0dac6d8"
+  },
+  "onsetPeriod": {
+    "start": "2026-06-27T10:00:00.000+00:00"
+  }
+}

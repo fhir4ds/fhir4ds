@@ -1,0 +1,22 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "7fc47567-38bf-4776-a142-0e4558799e9a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "103699006",
+      "display": "Patient referral to dietitian (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/4fa862e7-beac-4a7d-b053-f54afb689dc9"
+  },
+  "authoredOn": "2026-12-31T08:30:00.000+00:00"
+}

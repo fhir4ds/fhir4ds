@@ -1,0 +1,38 @@
+{
+  "resourceType": "Condition",
+  "id": "eba8fb2c-2489-4368-994a-a426e3b21cd8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "W08.XXXA"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/21d7f7e1-3977-4227-8792-2e316460326f"
+  },
+  "encounter": {
+    "reference": "Encounter/746765dd-1843-40d8-b4e1-05fa6e055525"
+  }
+}

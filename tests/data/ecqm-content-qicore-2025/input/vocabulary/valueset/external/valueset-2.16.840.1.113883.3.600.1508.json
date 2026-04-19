@@ -1,0 +1,91 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.600.1508-20250129",
+  "meta": {
+    "versionId": "32",
+    "lastUpdated": "2025-01-29T01:03:05.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Institutes for Research Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-29"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-01-29"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1508",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.600.1508"
+  } ],
+  "version": "20250129",
+  "name": "LifestyleRecommendation",
+  "title": "Lifestyle Recommendation",
+  "status": "active",
+  "date": "2025-01-29T01:03:05-05:00",
+  "publisher": "American Institutes for Research Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts for  lifestyle needs and education related to hypertension.),(Data Element Scope: This value set may use a model element related to Procedure or Intervention.),(Inclusion Criteria: Includes concepts that represent a procedure or intervention for lifestyle education focused on hypertension.),(Exclusion Criteria: No exclusions.)",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "10189761000046105",
+        "display": "Hypertension exercise education (procedure)"
+      }, {
+        "code": "313204009",
+        "display": "Lifestyle education (procedure)"
+      }, {
+        "code": "39155009",
+        "display": "Hypertension education (procedure)"
+      }, {
+        "code": "443402002",
+        "display": "Lifestyle education regarding hypertension (procedure)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:eb4b6454-a4bc-46ee-9cd9-77536df13c4c",
+    "timestamp": "2025-06-20T16:58:49-04:00",
+    "total": 4,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "10189761000046105",
+      "display": "Hypertension exercise education (procedure)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "313204009",
+      "display": "Lifestyle education (procedure)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "39155009",
+      "display": "Hypertension education (procedure)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "443402002",
+      "display": "Lifestyle education regarding hypertension (procedure)"
+    } ]
+  }
+}

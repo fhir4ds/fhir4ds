@@ -1,0 +1,31 @@
+{
+  "resourceType": "Observation",
+  "id": "99b37aa6-511a-400d-8bae-3264d2b5d0ad",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "93857-1",
+      "display": "Date and time of obstetric delivery",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "93857-1"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f247e141-7e9f-42ec-bef2-869e381ea00d"
+  },
+  "effectiveDateTime": "2026-06-08T20:00:00.000+00:00",
+  "performer": [ {
+    "reference": "Organization/example1",
+    "display": "Hendricks Country Hospital"
+  } ],
+  "valueDateTime": "2026-06-08T20:00:00.000+00:00"
+}

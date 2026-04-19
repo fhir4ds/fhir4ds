@@ -1,0 +1,339 @@
+{
+  "resourceType": "Bundle",
+  "id": "IPPass-NursingFacilityVisit",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/0b61ffb2-9d2d-4eb4-a208-f34f74824543",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "0b61ffb2-9d2d-4eb4-a208-f34f74824543",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "Bertha",
+        "given": [ "Betty" ]
+      } ],
+      "gender": "male",
+      "birthDate": "2007-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/0b61ffb2-9d2d-4eb4-a208-f34f74824543"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/1a2ff5b6-64ad-4947-9761-313eaee38f8b",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "1a2ff5b6-64ad-4947-9761-313eaee38f8b",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "code": "99315",
+          "display": "Nursing facility discharge management; 30 minutes or less total time on the date of the encounter"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/0b61ffb2-9d2d-4eb4-a208-f34f74824543"
+      },
+      "period": {
+        "start": "2026-01-01T00:00:00.000Z",
+        "end": "2026-01-01T01:00:00.000Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/1a2ff5b6-64ad-4947-9761-313eaee38f8b"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationDispense/520f4f0e-f1d3-401d-b5e7-37afcf39f4e8",
+    "resource": {
+      "resourceType": "MedicationDispense",
+      "id": "520f4f0e-f1d3-401d-b5e7-37afcf39f4e8",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationdispense" ]
+      },
+      "status": "completed",
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "1099316",
+          "display": "desipramine hydrochloride 75 MG Oral Tablet"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/0b61ffb2-9d2d-4eb4-a208-f34f74824543"
+      },
+      "daysSupply": {
+        "value": 10,
+        "system": "http://unitsofmeasure.org",
+        "code": "days"
+      },
+      "whenHandedOver": "2026-01-01T01:00:00.000Z"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationDispense/520f4f0e-f1d3-401d-b5e7-37afcf39f4e8"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationDispense/439d4549-3b38-4cd7-8884-99728468f448",
+    "resource": {
+      "resourceType": "MedicationDispense",
+      "id": "439d4549-3b38-4cd7-8884-99728468f448",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationdispense" ]
+      },
+      "status": "completed",
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "1099316",
+          "display": "desipramine hydrochloride 75 MG Oral Tablet"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/0b61ffb2-9d2d-4eb4-a208-f34f74824543"
+      },
+      "daysSupply": {
+        "value": 10,
+        "system": "http://unitsofmeasure.org",
+        "code": "days"
+      },
+      "whenHandedOver": "2026-03-01T01:00:00.000Z"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationDispense/439d4549-3b38-4cd7-8884-99728468f448"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/b1ca58ca-aecf-4968-a058-ba6dae59dc8e",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "b1ca58ca-aecf-4968-a058-ba6dae59dc8e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "15193003",
+          "display": "Severe recurrent major depression with psychotic features, mood-incongruent (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/0b61ffb2-9d2d-4eb4-a208-f34f74824543"
+      },
+      "onsetDateTime": "2026-01-01T01:00:00.000Z"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/b1ca58ca-aecf-4968-a058-ba6dae59dc8e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/358ce1fc-8ffe-45e9-8cc2-94bfb82150b5",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "358ce1fc-8ffe-45e9-8cc2-94bfb82150b5",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "1ed8c76c-2b1c-4282-b10b-7a3dd697dd29-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "0b61ffb2-9d2d-4eb4-a208-f34f74824543"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#1ed8c76c-2b1c-4282-b10b-7a3dd697dd29-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Qualifying encounter is nursing facility visit"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS128FHIRAntidepressantMedManagement",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      }, {
+        "id": "Group_2",
+        "population": [ {
+          "id": "InitialPopulation_2",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_2",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_2",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_2",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/0b61ffb2-9d2d-4eb4-a208-f34f74824543"
+      }, {
+        "reference": "Encounter/1a2ff5b6-64ad-4947-9761-313eaee38f8b"
+      }, {
+        "reference": "MedicationDispense/520f4f0e-f1d3-401d-b5e7-37afcf39f4e8"
+      }, {
+        "reference": "MedicationDispense/439d4549-3b38-4cd7-8884-99728468f448"
+      }, {
+        "reference": "Condition/b1ca58ca-aecf-4968-a058-ba6dae59dc8e"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/358ce1fc-8ffe-45e9-8cc2-94bfb82150b5"
+    }
+  } ]
+}

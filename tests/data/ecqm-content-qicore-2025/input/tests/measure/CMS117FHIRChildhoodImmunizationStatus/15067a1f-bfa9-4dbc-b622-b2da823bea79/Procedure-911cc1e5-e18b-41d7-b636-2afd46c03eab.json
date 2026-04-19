@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "911cc1e5-e18b-41d7-b636-2afd46c03eab",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-01-07T00:00:00.000Z"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "90681",
+      "display": "Rotavirus vaccine, human, attenuated (RV1), 2 dose schedule, live, for oral use"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/15067a1f-bfa9-4dbc-b622-b2da823bea79"
+  },
+  "performedPeriod": {
+    "start": "2025-01-07T00:00:00.000Z",
+    "end": "2025-01-07T23:59:59.000Z"
+  }
+}

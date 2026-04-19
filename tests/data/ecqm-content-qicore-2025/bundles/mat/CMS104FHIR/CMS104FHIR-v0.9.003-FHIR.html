@@ -1,0 +1,4371 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            background-color: #ffffff;;
+            margin: 0px;
+            padding: 10px;
+            height: 100%;
+            font-size: 1em;
+        }
+
+        p, li {
+            font-size: 12px;
+            line-height: 1.4em;
+            font-family: verdana;
+            margin: 0 0 20px 0;
+            font-weight: normal;
+        }
+
+        td {
+            font-size: 12px;
+            line-height: 1.4em;
+            font-family: verdana;
+            font-weight: normal;
+            padding: 3px;
+            vertical-align: top;
+        }
+
+        tr {
+            font-size: 12px;
+            line-height: 1.4em;
+            font-family: verdana;
+            font-weight: normal;
+            padding: 3px;
+            vertical-align: top;
+            text-align: left;
+        }
+
+        table.colstu td {
+            border: 1px grey solid;
+            border-spacing: 0;
+            padding: 5px;
+            border-collapse: collapse;
+            background-color: #fff5e6;
+        }
+
+        table.colsd td {
+            border: 1px grey solid;
+            border-spacing: 0;
+            padding: 5px;
+            border-collapse: collapse;
+            background-color: #efefef;
+        }
+
+        table.colsn td {
+            border: 1px grey solid;
+            border-spacing: 0;
+            padding: 5px;
+            border-collapse: collapse;
+            background-color: #e6ffe6;
+        }
+
+        table.colse td {
+            border: 1px grey solid;
+            border-spacing: 0;
+            padding: 5px;
+            border-collapse: collapse;
+            background-color: #e6e6e6;
+        }
+
+        table.colsi td {
+            border: 1px grey solid;
+            border-spacing: 0;
+            padding: 5px;
+            border-collapse: collapse;
+            background-color: #ffffe6;
+        }
+
+        table.list td {
+            border-top: 1px silver solid;
+            border-spacing: 0;
+        }
+
+        table.bare td {
+            border-spacing: 0;
+        }
+
+        ul.dict li {
+            font-size: 11px;
+            line-height: 1.2em;
+            font-family: verdana;
+            font-weight: normal;
+            padding: 3px;
+        }
+
+        table.dict td {
+            padding: 3px 7px 2px 7px;
+            font-size: 11px;
+            line-height: 1.2em;
+            font-family: verdana;
+            font-weight: normal;
+            padding: 3px;
+            vertical-align: top;
+        }
+
+        table.dict p {
+            font-size: 11px;
+        }
+
+        table {
+            margin-bottom: 10px;
+            border-collapse: collapse;
+        }
+
+        table.codes td {
+            border: 1px solid silver;
+            padding: 3px 7px 2px 7px;
+            font-size: 12px;
+            line-height: 1.4em;
+            font-family: verdana;
+            font-weight: normal;
+            padding: 3px;
+            vertical-align: top;
+        }
+
+        table.grid {
+            margin-bottom: 10px;
+            border: 1px black solid;
+            margin-right: auto;
+
+        }
+
+        table.grid th {
+            border: 1px solid silver;
+            padding: 3px 7px 2px 7px;
+            font-size: 12px;
+            line-height: 1.4em;
+            font-family: verdana;
+            font-weight: bold;
+            padding: 3px;
+            vertical-align: top;
+        }
+
+        table.grid td {
+            border: 1px solid silver;
+            padding: 3px 7px 2px 7px;
+            font-size: 12px;
+            line-height: 1.4em;
+            font-family: verdana;
+            font-weight: normal;
+            padding: 3px;
+            vertical-align: top;
+        }
+
+        ul {
+            margin: 10px 0;
+            padding: 0 0 0 25px;
+        }
+
+        .dense li {
+            margin: 0 0 0 0;
+        }
+
+        li {
+            margin: 0 0 5px 0;
+        }
+
+        h1 {
+            font-size: 16px;
+            margin: 0 0 4px 0;
+            font-family: verdana;
+            border-bottom: 1px solid #7e7e7e;
+            padding-bottom: 2px;
+        }
+
+        h2 {
+            font-family: verdana;
+            line-height: 1.2em;
+            font-size: 14px;
+            margin: 0 0 3px 0;
+            margin-top: 15px;
+            border-bottom: 1px solid #dcdcdc;
+            padding-bottom: 2px;
+        }
+
+        h3 {
+            font-family: verdana;
+            line-height: 1.2em;
+            font-size: 12px;
+            margin: 0 0 3px 0;
+            margin-top: 10px;
+        }
+
+        h4 {
+            font-family: verdana;
+            line-height: 1.2em;
+            font-size: 11px;
+            margin: 0 0 3px 0;
+            margin-top: 10px;
+        }
+
+        div.sidebar h2 {
+            border-bottom: 1px solid #dcdcdc;
+            padding-bottom: 2px;
+            padding-top: 0px;
+            margin-top: 0px;
+            font-weight: normal;
+            margin-left: 8px;
+            margin-bottom: 0px;
+            font-size: 12px;
+        }
+
+        div.sidebar p {
+            padding-bottom: 0px;
+            padding-top: 10px;
+            font-weight: normal;
+            margin-left: 8px;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        div.sidebar ul {
+            list-style: none;
+            padding: 0px;
+            margin-left: 6px;
+            font-size: 11px;
+            line-height: 2.125em;
+        }
+
+        div.sidebar li {
+            margin: 0px 0px 0px 6px;
+            padding: 0px;
+            font-size: 11px;
+            line-height: 2.125em;
+        }
+
+        a {
+            color: #428bca;
+            text-decoration: none;
+        }
+
+        a.xmltag :visited {
+            color: Navy;
+        }
+
+        a.xmltag :hover {
+            color: Blue;
+        }
+
+        pre {
+            display: block;
+            border: 1px solid #cccccc;
+            border-radius: 4px;
+        }
+
+        pre a {
+            color: darkgreen;
+            text-decoration: none;
+            border: 0;
+
+        }
+
+        /* PrismJS 1.21.0
+        https://prismjs.com/download.html#themes=prism&languages=markup+css+clike+javascript+abap+abnf+actionscript+ada+agda+al+antlr4+apacheconf+apl+applescript+aql+arduino+arff+asciidoc+aspnet+asm6502+autohotkey+autoit+bash+basic+batch+bbcode+birb+bison+bnf+brainfuck+brightscript+bro+bsl+c+csharp+cpp+cil+clojure+cmake+coffeescript+concurnas+csp+crystal+css-extras+cypher+d+dart+dax+dhall+diff+django+dns-zone-file+docker+ebnf+editorconfig+eiffel+ejs+elixir+elm+etlua+erb+erlang+excel-formula+fsharp+factor+firestore-security-rules+flow+fortran+ftl+gml+gcode+gdscript+gedcom+gherkin+git+glsl+go+graphql+groovy+haml+handlebars+haskell+haxe+hcl+hlsl+http+hpkp+hsts+ichigojam+icon+ignore+inform7+ini+io+j+java+javadoc+javadoclike+javastacktrace+jolie+jq+jsdoc+js-extras+json+json5+jsonp+jsstacktrace+js-templates+julia+keyman+kotlin+latex+latte+less+lilypond+liquid+lisp+livescript+llvm+lolcode+lua+makefile+markdown+markup-templating+matlab+mel+mizar+mongodb+monkey+moonscript+n1ql+n4js+nand2tetris-hdl+naniscript+nasm+neon+nginx+nim+nix+nsis+objectivec+ocaml+opencl+oz+parigp+parser+pascal+pascaligo+pcaxis+peoplecode+perl+php+phpdoc+php-extras+plsql+powerquery+powershell+processing+prolog+properties+protobuf+pug+puppet+pure+purebasic+purescript+python+q+qml+qore+r+racket+jsx+tsx+reason+regex+renpy+rest+rip+roboconf+robotframework+ruby+rust+sas+sass+scss+scala+scheme+shell-session+smali+smalltalk+smarty+sml+solidity+solution-file+soy+sparql+splunk-spl+sqf+sql+stan+iecst+stylus+swift+t4-templating+t4-cs+t4-vb+tap+tcl+tt2+textile+toml+turtle+twig+typescript+typoscript+unrealscript+vala+vbnet+velocity+verilog+vhdl+vim+visual-basic+warpscript+wasm+wiki+xeora+xml-doc+xojo+xquery+yaml+yang+zig&plugins=keep-markup */
+        /**
+         * prism.js default theme for JavaScript, CSS and HTML
+         * Based on dabblet (http://dabblet.com)
+         * @author Lea Verou
+         */
+
+        code[class*="language-"],
+        pre[class*="language-"] {
+            color: black;
+            background: none;
+            text-shadow: 0 1px white;
+            font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+            font-size: 0.95em;
+            text-align: left;
+            white-space: pre;
+            word-spacing: normal;
+            word-break: normal;
+            word-wrap: normal;
+            line-height: 1.5;
+
+            -moz-tab-size: 4;
+            -o-tab-size: 4;
+            tab-size: 4;
+
+            -webkit-hyphens: none;
+            -moz-hyphens: none;
+            -ms-hyphens: none;
+            hyphens: none;
+        }
+
+        pre[class*="language-"]::-moz-selection, pre[class*="language-"] ::-moz-selection,
+        code[class*="language-"]::-moz-selection, code[class*="language-"] ::-moz-selection {
+            text-shadow: none;
+            background: #b3d4fc;
+        }
+
+        pre[class*="language-"]::selection, pre[class*="language-"] ::selection,
+        code[class*="language-"]::selection, code[class*="language-"] ::selection {
+            text-shadow: none;
+            background: #b3d4fc;
+        }
+
+        @media print {
+            code[class*="language-"],
+            pre[class*="language-"] {
+                text-shadow: none;
+            }
+        }
+
+        /* Code blocks */
+        pre[class*="language-"] {
+            padding: 1em;
+            margin: .5em 0;
+            overflow: auto;
+        }
+
+        :not(pre) > code[class*="language-"],
+        pre[class*="language-"] {
+            background: #f5f2f0;
+        }
+
+        /* Inline code */
+        :not(pre) > code[class*="language-"] {
+            padding: .1em;
+            border-radius: .3em;
+            white-space: normal;
+        }
+        /*
+  ===============================
+  Liquid Narrative Styling Start
+  ===============================
+  */
+
+        .narrative-table {
+            border: 1pt inset rgb(0, 0, 0);
+            line-height: 10pt;
+            border-collapse: separate;
+            -webkit-border-horizontal-spacing: 2px;
+            -webkit-border-vertical-spacing: 2px;
+        }
+
+        .narrative-table>tbody {
+            display: table-row-group;
+            vertical-align: middle;
+        }
+
+        .narrative-table>tbody>tr {
+            display: table-row;
+            background-color: lightgray;
+            vertical-align: inherit;
+        }
+
+        .narrative-table>tbody>tr>th {
+            padding: 5px;
+        }
+
+        .section-header {
+            background-color: #656565;
+            color: whitesmoke;
+            vertical-align: inherit;
+        }
+
+        .row-header {
+            background-color: #656565;
+            color: whitesmoke;
+            vertical-align: inherit;
+        }
+
+        .tab-one {
+            padding-left: 5px;
+        }
+
+        @media (min-width: 768px) {
+            .row-header {
+                min-width: 138px;
+                max-width: 138px;
+            }
+
+            .content-container {
+                max-width: 576px;
+            }
+        }
+
+        @media (min-width: 992px) {
+            .row-header {
+                min-width: 181px;
+                max-width: 181px;
+            }
+
+            .content-container {
+                max-width: 745px;
+            }
+        }
+
+        @media (min-width: 1100px) {
+            .row-header {
+                min-width: 213px;
+                max-width: 213px;
+            }
+
+            .content-container {
+                max-width: 873px;
+            }
+        }
+
+        /*
+        ===============================
+        Liquid Narrative Styling End
+        ===============================
+        */
+    </style>
+</head>
+<body>
+<div xmlns="http://www.w3.org/1999/xhtml" class="col-12">
+  <table class="narrative-table">
+    <tbody>
+<tr>
+
+<th colspan="2" scope="row" class="row-header">Knowledge Artifact Metadata</th>
+
+</tr>
+
+<tr>
+
+<th scope="row" class="row-header">Name (machine-readable)</th>
+
+<td class="content-container">CMS104FHIRSTKDCAntithrombotic</td>
+</tr>
+
+
+<tr>
+
+<th scope="row" class="row-header">Title (human-readable)</th>
+
+<td class="content-container">Discharged on Antithrombotic TherapyFHIR</td>
+</tr>
+
+
+
+<tr>
+
+<th scope="row" class="row-header">Status</th>
+
+<td class="content-container">active</td>
+</tr>
+
+
+<tr>
+
+<th scope="row" class="row-header">Experimental</th>
+
+<td class="content-container">false</td>
+</tr>
+
+
+<tr>
+
+<th scope="row" class="row-header">Description</th>
+
+<td class="content-container">Ischemic stroke patients prescribed or continuing to take antithrombotic therapy at hospital discharge</td>
+</tr>
+
+
+
+<tr>
+
+<th scope="row" class="row-header">Clinical Usage</th>
+
+<td class="content-container">The &quot;Nonelective Inpatient Encounter&quot; value set intends to capture all non-scheduled hospitalizations. This value set is a subset of the &quot;Inpatient encounter&quot; value set, excluding concepts that specifically refer to elective hospital admissions. Non-elective admissions include emergency, urgent and unplanned admissions.
+
+The &quot;Medication, Discharge&quot; datatype refers to the discharge medication list and is intended to express medications ordered for post-discharge use.
+
+The denominator population includes patients with inpatient hospitalizations and patients from Acute Hospital Care at Home programs, who are treated and billed as inpatients but receive care in their home.
+
+This dQM is an episode-based measure. An episode is defined as each inpatient hospitalization or encounter that ends during the measurement period. This FHIR-based measure has been derived from the QDM-based measure: CMS104v14. Please refer to the HL7 QI-Core Implementation Guide (https://hl7.org/fhir/us/qicore/STU6/) for more information on QI-Core and mapping recommendations from QDM to QI-Core STU 6. (https://hl7.org/fhir/us/qicore/STU6/qdm-to-qicore.html).</td>
+</tr>
+
+
+
+
+
+<tr>
+
+<th scope="row" class="row-header">Effective Period</th>
+
+<td class="content-container">2026-01-01..2026-12-31</td>
+</tr>
+
+
+
+
+
+
+
+<tr>
+
+<th scope="row" class="row-header">Measure Developer</th>
+
+<td class="content-container">The Joint Commission</td>
+</tr>
+
+
+
+
+
+
+<tr>
+
+<th scope="row" class="row-header">Measure Steward</th>
+
+<td class="content-container">The Joint Commission</td>
+</tr>
+
+
+
+
+
+
+
+
+
+<tr>
+
+<th scope="row" class="row-header">Copyright</th>
+
+<td class="content-container">Measure specifications are in the Public Domain
+
+LOINC(R) copyright 2004-2024 Regenstrief Institute, Inc. This material contains SNOMED Clinical Terms(R) (SNOMED CT[R]) copyright 2004-2024 International Health Terminology Standards Development Organisation. ICD-10 copyright 2024 World Health Organization. All Rights Reserved.</td>
+</tr>
+
+
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Adams, H., Adams, R., del Zoppo, G., et al. (2005, April). Guidelines for the early management of patients with ischemic stroke: 2005 guidelines update—A scientific statement from the Stroke Council of the American Heart Association/American Stroke Association. Stroke, 36(4): 916-923. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Adams, H. P., Jr., del Zoppo, G., Alberts, M. J., et al. (2007, May). Guidelines for the early management of adults with ischemic stroke: A guideline from the American Heart Association/American Stroke Association Stroke Council, Clinical Cardiology Council, Cardiovascular Radiology and Intervention Council, and the Atherosclerotic Peripheral Vascular Disease and Quality of Care Outcomes in Research Interdisciplinary Working Groups. Stroke, 38(5), 1655-1711. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Albers, G. W, Amarenco, P., Easton, J. D., et al. (2001). Antithrombotic and thrombolytic therapy for ischemic stroke. Chest, 119, 300-320. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Albers, G. W., Amarenco, P., Easton, J. D., et al. (2004, September). Antithrombotic and thrombolytic therapy for ischemic stroke: The Seventh ACCP Conference on Antithrombotic and Thrombolytic Therapy. Chest, 126(3), 483S-512S. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Antiplatelet Trialists’ Collaboration. (1994, January 8). Collaborative overview of randomised trials of antiplatelet therapy—I: Prevention of death, myocardial infarction, and stroke by prolonged antiplatelet therapy in various categories of patients. BMJ, 308(6921), 81-106. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Antithrombotic Trialists’ Collaboration. (2002, January 12). Collaborative meta-analysis of randomised trials of antiplatelet therapy for prevention of death, myocardial infarction, and stroke in high-risk patients. BMJ, 324(7329), 71-86. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Bhatt, D. L., Fox, K. A., Hacke, W., et al. (2006, April 20). Clopidogrel and aspirin versus aspirin alone for the prevention of atherothrombotic events. New England Journal of Medicine, 354(16), 1706-1717. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Brott, T. G., Clark, W. M., Fagan, S. C., et al. (2000). Stroke: The first hours. Guidelines for acute treatment. Washington, DC: National Stroke Association. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Canadian Cooperative Study Group. (1978, July 13). A randomized trial of aspirin and sulfinpyrazone in threatened stroke. New England Journal of Medicine, 299(2), 53-59.
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - CAPRIE Steering Committee. (1996, November 16). A randomised, blinded trial of clopidogrel versus aspirin in patients at risk of ischaemic events (CAPRIE). Lancet, 348(9038), 1329-1339.
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Centers for Disease Control and Prevention. (2009, May 1). Prevalence and most common causes of disability among adults—United States, 2005. Morbidity and Mortality Weekly Report, 58(16),  421-426. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Chen, Z. M., Sandercock, P., Pan, H. C., et al. (2000, June). Indications for early aspirin use in acute ischemic stroke: A combined analysis of 40,000 randomized patients from the Chinese Acute Stroke Trial and the International Stroke Trial. Stroke, 31(6), 1240-1249. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Coull, B. M., Williams, L. S., Goldstein, L. B., et al. (2002, July). Anticoagulants and antiplatelet agents in acute ischemic stroke: Report of the Joint Stroke Guideline Development Committee of the American Academy of Neurology and the American Stroke Association (a Division of the American Heart Association). Stroke, 33(7), 1934-1942. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Diener, H. C., Bogousslavsky, J., Brass, L. M., et al. (2004, July). Aspirin and lopidogrel compared with clopidogrel alone after recent ischaemic stroke or transient ischaemic attack in high-risk patients (MATCH): Randomised, double-blind, placebo-controlled trial. Lancet, 364(9431), 331-337. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Dutch Tia Trial Study Group. (1991, October 31). A comparison of two doses of aspirin (30 mg vs. 283 mg a day) in patients after a transient ischemic attack or minor ischemic stroke. New England Journal of Medicine, 325(18), 1261-1266. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Eccles, M., Freemantle, N., &amp; Mason, J. (1998, April 25). North of England Evidence-Based Guideline Development Project: Guideline on the use of aspirin as secondary prophylaxis for vascular disease in primary care. BMJ, 316(7140), 1303-1309. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - ESPRIT Study Group, Halkes, P. H., van Gijn, J., et al. (2006, May 20). Aspirin plus dipyridamole versus aspirin alone after cerebral ischaemia of arterial origin (ESPRIT): Randomised controlled trial. Lancet, 367(9523), 1665-1673. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - ESPS Group. (1987, December 12). The European Stroke Prevention Study (ESPS): Principal end-points. Lancet, 2(8572), 1351-1354. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Farrell, B., Godwin, J., Richards, S., et al. (1991, December). The United Kingdom Transient Ischaemic Attack (Uk-Tia) Aspirin Trial: Final results. Journal of Neurology, Neurosurgery, and Psychiatry, 54(12), 1044-1054. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Gaspoz, J. M., Coxson, P. G., Goldman, P. A., et al. (2002, June 6). Cost effectiveness of aspirin, clopidogrel, or both for secondary prevention of coronary heart disease. New England Journal of Medicine, 346(23), 1800-1806. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Gent, M., Blakely, J. A., Easton, J. D., et al. (1989, June 3). The Canadian American Ticlopidine Study (CATS) in thromboembolic stroke. Lancet 1(8649), 1215-1220. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Gorelick, P. B., Richardson, D., Kelly, M., et al. (2003, June 11). Aspirin and ticlopidine for prevention of recurrent stroke in black patients: A randomized trial. JAMA, 289(22), 2947-2957. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Guyatt, G. H., Akl, E. A., Crowther, M., et al. (2012, February). Executive summary: Antithrombotic therapy and prevention of thrombosis, 9th ed.: American College of Chest Physicians evidence-based clinical practice guidelines. Chest, 141(2 Suppl.), 7S-47S. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Guyatt, G., Schunemann, H., Cook, D., et al. (2001, January). Grades of recommendation for antithrombotic agents. Chest, 119(1 Suppl.), 3S-7S. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Hass, W. K., Easton, J. D., Adams, H. P., Jr., et al. (1989, August 24). Randomized trial comparing ticlopidine hydrochloride with aspirin for the prevention of stroke in high-risk patients. New England Journal of Medicine, 321(8), 501-507. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - International Stroke Trial Collaborative Group. (1997, May 31). The International Stroke Trial (IST): A randomised trial of aspirin, subcutaneous heparin, both, or neither among 19,435 patients with acute ischaemic stroke. Lancet, 349(9065), 1569-1581. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Jauch, E. C., Saver, J. L., Adams, H. P., Jr., et al. (2013). Guidelines for the early management of patients with acute ischemic stroke: A guideline for health care professionals from the American Heart Association/American Stroke Association. Stroke, 44(3), 870-947. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Johnson, E. S., Lanes, S. F., Wentworth, C. E., III, et al. (1999, June 14). A metaregression analysis of the dose-response effect of aspirin on stroke. Archives of Internal Medicine, 159(11), 1248-1253. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Kennedy, J., Hill, M. D., Ryckborst, K. J., et al. (2007, November). Fast assessment of stroke and transient ischaemic attack to prevent early recurrence (FASTER): A randomised controlled pilot trial. Lancet Neurology, 6(11): 961-969. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Kernan, W. N., Ovbiagele, B., Black, H. R., et al. (2014, May). Guidelines for the prevention of stroke in patients with stroke and transient ischemic attack: A guideline for health care professionals from the American Heart Association/American Stroke Association. Stroke, 45(7), 2160-2223. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Powers, W. J., Rabinstein, A. A., Ackerson, T., et al. (2018, January). 2018 guidelines for the early management of patients with acute ischemic stroke: A guideline for health care professionals from the American Heart Association/American Stroke Association. Stroke, 49, e45-e46. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Roger, V. L., Go, A. S., Lloyd-Jones, D. M., et al. (2012, January 3). Heart disease and stroke statistics—2012 update: A report from the American Heart Association. Circulation, 125(1), e2-e220. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Sacco, R. L., Diener, H. C., Yusuf, S., et al. (2008, September 18). Aspirin and Extended-Release Dipyridamole Versus Clopidogrel for Recurrent Stroke. New England Journal of Medicine, 359(12), 1238-1251. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - SALT Collaborative Group. (1991, November 30). Swedish Aspirin Low-Dose Trial (SALT) of 75 mg aspirin as secondary prophylaxis after cerebrovascular ischaemic events. Lancet, 338(8779), 1345-1349. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - UK-Tia Study Group. (1988, January 30). United Kingdom Transient Ischaemic Attack (UK-Tia) Aspirin Trial: Interim results. British Medical Journal (Clinical Research Ed.), 296(6618), 316-320. 
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Kleindorfer, D. O., Towfighi, A., Chaturvedi, S., Cockroft, K. M., Gutierrez, J., Lombardi-Hill, D., ... Williams, L. S. (2021). 2021 guideline for the prevention of stroke in patients with stroke and transient ischemic attack: A guideline from the American Heart Association/American Stroke Association. Stroke, 52(7), e364-e467. https://doi.org/10.1161/STR.0000000000000375
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+
+
+
+
+
+
+
+
+
+<tr>
+
+<th colspan="2" scope="row" class="row-header">Measure Metadata</th>
+
+</tr>
+
+  
+<tr>
+
+<th scope="row" class="row-header">Short Name Identifier</th>
+
+<td class="content-container">CMS104FHIR</td>
+</tr>
+
+
+
+  
+<tr>
+
+<th scope="row" class="row-header">Version Independent Identifier</th>
+
+<td class="content-container">urn:uuid:4f57e4a2-097b-45f8-9c85-91b35ea92dc1</td>
+</tr>
+
+
+
+  
+<tr>
+
+<th scope="row" class="row-header">Version Specific Identifier</th>
+
+<td class="content-container">urn:uuid:3e24cf04-e7a8-4f7d-b9bc-3c3e3b1b39b6</td>
+</tr>
+
+
+
+  
+    
+    
+<tr>
+
+<th scope="row" class="row-header">Publisher (CMS) Identifier</th>
+
+<td class="content-container">104FHIR</td>
+</tr>
+
+  
+
+
+
+<tr>
+
+<th scope="row" class="row-header">Version Number</th>
+
+<td class="content-container">0.9.003</td>
+</tr>
+
+
+
+
+
+
+
+<tr>
+
+<th scope="row" class="row-header">Rationale</th>
+
+<td class="content-container">The effectiveness of antithrombotic agents in reducing stroke mortality, stroke-related morbidity and recurrence rates has been studied in several large clinical trials. While the use of these agents for patients with acute ischemic stroke and transient ischemic attacks continues to be the subject of study, substantial evidence is available from completed studies. Data at this time suggest that antithrombotic therapy should be prescribed at discharge following acute ischemic stroke to reduce stroke mortality and morbidity if no contraindications exist.
+
+
+For patients with a stroke due to a cardioembolic source (e.g., atrial fibrillation, mechanical heart valve), warfarin is recommended unless contraindicated. In recent years, novel oral anticoagulant agents (NOACs) have been developed and approved by the U.S. Food and Drug Administration (FDA) for stroke prevention and may be considered as an alternative to warfarin for select patients. Anticoagulation therapy is not generally recommended for secondary stroke prevention in patients presumed to have a non-cardioembolic stroke
+
+
+Anticoagulants at doses to prevent venous thromboembolism are insufficient antithrombotic therapy to prevent recurrent ischemic stroke or transient ischemic attack (TIA).</td>
+</tr>
+
+
+<tr>
+
+<th scope="row" class="row-header">Clinical Recommendation Statement</th>
+
+<td class="content-container">Clinical trial results suggest that antithrombotic therapy should be prescribed at discharge following acute ischemic stroke to reduce stroke mortality and morbidity if no contraindications exist</td>
+</tr>
+
+
+
+
+  
+    
+<tr>
+
+<th scope="row" class="row-header">Supplemental Data Guidance</th>
+
+<td class="content-container">For every patient evaluated by this measure also identify payer, race, ethnicity and sex; SDE Ethnicity-Patient's Ethnicity:
+Hispanic or Latino
+Not Hispanic or Latino
+ 
+ SDE Payer-Patient's Payer:
+Categories of types of health care payer entities as defined by the US Public Health Data Consortium SOP code system
+ 
+ SDE Race-Patient's Race:
+Native Hawaiian or Other Pacific Islander
+Asian
+American Indian or Alaska Native
+Other Race
+White
+Black or African American
+ 
+ SDE Sex-Patient's Sex:
+Gender identity restricted to only Male and Female used in administrative situations requiring a restriction to these two categories.
+ 
+ </td>
+</tr>
+
+  
+
+
+
+
+
+
+  
+    
+    <tr>
+
+<th colspan="2" scope="row" class="row-header">Measure Population Criteria (ID: Group_1)</th>
+
+</tr>
+  
+  
+    
+<tr>
+
+<th scope="row" class="row-header">Summary</th>
+
+<td class="content-container">Ischemic stroke patients prescribed or continuing to take antithrombotic therapy at hospital discharge</td>
+</tr>
+
+  
+  
+  
+    <tr>
+      
+        
+<th scope="row" class="row-header">Initial Population</th>
+
+      
+      <td class="content-container">
+        
+        <em>ID</em>: InitialPopulation_1
+        <br/>
+        
+        
+          <em>Description</em>:
+          <p style="white-space: pre-line" class="tab-one">Inpatient hospitalizations (non-elective admissions) for patients age 18 and older, discharged from inpatient care with a principal diagnosis of ischemic stroke, ending during the measurement period</p>
+        
+        
+          
+            
+            <em>Logic Definition</em>: <a href="#cms104fhirstkdcantithrombotic-initial-population">Initial Population</a> 
+          
+        
+      </td>
+    </tr>
+  
+
+  
+    <tr>
+      
+        
+<th scope="row" class="row-header">Denominator</th>
+
+      
+      <td class="content-container">
+        
+        <em>ID</em>: Denominator_1
+        <br/>
+        
+        
+          <em>Description</em>:
+          <p style="white-space: pre-line" class="tab-one">Equals Initial Population</p>
+        
+        
+          
+            
+            <em>Logic Definition</em>: <a href="#cms104fhirstkdcantithrombotic-denominator">Denominator</a> 
+          
+        
+      </td>
+    </tr>
+  
+
+  
+    <tr>
+      
+        
+<th scope="row" class="row-header">Denominator Exclusion</th>
+
+      
+      <td class="content-container">
+        
+        <em>ID</em>: DenominatorExclusion_1
+        <br/>
+        
+        
+          <em>Description</em>:
+          <p style="white-space: pre-line" class="tab-one">- Inpatient hospitalizations for patients admitted for elective carotid intervention. This exclusion is implicitly modeled by only including non-elective hospitalizations.
+- Inpatient hospitalizations for patients discharged to another hospital
+- Inpatient hospitalizations for patients who left against medical advice
+- Inpatient hospitalizations for patients who expired
+- Inpatient hospitalizations for patients discharged to home for hospice care
+- Inpatient hospitalizations for patients discharged to a health care facility for hospice care
+- Inpatient hospitalizations for patients with comfort measures documented</p>
+        
+        
+          
+            
+            <em>Logic Definition</em>: <a href="#cms104fhirstkdcantithrombotic-denominator-exclusions">Denominator Exclusions</a> 
+          
+        
+      </td>
+    </tr>
+  
+
+  
+    <tr>
+      
+        
+<th scope="row" class="row-header">Numerator</th>
+
+      
+      <td class="content-container">
+        
+        <em>ID</em>: Numerator_1
+        <br/>
+        
+        
+          <em>Description</em>:
+          <p style="white-space: pre-line" class="tab-one">Inpatient hospitalizations for patients prescribed or continuing to take antithrombotic therapy at hospital discharge</p>
+        
+        
+          
+            
+            <em>Logic Definition</em>: <a href="#cms104fhirstkdcantithrombotic-numerator">Numerator</a> 
+          
+        
+      </td>
+    </tr>
+  
+
+  
+    <tr>
+      
+        
+<th scope="row" class="row-header">Denominator Exception</th>
+
+      
+      <td class="content-container">
+        
+        <em>ID</em>: DenominatorException_1
+        <br/>
+        
+        
+          <em>Description</em>:
+          <p style="white-space: pre-line" class="tab-one">- Inpatient hospitalizations for patients with a documented reason for not prescribing antithrombotic therapy at discharge
+- Inpatient hospitalizations for patients who receive Prasugrel as an antithrombotic therapy at discharge</p>
+        
+        
+          
+            
+            <em>Logic Definition</em>: <a href="#cms104fhirstkdcantithrombotic-denominator-exceptions">Denominator Exceptions</a> 
+          
+        
+      </td>
+    </tr>
+  
+
+  
+  
+  
+<tr>
+
+<th scope="row" class="row-header">Population Basis</th>
+
+<td class="content-container">Encounter</td>
+</tr>
+
+
+
+  
+<tr>
+
+<th scope="row" class="row-header">Scoring</th>
+
+<td class="content-container">[http://terminology.hl7.org/CodeSystem/measure-scoring#proportion: 'Proportion']</td>
+</tr>
+
+
+
+
+
+
+
+  
+<tr>
+
+<th scope="row" class="row-header">Type</th>
+
+<td class="content-container">[http://terminology.hl7.org/CodeSystem/measure-type#process: 'Process']</td>
+</tr>
+
+
+
+
+  
+<tr>
+
+<th scope="row" class="row-header">Rate Aggregation</th>
+
+<td class="content-container">None</td>
+</tr>
+
+
+
+  
+<tr>
+
+<th scope="row" class="row-header">Improvement Notation</th>
+
+<td class="content-container">[http://terminology.hl7.org/CodeSystem/measure-improvement-notation#increase: 'Increased score indicates improvement']</td>
+</tr>
+
+
+
+
+  <tr>
+
+<th colspan="2" scope="row" class="row-header">Supplemental Data Elements</th>
+
+</tr>
+
+
+<tr>
+  
+<th scope="row" class="row-header">Supplemental Data Element</th>
+
+  <td class="content-container">
+    
+      <em>ID</em>: sde-ethnicity
+      
+      <br/>
+      
+    
+    
+      
+        
+          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]
+        
+        <br/>
+      
+    
+    
+      <em>Description</em>: SDE Ethnicity
+    
+    
+      
+        <br/>
+        
+        <em>Logic Definition</em>: <a href="#cms104fhirstkdcantithrombotic-sde-ethnicity">SDE Ethnicity</a> 
+      
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Supplemental Data Element</th>
+
+  <td class="content-container">
+    
+      <em>ID</em>: sde-payer
+      
+      <br/>
+      
+    
+    
+      
+        
+          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]
+        
+        <br/>
+      
+    
+    
+      <em>Description</em>: SDE Payer
+    
+    
+      
+        <br/>
+        
+        <em>Logic Definition</em>: <a href="#cms104fhirstkdcantithrombotic-sde-payer">SDE Payer</a> 
+      
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Supplemental Data Element</th>
+
+  <td class="content-container">
+    
+      <em>ID</em>: sde-race
+      
+      <br/>
+      
+    
+    
+      
+        
+          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]
+        
+        <br/>
+      
+    
+    
+      <em>Description</em>: SDE Race
+    
+    
+      
+        <br/>
+        
+        <em>Logic Definition</em>: <a href="#cms104fhirstkdcantithrombotic-sde-race">SDE Race</a> 
+      
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Supplemental Data Element</th>
+
+  <td class="content-container">
+    
+      <em>ID</em>: sde-sex
+      
+      <br/>
+      
+    
+    
+      
+        
+          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]
+        
+        <br/>
+      
+    
+    
+      <em>Description</em>: SDE Sex
+    
+    
+      
+        <br/>
+        
+        <em>Logic Definition</em>: <a href="#cms104fhirstkdcantithrombotic-sde-sex">SDE Sex</a> 
+      
+    
+  </td>
+</tr>
+
+
+<tr>
+
+<th colspan="2" scope="row" class="row-header">Measure Logic</th>
+
+</tr>
+
+<tr>
+
+<th scope="row" class="row-header">Primary Library</th>
+
+<td class="content-container">https://madie.cms.gov/Library/CMS104FHIRSTKDCAntithrombotic</td>
+</tr>
+
+
+
+
+  
+  
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Library SDE
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: https://madie.cms.gov/Library/SupplementalDataElements|5.1.000
+    <br/>
+    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/SupplementalDataElements|5.1.000</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Library FHIRHelpers
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: https://madie.cms.gov/Library/FHIRHelpers|4.4.000
+    <br/>
+    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/FHIRHelpers|4.4.000</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Library TJC
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: https://madie.cms.gov/Library/TJCOverall|8.24.000
+    <br/>
+    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/TJCOverall|8.24.000</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Library CQMCommon
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: https://madie.cms.gov/Library/CQMCommon|4.1.000
+    <br/>
+    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/CQMCommon|4.1.000</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Library QICoreCommon
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: https://madie.cms.gov/Library/QICoreCommon|4.0.000
+    <br/>
+    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/QICoreCommon|4.0.000</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Code system SNOMEDCT
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://snomed.info/sct
+    <br/>
+    <em>Canonical URL</em>: <tt>http://snomed.info/sct</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Code system Diagnosis Type
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://terminology.hl7.org/CodeSystem/ex-diagnosistype
+    <br/>
+    <em>Canonical URL</em>: <tt>http://terminology.hl7.org/CodeSystem/ex-diagnosistype</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Code system MedicationRequestCategory
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://terminology.hl7.org/CodeSystem/medicationrequest-category
+    <br/>
+    <em>Canonical URL</em>: <tt>http://terminology.hl7.org/CodeSystem/medicationrequest-category</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Code system TaskCode
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://hl7.org/fhir/CodeSystem/task-code
+    <br/>
+    <em>Canonical URL</em>: <tt>http://hl7.org/fhir/CodeSystem/task-code</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Nonelective Inpatient Encounter
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.424
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.424</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Ischemic Stroke
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.247
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.247</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Antithrombotic Therapy for Ischemic Stroke
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.62
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.62</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Payer Type
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Discharge To Acute Care Facility
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.87
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.87</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Left Against Medical Advice
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.308
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.308</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Patient Expired
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.309
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.309</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Discharged to Home for Hospice Care
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.209
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.209</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Discharged to Health Care Facility for Hospice Care
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.207
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.207</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Comfort Measures
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Observation Services
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Emergency Department Visit
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Medical Reason For Not Providing Treatment
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.473
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.473</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Patient Refusal
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.93
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.93</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Pharmacological Contraindications For Antithrombotic Therapy
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.52
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.52</tt>
+    
+  </td>
+</tr>
+
+
+  
+  <tr>
+    <th scope="row" class="row-header">Direct Reference Code</th>
+    <td class="content-container">
+      
+        <em>Display</em>: Male (finding)
+        <br/>
+      
+      <em>Code</em>: 248153007
+      <br/>
+      <em>System</em>: <tt>http://snomed.info/sct</tt>
+    </td>
+  </tr>
+
+  <tr>
+    <th scope="row" class="row-header">Direct Reference Code</th>
+    <td class="content-container">
+      
+        <em>Display</em>: Female (finding)
+        <br/>
+      
+      <em>Code</em>: 248152002
+      <br/>
+      <em>System</em>: <tt>http://snomed.info/sct</tt>
+    </td>
+  </tr>
+
+  <tr>
+    <th scope="row" class="row-header">Direct Reference Code</th>
+    <td class="content-container">
+      
+        <em>Display</em>: Principal Diagnosis
+        <br/>
+      
+      <em>Code</em>: principal
+      <br/>
+      <em>System</em>: <tt>http://terminology.hl7.org/CodeSystem/ex-diagnosistype</tt>
+    </td>
+  </tr>
+
+  <tr>
+    <th scope="row" class="row-header">Direct Reference Code</th>
+    <td class="content-container">
+      
+        <em>Display</em>: Community
+        <br/>
+      
+      <em>Code</em>: community
+      <br/>
+      <em>System</em>: <tt>http://terminology.hl7.org/CodeSystem/medicationrequest-category</tt>
+    </td>
+  </tr>
+
+  <tr>
+    <th scope="row" class="row-header">Direct Reference Code</th>
+    <td class="content-container">
+      
+        <em>Display</em>: Discharge
+        <br/>
+      
+      <em>Code</em>: discharge
+      <br/>
+      <em>System</em>: <tt>http://terminology.hl7.org/CodeSystem/medicationrequest-category</tt>
+    </td>
+  </tr>
+
+  <tr>
+    <th scope="row" class="row-header">Direct Reference Code</th>
+    <td class="content-container">
+      
+      <em>Code</em>: fulfill
+      <br/>
+      <em>System</em>: <tt>http://hl7.org/fhir/CodeSystem/task-code</tt>
+    </td>
+  </tr>
+
+  
+  
+<tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    
+    <em>Name</em>: Measurement Period
+    
+    
+    <br/>
+    
+    
+    <em>Use</em>: in
+    
+    
+    <br/>
+    
+    
+    <em>Min Cardinality</em>: 0
+    
+    
+    <br/>
+    
+    
+    <em>Max Cardinality</em>: 1
+    
+    
+    <br/>
+    
+    
+    <em>Type</em>: Period
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    
+    <em>Name</em>: Numerator
+    
+    
+    <br/>
+    
+    
+    <em>Use</em>: out
+    
+    
+    <br/>
+    
+    
+    <em>Min Cardinality</em>: 0
+    
+    
+    <br/>
+    
+    
+    <em>Max Cardinality</em>: *
+    
+    
+    <br/>
+    
+    
+    <em>Type</em>: Resource
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    
+    <em>Name</em>: Denominator
+    
+    
+    <br/>
+    
+    
+    <em>Use</em>: out
+    
+    
+    <br/>
+    
+    
+    <em>Min Cardinality</em>: 0
+    
+    
+    <br/>
+    
+    
+    <em>Max Cardinality</em>: *
+    
+    
+    <br/>
+    
+    
+    <em>Type</em>: Resource
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    
+    <em>Name</em>: Initial Population
+    
+    
+    <br/>
+    
+    
+    <em>Use</em>: out
+    
+    
+    <br/>
+    
+    
+    <em>Min Cardinality</em>: 0
+    
+    
+    <br/>
+    
+    
+    <em>Max Cardinality</em>: *
+    
+    
+    <br/>
+    
+    
+    <em>Type</em>: Resource
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    
+    <em>Name</em>: Denominator Exclusions
+    
+    
+    <br/>
+    
+    
+    <em>Use</em>: out
+    
+    
+    <br/>
+    
+    
+    <em>Min Cardinality</em>: 0
+    
+    
+    <br/>
+    
+    
+    <em>Max Cardinality</em>: *
+    
+    
+    <br/>
+    
+    
+    <em>Type</em>: Resource
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    
+    <em>Name</em>: Denominator Exceptions
+    
+    
+    <br/>
+    
+    
+    <em>Use</em>: out
+    
+    
+    <br/>
+    
+    
+    <em>Min Cardinality</em>: 0
+    
+    
+    <br/>
+    
+    
+    <em>Max Cardinality</em>: *
+    
+    
+    <br/>
+    
+    
+    <em>Type</em>: Resource
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    
+    <em>Name</em>: SDE Sex
+    
+    
+    <br/>
+    
+    
+    <em>Use</em>: out
+    
+    
+    <br/>
+    
+    
+    <em>Min Cardinality</em>: 0
+    
+    
+    <br/>
+    
+    
+    <em>Max Cardinality</em>: 1
+    
+    
+    <br/>
+    
+    
+    <em>Type</em>: Coding
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    
+    <em>Name</em>: SDE Payer
+    
+    
+    <br/>
+    
+    
+    <em>Use</em>: out
+    
+    
+    <br/>
+    
+    
+    <em>Min Cardinality</em>: 0
+    
+    
+    <br/>
+    
+    
+    <em>Max Cardinality</em>: *
+    
+    
+    <br/>
+    
+    
+    <em>Type</em>: Resource
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    
+    <em>Name</em>: SDE Ethnicity
+    
+    
+    <br/>
+    
+    
+    <em>Use</em>: out
+    
+    
+    <br/>
+    
+    
+    <em>Min Cardinality</em>: 0
+    
+    
+    <br/>
+    
+    
+    <em>Max Cardinality</em>: 1
+    
+    
+    <br/>
+    
+    
+    <em>Type</em>: Resource
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    
+    <em>Name</em>: SDE Race
+    
+    
+    <br/>
+    
+    
+    <em>Use</em>: out
+    
+    
+    <br/>
+    
+    
+    <em>Min Cardinality</em>: 0
+    
+    
+    <br/>
+    
+    
+    <em>Max Cardinality</em>: 1
+    
+    
+    <br/>
+    
+    
+    <em>Type</em>: Resource
+    
+  </td>
+</tr>
+
+  
+  
+  <tr>
+    <th colspan="2" scope="row" class="section-header"><a name="effective-data-requirements"> </a>Measure Logic Data Requirements</th>
+  </tr>
+  
+  
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Patient
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: extension, url, birthDate, birthDate.value
+    <br/>
+   
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Encounter
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: type, status, status.value, period, diagnosis, diagnosis.code
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: type</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Encounter
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: type, status, status.value, period, diagnosis, diagnosis.code
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: type</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Encounter
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: type, period, diagnosis, diagnosis.code, hospitalization, hospitalization.dischargeDisposition
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: type</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.424
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Resource
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/StructureDefinition/Resource
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: id, id.value
+    <br/>
+   
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Claim
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-claim
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: status, status.value, use, use.value, item
+    <br/>
+   
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Condition
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis
+    <br/>        
+  
+   
+   
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Condition
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns
+    <br/>        
+  
+   
+   
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: MedicationRequest
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: medication, status, status.value, intent, intent.value, authoredOn, authoredOn.value
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: medication</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.62
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: MedicationRequest
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: medication.reference.value, status, status.value
+    <br/>
+   
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: MedicationRequest
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: medication, status, status.value, intent, intent.value, authoredOn, authoredOn.value
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: medication</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.52
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Task
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-taskrejected
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: focus, code, statusReason
+    <br/>
+   
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Coverage
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: type, period
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: type</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: ServiceRequest
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: code, status, status.value, intent, intent.value, doNotPerform, doNotPerform.value
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: code</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Procedure
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: code, status, status.value
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: code</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: MedicationRequest
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: medication, reasonCode, status, status.value, intent, intent.value
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: medication</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.62
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Medication
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medication
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: id.value, code
+    <br/>
+   
+   
+  </td>
+</tr>
+
+  
+  <tr>
+
+<th colspan="2" scope="row" class="row-header">Measure Logic Definitions</th>
+
+</tr>
+  
+          
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="supplementaldataelements-sde-sex"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> SupplementalDataElements</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Sex&quot;:
+  case
+    when Patient.sex = '248153007' then &quot;Male (finding)&quot;
+    when Patient.sex = '248152002' then &quot;Female (finding)&quot;
+    else null
+  end</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms104fhirstkdcantithrombotic-sde-sex"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS104FHIRSTKDCAntithrombotic</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Sex&quot;:
+  SDE.&quot;SDE Sex&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="tjcoverall-non-elective-inpatient-encounter-with-age"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> TJCOverall</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Non Elective Inpatient Encounter With Age&quot;:
+  [&quot;Encounter&quot;: &quot;Nonelective Inpatient Encounter&quot;] NonElectiveEncounter
+        where AgeInYearsAt(date from start of NonElectiveEncounter.period ) &gt;= 18
+         and NonElectiveEncounter.period ends during day of &quot;Measurement Period&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="tjcoverall-ischemic-stroke-encounter"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> TJCOverall</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Ischemic Stroke Encounter&quot;:
+  &quot;Non Elective Inpatient Encounter With Age&quot; NonElectiveEncounterWithAge
+   where NonElectiveEncounterWithAge.hasPrincipalDiagnosisOf(&quot;Ischemic Stroke&quot; )</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms104fhirstkdcantithrombotic-numerator"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS104FHIRSTKDCAntithrombotic</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Numerator&quot;:
+  TJC.&quot;Ischemic Stroke Encounter&quot; IschemicStrokeEncounter
+    with [&quot;MedicationRequest&quot;: medication in &quot;Antithrombotic Therapy for Ischemic Stroke&quot;] DischargeAntithrombotic
+      such that DischargeAntithrombotic.status in { 'active', 'completed' }
+        and DischargeAntithrombotic.intent in { 'order', 'original-order', 'reflex-order', 'filler-order', 'instance-order' }
+        and ( DischargeAntithrombotic.isCommunity ( )
+            or DischargeAntithrombotic.isDischarge ( )
+        )
+        and DischargeAntithrombotic.authoredOn during IschemicStrokeEncounter.period
+        and not exists ( [&quot;TaskRejected&quot;] TaskReject
+            where TaskReject.focus.references ( DischargeAntithrombotic )
+              and TaskReject.code ~ &quot;fulfill&quot;
+        )</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms104fhirstkdcantithrombotic-initial-population"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS104FHIRSTKDCAntithrombotic</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Initial Population&quot;:
+  TJC.&quot;Ischemic Stroke Encounter&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms104fhirstkdcantithrombotic-denominator"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS104FHIRSTKDCAntithrombotic</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Denominator&quot;:
+  &quot;Initial Population&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="supplementaldataelements-sde-payer"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> SupplementalDataElements</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Payer&quot;:
+  [Coverage: type in &quot;Payer Type&quot;] Payer
+    return {
+      code: Payer.type,
+      period: Payer.period
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms104fhirstkdcantithrombotic-sde-payer"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS104FHIRSTKDCAntithrombotic</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Payer&quot;:
+  SDE.&quot;SDE Payer&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="supplementaldataelements-sde-ethnicity"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> SupplementalDataElements</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Ethnicity&quot;:
+  Patient.ethnicity E
+    return Tuple {
+      codes: { E.ombCategory } union E.detailed,
+      display: E.text
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms104fhirstkdcantithrombotic-sde-ethnicity"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS104FHIRSTKDCAntithrombotic</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Ethnicity&quot;:
+  SDE.&quot;SDE Ethnicity&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="tjcoverall-ischemic-stroke-encounters-with-discharge-disposition"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> TJCOverall</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Ischemic Stroke Encounters With Discharge Disposition&quot;:
+  &quot;Ischemic Stroke Encounter&quot; IschemicStrokeEncounter
+  let DischDisp: IschemicStrokeEncounter.hospitalization.dischargeDisposition
+  	where  DischDisp in &quot;Discharge To Acute Care Facility&quot;
+		or DischDisp in &quot;Left Against Medical Advice&quot;
+		or DischDisp in &quot;Patient Expired&quot;
+		or DischDisp in &quot;Discharged to Home for Hospice Care&quot;
+		or DischDisp in &quot;Discharged to Health Care Facility for Hospice Care&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="tjcoverall-intervention-comfort-measures"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> TJCOverall</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Intervention Comfort Measures&quot;:
+  ( [&quot;ServiceRequest&quot;: code in &quot;Comfort Measures&quot;] SR
+    where SR.status in { 'active', 'completed', 'on-hold' }
+      and SR.intent in { 'order', 'original-order', 'reflex-order', 'filler-order', 'instance-order' }
+      and SR.doNotPerform is not true
+  )  
+  union ( [&quot;Procedure&quot;: &quot;Comfort Measures&quot;] InterventionPerformed
+        where InterventionPerformed.status in { 'completed', 'in-progress' }
+  )</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="tjcoverall-encounter-with-comfort-measures-during-hospitalization"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> TJCOverall</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Encounter With Comfort Measures During Hospitalization&quot;:
+  &quot;Ischemic Stroke Encounter&quot; IschemicStrokeEncounter
+    with &quot;Intervention Comfort Measures&quot; ComfortMeasure
+     such that Coalesce(start of ComfortMeasure.performed.toInterval(), ComfortMeasure.authoredOn) during IschemicStrokeEncounter.hospitalizationWithObservation()</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms104fhirstkdcantithrombotic-denominator-exclusions"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS104FHIRSTKDCAntithrombotic</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Denominator Exclusions&quot;:
+  TJC.&quot;Ischemic Stroke Encounters With Discharge Disposition&quot;
+    union TJC.&quot;Encounter With Comfort Measures During Hospitalization&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="supplementaldataelements-sde-race"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> SupplementalDataElements</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Race&quot;:
+  Patient.race R
+    return Tuple {
+      codes: R.ombCategory union R.detailed,
+      display: R.text
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms104fhirstkdcantithrombotic-sde-race"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS104FHIRSTKDCAntithrombotic</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Race&quot;:
+  SDE.&quot;SDE Race&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms104fhirstkdcantithrombotic-reason-for-not-giving-antithrombotic-at-discharge"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS104FHIRSTKDCAntithrombotic</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Reason For Not Giving Antithrombotic At Discharge&quot;:
+  ( [&quot;MedicationNotRequested&quot;: &quot;Antithrombotic Therapy for Ischemic Stroke&quot;] NoAntithromboticDischarge
+      where ( NoAntithromboticDischarge.reasonCode in &quot;Medical Reason For Not Providing Treatment&quot;
+          or NoAntithromboticDischarge.reasonCode in &quot;Patient Refusal&quot;
+      )
+        and ( NoAntithromboticDischarge.isCommunity ( )
+            or NoAntithromboticDischarge.isDischarge ( )
+        )
+        and NoAntithromboticDischarge.status in { 'active', 'completed' }
+        and NoAntithromboticDischarge.intent in { 'order', 'original-order', 'reflex-order', 'filler-order', 'instance-order' }
+  )
+    union ( [&quot;MedicationRequest&quot;: &quot;Antithrombotic Therapy for Ischemic Stroke&quot;] MedReqAntithrombotic
+        with [&quot;TaskRejected&quot;] TaskReject
+          such that TaskReject.focus.references ( MedReqAntithrombotic )
+            and ( TaskReject.statusReason in &quot;Medical Reason For Not Providing Treatment&quot;
+                or TaskReject.statusReason in &quot;Patient Refusal&quot;
+            )
+            and MedReqAntithrombotic.status = 'active'
+            and TaskReject.code ~ &quot;fulfill&quot;
+    )</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms104fhirstkdcantithrombotic-encounter-with-documented-reason-for-no-antithrombotic-at-discharge"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS104FHIRSTKDCAntithrombotic</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Encounter With Documented Reason For No Antithrombotic At Discharge&quot;:
+  TJC.&quot;Ischemic Stroke Encounter&quot; IschemicStrokeEncounter
+    with &quot;Reason For Not Giving Antithrombotic At Discharge&quot; NoDischargeAntithrombotic
+      such that NoDischargeAntithrombotic.authoredOn during IschemicStrokeEncounter.period</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms104fhirstkdcantithrombotic-pharmacological-contraindications-for-antithrombotic-therapy-at-discharge"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS104FHIRSTKDCAntithrombotic</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Pharmacological Contraindications For Antithrombotic Therapy At Discharge&quot;:
+  [&quot;MedicationRequest&quot;: medication in &quot;Pharmacological Contraindications For Antithrombotic Therapy&quot;] PharmacologicalContraindications
+    where ( PharmacologicalContraindications.isCommunity ( )
+        or PharmacologicalContraindications.isDischarge ( )
+    )
+      and PharmacologicalContraindications.status in { 'active', 'completed' }
+      and PharmacologicalContraindications.intent in { 'order', 'original-order', 'reflex-order', 'filler-order', 'instance-order' }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms104fhirstkdcantithrombotic-encounter-with-pharmacological-contraindications-for-antithrombotic-therapy-at-discharge"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS104FHIRSTKDCAntithrombotic</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Encounter With Pharmacological Contraindications For Antithrombotic Therapy At Discharge&quot;:
+  TJC.&quot;Ischemic Stroke Encounter&quot; IschemicStrokeEncounter
+    with &quot;Pharmacological Contraindications For Antithrombotic Therapy At Discharge&quot; DischargePharmacological
+      such that DischargePharmacological.authoredOn during IschemicStrokeEncounter.period</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms104fhirstkdcantithrombotic-denominator-exceptions"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS104FHIRSTKDCAntithrombotic</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Denominator Exceptions&quot;:
+  &quot;Encounter With Documented Reason For No Antithrombotic At Discharge&quot;
+    union &quot;Encounter With Pharmacological Contraindications For Antithrombotic Therapy At Discharge&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="fhirhelpers-tostring"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> FHIRHelpers</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define function ToString(value uri): value.value</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="fhirhelpers-tointerval"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> FHIRHelpers</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Converts the given [Period](https://hl7.org/fhir/datatypes.html#Period)
+value to a CQL DateTime Interval
+@comment: If the start value of the given period is unspecified, the starting
+boundary of the resulting interval will be open (meaning the start of the interval
+is unknown, as opposed to interpreted as the beginning of time).
+*/
+define function ToInterval(period FHIR.Period):
+    if period is null then
+        null
+    else
+        if period.&quot;start&quot; is null then
+            Interval(period.&quot;start&quot;.value, period.&quot;end&quot;.value]
+        else
+            Interval[period.&quot;start&quot;.value, period.&quot;end&quot;.value]</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cqmcommon-hasprincipaldiagnosisof"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CQMCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+ @description: Returns the condition that is specified as the principal diagnosis for the encounter and has a code in the given valueSet.
+ @comment: See the QICore 6 Authoring Patterns discussion on [Principal Diagnosis and Present on Admission](https://github.com/cqframework/CQL-Formatting-and-Usage-Wiki/wiki/Authoring-Patterns-QICore-v6.0.0#conditions-present-on-admission-and-principal-diagnoses) for more information
+ */
+ define fluent function hasPrincipalDiagnosisOf(encounter Encounter, valueSet ValueSet):
+   (encounter.principalDiagnosis()) PD
+     return PD.diagnosis in valueSet
+       or PD.diagnosis.getCondition().code in valueSet</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cqmcommon-principaldiagnosis"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CQMCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Returns the claim diagnosis element that is specified as the principal diagnosis for the encounter
+ @comment: See the QICore 6 Authoring Patterns discussion on [Principal Diagnosis and Present on Admission](https://github.com/cqframework/CQL-Formatting-and-Usage-Wiki/wiki/Authoring-Patterns-QICore-v6.0.0#conditions-present-on-admission-and-principal-diagnoses) for more information
+*/
+define fluent function principalDiagnosis(encounter Encounter):
+singleton from (
+     (encounter.claimDiagnosis()) CD
+       where CD.type.includesCode(&quot;Principal Diagnosis&quot;)
+   )</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cqmcommon-claimdiagnosis"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CQMCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Returns the claim diagnosis elements for the given encounter
+@comment: See the QICore 6 Authoring Patterns discussion on [Principal Diagnosis and Present on Admission](https://github.com/cqframework/CQL-Formatting-and-Usage-Wiki/wiki/Authoring-Patterns-QICore-v6.0.0#conditions-present-on-admission-and-principal-diagnoses) for more information
+*/
+define fluent function claimDiagnosis(encounter Encounter):
+  encounter E
+    let 
+      claim: ([Claim] C where C.status = 'active' and C.use = 'claim' and exists (C.item I where I.encounter.references(E))),
+      claimItem: (claim.item I where I.encounter.references(E))
+    return claim.diagnosis D where D.sequence in claimItem.diagnosisSequence</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="qicorecommon-references"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> QICoreCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Returns true if any of the given references are to the given resource
+@comment: Returns true if the `id` element of the given resource exactly equals the tail of any of the given references.
+NOTE: This function assumes resources from the same source server.
+*/
+define fluent function references(references List&lt;Reference&gt;, resource Resource):
+  exists (references R where R.references(resource))</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="qicorecommon-references"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> QICoreCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Returns true if the given reference is to the given resource
+@comment: Returns true if the `id` element of the given resource exactly equals the tail of the given reference.
+NOTE: This function assumes resources from the same source server.
+*/
+define fluent function references(reference Reference, resource Resource):
+  resource.id = Last(Split(reference.reference, '/'))</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="qicorecommon-includescode"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> QICoreCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Returns true if the given code is in the given codeList
+@comment: Returns true if the `code` is equivalent to any of the codes in the given `codeList`, false otherwise.
+*/
+define fluent function includesCode(codeList List&lt;Concept&gt;, code Code):
+  exists (codeList C where C ~ code)</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="fhirhelpers-toconcept"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> FHIRHelpers</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Converts the given FHIR [CodeableConcept](https://hl7.org/fhir/datatypes.html#CodeableConcept) value to a CQL Concept.
+*/
+define function ToConcept(concept FHIR.CodeableConcept):
+    if concept is null then
+        null
+    else
+        System.Concept {
+            codes: concept.coding C return ToCode(C),
+            display: concept.text.value
+        }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="fhirhelpers-tocode"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> FHIRHelpers</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Converts the given FHIR [Coding](https://hl7.org/fhir/datatypes.html#Coding) value to a CQL Code.
+*/
+define function ToCode(coding FHIR.Coding):
+    if coding is null then
+        null
+    else
+        System.Code {
+          code: coding.code.value,
+          system: coding.system.value,
+          version: coding.version.value,
+          display: coding.display.value
+        }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cqmcommon-getcondition"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CQMCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Returns the Condition resource for the given reference
+*/
+define fluent function getCondition(reference Reference):
+  singleton from (([ConditionEncounterDiagnosis] union [ConditionProblemsHealthConcerns]) C where reference.references(C.id))</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="qicorecommon-references"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> QICoreCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Returns true if the given reference is to the given resourceId
+@comment: Returns true if the `resourceId` parameter exactly equals the tail of the given reference.
+NOTE: This function assumes resources from the same source server.
+*/
+define fluent function references(reference Reference, resourceId String):
+  resourceId = Last(Split(reference.reference, '/'))</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="qicorecommon-iscommunity"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> QICoreCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Returns true if the given MedicationRequest has a category of Community
+*/
+define fluent function isCommunity(medicationRequest Choice&lt;MedicationRequest, MedicationNotRequested&gt;):
+  exists (medicationRequest.category C
+    where C ~ Community
+  )</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="qicorecommon-isdischarge"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> QICoreCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Returns true if the given MedicationRequest has a category of Discharge
+*/
+define fluent function isDischarge(medicationRequest Choice&lt;MedicationRequest, MedicationNotRequested&gt;):
+  exists (medicationRequest.category C
+    where C ~ Discharge
+  )</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="qicorecommon-tointerval"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> QICoreCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Normalizes a value that is a choice of timing-valued types to an equivalent interval
+@comment: Normalizes a choice type of DateTime, Quanitty, Interval&lt;DateTime&gt;, or Interval&lt;Quantity&gt; types
+to an equivalent interval. This selection of choice types is a superset of the majority of choice types that are used as possible
+representations for timing-valued elements in QICore, allowing this function to be used across any resource.
+The input can be provided as a DateTime, Quantity, Interval&lt;DateTime&gt; or Interval&lt;Quantity&gt;.
+The intent of this function is to provide a clear and concise mechanism to treat single
+elements that have multiple possible representations as intervals so that logic doesn't have to account
+for the variability. More complex calculations (such as medication request period or dispense period
+calculation) need specific guidance and consideration. That guidance may make use of this function, but
+the focus of this function is on single element calculations where the semantics are unambiguous.
+If the input is a DateTime, the result a DateTime Interval beginning and ending on that DateTime.
+If the input is a Quantity, the quantity is expected to be a calendar-duration interpreted as an Age,
+and the result is a DateTime Interval beginning on the Date the patient turned that age and ending immediately before one year later.
+If the input is a DateTime Interval, the result is the input.
+If the input is a Quantity Interval, the quantities are expected to be calendar-durations interpreted as an Age, and the result
+is a DateTime Interval beginning on the date the patient turned the age given as the start of the quantity interval, and ending
+immediately before one year later than the date the patient turned the age given as the end of the quantity interval.
+If the input is a Timing, an error will be thrown indicating that Timing calculations are not implemented. Any other input will reslt in a null DateTime Interval
+*/
+define fluent function toInterval(choice Choice&lt;DateTime, Quantity, Interval&lt;DateTime&gt;, Interval&lt;Quantity&gt;, Timing&gt;):
+  case
+	  when choice is DateTime then
+    	Interval[choice as DateTime, choice as DateTime]
+		when choice is Interval&lt;DateTime&gt; then
+  		choice as Interval&lt;DateTime&gt;
+		when choice is Quantity then
+		  Interval[Patient.birthDate + (choice as Quantity),
+			  Patient.birthDate + (choice as Quantity) + 1 year)
+		when choice is Interval&lt;Quantity&gt; then
+		  Interval[Patient.birthDate + (choice.low as Quantity),
+			  Patient.birthDate + (choice.high as Quantity) + 1 year)
+		when choice is Timing then
+      Message(null, true, 'NOT_IMPLEMENTED', 'Error', 'Calculation of an interval from a Timing value is not supported') as Interval&lt;DateTime&gt;
+		else
+			null as Interval&lt;DateTime&gt;
+	end</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cqmcommon-hospitalizationwithobservation"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CQMCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Hospitalization with Observation returns the total interval from the start of any immediately prior emergency department visit through the observation visit to the discharge of the given encounter
+*/
+define fluent function hospitalizationWithObservation(TheEncounter Encounter ):
+  TheEncounter Visit
+  		let ObsVisit: Last([Encounter: &quot;Observation Services&quot;] LastObs
+  				where LastObs.status = 'finished'
+            and LastObs.period ends 1 hour or less on or before start of Visit.period
+  				sort by end of period
+  			),
+  			VisitStart: Coalesce(start of ObsVisit.period, start of Visit.period),
+  			EDVisit: Last([Encounter: &quot;Emergency Department Visit&quot;] LastED
+  				where LastED.status = 'finished'
+            and LastED.period ends 1 hour or less on or before VisitStart
+  				sort by end of period
+  			)
+  		return Interval[Coalesce(start of EDVisit.period, VisitStart), end of Visit.period]</code></pre>
+  </td>
+
+</tr>
+
+  
+
+<tr>
+  <th colspan="2" scope="row" class="row-header">Generated using version 0.4.7 of the sample-content-ig Liquid templates</th>
+</tr>
+
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

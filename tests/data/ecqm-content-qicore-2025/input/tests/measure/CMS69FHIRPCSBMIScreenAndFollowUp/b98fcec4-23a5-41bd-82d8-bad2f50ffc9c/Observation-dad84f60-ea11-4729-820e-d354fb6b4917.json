@@ -1,0 +1,31 @@
+{
+  "resourceType": "Observation",
+  "id": "dad84f60-ea11-4729-820e-d354fb6b4917",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "procedure",
+      "display": "Procedure"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "39156-5",
+      "display": "Body mass index (BMI) [Ratio]",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b98fcec4-23a5-41bd-82d8-bad2f50ffc9c"
+  },
+  "effectiveDateTime": "2026-01-01T00:01:00.000+00:00",
+  "valueQuantity": {
+    "value": 18.4,
+    "unit": "kg/m2"
+  }
+}

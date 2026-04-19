@@ -1,0 +1,23 @@
+{
+  "resourceType": "Coverage",
+  "id": "a1072135-dd48-4ec0-8f72-a4c65291627c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+  },
+  "status": "active",
+  "subscriberId": "123456789",
+  "beneficiary": {
+    "reference": "Patient/f256f4bb-e5ad-4e93-bee7-7237b1fa275a"
+  },
+  "relationship": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+      "code": "self",
+      "display": "Self",
+      "userSelected": true
+    } ]
+  },
+  "payor": [ {
+    "reference": "Organization/ab19a50e-596f-44d4-bef5-48a6fd70c235"
+  } ]
+}

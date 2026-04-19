@@ -1126,6 +1126,23 @@ class FP_DateTime(FP_TimeBase):
         return datetime.strptime(date_string, "%Y-%m-%d %H:%M:%S.%f")
 
 
+# FHIR choice type TitleCase suffixes used to infer type from paths like
+# "Observation.valueQuantity" → type "Quantity".  Ordered longest-first so
+# that e.g. "CodeableConcept" matches before "Concept".
+_CHOICE_TYPE_SUFFIXES = sorted([
+    "DateTime", "Date", "Time", "Instant",
+    "Boolean", "Integer", "Decimal", "String",
+    "Quantity", "CodeableConcept", "Coding", "Code",
+    "Period", "Range", "Ratio", "Reference",
+    "Annotation", "Attachment", "Identifier",
+    "HumanName", "Address", "ContactPoint",
+    "Timing", "Signature", "Age", "Count",
+    "Distance", "Duration", "Money", "SimpleQuantity",
+    "SampledData", "Uri", "Url", "Canonical", "Oid", "Uuid",
+    "Id", "Markdown", "Base64Binary", "UnsignedInt", "PositiveInt",
+], key=len, reverse=True)
+
+
 class ResourceNode:
     """
     *  Constructs a instance for the given node ("data") of a resource.  If the
@@ -1199,6 +1216,19 @@ class ResourceNode:
                 field_name = suffix[1:]
                 if self.path.endswith("." + field_name) or self.path == field_name:
                     return TypeInfo(namespace=namespace, name=type_name)
+
+        # Detect FHIR choice type paths (e.g., "DetectedIssue.identifiedDateTime")
+        # by checking if the last path segment ends with a known FHIR type suffix.
+        if "." in self.path:
+            last_segment = self.path.rsplit(".", 1)[1]
+            for suffix in _CHOICE_TYPE_SUFFIXES:
+                if last_segment.endswith(suffix) and len(last_segment) > len(suffix):
+                    # Verify the prefix part is lowercase (a real choice field)
+                    prefix = last_segment[:-len(suffix)]
+                    if prefix and prefix[0].islower():
+                        # Convert suffix to FHIR type name (lowercase first char)
+                        fhir_type = suffix[0].lower() + suffix[1:]
+                        return TypeInfo(namespace=namespace, name=fhir_type)
 
         # If we have a model but no path match, fall back to value-based inference
         # (don't just return BackboneElement)
@@ -1305,6 +1335,12 @@ class TypeInfo:
         if not isinstance(other, TypeInfo):
             return False
 
+        # FHIRPath §6.3: System types and FHIR types do not match across
+        # namespaces. Only compare names when namespaces are compatible.
+        if (self.namespace and other.namespace
+                and self.namespace != other.namespace):
+            return False
+
         self_name = TypeInfo._normalize_type_name(self.namespace, self.name)
         other_name = TypeInfo._normalize_type_name(other.namespace, other.name)
 
@@ -1313,6 +1349,12 @@ class TypeInfo:
     def is_exact_type(self, other, model=None):
         """Check if this type is exactly the same as other type (no subtype matching)."""
         if not isinstance(other, TypeInfo):
+            return False
+
+        # FHIRPath §6.3: System types and FHIR types do not match across
+        # namespaces.
+        if (self.namespace and other.namespace
+                and self.namespace != other.namespace):
             return False
 
         self_name = TypeInfo._normalize_type_name(self.namespace, self.name)

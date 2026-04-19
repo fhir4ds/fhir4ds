@@ -1,0 +1,58 @@
+{
+  "resourceType": "Patient",
+  "id": "15f7e535-9af3-4fdf-b3b3-8fa6b9d6ca76",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient", "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2028-9",
+        "display": "Asian"
+      }
+    }, {
+      "url": "text",
+      "valueString": "Asian"
+    }, {
+      "url": "detailed",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2036-2",
+        "display": "Filipino"
+      }
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino"
+      }
+    }, {
+      "url": "text",
+      "valueString": "Hispanic or Latino"
+    }, {
+      "url": "detailed",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2143-6",
+        "display": "Gallego"
+      }
+    } ]
+  } ],
+  "identifier": [ {
+    "system": "http://hospital.smarthealthit.org",
+    "value": "999999995"
+  } ],
+  "name": [ {
+    "family": "Age18",
+    "given": [ "IPPPass" ]
+  } ],
+  "gender": "female",
+  "birthDate": "2005-12-31"
+}

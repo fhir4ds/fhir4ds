@@ -1,0 +1,34 @@
+{
+  "resourceType": "Condition",
+  "id": "20c5793d-9fb9-492f-b73d-8c6dcb85d7ca",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "232023006",
+      "display": "Traction detachment of retina due to diabetes mellitus (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/9bdcc79c-f0b7-438e-9e2b-3f6a4350caf6"
+  },
+  "onsetDateTime": "2026-09-10T10:45:00.000+00:00"
+}

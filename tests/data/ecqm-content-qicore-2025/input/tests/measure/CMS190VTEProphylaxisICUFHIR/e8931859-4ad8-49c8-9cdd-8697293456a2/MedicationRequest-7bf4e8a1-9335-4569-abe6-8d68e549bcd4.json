@@ -1,0 +1,46 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "7bf4e8a1-9335-4569-abe6-8d68e549bcd4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+      "code": "community"
+    } ]
+  } ],
+  "doNotPerform": true,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "861363"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/e8931859-4ad8-49c8-9cdd-8697293456a2"
+  },
+  "authoredOn": "2026-11-03T09:00:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/123456"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183932001",
+      "display": "Procedure contraindicated (situation)",
+      "userSelected": true
+    } ]
+  } ],
+  "dosageInstruction": [ {
+    "timing": {
+      "repeat": {
+        "boundsPeriod": {
+          "start": "2026-11-03T09:00:00.000+00:00"
+        }
+      }
+    }
+  } ]
+}

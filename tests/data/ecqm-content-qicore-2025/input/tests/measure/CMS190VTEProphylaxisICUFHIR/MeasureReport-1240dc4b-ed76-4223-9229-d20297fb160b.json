@@ -1,0 +1,111 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "1240dc4b-ed76-4223-9229-d20297fb160b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "68d887a6-0b11-4313-a7ca-c1698a9f9c55-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "f859dd94-f201-4517-a368-32b98dd486c9"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#68d887a6-0b11-4313-a7ca-c1698a9f9c55-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "meets IPP, meets Denominator, IPC applied not done MedRsn and Warfarin admin not done PatRfsl - during ED but ED > 1 hr before adm time, but it is on the same day as Adm date\n\"\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS190VTEProphylaxisICUFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/f859dd94-f201-4517-a368-32b98dd486c9"
+  }, {
+    "reference": "Encounter/f37818c5-e7ab-43e3-aed5-9f032b3a4388"
+  }, {
+    "reference": "Encounter/a89ef33f-53f8-4f79-a380-0e6d66e7e063"
+  }, {
+    "reference": "Coverage/68bfde7f-f67e-4811-9e05-9448e940bb88"
+  }, {
+    "reference": "Location/fa64ccaf-0f51-49fa-bf3f-83b046348dff"
+  }, {
+    "reference": "Procedure/c3a13734-bd00-4cf2-8b5e-8fad69dabeed"
+  }, {
+    "reference": "MedicationAdministration/b6f233e3-a330-4f52-9c54-127d69fcd488"
+  }, {
+    "reference": "Organization/853f3eab-f726-40bf-bf86-f5926008e1ba"
+  }, {
+    "reference": "Practitioner/03e9778e-f002-41da-9f1b-c6bf2a67e215"
+  } ]
+}

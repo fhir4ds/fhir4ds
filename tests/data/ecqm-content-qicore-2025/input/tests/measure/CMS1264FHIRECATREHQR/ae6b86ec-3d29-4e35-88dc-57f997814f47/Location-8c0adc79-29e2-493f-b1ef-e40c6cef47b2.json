@@ -1,0 +1,22 @@
+{
+  "resourceType": "Location",
+  "id": "8c0adc79-29e2-493f-b1ef-e40c6cef47b2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-location" ]
+  },
+  "identifier": [ {
+    "use": "usual",
+    "system": "http://exampleoflocation.com",
+    "value": "B1-S.F2"
+  } ],
+  "name": "Emergency Department",
+  "type": [ {
+    "coding": [ {
+      "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+      "version": "2022",
+      "code": "1209-6",
+      "display": "Treatment Room",
+      "userSelected": true
+    } ]
+  } ]
+}

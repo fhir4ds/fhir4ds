@@ -85,7 +85,7 @@ from ...translator.expressions._utils import (
     _get_qicore_extension_fhirpath,
     _resolve_library_code_constant,
 )
-from ...translator.expressions._operators import _is_patient_id_correlation
+from ...translator.expressions._operators import _is_patient_id_correlation, _is_quantity_expression, _ensure_parse_quantity
 
 if TYPE_CHECKING:
     from ...translator.context import SQLTranslationContext
@@ -101,6 +101,19 @@ from ...translator.fhirpath_builder import (
 
 class FunctionsMixin:
     """Mixin providing function reference, exists, and age translations."""
+
+    @staticmethod
+    def _is_list_typed_ast(node) -> bool:
+        """Check if a CQL AST node is typed as a list (e.g., ``null as List<Any>``)."""
+        from ...parser.ast_nodes import BinaryExpression
+        # ``null as List<X>`` parses as BinaryExpression(operator='as', right=TypeSpecifier)
+        if isinstance(node, BinaryExpression) and getattr(node, 'operator', '') == 'as':
+            ts = getattr(node, 'right', None)
+            if ts is not None:
+                ts_str = str(ts).lower()
+                if 'list' in ts_str:
+                    return True
+        return False
 
     def _wrap_list_aggregate(
         self, agg_func: str, source_sql: SQLExpression
@@ -395,6 +408,44 @@ class FunctionsMixin:
         # Step 2: Translate arguments
         args = [self.translate(arg, usage=ExprUsage.SCALAR) for arg in func.arguments]
 
+        # Step 2a: CQL Round — half-up semantics via custom macros
+        # 1-arg → Round(x), 2-arg → RoundTo(x, precision)
+        if name == "Round":
+            if len(args) == 1:
+                return SQLFunctionCall(name="Round", args=args)
+            elif len(args) == 2:
+                return SQLFunctionCall(name="RoundTo", args=args)
+
+        # Step 2a2: ToConcept — ensure argument is VARCHAR for the UDF
+        # If argument is a struct_pack (legacy), wrap in to_json()
+        # json_object() already returns VARCHAR, no wrapping needed
+        if name == "ToConcept" and len(args) == 1:
+            arg = args[0]
+            if isinstance(arg, SQLFunctionCall) and arg.name == "struct_pack":
+                arg = SQLFunctionCall(name="to_json", args=[arg])
+            return SQLFunctionCall(name="ToConcept", args=[arg])
+
+        # Step 2b: Quantity-aware routing for numeric functions
+        # CQL Abs/Negate on Quantity must use UDF, not SQL ABS() macro
+        if name == "Abs" and len(args) == 1:
+            if _is_quantity_expression(args[0]) or self._is_cql_quantity_expr(func.arguments[0]):
+                return SQLFunctionCall(name="quantityAbs", args=[_ensure_parse_quantity(args[0])])
+
+        # Step 2c: CQL Length — polymorphic over String and List
+        # CQL §20.16: Length on list returns count, null list → 0
+        # CQL §17.5: Length on string returns char count, null string → null
+        if name == "Length" and len(args) == 1:
+            raw_arg = func.arguments[0]
+            is_list = _is_list_returning_sql(args[0]) or self._is_list_typed_ast(raw_arg)
+            if is_list:
+                return SQLFunctionCall(
+                    name="COALESCE",
+                    args=[
+                        SQLFunctionCall(name="array_length", args=args),
+                        SQLLiteral(0),
+                    ],
+                )
+
         # Step 3: Check registry for simple renames and parameterized translations
         strategy = self._function_registry.get(name, arity)
         if isinstance(strategy, SimpleRename):
@@ -449,6 +500,12 @@ class FunctionsMixin:
                     args=[args[0], SQLLiteral(fhirpath_expr)],
                 )
 
+        # Step 6.6: Combine with separator → CombineSep macro
+        # DuckDB doesn't support macro overloading, so 2-arg Combine needs
+        # to use the CombineSep macro instead.
+        if bare_name == "Combine" and len(args) == 2:
+            return SQLFunctionCall(name="CombineSep", args=args)
+
         # Step 7: Fallback — pass through as function call
         logger.debug("Unknown function '%s' — passing through to SQL", name)
         return SQLFunctionCall(name=name, args=args)
@@ -463,6 +520,8 @@ class FunctionsMixin:
         _CQL_AGG_TO_SQL = {
             "anytrue": "bool_or",
             "alltrue": "bool_and",
+            "anyfalse": "bool_and",   # AnyFalse = NOT AllTrue → uses bool_and with NOT
+            "allfalse": "bool_or",    # AllFalse = NOT AnyTrue → uses bool_or with NOT
             "min": "MIN",
             "max": "MAX",
             "sum": "SUM",
@@ -471,6 +530,7 @@ class FunctionsMixin:
             "median": "MEDIAN",
             "mode": "MODE",
             "stddev": "STDDEV_SAMP",
+            "stddevpop": "STDDEV_POP",
             "variance": "VAR_SAMP",
             "populationstddev": "STDDEV_POP",
             "populationvariance": "VAR_POP",
@@ -481,9 +541,17 @@ class FunctionsMixin:
         agg_func = _CQL_AGG_TO_SQL.get(name.lower())
         if agg_func is None:
             return None
+        # CQL §20.3-20.4: AllFalse/AnyFalse negate their base aggregate
+        _negate_result = name.lower() in ("allfalse", "anyfalse")
 
         from ...parser.ast_nodes import Query as CQLQuery, ListExpression, Retrieve, DistinctExpression
         arg = func.arguments[0]
+
+        def _maybe_negate(expr: SQLExpression) -> SQLExpression:
+            """Wrap with NOT for AllFalse/AnyFalse (CQL §20.3-20.4)."""
+            if _negate_result:
+                return SQLUnaryOp(operator="NOT", operand=expr)
+            return expr
 
         # Retrieve sources (e.g. Count([Encounter])) need a correlated subquery
         # because the Retrieve translates to a RetrievePlaceholder that Phase 3
@@ -506,7 +574,7 @@ class FunctionsMixin:
                     right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
                 ),
             ))
-            return correlated
+            return _maybe_negate(correlated)
 
         # Aggregate on distinct(query) — e.g., Count(distinct(query)) (CMS117).
         # Translate the inner query and wrap with COUNT(DISTINCT col) instead of
@@ -523,19 +591,19 @@ class FunctionsMixin:
                             result.query.columns[i] = SQLFunctionCall(
                                 name=col.name, args=col.args, distinct=True
                             )
-                return result
+                return _maybe_negate(result)
 
         if isinstance(arg, CQLQuery):
             source_sql = self.translate(arg, usage=ExprUsage.LIST)
             result = self._wrap_list_aggregate(agg_func, source_sql)
             if result is not None:
-                return result
+                return _maybe_negate(result)
         # FunctionRef that expands to a Query
         if isinstance(arg, FunctionRef):
             source_sql = self.translate(arg, usage=ExprUsage.LIST)
             result = self._wrap_list_aggregate(agg_func, source_sql)
             if result is not None:
-                return result
+                return _maybe_negate(result)
         # Property-on-Query: Min((from X where Y).prop)
         if (
             name.lower() in ("min", "max", "sum", "avg", "count")
@@ -552,10 +620,17 @@ class FunctionsMixin:
             return SQLSubquery(query=SQLSelect(
                 columns=[SQLFunctionCall(name=agg_func, args=[scalar])],
             ))
-        # AnyTrue/AllTrue with non-query source
-        if name.lower() in ("anytrue", "alltrue"):
+        # AnyTrue/AllTrue/AnyFalse/AllFalse with non-query source (list literals)
+        # CQL §20.1-20.4: these aggregate boolean lists into a single boolean.
+        _BOOL_AGG_UDF = {
+            "alltrue": "logicalAllTrue",
+            "anytrue": "logicalAnyTrue",
+            "allfalse": "logicalAllFalse",
+            "anyfalse": "logicalAnyFalse",
+        }
+        if name.lower() in _BOOL_AGG_UDF:
             scalar = self.translate(arg, usage=ExprUsage.SCALAR)
-            return scalar
+            return SQLFunctionCall(name=_BOOL_AGG_UDF[name.lower()], args=[scalar])
         # Min/Max on list literals
         if name.lower() in ("min", "max") and isinstance(arg, ListExpression):
             source_sql = self.translate(arg, usage=ExprUsage.SCALAR)
@@ -563,18 +638,74 @@ class FunctionsMixin:
                 list_func = "list_min" if name.lower() == "min" else "list_max"
                 return SQLFunctionCall(name=list_func, args=[source_sql])
 
-        # Count/Sum/Avg on list literals — use DuckDB list functions
+        # Count/Sum/Avg/StdDev/Variance/Product on list literals — use DuckDB list functions
         if isinstance(arg, ListExpression):
             source_sql = self.translate(arg, usage=ExprUsage.SCALAR)
             if isinstance(source_sql, SQLArray):
                 if name.lower() == "count":
-                    return SQLFunctionCall(name="len", args=[source_sql])
-                _list_agg = {"sum": "sum", "avg": "avg", "median": "median",
-                             "mode": "mode"}.get(name.lower())
+                    # CQL §20.5: Count returns number of non-null elements
+                    filtered = SQLFunctionCall(
+                        name="list_filter",
+                        args=[source_sql, SQLLambda(param="_v", body=SQLUnaryOp(
+                            operator="IS NOT NULL",
+                            operand=SQLIdentifier(name="_v"),
+                            prefix=False,
+                        ))],
+                    )
+                    return SQLFunctionCall(name="len", args=[filtered])
+                _list_agg = {
+                    "sum": "sum", "avg": "avg", "median": "median",
+                    "mode": "mode", "stddev": "stddev_samp",
+                    "stddevpop": "stddev_pop", "populationstddev": "stddev_pop",
+                    "variance": "var_samp", "populationvariance": "var_pop",
+                    "product": "product",
+                }.get(name.lower())
                 if _list_agg:
+                    # Mode works on any type; numeric aggregates need DOUBLE cast
+                    if _list_agg == "mode":
+                        return SQLFunctionCall(
+                            name="list_aggregate",
+                            args=[source_sql, SQLLiteral(value=_list_agg)],
+                        )
+                    # DuckDB list_aggregate requires numeric input; cast VARCHAR elements.
+                    # For quantity elements (parse_quantity struct), extract .value field.
+                    _has_quantity = any(
+                        isinstance(e, SQLFunctionCall) and e.name == "parse_quantity"
+                        for e in (source_sql.elements if hasattr(source_sql, 'elements') else [])
+                    )
+                    if _has_quantity:
+                        # parse_quantity returns VARCHAR (JSON). Extract numeric value via json_extract.
+                        cast_source = SQLFunctionCall(
+                            name="list_transform",
+                            args=[source_sql, SQLLambda(param="_v", body=SQLRaw("CAST(json_extract_string(_v, '$.value') AS DOUBLE)"))],
+                        )
+                        agg_result = SQLFunctionCall(
+                            name="list_aggregate",
+                            args=[cast_source, SQLLiteral(value=_list_agg)],
+                        )
+                        # Wrap result back as quantity JSON with the unit from first element
+                        first_elem = source_sql.elements[0] if hasattr(source_sql, 'elements') and source_sql.elements else None
+                        if first_elem and isinstance(first_elem, SQLFunctionCall) and first_elem.args:
+                            unit_json = first_elem.args[0]  # The JSON string arg
+                            unit_sql = unit_json.to_sql()
+                            return SQLRaw(
+                                f"CASE WHEN ({agg_result.to_sql()}) IS NULL THEN NULL "
+                                f"ELSE CAST(json_object('value', ({agg_result.to_sql()})::DOUBLE, "
+                                f"'unit', COALESCE(json_extract_string({unit_sql}, '$.unit'), "
+                                f"json_extract_string({unit_sql}, '$.code'))) AS VARCHAR) END"
+                            )
+                        return agg_result
+                    cast_source = SQLFunctionCall(
+                        name="list_transform",
+                        args=[source_sql, SQLLambda(param="_v", body=SQLCast(
+                            expression=SQLIdentifier(name="_v"),
+                            target_type="DOUBLE",
+                            try_cast=True,
+                        ))],
+                    )
                     return SQLFunctionCall(
                         name="list_aggregate",
-                        args=[source_sql, SQLLiteral(value=_list_agg)],
+                        args=[cast_source, SQLLiteral(value=_list_agg)],
                     )
 
         return None  # Fall through to standard translation
@@ -582,7 +713,20 @@ class FunctionsMixin:
     # ── Parameterized function handlers ───────────────────────────────────
 
     def _translate_coalesce(self, args: list) -> SQLExpression:
-        """Translate CQL Coalesce with type compatibility handling."""
+        """Translate CQL Coalesce with type compatibility handling.
+
+        CQL §22.6: Coalesce returns the first non-null argument.
+        When called with a single list argument, returns the first non-null element.
+        """
+        # Single list argument: reduce to first non-null element
+        if len(args) == 1 and isinstance(args[0], SQLArray):
+            # Expand list elements into COALESCE arguments
+            args = args[0].elements
+
+        # Empty argument list → null
+        if not args:
+            return SQLLiteral(value=None)
+
         has_date_cast = any(
             isinstance(a, SQLCast) and a.target_type == "DATE" for a in args
         )
@@ -683,12 +827,27 @@ class FunctionsMixin:
         return SQLLiteral(value=False)
 
     def _translate_substring(self, args: list) -> SQLExpression:
-        """Translate CQL Substring (0-indexed) to SQL SUBSTRING (1-indexed)."""
+        """Translate CQL Substring (0-indexed) to SQL SUBSTRING (1-indexed).
+
+        Uses ``system.substring`` to bypass the CQL ``Substring`` macro which
+        only accepts 2 arguments.
+
+        CQL §17.7: If startIndex < 0 or > Length(string), the result is null.
+        """
         if len(args) >= 2:
             start_index = SQLBinaryOp(operator="+", left=args[1], right=SQLLiteral(value=1))
             if len(args) >= 3:
-                return SQLFunctionCall(name="SUBSTRING", args=[args[0], start_index, args[2]])
-            return SQLFunctionCall(name="SUBSTRING", args=[args[0], start_index])
+                substr = SQLFunctionCall(name="system.substring", args=[args[0], start_index, args[2]])
+            else:
+                substr = SQLFunctionCall(name="system.substring", args=[args[0], start_index])
+            # Return NULL when start index < 0 (CQL uses 0-based)
+            return SQLCase(
+                when_clauses=[(
+                    SQLBinaryOp(left=args[1], operator="<", right=SQLLiteral(value=0)),
+                    SQLNull(),
+                )],
+                else_clause=substr,
+            )
         return args[0] if args else SQLNull()
 
     def _translate_startswith(self, args: list) -> SQLExpression:
@@ -743,23 +902,28 @@ class FunctionsMixin:
         return SQLLiteral(value=-1)
 
     def _translate_lastpositionof(self, args: list) -> SQLExpression:
-        """Translate CQL LastPositionOf (0-based) to DuckDB strrpos (1-based)."""
+        """Translate CQL LastPositionOf (0-based) using the registered macro."""
         if len(args) >= 2:
-            strrpos_result = SQLFunctionCall(name="strrpos", args=[args[1], args[0]])
-            return SQLCase(
-                when_clauses=[(
-                    SQLBinaryOp(operator="=", left=strrpos_result, right=SQLLiteral(value=0)),
-                    SQLLiteral(value=-1),
-                )],
-                else_clause=SQLBinaryOp(operator="-", left=strrpos_result, right=SQLLiteral(value=1)),
-            )
+            # Use the registered LastPositionOf macro (handles null, 0-based)
+            return SQLFunctionCall(name="LastPositionOf", args=[args[0], args[1]])
         return SQLLiteral(value=-1)
 
     def _translate_log(self, args: list) -> SQLExpression:
-        """Translate CQL Log: 2-arg is LOG(base, value), 1-arg is LN."""
+        """Translate CQL Log: 2-arg is Log(value, base), 1-arg is Ln.
+
+        CQL §16.13/§16.12: Returns null for invalid inputs (negative, base=1).
+        Uses ``system.log`` to bypass the 1-arg CQL macro that would
+        otherwise shadow DuckDB's native 2-arg LOG.
+        Wraps in TRY() to return null on out-of-range errors.
+        """
         if len(args) >= 2:
-            return SQLFunctionCall(name="LOG", args=[args[1], args[0]])
-        return SQLFunctionCall(name="LN", args=args)
+            # CQL: Log(value, base) → DuckDB: TRY(system.log(base, value))
+            return SQLRaw(raw_sql=f"TRY(system.log({args[1].to_sql()}, {args[0].to_sql()}))")
+        return SQLRaw(raw_sql=f"TRY(LN({args[0].to_sql()}))")
+
+    def _translate_ln(self, args: list) -> SQLExpression:
+        """Translate CQL Ln — wraps in TRY() for invalid input (negative numbers)."""
+        return SQLRaw(raw_sql=f"TRY(LN({args[0].to_sql()}))")
 
     def _translate_power(self, args: list) -> SQLExpression:
         """Translate CQL Power to DuckDB POW."""
@@ -836,6 +1000,7 @@ class FunctionsMixin:
             "date": "9999-12-31",
             "time": "23:59:59",
             "integer": 2147483647,
+            "long": 9223372036854775807,
             "decimal": "99999999999999999999.99999999",
         }
         if func.arguments:
@@ -854,6 +1019,7 @@ class FunctionsMixin:
             "date": "0001-01-01",
             "time": "00:00:00",
             "integer": -2147483648,
+            "long": -9223372036854775808,
             "decimal": "-99999999999999999999.99999999",
         }
         if func.arguments:
@@ -902,32 +1068,80 @@ class FunctionsMixin:
         return SQLFunctionCall(name="collapse_intervals", args=[arg])
 
     def _translate_expand(self, func: FunctionRef) -> Optional[SQLExpression]:
-        """Translate CQL Expand for integer interval lists."""
-        from ...parser.ast_nodes import ListExpression, Interval as CQLInterval
+        """Translate CQL Expand.
+
+        For integer list-of-intervals with a single element, uses DuckDB's
+        native ``generate_series`` + ``list_transform`` for efficient expansion
+        that returns a proper DuckDB list (compatible with UNNEST).
+
+        For single-interval overloads, routes to ``expand_points`` UDFs.
+        For other list-of-intervals (dates, etc.), routes to ``expand`` UDFs.
+
+        CQL §19.25.
+        """
         if not func.arguments:
             return None
-        cql_arg = func.arguments[0]
-        if isinstance(cql_arg, ListExpression) and len(cql_arg.elements) == 1:
-            interval_elem = cql_arg.elements[0]
-            if isinstance(interval_elem, CQLInterval):
-                low_sql = self.translate(interval_elem.low, usage=ExprUsage.SCALAR)
-                high_sql = self.translate(interval_elem.high, usage=ExprUsage.SCALAR)
-                series = SQLFunctionCall(name="generate_series", args=[low_sql, high_sql])
-                lambda_param = SQLIdentifier(name="x")
-                lambda_body = SQLFunctionCall(
-                    name="intervalFromBounds",
-                    args=[
-                        SQLCast(expression=lambda_param, target_type="VARCHAR"),
-                        SQLCast(expression=SQLIdentifier(name="x"), target_type="VARCHAR"),
-                        SQLLiteral(value=True),
-                        SQLLiteral(value=True),
-                    ],
-                )
-                return SQLFunctionCall(
-                    name="list_transform",
-                    args=[series, SQLLambda(param="x", body=lambda_body)],
-                )
-        return None
+
+        first_arg = self.translate(func.arguments[0], usage=ExprUsage.SCALAR)
+
+        from ...parser.ast_nodes import Interval as CQLInterval, ListExpression
+        ast_arg = func.arguments[0]
+        is_single_interval = isinstance(ast_arg, CQLInterval)
+
+        if is_single_interval:
+            # Single-interval overload → expand_points UDF (accepts VARCHAR)
+            fn_name = "expand_points" if len(func.arguments) > 1 else "expand_points1"
+            if len(func.arguments) > 1:
+                per_arg = self.translate(func.arguments[1], usage=ExprUsage.SCALAR)
+                return SQLFunctionCall(name=fn_name, args=[first_arg, per_arg])
+            return SQLFunctionCall(name=fn_name, args=[first_arg])
+
+        # List-of-intervals: check for integer interval optimization.
+        # { Interval[low, high] } with no per → generate_series for DuckDB list.
+        if (
+            isinstance(ast_arg, ListExpression)
+            and len(ast_arg.elements) == 1
+            and isinstance(ast_arg.elements[0], CQLInterval)
+            and len(func.arguments) == 1
+        ):
+            interval_elem = ast_arg.elements[0]
+            low_sql = self.translate(interval_elem.low, usage=ExprUsage.SCALAR)
+            high_sql = self.translate(interval_elem.high, usage=ExprUsage.SCALAR)
+            # Adjust for open bounds: integer [1, 10) → generate_series(1, 9)
+            if not interval_elem.low_closed:
+                low_sql = SQLBinaryOp(operator="+", left=low_sql, right=SQLLiteral(value=1))
+            if not interval_elem.high_closed:
+                high_sql = SQLBinaryOp(operator="-", left=high_sql, right=SQLLiteral(value=1))
+            series = SQLFunctionCall(name="generate_series", args=[low_sql, high_sql])
+            lambda_param = SQLIdentifier(name="x")
+            lambda_body = SQLFunctionCall(
+                name="intervalFromBounds",
+                args=[
+                    SQLCast(expression=lambda_param, target_type="VARCHAR"),
+                    SQLCast(expression=SQLIdentifier(name="x"), target_type="VARCHAR"),
+                    SQLLiteral(value=True),
+                    SQLLiteral(value=True),
+                ],
+            )
+            return SQLFunctionCall(
+                name="list_transform",
+                args=[series, SQLLambda(param="x", body=lambda_body)],
+            )
+
+        # General list-of-intervals → expand UDF (accepts VARCHAR[])
+        from ...translator.types import SQLArray
+        if not isinstance(first_arg, SQLArray) and not (
+            isinstance(first_arg, SQLFunctionCall)
+            and first_arg.name
+            and first_arg.name.startswith("list_")
+        ):
+            first_arg = SQLFunctionCall(name="list_value", args=[first_arg])
+        fn_name = "expand" if len(func.arguments) > 1 else "expand1"
+
+        if len(func.arguments) > 1:
+            per_arg = self.translate(func.arguments[1], usage=ExprUsage.SCALAR)
+            return SQLFunctionCall(name=fn_name, args=[first_arg, per_arg])
+        return SQLFunctionCall(name=fn_name, args=[first_arg])
 
     def _translate_type_conversion(self, name: str, args: List[SQLExpression]) -> SQLExpression:
         """Translate a CQL type conversion function."""
@@ -944,7 +1158,28 @@ class FunctionsMixin:
 
         target_type = type_map.get(name_lower)
         if target_type and args:
-            return SQLCast(expression=args[0], target_type=target_type)
+            # ToTime needs special handling — use the macro which strips 'T' prefix
+            if name_lower == "totime":
+                return SQLFunctionCall("ToTime", args)
+            # ToString(Quantity): CQL §22.31 — format as "<value> '<unit>'"
+            if name_lower == "tostring":
+                arg = args[0]
+                arg_sql = arg.to_sql() if hasattr(arg, 'to_sql') else str(arg)
+                if 'parse_quantity' in arg_sql or 'Quantity' in arg_sql:
+                    return SQLFunctionCall("QuantityToString", args)
+            # CQL §22.28-34: Conversion functions return null on invalid input.
+            # ToDateTime/ToDate from string: validate ISO 8601 format (DuckDB TRY_CAST is too lenient).
+            # Only apply regex when input is a string literal; non-string inputs (TIMESTAMP, DATE) use TRY_CAST.
+            if name_lower in ('todatetime', 'todate'):
+                arg_sql = args[0].to_sql()
+                # Both ToDate and ToDateTime accept ISO 8601 strings starting with YYYY-MM-DD
+                pattern = r"'\d{4}-\d{2}-\d{2}.*'"
+                return SQLRaw(
+                    f"CASE WHEN typeof({arg_sql}) = 'VARCHAR' AND NOT ({arg_sql}) SIMILAR TO {pattern} "
+                    f"THEN NULL ELSE TRY_CAST(({arg_sql}) AS {target_type}) END"
+                )
+            # Use TRY_CAST to avoid Conversion Errors.
+            return SQLCast(expression=args[0], target_type=target_type, try_cast=True)
 
         return args[0] if args else SQLNull()
 

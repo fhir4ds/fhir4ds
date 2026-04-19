@@ -1,0 +1,41 @@
+{
+  "resourceType": "Observation",
+  "id": "089cead4-7903-483d-b2f8-673f386042ad",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observationcancelled" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/202303",
+        "code": "410536001",
+        "display": "Contraindicated (qualifier value)"
+      } ]
+    }
+  } ],
+  "status": "cancelled",
+  "category": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "428119001",
+      "display": "Procedure not indicated (situation)",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.73",
+      "code": "71487-3",
+      "display": "Right eye Optic disc or retinal nerve fiber layer structural abnormalities by Ophthalmoscopy"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/37d4f1ee-3f65-4f68-ac6c-685cc093eaf1"
+  },
+  "effectiveDateTime": "2026-08-27T13:00:00.000+00:00",
+  "issued": "2026-08-28T14:15:00.000+00:00"
+}

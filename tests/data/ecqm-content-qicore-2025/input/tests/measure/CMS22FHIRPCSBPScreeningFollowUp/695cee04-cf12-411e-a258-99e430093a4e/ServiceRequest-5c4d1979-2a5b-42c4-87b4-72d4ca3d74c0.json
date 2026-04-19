@@ -1,0 +1,34 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "5c4d1979-2a5b-42c4-87b4-72d4ca3d74c0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "version": "2022-03",
+        "code": "413311005",
+        "display": "Patient non-compliant - declined intervention / support (situation)",
+        "userSelected": true
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183625007",
+      "display": "Follow-up 4-6 months (finding)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/695cee04-cf12-411e-a258-99e430093a4e"
+  },
+  "authoredOn": "2026-12-31T23:45:00.000+00:00"
+}

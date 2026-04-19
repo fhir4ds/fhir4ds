@@ -1,0 +1,33 @@
+{
+  "resourceType": "Coverage",
+  "id": "3562bfd0-1151-45f8-9a36-d9d9e554e16e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+  },
+  "status": "active",
+  "type": {
+    "coding": [ {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "code": "11",
+      "display": "Medicare Managed Care (Includes Medicare Advantage Plans)"
+    } ]
+  },
+  "subscriberId": "97531",
+  "beneficiary": {
+    "reference": "Patient/49413716-ad9f-4340-b6f8-8186c602f515"
+  },
+  "dependent": "0",
+  "relationship": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+      "code": "self"
+    } ]
+  },
+  "period": {
+    "start": "2024-10-01T00:00:00.000+00:00"
+  },
+  "payor": [ {
+    "reference": "Organization/ede3f297-6a21-489f-9d16-1aa7feabc70a"
+  } ]
+}

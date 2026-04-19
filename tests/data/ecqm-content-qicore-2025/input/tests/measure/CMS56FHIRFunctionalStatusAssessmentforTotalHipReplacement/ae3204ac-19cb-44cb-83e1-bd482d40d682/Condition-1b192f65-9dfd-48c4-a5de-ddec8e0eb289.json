@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "1b192f65-9dfd-48c4-a5de-ddec8e0eb289",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "101371000119101",
+      "display": "Adamantinoma of long bone of lower limb (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/ae3204ac-19cb-44cb-83e1-bd482d40d682"
+  },
+  "onsetDateTime": "2024-11-01T00:00:00.000Z"
+}

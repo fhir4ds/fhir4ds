@@ -1,0 +1,105 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "d4be808c-5d16-4366-9cdc-17ed5390fc77",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "589ce261-ea03-4141-9fae-bc5cf2a0e91a-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "27111f10-365a-4ec3-a918-f856c687211e"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#589ce261-ea03-4141-9fae-bc5cf2a0e91a-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient has 2 ambulatory encounters, HF diagnosis and LVSD and meets denominator exclusion with history of Left Ventricular Assisted Device placement."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS135FHIRHFACEIorARBorARNIforLVSD",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/27111f10-365a-4ec3-a918-f856c687211e"
+  }, {
+    "reference": "Encounter/881d5765-9ac1-402c-bf29-5b84529a5f6e"
+  }, {
+    "reference": "Encounter/79a9a6ab-6f65-479d-b281-1268d397c6aa"
+  }, {
+    "reference": "Condition/c21d6f7b-b0bd-4765-9462-e302f33efbca"
+  }, {
+    "reference": "Condition/e4ebcb6c-752e-4e18-888a-84935b766346"
+  }, {
+    "reference": "Procedure/50ca3558-9aed-4ff1-ba52-2db7b781b754"
+  } ]
+}

@@ -154,7 +154,6 @@ class ExpressionTranslator(
             "abs": "ABS",
             "ceiling": "CEIL",
             "floor": "FLOOR",
-            "round": "ROUND",
             "sqrt": "SQRT",
             "exp": "EXP",
             "nullif": "NULLIF",
@@ -164,7 +163,9 @@ class ExpressionTranslator(
             "stddev": "STDDEV",
             "populationvariance": "VAR_POP",
             "populationstddev": "STDDEV_POP",
+            "stddevpop": "STDDEV_POP",
             "distinct": "list_distinct",
+            "precision": "CQLPrecision",
         }
         for cql, sql in _RENAMES.items():
             registry.register_rename(cql, sql)
@@ -196,6 +197,7 @@ class ExpressionTranslator(
 
         # Math functions
         registry.register("log", lambda args, ctx: self._translate_log(args))
+        registry.register("ln", lambda args, ctx: self._translate_ln(args))
         registry.register("power", lambda args, ctx: self._translate_power(args))
 
         # Scalar min/max (2-arg: LEAST/GREATEST — only after aggregate pre-check)
@@ -220,6 +222,8 @@ class ExpressionTranslator(
         # Misc
         registry.register("message", lambda args, ctx: self._translate_message(args))
         registry.register("quantity", lambda args, ctx: self._translate_quantity_constructor(args))
+        # CQL IndexOf → CQLIndexOf macro (avoids C++ FHIRPath extension conflict)
+        registry.register_rename("indexof", "CQLIndexOf")
 
         # Maximum/Minimum need raw CQL AST to extract type name
         registry.register_pre_translate("maximum", self._translate_maximum_pre)
@@ -257,9 +261,11 @@ class ExpressionTranslator(
             )
 
         # === Pre-translate strategies: need raw CQL AST (aggregates on queries) ===
-        for agg_name in ("anytrue", "alltrue", "min", "max", "sum", "avg", "count",
+        for agg_name in ("anytrue", "alltrue", "anyfalse", "allfalse",
+                         "min", "max", "sum", "avg", "count",
                          "median", "mode", "stddev", "variance",
-                         "populationstddev", "populationvariance"):
+                         "populationstddev", "populationvariance",
+                         "stddevpop"):
             registry.register_pre_translate(
                 agg_name,
                 self._translate_aggregate_pre,

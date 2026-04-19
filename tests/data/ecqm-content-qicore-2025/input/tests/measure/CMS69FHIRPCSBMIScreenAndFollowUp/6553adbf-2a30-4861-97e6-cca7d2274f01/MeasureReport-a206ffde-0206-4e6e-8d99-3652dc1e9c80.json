@@ -1,0 +1,105 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "a206ffde-0206-4e6e-8d99-3652dc1e9c80",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "a00e26f5-b7fb-4f91-b8cd-e2e8ded15308-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "6553adbf-2a30-4861-97e6-cca7d2274f01"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#a00e26f5-b7fb-4f91-b8cd-e2e8ded15308-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Adult, Enc first 30 minutes of the first day of the MP, BMI result above normal, no f/u plan due to medical reason"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS69FHIRPCSBMIScreenAndFollowUp",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 1
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/6553adbf-2a30-4861-97e6-cca7d2274f01"
+  }, {
+    "reference": "Encounter/11fc2aaf-794a-4eea-8797-981c373cecb6"
+  }, {
+    "reference": "Observation/d3b80ec3-9f7d-4ea2-8849-795d3cc56d25"
+  }, {
+    "reference": "MedicationRequest/7c83b982-82a5-4338-8bc9-23eef36a488a"
+  }, {
+    "reference": "Coverage/390a168e-8b93-4e69-b94e-e98821f8fb1d"
+  }, {
+    "reference": "Organization/6ff7a92e-ab91-4497-895a-f7310061f159"
+  } ]
+}

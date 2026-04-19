@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "00f52bfa-44ca-42e3-82a2-fa349184c0b0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "75285-7",
+      "display": "Comparative nutrition assessment standards panel",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/83ccd7ae-2a13-412f-865e-68c6b7f443b9"
+  },
+  "effectiveDateTime": "2026-02-23T10:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "272588001",
+      "display": "Malnutrition (calorie) (disorder)",
+      "userSelected": true
+    } ]
+  }
+}

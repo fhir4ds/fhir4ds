@@ -1,0 +1,33 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "af48fa75-2ba3-486e-ae1a-d5c71d37562c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1000001",
+      "display": "amlodipine 5 MG / hydrochlorothiazide 25 MG / olmesartan medoxomil 40 MG Oral Tablet",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/298d5342-fa0a-4386-bf48-b9c977a1c367"
+  },
+  "authoredOn": "2026-05-15T11:50:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/123456"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183932001",
+      "display": "Procedure contraindicated (situation)",
+      "userSelected": true
+    } ]
+  } ]
+}

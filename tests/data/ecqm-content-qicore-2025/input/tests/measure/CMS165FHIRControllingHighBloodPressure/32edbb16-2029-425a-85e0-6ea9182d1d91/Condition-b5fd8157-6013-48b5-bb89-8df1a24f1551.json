@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "b5fd8157-6013-48b5-bb89-8df1a24f1551",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "10231000132102",
+      "display": "In-vitro fertilization pregnancy (finding)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/32edbb16-2029-425a-85e0-6ea9182d1d91"
+  },
+  "onsetDateTime": "2027-01-01T00:00:00.000+00:00"
+}

@@ -1,0 +1,40 @@
+{
+  "resourceType": "Communication",
+  "id": "cff2802a-9af2-4e3a-a96b-26021dcf0db0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2014-07-02T15:00:00.000+00:00"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDone",
+    "valueBoolean": true
+  }, {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDone",
+    "valueBoolean": true
+  } ],
+  "status": "not-done",
+  "statusReason": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "183932001",
+      "display": "Procedure contraindicated (situation)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b85440e4-b902-49cd-b3d6-363ba7a99bce"
+  },
+  "sent": "2026-07-09T08:00:00.000+00:00",
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "312911008",
+      "display": "Clinically significant macular edema (disorder)"
+    } ]
+  } ]
+}

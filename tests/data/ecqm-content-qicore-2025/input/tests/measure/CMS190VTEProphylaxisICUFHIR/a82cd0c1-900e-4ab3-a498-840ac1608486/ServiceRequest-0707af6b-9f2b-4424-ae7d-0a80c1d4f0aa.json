@@ -1,0 +1,30 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "0707af6b-9f2b-4424-ae7d-0a80c1d4f0aa",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "416406003",
+        "display": "Procedure discontinued (situation)"
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": false,
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "133918004"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a82cd0c1-900e-4ab3-a498-840ac1608486"
+  },
+  "authoredOn": "2026-12-04T06:30:00+00:00"
+}

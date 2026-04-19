@@ -1,0 +1,298 @@
+{
+  "resourceType": "Bundle",
+  "id": "63ec096bccb3770120fea0ad",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/3f107815-92e5-43d1-b57a-4efc0d195b26",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "3f107815-92e5-43d1-b57a-4efc0d195b26",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "text": {
+        "status": "generated",
+        "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">NoResult <b>SODIUMFAIL </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>eb360e3679224871964d5b3575a59ceb3c2f6260372fb1be3ea61ac84d2937cf</td></tr><tr><td>Date of birth</td><td><span>15 June 1956</span></td></tr></tbody></table></div>"
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248153007"
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "63ec096bccb3770120fea0ad"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "OxygenSatPass",
+        "given": [ "OxygenAdminProcDuringEDEncounter" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1941-07-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/3f107815-92e5-43d1-b57a-4efc0d195b26"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/0951b0b7-2eb2-4457-81c5-f0ccfb9840bd",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "0951b0b7-2eb2-4457-81c5-f0ccfb9840bd",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMR",
+        "display": "emergency",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "4525004",
+          "display": "Emergency department patient visit (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/3f107815-92e5-43d1-b57a-4efc0d195b26"
+      },
+      "period": {
+        "start": "2026-07-01T12:01:00.000+00:00",
+        "end": "2026-07-04T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/0951b0b7-2eb2-4457-81c5-f0ccfb9840bd"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/265aaeeb-861f-459d-832b-8a4f5550c28c",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "265aaeeb-861f-459d-832b-8a4f5550c28c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183452005"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/3f107815-92e5-43d1-b57a-4efc0d195b26"
+      },
+      "period": {
+        "start": "2026-07-04T08:15:00.000+00:00",
+        "end": "2026-07-05T11:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/265aaeeb-861f-459d-832b-8a4f5550c28c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/795cf278-a857-422b-8655-8b87a1481042",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "795cf278-a857-422b-8655-8b87a1481042",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-07-01T16:01:00.000+00:00"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "243136002"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/219e4637-9ca3-449d-acf2-b8f387ccb7f5"
+      },
+      "performedPeriod": {
+        "start": "2026-07-05T08:01:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/795cf278-a857-422b-8655-8b87a1481042"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/32155111-6894-43ba-96c2-0fb3f0a01478",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "32155111-6894-43ba-96c2-0fb3f0a01478",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "type": {
+        "coding": [ {
+          "system": "https://nahdo.org/sopt",
+          "version": "1.0.1",
+          "code": "1",
+          "display": "MEDICARE",
+          "userSelected": true
+        } ]
+      },
+      "subscriberId": "AB9876",
+      "beneficiary": {
+        "reference": "Patient/3f107815-92e5-43d1-b57a-4efc0d195b26"
+      },
+      "relationship": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+          "code": "self"
+        } ]
+      },
+      "payor": [ {
+        "reference": "Organization/123456"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/32155111-6894-43ba-96c2-0fb3f0a01478"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/a48f00ad-f632-477d-981e-493eda329dec",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "a48f00ad-f632-477d-981e-493eda329dec",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "0723660813"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/a48f00ad-f632-477d-981e-493eda329dec"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/2b61aa62-52c0-410a-b17d-0de7fc399138",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "2b61aa62-52c0-410a-b17d-0de7fc399138",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "7498665d-8a94-42a2-87e6-878b8ed1bc7c-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "3f107815-92e5-43d1-b57a-4efc0d195b26"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#7498665d-8a94-42a2-87e6-878b8ed1bc7c-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Oxygen procedure after ED encounter, admitted to inpatient"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMSFHIR844HybridHospitalWideMortality",
+      "period": {
+        "start": "2026-07-01",
+        "end": "2027-06-30"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/3f107815-92e5-43d1-b57a-4efc0d195b26"
+      }, {
+        "reference": "Encounter/0951b0b7-2eb2-4457-81c5-f0ccfb9840bd"
+      }, {
+        "reference": "Encounter/265aaeeb-861f-459d-832b-8a4f5550c28c"
+      }, {
+        "reference": "Procedure/795cf278-a857-422b-8655-8b87a1481042"
+      }, {
+        "reference": "Coverage/32155111-6894-43ba-96c2-0fb3f0a01478"
+      }, {
+        "reference": "Practitioner/a48f00ad-f632-477d-981e-493eda329dec"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/2b61aa62-52c0-410a-b17d-0de7fc399138"
+    }
+  } ]
+}

@@ -1,0 +1,32 @@
+{
+  "resourceType": "Encounter",
+  "id": "37c1ebf6-e041-44ac-b6d3-7b19a5367402",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2024",
+      "code": "99212",
+      "display": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and straightforward medical decision making. When using time for code selection, 10-19 minutes of total time is spent on the date of the encounter."
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/69030a7d-2238-4f08-beb2-cd96e5152a4b"
+  },
+  "period": {
+    "start": "2026-11-22T07:30:00.000+00:00",
+    "end": "2026-11-22T08:30:00.000+00:00"
+  },
+  "length": {
+    "value": 0,
+    "unit": "days"
+  }
+}

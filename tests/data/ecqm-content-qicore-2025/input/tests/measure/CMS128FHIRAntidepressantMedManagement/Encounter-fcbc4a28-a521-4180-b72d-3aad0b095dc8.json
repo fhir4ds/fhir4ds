@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "fcbc4a28-a521-4180-b72d-3aad0b095dc8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "444971000124105",
+      "display": "Annual wellness visit (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/3207b0d6-43cb-4dd7-a71f-db8ad4b9e07a"
+  },
+  "period": {
+    "start": "2026-01-01T00:00:00.000Z",
+    "end": "2026-01-01T01:00:00.000Z"
+  }
+}

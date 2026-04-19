@@ -1,0 +1,50 @@
+{
+  "resourceType": "Claim",
+  "id": "fe63c623-1f68-4e89-9a7e-e70059525aa2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-claim" ]
+  },
+  "status": "active",
+  "type": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/claim-type",
+      "code": "institutional"
+    } ]
+  },
+  "use": "claim",
+  "patient": {
+    "reference": "Patient/113d43da-4cad-4907-804e-63afb7652b27"
+  },
+  "billablePeriod": {
+    "start": "2026-11-09",
+    "end": "2026-11-13"
+  },
+  "created": "2026-11-13",
+  "priority": {
+    "coding": [ {
+      "code": "normal"
+    } ]
+  },
+  "diagnosis": [ {
+    "sequence": 2,
+    "diagnosisCodeableConcept": {
+      "coding": [ {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "code": "S01.02XA"
+      } ]
+    },
+    "onAdmission": {
+      "coding": [ {
+        "system": "https://www.cms.gov/Medicare/Medicare-Fee-for-Service-Payment/HospitalAcqCond/Coding",
+        "code": "W"
+      } ]
+    }
+  } ],
+  "item": [ {
+    "sequence": 1,
+    "diagnosisSequence": [ 1, 2, 3 ],
+    "encounter": [ {
+      "reference": "Encounter/88e133a9-10b5-42f0-8f7b-578a6eace416"
+    } ]
+  } ]
+}

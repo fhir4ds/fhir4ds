@@ -1,0 +1,35 @@
+{
+  "resourceType": "Condition",
+  "id": "0c2e3b1f-d02f-488f-9815-796d9416a963",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "I25.3",
+      "display": "Aneurysm of heart",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c85da3dc-b545-42f2-a5d5-d9c7ae88d944"
+  },
+  "onsetDateTime": "2026-10-08T05:00:00.000+00:00"
+}

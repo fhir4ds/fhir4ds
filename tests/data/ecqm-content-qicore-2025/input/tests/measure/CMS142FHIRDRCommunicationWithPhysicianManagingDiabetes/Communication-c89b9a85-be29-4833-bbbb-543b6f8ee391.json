@@ -1,0 +1,36 @@
+{
+  "resourceType": "Communication",
+  "id": "c89b9a85-be29-4833-bbbb-543b6f8ee391",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-07-09T08:00:00.000+00:00"
+  } ],
+  "status": "not-done",
+  "statusReason": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "713247000",
+      "display": "Procedure discontinued by patient (situation)",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "312903003",
+      "display": "Mild nonproliferative retinopathy due to diabetes mellitus (disorder)",
+      "userSelected": true
+    } ]
+  } ],
+  "sent": "2026-08-02T08:00:00.000+00:00",
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "312903003",
+      "display": "Level of Severity of Retinopathy Findings"
+    } ]
+  } ]
+}

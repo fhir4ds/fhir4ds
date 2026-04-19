@@ -1,0 +1,39 @@
+{
+  "resourceType": "Observation",
+  "id": "474243ce-e793-4dcf-8067-eebc328b36bb",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observationcancelled" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "183932001",
+        "display": "Procedure contraindicated (situation)",
+        "userSelected": true
+      } ]
+    }
+  } ],
+  "status": "cancelled",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "procedure",
+      "display": "Procedure"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "73831-0",
+      "display": "Adolescent depression screening assessment",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/0e463fc3-d1bf-4e19-882b-fad6342aa668"
+  },
+  "issued": "2026-01-02T08:00:00.000+00:00",
+  "valueBoolean": true
+}

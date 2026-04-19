@@ -1,0 +1,31 @@
+{
+  "resourceType": "Encounter",
+  "id": "ee76dc1c-16ea-4e60-a9d8-7a02fabe2e14",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "HH",
+    "display": "home health"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "305284002"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/16eff6ae-362b-458a-b631-834ce4ba9402"
+  },
+  "period": {
+    "start": "2025-12-31T08:00:00+00:00",
+    "end": "2026-01-01T12:00:00+00:00"
+  },
+  "length": {
+    "value": 0,
+    "unit": "days"
+  }
+}

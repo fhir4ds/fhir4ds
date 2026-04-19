@@ -1,0 +1,42 @@
+{
+  "resourceType": "Condition",
+  "id": "dd952b42-8fac-4581-882f-2156d5ddacb6",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "49710005",
+      "display": "Sinus bradycardia (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/cdcbc425-203d-4ebb-81f3-8d5f50253eed"
+  },
+  "onsetPeriod": {
+    "start": "2026-07-01T11:50:00.000+00:00"
+  }
+}

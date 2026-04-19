@@ -1,0 +1,286 @@
+{
+  "resourceType": "Bundle",
+  "id": "ipppass-age18",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/81a1095b-130f-4ef2-b5a9-f78289a2373e",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "81a1095b-130f-4ef2-b5a9-f78289a2373e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient", "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        }, {
+          "url": "detailed",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2036-2",
+            "display": "Filipino"
+          }
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        }, {
+          "url": "detailed",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2143-6",
+            "display": "Gallego"
+          }
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "184115007"
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "Age18",
+        "given": [ "IPPPass" ]
+      } ],
+      "gender": "female",
+      "birthDate": "2006-12-31"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/81a1095b-130f-4ef2-b5a9-f78289a2373e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/607d20b0-fa14-4877-8e8f-1b4b26f0e261",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "607d20b0-fa14-4877-8e8f-1b4b26f0e261",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "imaging",
+          "display": "Imaging"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "96914-7",
+          "display": "CT dose and image quality category"
+        } ],
+        "text": "CT dose and image quality category"
+      },
+      "subject": {
+        "reference": "Patient/81a1095b-130f-4ef2-b5a9-f78289a2373e"
+      },
+      "effectiveDateTime": "2026-01-02T00:00:00Z",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "LA31752-1",
+          "display": "Abdomen and Pelvis Low Dose"
+        } ]
+      },
+      "component": [ {
+        "code": {
+          "coding": [ {
+            "system": "http://loinc.org",
+            "code": "96912-1",
+            "display": "Calculated CT global noise"
+          } ]
+        },
+        "valueQuantity": {
+          "value": 63,
+          "unit": "[hnsf'U]",
+          "system": "http://unitsofmeasure.org",
+          "code": "[hnsf'U]"
+        }
+      }, {
+        "code": {
+          "coding": [ {
+            "system": "http://loinc.org",
+            "code": "96913-9",
+            "display": "Calculated CT size-adjusted dose"
+          } ]
+        },
+        "valueQuantity": {
+          "value": 597,
+          "unit": "mGy.cm",
+          "system": "http://unitsofmeasure.org",
+          "code": "mGy.cm"
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/607d20b0-fa14-4877-8e8f-1b4b26f0e261"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/1850d7a2-7cdc-4936-84a7-b87f69256554",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "1850d7a2-7cdc-4936-84a7-b87f69256554",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "identifier": [ {
+        "system": "http://benefitsinc.com/certificate",
+        "value": "12345"
+      } ],
+      "status": "active",
+      "type": {
+        "coding": [ {
+          "system": "https://nahdo.org/sopt",
+          "code": "1",
+          "display": "MEDICARE"
+        } ]
+      },
+      "policyHolder": {
+        "reference": "Patient/81a1095b-130f-4ef2-b5a9-f78289a2373e"
+      },
+      "subscriber": {
+        "reference": "Patient/81a1095b-130f-4ef2-b5a9-f78289a2373e"
+      },
+      "beneficiary": {
+        "reference": "Patient/81a1095b-130f-4ef2-b5a9-f78289a2373e"
+      },
+      "dependent": "0",
+      "relationship": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+          "code": "self"
+        } ]
+      },
+      "period": {
+        "start": "2022-05-23",
+        "end": "2027-05-23"
+      },
+      "payor": [ {
+        "reference": "Organization/Org-123456"
+      } ],
+      "order": 9
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/1850d7a2-7cdc-4936-84a7-b87f69256554"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/627deb3e-f753-46d1-993a-dc432c80fa1c",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "627deb3e-f753-46d1-993a-dc432c80fa1c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "754a879e-1ed4-4702-a513-c12f60fe42d6-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "81a1095b-130f-4ef2-b5a9-f78289a2373e"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#754a879e-1ed4-4702-a513-c12f60fe42d6-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient is exactly 18 at the start of the measurement period and has a valid scan"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS1206FHIRCTOQR",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/81a1095b-130f-4ef2-b5a9-f78289a2373e"
+      }, {
+        "reference": "Observation/607d20b0-fa14-4877-8e8f-1b4b26f0e261"
+      }, {
+        "reference": "Coverage/1850d7a2-7cdc-4936-84a7-b87f69256554"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/627deb3e-f753-46d1-993a-dc432c80fa1c"
+    }
+  } ]
+}

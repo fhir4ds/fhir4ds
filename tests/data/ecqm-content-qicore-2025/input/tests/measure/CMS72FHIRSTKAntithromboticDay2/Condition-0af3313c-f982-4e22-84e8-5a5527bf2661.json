@@ -1,0 +1,42 @@
+{
+  "resourceType": "Condition",
+  "id": "0af3313c-f982-4e22-84e8-5a5527bf2661",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2020-09",
+      "code": "111297002",
+      "display": "Nonparalytic stroke (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/5736982d-6c82-4815-b0d2-3416ebe105f4"
+  },
+  "encounter": {
+    "reference": "Encounter/46afbbc2-39ad-4f59-8ab6-8a40842c316d"
+  },
+  "recordedDate": "2026-08-12T08:00:00Z"
+}

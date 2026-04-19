@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "29eed2cd-3973-42a0-b4ab-6005bd45ed4d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2024-11-01T00:00:00.000Z"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+      "code": "0SR9019",
+      "display": "Replacement of Right Hip Joint with Metal Synthetic Substitute, Cemented, Open Approach"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/80ed4488-76a7-41af-ac4d-58362b0753e2"
+  },
+  "performedPeriod": {
+    "start": "2024-11-01T00:00:00.000Z",
+    "end": "2024-11-01T01:00:00.000Z"
+  }
+}

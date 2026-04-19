@@ -1,0 +1,61 @@
+{
+  "resourceType": "Patient",
+  "id": "81470689-a3f6-4580-88e0-5cddc5813c79",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2106-3",
+        "display": "White",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "White"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Hispanic or Latino"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248153007"
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://madie.cms.gov/",
+    "value": "ScreAtriRefAsseModDxCp"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "text": "ScreAtriRefAsseModDxCp",
+    "family": "MSROBSPass4",
+    "given": [ "ScreAtriRefAsseModDxCp" ]
+  } ],
+  "gender": "male",
+  "birthDate": "1956-03-02",
+  "address": [ {
+    "text": "ScreAtriRefAsseModDxCp, Screened Not at risk Assessed Severely Malnourished Diagnosed Care Plan, ID=ScreAtriRefAsseModDxCp, DOB: 03 Feb 1956"
+  } ]
+}

@@ -1,0 +1,35 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "7a98cf1f-63e6-452b-b9ea-c65cd4fc0188",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "version": "2022-03",
+        "code": "183945002",
+        "display": "Procedure declined for religious reason (situation)",
+        "userSelected": true
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "20093000",
+      "display": "Alcohol rehabilitation and detoxification (regime/therapy)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/86618b52-e0cc-4e90-b48c-cd64bbae8973"
+  },
+  "authoredOn": "2026-12-31T10:44:00.000+00:00"
+}

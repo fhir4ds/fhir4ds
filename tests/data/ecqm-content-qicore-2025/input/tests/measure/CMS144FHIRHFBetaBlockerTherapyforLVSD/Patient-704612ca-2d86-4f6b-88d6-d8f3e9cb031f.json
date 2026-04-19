@@ -1,0 +1,66 @@
+{
+  "resourceType": "Patient",
+  "id": "704612ca-2d86-4f6b-88d6-d8f3e9cb031f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2106-3",
+        "display": "White"
+      }
+    }, {
+      "url": "detailed",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2036-2",
+        "display": "Filipino"
+      }
+    }, {
+      "url": "text",
+      "valueString": "mixed"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino"
+      }
+    }, {
+      "url": "detailed",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2148-5",
+        "display": "Mexican"
+      }
+    }, {
+      "url": "text",
+      "valueString": "Hispanic or Latino"
+    } ]
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://bonnie-fhir.healthit.gov/",
+    "value": "43131346846313"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "family": "DENOMFail",
+    "given": [ "ModToSevereLVSDAfterHFEncounters" ]
+  } ],
+  "gender": "male",
+  "birthDate": "1973-12-13"
+}

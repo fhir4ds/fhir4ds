@@ -1,0 +1,37 @@
+{
+  "resourceType": "Procedure",
+  "id": "bbf0d990-cae9-423a-8d75-1ed3965ce01f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-11-03T11:35:00.000+00:00"
+  } ],
+  "status": "not-done",
+  "statusReason": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183932001",
+      "display": "Procedure contraindicated (situation)",
+      "userSelected": true
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "424831005",
+      "display": "Application of foot pump (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/e8931859-4ad8-49c8-9cdd-8697293456a2"
+  },
+  "_performedDateTime": {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "not-performed"
+    } ]
+  }
+}

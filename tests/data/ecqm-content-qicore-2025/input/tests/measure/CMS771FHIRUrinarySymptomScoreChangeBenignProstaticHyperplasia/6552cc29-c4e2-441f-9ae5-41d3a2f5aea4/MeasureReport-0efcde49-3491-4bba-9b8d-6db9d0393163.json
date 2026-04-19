@@ -1,0 +1,95 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "0efcde49-3491-4bba-9b8d-6db9d0393163",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "57343a19-b18e-4ad8-b4a8-a5e78b33f8ee-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "6552cc29-c4e2-441f-9ae5-41d3a2f5aea4"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#57343a19-b18e-4ad8-b4a8-a5e78b33f8ee-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient with OV in MP, initial and followup USS, has BPH Dx GT 30 days after hospitalization Encounter"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS771FHIRUrinarySymptomScoreChangeBenignProstaticHyperplasia",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/6552cc29-c4e2-441f-9ae5-41d3a2f5aea4"
+  }, {
+    "reference": "Encounter/6e03d546-6822-441b-8004-599f399e3f9d"
+  }, {
+    "reference": "Encounter/ad6fa87b-955a-486a-891f-bbc116fee58a"
+  }, {
+    "reference": "Condition/b2239f9e-16bf-4721-8574-b370ea9161a4"
+  }, {
+    "reference": "Observation/e4db9246-4eed-4621-b4fe-21fcc79a5ab7"
+  }, {
+    "reference": "Observation/ac31a595-6082-49e5-8a21-70f7f0fda23a"
+  } ]
+}

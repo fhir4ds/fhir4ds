@@ -1,0 +1,1258 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.117.1.7.1.247",
+  "meta": {
+    "versionId": "35",
+    "lastUpdated": "2023-12-21T17:43:03.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2021-02-20"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2021-02-20"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.247",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113883.3.117.1.7.1.247"
+    }
+  ],
+  "version": "20210220",
+  "name": "IschemicStroke",
+  "title": "Ischemic Stroke",
+  "status": "active",
+  "experimental": false,
+  "date": "2021-02-20T01:03:49-05:00",
+  "publisher": "TJC EH Steward",
+  "expansion": {
+    "identifier": "urn:uuid:260beac9-fe1b-465f-a12a-49cb19d74bd1",
+    "timestamp": "2026-03-13T12:53:45-04:00",
+    "total": 200,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "107557061000119108",
+        "display": "Cerebrovascular accident due to embolism of bilateral anterior cerebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "111297002",
+        "display": "Nonparalytic stroke (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "116288000",
+        "display": "Paralytic stroke (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "1269237007",
+        "display": "Cerebrovascular accident due to thrombosis of anterior cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "149821000119103",
+        "display": "Cerebral infarction due to carotid artery occlusion (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "151161000119102",
+        "display": "Bilateral cerebral infarction due to precerebral arterial occlusion (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "152148641000119104",
+        "display": "Cerebrovascular accident due to embolism of bilateral carotid arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16000351000119109",
+        "display": "Cerebrovascular accident due to occlusion of left posterior cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16000391000119104",
+        "display": "Cerebrovascular accident due to occlusion of right posterior cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16000431000119109",
+        "display": "Cerebrovascular accident due to occlusion of right middle cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16000511000119103",
+        "display": "Cerebrovascular accident due to occlusion of left middle cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16002031000119102",
+        "display": "Cerebrovascular accident due to thrombus of right middle cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16002071000119104",
+        "display": "Cerebrovascular accident due to thrombus of right cerebellar artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16002111000119106",
+        "display": "Cerebrovascular accident due to thrombus of left middle cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16002191000119102",
+        "display": "Cerebrovascular accident due to thrombus of left cerebellar artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16002351000119105",
+        "display": "Cerebrovascular accident due to embolus of right vertebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16002391000119100",
+        "display": "Cerebrovascular accident due to embolus of left vertebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16002511000119104",
+        "display": "Cerebrovascular accident due to embolus of basilar artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16023911000119108",
+        "display": "Cerebrovascular accident due to occlusion of right carotid artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16024111000119109",
+        "display": "Cerebrovascular accident due to occlusion of left carotid artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16024151000119105",
+        "display": "Cerebrovascular accident due to occlusion of left cerebellar artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16024271000119107",
+        "display": "Cerebrovascular accident due to occlusion of right cerebellar artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16026951000119102",
+        "display": "Cerebrovascular accident due to stenosis of right carotid artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16026991000119107",
+        "display": "Cerebrovascular accident due to stenosis of left carotid artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16644541000119106",
+        "display": "Cerebrovascular accident due to occlusion of bilateral carotid arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16661931000119102",
+        "display": "Cerebrovascular accident due to stenosis of bilateral vertebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16661971000119104",
+        "display": "Cerebrovascular accident due to stenosis of bilateral carotid arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "168747591000119109",
+        "display": "Cerebrovascular accident due to embolism of bilateral posterior cerebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "182960891000119101",
+        "display": "Cerebrovascular accident due to occlusion of left anterior cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "188174841000119103",
+        "display": "Cerebrovascular accident due to occlusion of bilateral middle cerebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "195185009",
+        "display": "Cerebral infarct due to thrombosis of precerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "195186005",
+        "display": "Cerebral infarction due to embolism of precerebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "195189003",
+        "display": "Cerebral infarction due to thrombosis of cerebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "195190007",
+        "display": "Cerebral infarction due to embolism of cerebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "195212005",
+        "display": "Brainstem stroke syndrome (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "195213000",
+        "display": "Cerebellar stroke syndrome (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "195216008",
+        "display": "Left sided cerebral hemisphere cerebrovascular accident (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "195217004",
+        "display": "Right sided cerebral hemisphere cerebrovascular accident (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "195230003",
+        "display": "Cerebral infarction due to cerebral venous thrombosis, non-pyogenic (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "195772021000119105",
+        "display": "Cerebrovascular accident due to thrombosis of left anterior cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "230690007",
+        "display": "Cerebrovascular accident (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "230691006",
+        "display": "Cerebrovascular accident due to occlusion of cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "230692004",
+        "display": "Infarction - precerebral (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "230693009",
+        "display": "Anterior cerebral circulation infarction (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "230694003",
+        "display": "Total anterior cerebral circulation infarction (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "230695002",
+        "display": "Partial anterior cerebral circulation infarction (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "230696001",
+        "display": "Posterior cerebral circulation infarction (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "230698000",
+        "display": "Lacunar infarction (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "230699008",
+        "display": "Pure motor hemiparesis due to and following lacunar infarction (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "230700009",
+        "display": "Pure sensory stroke due to and following lacunar infarction (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "230701008",
+        "display": "Pure sensorimotor motor hemiparesis due to and following lacunar infarction (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "251770561000119107",
+        "display": "Cerebrovascular accident due to embolism of left anterior cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "292661000119105",
+        "display": "Cerebrovascular accident due to stenosis of right vertebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "292671000119104",
+        "display": "Cerebrovascular accident due to stenosis of left vertebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "292681000119101",
+        "display": "Cerebrovascular accident due to occlusion of right vertebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "292691000119103",
+        "display": "Cerebrovascular accident due to occlusion of left vertebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "293811000119100",
+        "display": "Cerebral infarction due to vertebral artery stenosis (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "297778421000119102",
+        "display": "Cerebrovascular accident due to thrombosis of bilateral posterior cerebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "307363008",
+        "display": "Multiple lacunar infarcts (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "329361000119107",
+        "display": "Cerebrovascular accident due to occlusion of right middle cerebral artery by embolus (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "329371000119101",
+        "display": "Cerebrovascular accident due to occlusion of left middle cerebral artery by embolus (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "329391000119100",
+        "display": "Cerebrovascular accident due to embolus of right anterior cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "329401000119103",
+        "display": "Cerebrovascular accident due to embolus of left anterior cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "329421000119107",
+        "display": "Cerebrovascular accident due to occlusion of right posterior cerebral artery by embolus (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "329431000119105",
+        "display": "Cerebrovascular accident due to occlusion of left posterior cerebral artery by embolus (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "329451000119104",
+        "display": "Cerebrovascular accident due to occlusion of right cerebellar artery by embolus (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "329461000119102",
+        "display": "Cerebrovascular accident due to occlusion of left cerebellar artery by embolus (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "329621000119105",
+        "display": "Cerebrovascular accident due to thrombus of right vertebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "329631000119108",
+        "display": "Cerebrovascular accident due to thrombus of left vertebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "329641000119104",
+        "display": "Cerebrovascular accident due to thrombus of basilar artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "329651000119102",
+        "display": "Cerebrovascular accident due to thrombus of right carotid artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "330791000119108",
+        "display": "Cerebrovascular accident due to thrombus of left carotid artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "34181000119102",
+        "display": "Cerebral infarction due to occlusion of basilar artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "34191000119104",
+        "display": "Cerebral infarction due to vertebral artery occlusion (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "346674811000119104",
+        "display": "Cerebrovascular accident due to occlusion of bilateral cerebellar arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "384430101000119103",
+        "display": "Cerebrovascular accident due to embolism of right carotid artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "38595071000119104",
+        "display": "Cerebrovascular accident due to thrombosis of right posterior cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "422504002",
+        "display": "Ischemic stroke (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "426107000",
+        "display": "Acute lacunar infarction (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "433891000124100",
+        "display": "Cerebral infarction due to cerebral artery occlusion (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "433911000124103",
+        "display": "Cerebral infarction due to posterior cerebral artery occlusion (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "433931000124109",
+        "display": "Cerebral infarction due to internal carotid artery occlusion (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "434151000124101",
+        "display": "Cerebral infarction due to anterior cerebral artery occlusion (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "434961000124102",
+        "display": "Cerebral infarction due to middle cerebral artery occlusion (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "488408691000119104",
+        "display": "Cerebrovascular accident due to thrombosis of bilateral cerebellar arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "496369931000119104",
+        "display": "Cerebrovascular accident due to thrombosis of right cerebellar artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "511452481000119102",
+        "display": "Cerebrovascular accident due to thrombosis of right vertebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "517253051000119105",
+        "display": "Cerebrovascular accident due to embolism of left vertebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "563789641000119101",
+        "display": "Cerebrovascular accident due to thrombosis of bilateral carotid arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "578968971000119100",
+        "display": "Cerebrovascular accident due to thrombosis of bilateral vertebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "58173271000119101",
+        "display": "Cerebrovascular accident due to embolism of bilateral cerebellar arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "655081461000119101",
+        "display": "Cerebrovascular accident due to occlusion of right anterior cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "705128004",
+        "display": "Cerebral infarction due to embolism of middle cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "705130002",
+        "display": "Cerebral infarction due to thrombosis of middle cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "720261501000119107",
+        "display": "Cerebrovascular accident due to occlusion of bilateral anterior cerebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "721711931000119105",
+        "display": "Cerebrovascular accident due to thrombosis of bilateral anterior cerebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "732330391000119107",
+        "display": "Cerebrovascular accident due to embolism of bilateral vertebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "759950981000119101",
+        "display": "Cerebrovascular accident due to thrombosis of left vertebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "806161651000119106",
+        "display": "Cerebrovascular accident due to embolism of right vertebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "828066161000119106",
+        "display": "Cerebrovascular accident due to thrombosis of right anterior cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "849488701000119104",
+        "display": "Cerebrovascular accident due to embolism of right anterior cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "851365731000119106",
+        "display": "Cerebrovascular accident due to thrombosis of left posterior cerebral artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "859422751000119101",
+        "display": "Cerebrovascular accident due to embolism of left carotid artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "86553761000119103",
+        "display": "Cerebrovascular accident due to occlusion of bilateral posterior cerebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "898941951000119108",
+        "display": "Cerebrovascular accident due to occlusion of bilateral vertebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "915141931000119109",
+        "display": "Cerebrovascular accident due to embolism of basilar artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "939885431000119109",
+        "display": "Cerebrovascular accident due to embolism of bilateral middle cerebral arteries (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "957319791000119104",
+        "display": "Cerebrovascular accident due to thrombosis of left cerebellar artery (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "99451000119105",
+        "display": "Cerebral infarction due to stenosis of carotid artery (disorder)"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.00",
+        "display": "Cerebral infarction due to thrombosis of unspecified precerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.011",
+        "display": "Cerebral infarction due to thrombosis of right vertebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.012",
+        "display": "Cerebral infarction due to thrombosis of left vertebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.013",
+        "display": "Cerebral infarction due to thrombosis of bilateral vertebral arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.019",
+        "display": "Cerebral infarction due to thrombosis of unspecified vertebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.02",
+        "display": "Cerebral infarction due to thrombosis of basilar artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.031",
+        "display": "Cerebral infarction due to thrombosis of right carotid artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.032",
+        "display": "Cerebral infarction due to thrombosis of left carotid artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.033",
+        "display": "Cerebral infarction due to thrombosis of bilateral carotid arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.039",
+        "display": "Cerebral infarction due to thrombosis of unspecified carotid artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.09",
+        "display": "Cerebral infarction due to thrombosis of other precerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.10",
+        "display": "Cerebral infarction due to embolism of unspecified precerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.111",
+        "display": "Cerebral infarction due to embolism of right vertebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.112",
+        "display": "Cerebral infarction due to embolism of left vertebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.113",
+        "display": "Cerebral infarction due to embolism of bilateral vertebral arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.119",
+        "display": "Cerebral infarction due to embolism of unspecified vertebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.12",
+        "display": "Cerebral infarction due to embolism of basilar artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.131",
+        "display": "Cerebral infarction due to embolism of right carotid artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.132",
+        "display": "Cerebral infarction due to embolism of left carotid artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.133",
+        "display": "Cerebral infarction due to embolism of bilateral carotid arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.139",
+        "display": "Cerebral infarction due to embolism of unspecified carotid artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.19",
+        "display": "Cerebral infarction due to embolism of other precerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.20",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of unspecified precerebral arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.211",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of right vertebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.212",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of left vertebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.213",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of bilateral vertebral arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.219",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of unspecified vertebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.22",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of basilar artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.231",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of right carotid arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.232",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of left carotid arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.233",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of bilateral carotid arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.239",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of unspecified carotid artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.29",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of other precerebral arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.30",
+        "display": "Cerebral infarction due to thrombosis of unspecified cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.311",
+        "display": "Cerebral infarction due to thrombosis of right middle cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.312",
+        "display": "Cerebral infarction due to thrombosis of left middle cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.313",
+        "display": "Cerebral infarction due to thrombosis of bilateral middle cerebral arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.319",
+        "display": "Cerebral infarction due to thrombosis of unspecified middle cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.321",
+        "display": "Cerebral infarction due to thrombosis of right anterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.322",
+        "display": "Cerebral infarction due to thrombosis of left anterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.323",
+        "display": "Cerebral infarction due to thrombosis of bilateral anterior cerebral arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.329",
+        "display": "Cerebral infarction due to thrombosis of unspecified anterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.331",
+        "display": "Cerebral infarction due to thrombosis of right posterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.332",
+        "display": "Cerebral infarction due to thrombosis of left posterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.333",
+        "display": "Cerebral infarction due to thrombosis of bilateral posterior cerebral arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.339",
+        "display": "Cerebral infarction due to thrombosis of unspecified posterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.341",
+        "display": "Cerebral infarction due to thrombosis of right cerebellar artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.342",
+        "display": "Cerebral infarction due to thrombosis of left cerebellar artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.343",
+        "display": "Cerebral infarction due to thrombosis of bilateral cerebellar arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.349",
+        "display": "Cerebral infarction due to thrombosis of unspecified cerebellar artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.39",
+        "display": "Cerebral infarction due to thrombosis of other cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.40",
+        "display": "Cerebral infarction due to embolism of unspecified cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.411",
+        "display": "Cerebral infarction due to embolism of right middle cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.412",
+        "display": "Cerebral infarction due to embolism of left middle cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.413",
+        "display": "Cerebral infarction due to embolism of bilateral middle cerebral arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.419",
+        "display": "Cerebral infarction due to embolism of unspecified middle cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.421",
+        "display": "Cerebral infarction due to embolism of right anterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.422",
+        "display": "Cerebral infarction due to embolism of left anterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.423",
+        "display": "Cerebral infarction due to embolism of bilateral anterior cerebral arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.429",
+        "display": "Cerebral infarction due to embolism of unspecified anterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.431",
+        "display": "Cerebral infarction due to embolism of right posterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.432",
+        "display": "Cerebral infarction due to embolism of left posterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.433",
+        "display": "Cerebral infarction due to embolism of bilateral posterior cerebral arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.439",
+        "display": "Cerebral infarction due to embolism of unspecified posterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.441",
+        "display": "Cerebral infarction due to embolism of right cerebellar artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.442",
+        "display": "Cerebral infarction due to embolism of left cerebellar artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.443",
+        "display": "Cerebral infarction due to embolism of bilateral cerebellar arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.449",
+        "display": "Cerebral infarction due to embolism of unspecified cerebellar artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.49",
+        "display": "Cerebral infarction due to embolism of other cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.50",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of unspecified cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.511",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of right middle cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.512",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of left middle cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.513",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of bilateral middle cerebral arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.519",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of unspecified middle cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.521",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of right anterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.522",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of left anterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.523",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of bilateral anterior cerebral arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.529",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of unspecified anterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.531",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of right posterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.532",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of left posterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.533",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of bilateral posterior cerebral arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.539",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of unspecified posterior cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.541",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of right cerebellar artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.542",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of left cerebellar artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.543",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of bilateral cerebellar arteries"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.549",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of unspecified cerebellar artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.59",
+        "display": "Cerebral infarction due to unspecified occlusion or stenosis of other cerebral artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.6",
+        "display": "Cerebral infarction due to cerebral venous thrombosis, nonpyogenic"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.81",
+        "display": "Other cerebral infarction due to occlusion or stenosis of small artery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.89",
+        "display": "Other cerebral infarction"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I63.9",
+        "display": "Cerebral infarction, unspecified"
+      }
+    ]
+  }
+}

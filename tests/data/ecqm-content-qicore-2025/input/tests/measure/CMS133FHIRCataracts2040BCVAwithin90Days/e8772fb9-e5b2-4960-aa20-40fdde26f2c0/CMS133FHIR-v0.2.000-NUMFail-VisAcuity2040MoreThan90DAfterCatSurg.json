@@ -1,0 +1,372 @@
+{
+  "resourceType": "Bundle",
+  "id": "61095b0998086b53805591a5",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/e8772fb9-e5b2-4960-aa20-40fdde26f2c0",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "e8772fb9-e5b2-4960-aa20-40fdde26f2c0",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "text": {
+        "status": "generated",
+        "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">Age@18 <b>DENOMPASS </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>67f3e33acf17bcb386e754d726ed064ccd48ba21ff0ffb2eb678740a684398be</td></tr><tr><td>Date of birth</td><td><span>01 January 1994</span></td></tr></tbody></table></div>"
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "61095b0998086b53805591a5"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "NUMFail",
+        "given": [ "VisAcuity20/40>90DAfterCatSurg" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1996-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/e8772fb9-e5b2-4960-aa20-40fdde26f2c0"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/f6976ac9-6bc7-462b-a489-5522048b89b2",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "f6976ac9-6bc7-462b-a489-5522048b89b2",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "exam",
+          "display": "exam"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "419775003"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/e8772fb9-e5b2-4960-aa20-40fdde26f2c0"
+      },
+      "effectivePeriod": {
+        "start": "2026-08-13T09:00:00+00:00",
+        "end": "2026-08-13T09:30:00+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/f6976ac9-6bc7-462b-a489-5522048b89b2"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/a2378c4e-985b-4ff0-9603-5c0bdfe18672",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "a2378c4e-985b-4ff0-9603-5c0bdfe18672",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "exam",
+          "display": "Exam",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "419775003",
+          "display": "Best corrected visual acuity (observable entity)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/e8772fb9-e5b2-4960-aa20-40fdde26f2c0"
+      },
+      "effectiveDateTime": "2026-11-27T08:00:00.000Z",
+      "component": [ {
+        "code": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "version": "2021-09",
+            "code": "424703005",
+            "display": "Distance vision 20/40 (finding)"
+          } ]
+        },
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "version": "2021-09",
+            "code": "424703005",
+            "display": "Distance vision 20/40 (finding)",
+            "userSelected": true
+          } ]
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/a2378c4e-985b-4ff0-9603-5c0bdfe18672"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/0d37b102-9643-48f7-91c7-3b66322e087b",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "0d37b102-9643-48f7-91c7-3b66322e087b",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-08-30T09:35:00-08:00"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "84149000"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/e8772fb9-e5b2-4960-aa20-40fdde26f2c0"
+      },
+      "performedPeriod": {
+        "start": "2026-08-30T09:20:00-08:00",
+        "end": "2026-08-30T10:30:00-08:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/0d37b102-9643-48f7-91c7-3b66322e087b"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/442840e8-1101-475b-962c-216e83b49d9a",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "442840e8-1101-475b-962c-216e83b49d9a",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/e8772fb9-e5b2-4960-aa20-40fdde26f2c0"
+      },
+      "payor": [ {
+        "reference": "Organization/21041e42-de89-4fd7-9689-5aa17b413320"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/442840e8-1101-475b-962c-216e83b49d9a"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/21041e42-de89-4fd7-9689-5aa17b413320",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "21041e42-de89-4fd7-9689-5aa17b413320",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/21041e42-de89-4fd7-9689-5aa17b413320"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/ec6f1ca5-373e-4822-a26c-80264e3323fe",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "ec6f1ca5-373e-4822-a26c-80264e3323fe",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "123456"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/ec6f1ca5-373e-4822-a26c-80264e3323fe"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/e89b8754-655f-41f7-8911-be0d8596515d",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "e89b8754-655f-41f7-8911-be0d8596515d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "dc503d5d-af4d-4d1d-b263-7c04121fe457-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "e8772fb9-e5b2-4960-aa20-40fdde26f2c0"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#dc503d5d-af4d-4d1d-b263-7c04121fe457-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient with visual acuity 20/40 or better more than 90 days after cataract surgery."
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS133FHIRCataracts2040BCVAwithin90Days",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/e8772fb9-e5b2-4960-aa20-40fdde26f2c0"
+      }, {
+        "reference": "Observation/f6976ac9-6bc7-462b-a489-5522048b89b2"
+      }, {
+        "reference": "Observation/a2378c4e-985b-4ff0-9603-5c0bdfe18672"
+      }, {
+        "reference": "Procedure/0d37b102-9643-48f7-91c7-3b66322e087b"
+      }, {
+        "reference": "Coverage/442840e8-1101-475b-962c-216e83b49d9a"
+      }, {
+        "reference": "Organization/21041e42-de89-4fd7-9689-5aa17b413320"
+      }, {
+        "reference": "Practitioner/ec6f1ca5-373e-4822-a26c-80264e3323fe"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/e89b8754-655f-41f7-8911-be0d8596515d"
+    }
+  } ]
+}

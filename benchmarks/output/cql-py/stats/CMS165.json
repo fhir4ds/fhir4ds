@@ -1,0 +1,16 @@
+{
+  "measure_id": "CMS165",
+  "patient_count": 68,
+  "timings_ms": {
+    "cql_parse_ms": 14.027105004061013,
+    "sql_generation_ms": 4981.237633997807,
+    "sql_execution_ms": 180.6931149912998,
+    "total_ms": 5175.957853993168
+  },
+  "patients_per_second": 13.137664934334637,
+  "comparison": {
+    "total_patients": 68,
+    "matching_patients": 68,
+    "accuracy_pct": 100.0
+  }
+}

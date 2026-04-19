@@ -1,0 +1,95 @@
+{
+    "resourceType": "MeasureReport",
+    "id": "ecd5d1e5-ad87-4aae-aacf-75bd13d34ea0",
+    "meta": {
+      "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+    },
+    "contained": [ {
+      "resourceType": "Parameters",
+      "id": "e895b580-5d04-427d-8281-814f7cafde6b-parameters",
+      "parameter": [ {
+        "name": "subject",
+        "valueString": "fa4e4971-3ff2-44f0-bfd6-0821a89a3f84"
+      } ]
+    } ],
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-inputParameters",
+      "valueReference": {
+        "reference": "#e895b580-5d04-427d-8281-814f7cafde6b-parameters"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+      "valueMarkdown": "Encounter 1/1 - 1/3 , age 18, 1 opioid completed at dc , has cancer that started last day of prior year "
+    } ],
+    "modifierExtension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+      "valueBoolean": true
+    } ],
+    "status": "complete",
+    "type": "individual",
+    "measure": "https://madie.cms.gov/Measure/CMS506FHIRSafeUseofOpioids",
+    "period": {
+      "start": "2026-01-01",
+      "end": "2026-12-31"
+    },
+    "group": [ {
+      "id": "6781a5c2450fe330a8ef3c14",
+      "population": [ {
+        "id": "345E1255-3623-402A-9016-2B5C9E096C26",
+        "code": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "initial-population",
+            "display": "Initial Population"
+          } ]
+        },
+        "count": 1
+      }, {
+        "id": "9ED4F80C-B465-4CDB-BFDD-CE376A165DD0",
+        "code": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "denominator",
+            "display": "Denominator"
+          } ]
+        },
+        "count": 1
+      }, {
+        "id": "25C57870-241A-428F-BDA8-63C5B4685EE4",
+        "code": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "denominator-exclusion",
+            "display": "Denominator Exclusion"
+          } ]
+        },
+        "count": 1
+      }, {
+        "id": "C36B952C-8CCF-436F-A9E2-423A00C56A1A",
+        "code": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "numerator",
+            "display": "Numerator"
+          } ]
+        },
+        "count": 0
+      } ],
+      "measureScore": {
+        "value": 0.0
+      }
+    } ],
+    "evaluatedResource": [ {
+      "reference": "Patient/fa4e4971-3ff2-44f0-bfd6-0821a89a3f84"
+    }, {
+      "reference": "Encounter/c9af5eeb-faa6-45cb-ac98-24b93fe14d72"
+    }, {
+      "reference": "MedicationRequest/b33ce76f-27cc-4b76-9170-b26d7a173395"
+    }, {
+      "reference": "Condition/887238ac-fe86-48ff-855a-763b080f8d2f"
+    }, {
+      "reference": "Coverage/665dcdcf-c9ed-4187-b2b5-1f9119db46c0"
+    }, {
+      "reference": "Organization/973255a3-1f6a-4a56-be33-227eb3966e93"
+    } ]
+  }

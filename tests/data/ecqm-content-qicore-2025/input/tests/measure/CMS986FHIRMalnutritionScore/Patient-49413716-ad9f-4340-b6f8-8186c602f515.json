@@ -1,0 +1,61 @@
+{
+  "resourceType": "Patient",
+  "id": "49413716-ad9f-4340-b6f8-8186c602f515",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2106-3",
+        "display": "White",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "White"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248153007"
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2186-5",
+        "display": "Not Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Not Hispanic or Latino"
+    } ]
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://madie.cms.gov/",
+    "value": "LOS23Hours"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "text": "LOS23Hours",
+    "family": "IPPFAIL",
+    "given": [ "LOS23Hours" ]
+  } ],
+  "gender": "male",
+  "birthDate": "1950-05-14",
+  "address": [ {
+    "text": "LOS23Hours, Screened Not at risk Assessed Severely Malnourished Diagnosed Care Plan, ID=LOS23Hours, DOB: 14 May 1950"
+  } ]
+}

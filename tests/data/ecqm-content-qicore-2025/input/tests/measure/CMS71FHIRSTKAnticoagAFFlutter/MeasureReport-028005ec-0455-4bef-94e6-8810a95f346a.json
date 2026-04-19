@@ -1,0 +1,111 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "028005ec-0455-4bef-94e6-8810a95f346a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "c074ac53-0d71-48d9-b6ff-a57ccd78295c-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "4151585a-f621-4de5-91df-4e4227e2165e"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#c074ac53-0d71-48d9-b6ff-a57ccd78295c-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient is 18 with Non-Elective Inpatient Encounter (LOS 120 days) with principal diagnosis of ischemic stroke ends during MP received medication not found in anticoagulant value set during IP encounter\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS71FHIRSTKAnticoagAFFlutter",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/4151585a-f621-4de5-91df-4e4227e2165e"
+  }, {
+    "reference": "Encounter/4f72db39-bb3e-4c49-abf3-69d1308d8616"
+  }, {
+    "reference": "MedicationRequest/c21c7256-89a8-4537-a0cc-7c80b4cdb850"
+  }, {
+    "reference": "Coverage/3455d1dd-bf39-4161-a49b-fd40b4442242"
+  }, {
+    "reference": "Procedure/432dd51f-2496-4bde-922d-c29aaa0424d6"
+  }, {
+    "reference": "Condition/8703066b-05b3-4c0a-938b-a4525972b616"
+  }, {
+    "reference": "Claim/5ca62962b8484628b8de1ec5"
+  }, {
+    "reference": "Organization/d683629d-bb82-48e2-afe3-39aa6df18f37"
+  }, {
+    "reference": "Practitioner/c47a5eca-9bd2-4cc1-9f1e-ca644c897d6b"
+  } ]
+}

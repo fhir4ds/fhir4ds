@@ -1,0 +1,109 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "7b26739a-ef11-44d3-9d64-42c78bdc64c4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "74ae5717-577d-45f5-aabf-4add7ff41285-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "edd8668f-d541-4869-9bb6-02e9e2c2509d"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#74ae5717-577d-45f5-aabf-4add7ff41285-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient receives comfort measures performed during a different ED encounter from IP Encounter. Testing multiple occurrences.\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS72FHIRSTKAntithromboticDay2",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/edd8668f-d541-4869-9bb6-02e9e2c2509d"
+  }, {
+    "reference": "Encounter/a193830a-34ca-44fa-bae7-c4ecb38c7a33"
+  }, {
+    "reference": "Encounter/a76cb4ee-b163-48e0-bb97-0b2a9a5c1ef0"
+  }, {
+    "reference": "Procedure/6b125df1-8d4e-495d-9ee2-dc4da88f2d3a"
+  }, {
+    "reference": "Coverage/02ac458f-1888-411a-a5e5-94e9823d46fd"
+  }, {
+    "reference": "Condition/62cf1cd1-c3f1-4c2f-948a-dca77ff798b2"
+  }, {
+    "reference": "Claim/5ca62962b8484628b8de1ec5"
+  }, {
+    "reference": "Organization/8674c43b-7b90-4fce-9400-a8b975ee4769"
+  } ]
+}

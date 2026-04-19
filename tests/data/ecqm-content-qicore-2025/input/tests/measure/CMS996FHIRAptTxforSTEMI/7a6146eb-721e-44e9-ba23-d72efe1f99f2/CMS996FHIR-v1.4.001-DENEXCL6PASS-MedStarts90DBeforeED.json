@@ -1,0 +1,278 @@
+{
+  "resourceType": "Bundle",
+  "id": "617be6cd1619a529957d62b5",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/7a6146eb-721e-44e9-ba23-d72efe1f99f2",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "7a6146eb-721e-44e9-ba23-d72efe1f99f2",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248152002"
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "617be6cd1619a529957d62b5"
+      } ],
+      "name": [ {
+        "family": "DenExcl6Pass",
+        "given": [ "MedStarts90DBeforeED" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1985-12-02"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/7a6146eb-721e-44e9-ba23-d72efe1f99f2"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/596ffce4-5ea6-46a2-b5da-b3788ebd24fd",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "596ffce4-5ea6-46a2-b5da-b3788ebd24fd",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMER",
+        "display": "emergency",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2020-09",
+          "code": "4525004",
+          "display": "Emergency department patient visit (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/7a6146eb-721e-44e9-ba23-d72efe1f99f2"
+      },
+      "period": {
+        "start": "2026-10-09T08:05:00.000+00:00",
+        "end": "2026-10-10T07:15:00.000+00:00"
+      },
+      "reasonCode": [ {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "version": "2021",
+          "code": "I21.02",
+          "display": "ST elevation (STEMI) myocardial infarction involving left anterior descending coronary artery",
+          "userSelected": true
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/596ffce4-5ea6-46a2-b5da-b3788ebd24fd"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationRequest/3e1a71c1-6439-4243-9754-aa49bf0c668f",
+    "resource": {
+      "resourceType": "MedicationRequest",
+      "id": "3e1a71c1-6439-4243-9754-aa49bf0c668f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+      },
+      "status": "active",
+      "intent": "order",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+          "code": "inpatient",
+          "display": "Inpatient",
+          "userSelected": true
+        } ]
+      } ],
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "2059015",
+          "display": "rivaroxaban 2.5 MG Oral Tablet",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/7a6146eb-721e-44e9-ba23-d72efe1f99f2"
+      },
+      "authoredOn": "2026-07-12T08:00:00.000+00:00",
+      "requester": {
+        "reference": "Practitioner/6b2b39d7-cdc4-41dc-92f4-95073209d9b3"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationRequest/3e1a71c1-6439-4243-9754-aa49bf0c668f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/6b2b39d7-cdc4-41dc-92f4-95073209d9b3",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "6b2b39d7-cdc4-41dc-92f4-95073209d9b3",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "9999999896"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/6b2b39d7-cdc4-41dc-92f4-95073209d9b3"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/4285d8b5-8f79-40d0-820b-b89a8e6e0807",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "4285d8b5-8f79-40d0-820b-b89a8e6e0807",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "72f41f39-0d33-4e22-a4c8-777084ad091f-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "7a6146eb-721e-44e9-ba23-d72efe1f99f2"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#72f41f39-0d33-4e22-a4c8-777084ad091f-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient has anticoagulant medication starts 90D before ED"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS996FHIRAptTxforSTEMI",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/7a6146eb-721e-44e9-ba23-d72efe1f99f2"
+      }, {
+        "reference": "Encounter/596ffce4-5ea6-46a2-b5da-b3788ebd24fd"
+      }, {
+        "reference": "MedicationRequest/3e1a71c1-6439-4243-9754-aa49bf0c668f"
+      }, {
+        "reference": "Practitioner/6b2b39d7-cdc4-41dc-92f4-95073209d9b3"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/4285d8b5-8f79-40d0-820b-b89a8e6e0807"
+    }
+  } ]
+}

@@ -1,0 +1,255 @@
+{
+  "resourceType": "Bundle",
+  "id": "DENEXPass-MalNeoplasmDxOverlapsTHAProcInt",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/4029b23c-b8b3-43aa-a1c5-049b046646bf",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "4029b23c-b8b3-43aa-a1c5-049b046646bf",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "Bertha",
+        "given": [ "Betty" ]
+      } ],
+      "gender": "female",
+      "birthDate": "2007-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/4029b23c-b8b3-43aa-a1c5-049b046646bf"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/df332f2b-4ae6-4e9a-a652-02822fa2002c",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "df332f2b-4ae6-4e9a-a652-02822fa2002c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-01-15T00:00:00.000Z"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+          "code": "0SR9019",
+          "display": "Replacement of Right Hip Joint with Metal Synthetic Substitute, Cemented, Open Approach"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/4029b23c-b8b3-43aa-a1c5-049b046646bf"
+      },
+      "performedPeriod": {
+        "start": "2024-11-01T00:00:00.000Z",
+        "end": "2024-11-01T01:00:00.000Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/df332f2b-4ae6-4e9a-a652-02822fa2002c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/d0151c58-b094-4b96-9f49-f52a6aacae67",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "d0151c58-b094-4b96-9f49-f52a6aacae67",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "281036007",
+          "display": "Follow-up consultation (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/4029b23c-b8b3-43aa-a1c5-049b046646bf"
+      },
+      "period": {
+        "start": "2025-11-01T00:00:00.000Z",
+        "end": "2025-11-01T01:15:00.000Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/d0151c58-b094-4b96-9f49-f52a6aacae67"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/c27a0cac-0739-4baa-baa3-ad03e0d0da9e",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "c27a0cac-0739-4baa-baa3-ad03e0d0da9e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "101371000119101",
+          "display": "Adamantinoma of long bone of lower limb (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/4029b23c-b8b3-43aa-a1c5-049b046646bf"
+      },
+      "onsetDateTime": "2024-11-01T00:00:00.000Z"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/c27a0cac-0739-4baa-baa3-ad03e0d0da9e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/ce6ed089-0f2c-46b4-9b5e-a35d84d02ceb",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "ce6ed089-0f2c-46b4-9b5e-a35d84d02ceb",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "f15f7d61-37c3-4b09-90c8-55b21c46ea4b-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "4029b23c-b8b3-43aa-a1c5-049b046646bf"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#f15f7d61-37c3-4b09-90c8-55b21c46ea4b-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient has Dx of Malignant Neoplasm that overlaps THAProcedure Interval"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS56FHIRFunctionalStatusAssessmentforTotalHipReplacement",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/4029b23c-b8b3-43aa-a1c5-049b046646bf"
+      }, {
+        "reference": "Procedure/df332f2b-4ae6-4e9a-a652-02822fa2002c"
+      }, {
+        "reference": "Encounter/d0151c58-b094-4b96-9f49-f52a6aacae67"
+      }, {
+        "reference": "Condition/c27a0cac-0739-4baa-baa3-ad03e0d0da9e"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/ce6ed089-0f2c-46b4-9b5e-a35d84d02ceb"
+    }
+  } ]
+}

@@ -1,0 +1,48 @@
+{
+  "resourceType": "Encounter",
+  "id": "7fdfb931-a98c-4ad5-9ad4-4194efbe79f0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient encounter"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "8715000",
+      "display": "Hospital admission, elective (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/4b2aa517-ae2b-4419-9c13-4294295eef9a"
+  },
+  "period": {
+    "start": "2026-12-04T08:00:00.000+00:00",
+    "end": "2026-12-30T08:15:00.000+00:00"
+  },
+  "length": {
+    "value": 26.0,
+    "unit": "days"
+  },
+  "location": [ {
+    "location": {
+      "reference": "Location/9b6d8ea2-519d-4175-9da3-b7aecbc5ea00"
+    },
+    "period": {
+      "start": "2026-12-06T08:00:00.000+00:00",
+      "end": "2026-12-08T08:15:00.000+00:00"
+    }
+  }, {
+    "location": {
+      "reference": "Location/d89d7d66-dac2-4e56-b26e-81da67a6e3cd"
+    },
+    "period": {
+      "start": "2026-12-31T08:00:00.000+00:00",
+      "end": "2026-12-31T08:15:00.000+00:00"
+    }
+  } ]
+}

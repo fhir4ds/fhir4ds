@@ -1,0 +1,22 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "2006df78-8600-40ae-87be-6d0bc9098d7d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "855812",
+      "display": "prasugrel 10 MG Oral Tablet",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/aadbfade-4898-4931-9e11-e5d7ba64ab27"
+  },
+  "effectivePeriod": {
+    "start": "2026-10-11T23:59:00Z"
+  }
+}

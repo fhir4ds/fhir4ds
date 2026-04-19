@@ -170,6 +170,12 @@ def _parse_constant(const_data: Dict[str, Any]) -> Constant:
                     value_type = type_name
                 break
 
+    if value is None and value_type is None:
+        raise ParseError(
+            f"Constant '{name}' has no value. "
+            f"A constant must include a typed value property (e.g., valueString, valueInteger)."
+        )
+
     return Constant(name=name, value=value, value_type=value_type)
 
 

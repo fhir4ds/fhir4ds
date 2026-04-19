@@ -1,0 +1,35 @@
+{
+  "resourceType": "Condition",
+  "id": "8d38f206-7ad6-4ef9-8abd-9b1cc9963090",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "active",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "10349009",
+      "display": "Multi-infarct dementia with delirium (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/2eb467fd-9453-4652-bb38-18d1ab636aca"
+  },
+  "onsetDateTime": "2026-01-01T00:00:00.000+00:00"
+}

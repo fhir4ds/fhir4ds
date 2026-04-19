@@ -1,0 +1,32 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "c89deb23-758d-4356-b537-3eec3a15d740",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "183932001",
+        "display": "Procedure contraindicated (situation)"
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "428411000124104",
+      "display": "Intermittent pneumatic compression boot (physical object)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/5109af7f-4d95-4372-8857-71d800f53100"
+  },
+  "authoredOn": "2026-11-02T09:15:00.000+00:00"
+}

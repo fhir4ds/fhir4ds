@@ -1,0 +1,31 @@
+{
+  "resourceType": "Communication",
+  "id": "c046f70b-1526-4194-8347-deca75772099",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communication" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-06-26T16:15:00.000+00:00"
+  } ],
+  "status": "completed",
+  "category": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "312903003",
+      "display": "Mild nonproliferative retinopathy due to diabetes mellitus (disorder)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/3835c33d-b335-44d7-a7b6-c8a0d5420290"
+  },
+  "sent": "2026-06-26T16:15:00.000+00:00",
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "312903003"
+    } ]
+  } ]
+}

@@ -1,0 +1,38 @@
+{
+  "resourceType": "Condition",
+  "id": "2adf3124-3532-45dc-9e5f-b841d2ae0851",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "active",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "active",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "H31.20",
+      "userSelected": true
+    }, {
+      "system": "http://snomed.info/sct",
+      "code": "92820007",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/10948d40-4024-4a78-873a-0e4d106d5761"
+  },
+  "onsetDateTime": "2024-11-01T08:00:00.000+00:00"
+}

@@ -1,0 +1,251 @@
+{
+  "resourceType": "Bundle",
+  "id": "627a80a15a0d870123c7253c",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/06d7810a-dcc6-4f6d-ab28-2a0843449475",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "06d7810a-dcc6-4f6d-ab28-2a0843449475",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        }, {
+          "url": "detailed",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1653-5",
+            "display": "Tohono O'Odham"
+          }
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "627a80a15a0d870123c7253c"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "DENOMPass",
+        "given": [ "Age17InEDAge18DayOfIPAdmit" ]
+      } ],
+      "gender": "other",
+      "birthDate": "2008-04-07"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/06d7810a-dcc6-4f6d-ab28-2a0843449475"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/c2d5c775-b657-4af6-a9ab-a0432eb4273e",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "c2d5c775-b657-4af6-a9ab-a0432eb4273e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMER",
+        "display": "emergency"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "4525004"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/06d7810a-dcc6-4f6d-ab28-2a0843449475"
+      },
+      "period": {
+        "start": "2026-04-06T08:00:00Z",
+        "end": "2026-04-07T08:15:00Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/c2d5c775-b657-4af6-a9ab-a0432eb4273e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/b225b0fb-e0ee-44df-97ad-02abe454e0f1",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "b225b0fb-e0ee-44df-97ad-02abe454e0f1",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183452005"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/06d7810a-dcc6-4f6d-ab28-2a0843449475"
+      },
+      "period": {
+        "start": "2026-04-07T09:00:00Z",
+        "end": "2026-04-10T08:15:00Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/b225b0fb-e0ee-44df-97ad-02abe454e0f1"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationAdministration/79fa3d63-331b-4905-918d-49f40d5d214d",
+    "resource": {
+      "resourceType": "MedicationAdministration",
+      "id": "79fa3d63-331b-4905-918d-49f40d5d214d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+      },
+      "status": "completed",
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "1010600"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/06d7810a-dcc6-4f6d-ab28-2a0843449475"
+      },
+      "effectivePeriod": {
+        "start": "2026-04-07T08:00:00Z",
+        "end": "2026-04-07T08:15:00Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationAdministration/79fa3d63-331b-4905-918d-49f40d5d214d"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/24ca1626-867e-403c-8ae4-818796faeb2c",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "24ca1626-867e-403c-8ae4-818796faeb2c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "09c4a30a-ab2b-41da-bee4-9e0c7c74e59a-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "06d7810a-dcc6-4f6d-ab28-2a0843449475"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#09c4a30a-ab2b-41da-bee4-9e0c7c74e59a-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Age 17 in ED, 18 at time of admission meets denominator. Sex = \"other\". "
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS819FHIRHHORAE",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/06d7810a-dcc6-4f6d-ab28-2a0843449475"
+      }, {
+        "reference": "Encounter/c2d5c775-b657-4af6-a9ab-a0432eb4273e"
+      }, {
+        "reference": "Encounter/b225b0fb-e0ee-44df-97ad-02abe454e0f1"
+      }, {
+        "reference": "MedicationAdministration/79fa3d63-331b-4905-918d-49f40d5d214d"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/24ca1626-867e-403c-8ae4-818796faeb2c"
+    }
+  } ]
+}

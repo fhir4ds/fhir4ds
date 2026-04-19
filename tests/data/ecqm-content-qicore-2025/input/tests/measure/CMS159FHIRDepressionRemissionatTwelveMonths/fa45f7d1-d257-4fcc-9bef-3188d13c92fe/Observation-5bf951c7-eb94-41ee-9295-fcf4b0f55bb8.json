@@ -1,0 +1,27 @@
+{
+  "resourceType": "Observation",
+  "id": "5bf951c7-eb94-41ee-9295-fcf4b0f55bb8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "44261-6"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/fa45f7d1-d257-4fcc-9bef-3188d13c92fe"
+  },
+  "effectiveDateTime": "2026-02-19T14:30:00+00:00",
+  "valueInteger": 3
+}

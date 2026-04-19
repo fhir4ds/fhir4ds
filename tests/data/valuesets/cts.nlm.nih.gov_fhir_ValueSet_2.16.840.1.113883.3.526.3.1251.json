@@ -1,0 +1,69 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.3.1251",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:01.920-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1251",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "2.16.840.1.113883.3.526.3.1251"
+    }
+  ],
+  "version": "20210209",
+  "name": "MacularExam",
+  "title": "Macular Exam",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:ae4f6d26-5291-441b-9523-2288e4e532a6",
+    "timestamp": "2025-06-20T16:57:17-04:00",
+    "total": 5,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://loinc.org",
+        "version": "2.76",
+        "code": "32451-7",
+        "display": "Physical findings of Macula"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.76",
+        "code": "71488-1",
+        "display": "Left eye Macular edema by Ophthalmoscopy"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.76",
+        "code": "71489-9",
+        "display": "Right eye Macular edema by Ophthalmoscopy"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.76",
+        "code": "79820-7",
+        "display": "Physical findings of Right macula by Ophthalmoscopy"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.76",
+        "code": "79821-5",
+        "display": "Physical findings of Left macula by Ophthalmoscopy"
+      }
+    ]
+  }
+}

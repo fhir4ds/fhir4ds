@@ -1,0 +1,311 @@
+{
+  "resourceType": "Bundle",
+  "id": "6179e726ad1a790b7af75248",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/c485da91-d480-4bb6-b24d-0280bda7c512",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "c485da91-d480-4bb6-b24d-0280bda7c512",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2076-8",
+            "display": "Native Hawaiian or Other Pacific Islander",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Native Hawaiian or Other Pacific Islander"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248152002"
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "6179e726ad1a790b7af75248"
+      } ],
+      "name": [ {
+        "family": "DenExcl1Pass",
+        "given": [ "DxExclStartsDuringEndsAfterED" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1985-12-02"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/c485da91-d480-4bb6-b24d-0280bda7c512"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/70c7022c-767b-4d8a-af6b-3d3ed93cde85",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "70c7022c-767b-4d8a-af6b-3d3ed93cde85",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMER",
+        "display": "emergency",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2020-09",
+          "code": "4525004",
+          "display": "Emergency department patient visit (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/c485da91-d480-4bb6-b24d-0280bda7c512"
+      },
+      "period": {
+        "start": "2026-10-09T08:05:00.000+00:00",
+        "end": "2026-10-10T07:15:00.000+00:00"
+      },
+      "reasonReference": [ {
+        "reference": "Condition/d6d83741-f024-4052-9f97-0fc75da775c3"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/70c7022c-767b-4d8a-af6b-3d3ed93cde85"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/d6d83741-f024-4052-9f97-0fc75da775c3",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "d6d83741-f024-4052-9f97-0fc75da775c3",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active",
+          "userSelected": true
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "differential"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2020-09",
+          "code": "401303003",
+          "display": "Acute ST segment elevation myocardial infarction (disorder)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/c485da91-d480-4bb6-b24d-0280bda7c512"
+      },
+      "onsetDateTime": "2026-10-09T08:30:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/d6d83741-f024-4052-9f97-0fc75da775c3"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/738052c4-c78f-4d32-866c-76f551857dcb",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "738052c4-c78f-4d32-866c-76f551857dcb",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "version": "4.0.1",
+          "code": "inactive",
+          "display": "Inactive",
+          "userSelected": true
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "unconfirmed"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2020-09",
+          "code": "14336007",
+          "display": "Ruptured abdominal aortic aneurysm (disorder)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/c485da91-d480-4bb6-b24d-0280bda7c512"
+      },
+      "onsetDateTime": "2026-10-09T13:00:00.000+00:00",
+      "abatementDateTime": "2026-11-07T09:15:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/738052c4-c78f-4d32-866c-76f551857dcb"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/dd36ba60-9733-4a9a-bff9-3b69fba76d7d",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "dd36ba60-9733-4a9a-bff9-3b69fba76d7d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "e3a69b6d-c572-46db-b9a1-56d3a2dc508b-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "c485da91-d480-4bb6-b24d-0280bda7c512"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#e3a69b6d-c572-46db-b9a1-56d3a2dc508b-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient has aortic dissection (exclusion diagnosis) that starts during and ends after the ED encounter"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS996FHIRAptTxforSTEMI",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/c485da91-d480-4bb6-b24d-0280bda7c512"
+      }, {
+        "reference": "Encounter/70c7022c-767b-4d8a-af6b-3d3ed93cde85"
+      }, {
+        "reference": "Condition/d6d83741-f024-4052-9f97-0fc75da775c3"
+      }, {
+        "reference": "Condition/738052c4-c78f-4d32-866c-76f551857dcb"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/dd36ba60-9733-4a9a-bff9-3b69fba76d7d"
+    }
+  } ]
+}

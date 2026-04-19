@@ -1,0 +1,29 @@
+{
+  "resourceType": "Patient",
+  "id": "2adae583-4f70-4492-add5-c56cd38f5843",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "text": {
+    "status": "generated",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">Opioid exactly 12 hrs before Naloxone <b>NUMERPASS </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Date of birth</td><td><span>14 November 1980</span></td></tr></tbody></table></div>"
+  },
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://bonnie-fhir.healthit.gov/",
+    "value": "627a80a15a0d870123c7253e"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "family": "NUMERPass",
+    "given": [ "OpioidExactly12hrsBeforeAntagonist" ]
+  } ],
+  "gender": "female",
+  "birthDate": "1981-11-14"
+}

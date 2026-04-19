@@ -1,0 +1,2174 @@
+<Measure xmlns="http://hl7.org/fhir">
+   <id value="CMS816FHIRHHHypo"></id>
+   <meta>
+      <profile value="http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-shareablemeasure"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/executable-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cql-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/elm-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/proportion-measure-cqfm"></profile>
+   </meta>
+   <text>
+      <status value="extensions"></status>
+      <div xmlns="http://www.w3.org/1999/xhtml" class="col-12"> 
+         <table class="narrative-table"> 
+            <tbody> 
+               <tr> 
+                  <th colspan="2" scope="row" class="row-header">Knowledge Artifact Metadata</th> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Name (machine-readable)</th> 
+                  <td class="content-container">CMS816FHIRHHHypo</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Title (human-readable)</th> 
+                  <td class="content-container">Hospital Harm - Severe HypoglycemiaFHIR</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Status</th> 
+                  <td class="content-container">active</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Experimental</th> 
+                  <td class="content-container">false</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Description</th> 
+                  <td class="content-container">The measure assesses the number of inpatient hospitalizations for patients age 18 and older who were administered at least one hypoglycemic medication during the encounter, who suffer the harm of a severe hypoglycemic event during the encounter</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Clinical Usage</th> 
+                  <td class="content-container">Note the measure is currently confined to using mg/dL as the unit of measurement for glucose results.
+
+Glucose levels are determined by laboratory or point-of-care (POC) tests, including capillary/glucometer blood glucose tests, and by interstitial fluid specimens from continuous glucose monitors. Glucose test results from urine specimens are not considered. Millimoles per liter (mmol/L) should be converted to milligrams per deciliter (mg/dL) for reporting this measure.
+
+This dQM is an episode-based measure. An episode is defined as each inpatient hospitalization or encounter that ends during the measurement period. This FHIR-based measure has been derived from the QDM-based measure: CMS816v5. Please refer to the HL7 QI-Core Implementation Guide (https://hl7.org/fhir/us/qicore/STU6/) for more information on QI-Core and mapping recommendations from QDM to QI-Core STU 6 (https://hl7.org/fhir/us/qicore/STU6/qdm-to-qicore.html).</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Effective Period</th> 
+                  <td class="content-container">2026-01-01..2026-12-31</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Measure Developer</th> 
+                  <td class="content-container">Mathematica</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Measure Steward</th> 
+                  <td class="content-container">Centers for Medicare &amp; Medicaid Services (CMS)</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Copyright</th> 
+                  <td class="content-container">Limited proprietary coding is contained in the Measure specifications for user convenience. Users of proprietary code sets should obtain all necessary licenses from the owners of the code sets. Mathematica disclaims all liability for use or accuracy of any third-party codes contained in the specifications. 
+
+LOINC(R) copyright 2004-2024 Regenstrief Institute, Inc. This material contains SNOMED Clinical Terms(R) (SNOMED CT[R]) copyright 2004-2024 International Health Terminology Standards Development Organisation. ICD-10 copyright 2024 World Health Organization. All Rights Reserved.</td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Citation</th>  
+                  <td class="content-container">  
+                     <em>Citation</em>: CITATION - American Diabetes Association Professional Practice Committee; 16. (2022). Diabetes Care in the Hospital: Standards of Medical Care in Diabetes—2022. Diabetes Care 1 January 2022; 45 (Supplement_1): S244–S253.  https://doi.org/10.2337/dc22-S016   
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Citation</th>  
+                  <td class="content-container">  
+                     <em>Citation</em>: CITATION - Classen, D. C. MD, MS; Munier, W. MD; Verzier, N. MSN, RN; Eldridge, N. MS; Hunt, D. MD; Metersky, M. MD,∥; Richards, C. MD, MPH; Wang, Y. PhD; Brady, P. J. MD, MPH; Helwig, A. MD; Battles, J. PhD. (2021). Measuring Patient Safety: The Medicare Patient Safety Monitoring System (Past, Present, and Future). Journal of Patient Safety: April 2021 - Volume 17 - Issue 3 - p e234-e240
+doi: 10.1097/PTS.0000000000000322   
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Citation</th>  
+                  <td class="content-container">  
+                     <em>Citation</em>: CITATION - Cruz, P. (2020). Inpatient Hypoglycemia: The Challenge Remains. J Diabetes Sci Technol. 2020;14(3):560-566. doi:10.1177/1932296820918540   
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Citation</th>  
+                  <td class="content-container">  
+                     <em>Citation</em>: CITATION - Korytkowski, M.T., Muniyappa, R., Antinori-Lent, K., Donihi, A.C., Drincic, A.T, Hirsch, I.B., Luger, A., McDonnell, M.E., Murad, M.H., Nielsen, C., Pegg, C., Rushakoff, R.J., Santesso, N., Umpierrez, G.E. (2022). Management of Hyperglycemia in Hospitalized Adult Patients in Non-Critical Care Settings: An Endocrine Society Clinical Practice Guideline, The Journal of Clinical Endocrinology &amp; Metabolism, Volume 107, Issue 8, August 2022, Pages 2101–2128,  https://doi.org/10.1210/clinem/dgac278   
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Citation</th>  
+                  <td class="content-container">  
+                     <em>Citation</em>: CITATION - Office of Inspector General Adverse Events in Hospitals. (2022). A Quarter of Medicare Patients Experienced Harm in October 2018. https://oig.hhs.gov/oei/reports/OEI-06-18-00400.asp   
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Citation</th>  
+                  <td class="content-container">  
+                     <em>Citation</em>: CITATION - Santos, C.A.Q., Conover, C., Shehab, N., et al. (2020). Electronic Measurement of a Clinical Quality Measure for Inpatient Hypoglycemic Events: A Multicenter Validation Study. Med Care. 2020;58(10):927-933. doi:10.1097/MLR.0000000000001398   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th colspan="2" scope="row" class="row-header">Measure Metadata</th> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Short Name Identifier</th> 
+                  <td class="content-container">CMS816FHIR</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Version Independent Identifier</th> 
+                  <td class="content-container">urn:uuid:1238aa6c-b533-4289-9ab9-8bb9900e9736</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Version Specific Identifier</th> 
+                  <td class="content-container">urn:uuid:d1776eec-2fd2-49f0-9edf-78131aea019e</td> 
+               </tr>  
+               <tr> 
+                  <th scope="row" class="row-header">Publisher (CMS) Identifier</th> 
+                  <td class="content-container">816FHIR</td> 
+               </tr>  
+               <tr> 
+                  <th scope="row" class="row-header">Identifier</th> 
+                  <td class="content-container">3503e</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Version Number</th> 
+                  <td class="content-container">0.3.000</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Rationale</th> 
+                  <td class="content-container">This measure focuses on severe hypoglycemia as an outcome in the hospital inpatient setting. In a study published by the Office of the Inspector General (OIG), in 2018 adverse drug events represented 43% of all adverse events in hospitals among Medicare patients; of those events, hypoglycemia was among the top 5 adverse drug events (Office of the Inspector General, 2022).
+
+Inpatient hypoglycemia can be life-threatening, and is associated with longer hospital stays and increased medical costs. Severe hypoglycemia (&lt;40 mg/dL) occurs in 2–5% of hospitalized patients with diabetes mellitus, and medication-related hypoglycemic events are common causes of adverse drug events occurring in inpatient settings. Up to half of inpatient adverse drug events may be preventable, and recent studies show that rates of severe hypoglycemia vary across hospitals, suggesting opportunities for improved care (Santos et al., 2020). Rates of inpatient hypoglycemia events are considered an indicator of the quality of care provided by a hospital. Severe hypoglycemia events are largely avoidable by careful use of antihyperglycemic medication. Moreover, the rate of severe hypoglycemia varies across hospitals indicating an opportunity for improvement in care. The Agency for Healthcare Research and Quality (AHRQ) identified insulin and other hypoglycemic agents as high alert medications and associated adverse events to be included as a measure in the Medicare Patient Safety Monitoring System (MPSMS) (Classen et al., 2021). Hypoglycemic events are an adverse outcome that can cause patients to experience drowsiness, confusion, anxiety, irritability, sweating, weakness, increased heart rate, uncontrollable trembling, as well as loss of consciousness and seizure (American Diabetes Association, 2022; Cruz, 2020). It has been found that fasting glucose levels &lt;100 mg/dL are predictors of hypoglycemia within the next 24 hours (ElSayed et al., 2023).</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Clinical Recommendation Statement</th> 
+                  <td class="content-container">From  Section 16, Diabetes Care in the Hospital in the Standards of Medical Care in Diabetes by the American Diabetes Association, (American Diabetes Association, 2024):
+
+16.12 A hypoglycemia management protocol should be adopted and implemented by each hospital or hospital system. A plan for preventing and treating hypoglycemia should be established for each individual. Episodes of hypoglycemia in the hospital should be documented in the electronic health record and tracked for quality assessment and quality improvement.  16.13 Treatment plans should be reviewed and changed as necessary to prevent hypoglycemia when a blood glucose value of &lt;70 mg/dL (3.9 mmol/L) is documented.
+
+A standardized hospital-wide, nurse-initiated hypoglycemia treatment protocol should be in place to immediately address blood glucose levels of &lt;70 mg/dL (3.9 mmol/L). In addition, individualized plans for preventing and treating hypoglycemia for each patient should also be developed. An American Diabetes Association consensus statement recommends that an individuals treatment plan be reviewed any time a blood glucose value of &lt;70 mg/dL (3.9 mmol/L) occurs, as this level often predict subsequent level 3 hypoglycemia. Episodes of hypoglycemia in the hospital should be documented in the EHR and tracked. A key strategy is embedding hypoglycemia treatment into all insulin and insulin infusion orders.
+
+From the Endocrine Society clinical practice guideline on the Management of Hyperglycemia in Hospitalized Patients in Non-critical Care Setting (Korytkowski et al., 2022) as it relates to patients at high risk of hypoglycemia: Recommendation 1.1 
+In adults with insulin-treated diabetes hospitalized for noncritical illness who are at high risk of hypoglycemia, we suggest the use of real-time continuous glucose monitoring (CGM) with confirmatory bedside point-of-care blood glucose (POC-BG) monitoring for adjustments in insulin dosing rather than point-of-care blood glucose POC-BG testing alone in hospital settings where resources and training are available. Recommendation 2.1 
+Management of patients with glucocorticoid (GC)-associated hyperglycemia requires ongoing BG monitoring with adjustment of insulin dosing. All therapies require safeguards to avoid hypoglycemia when doses of GCs are tapered or abruptly discontinued. Recommendation 10.1   
+In adults with no prior history of diabetes hospitalized for noncritical illness with hyperglycemia [defined as BG &gt; 140 mg/dL (7.8 mmol/L)] during hospitalization, we suggest initial therapy with correctional insulin over scheduled insulin therapy (defined as basal or basal/bolus insulin) to maintain glucose targets in the range of 100 to 180 mg/dL (5.6 to 10.0 mmol/L). For patients with persistent hyperglycemia [≥2 POC-BG measurements ≥ 180 mg/dL (≥10.0 mmol/L) in a 24-hour period on correctional insulin alone], we suggest the addition of scheduled insulin therapy.
+
+Recommendation 10.2 In adults with diabetes treated with diet or noninsulin diabetes medications prior to admission, we suggest initial therapy with correctional insulin or scheduled insulin therapy to maintain glucose targets in the range of 100 to 180 mg/dL (5.6 to 10.0 mmol/L). For hospitalized adults started on correctional insulin alone and with persistent hyperglycemia [≥2 point-of-care blood glucose (POC-BG) measurements ≥ 180 mg/dL in a 24-hour period (≥10.0 mmol/L)], we suggest addition of scheduled insulin therapy. We suggest initiation of scheduled insulin therapy for patients with confirmed admission blood glucose (BG) ≥ 180 mg/dL (≥10.0 mmol/L).  Recommendation 10.3
+In adults with insulin-treated diabetes prior to admission who are hospitalized for noncritical illness, we recommend continuation of the scheduled insulin regimen modified for nutritional status and severity of illness to maintain glucose targets in the range of 100 to 180 mg/dL (5.6 to 10.0 mmol/L). Remarks
+Reductions in the dose of basal insulin (by 10% to 20%) at time of hospitalization may be required for patients on basal heavy insulin regimens (defined as doses of basal insulin ≥ 0.6 to 1.0 units/kg/day), in which basal insulin is being used inappropriately to cover meal-related excursions in BG.</td> 
+               </tr>  
+               <tr> 
+                  <th scope="row" class="row-header">Supplemental Data Guidance</th> 
+                  <td class="content-container">For every patient evaluated by this measure also identify payer, race, ethnicity and sex </td> 
+               </tr>  
+               <tr> 
+                  <th colspan="2" scope="row" class="row-header">Measure Population Criteria (ID: Group_1)</th> 
+               </tr>   
+               <tr>  
+                  <th scope="row" class="row-header">Initial Population</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: InitialPopulation_1 
+                     <br></br>  
+                     <em>Description</em>: 
+                     <p style="white-space: pre-line" class="tab-one">Inpatient hospitalizations that end during the measurement period for patients age 18 and older and at least one hypoglycemic medication administration starts during the encounter</p>   
+                     <em>Logic Definition</em>: 
+                     <a href="#cms816fhirhhhypo-initial-population">Initial Population</a>  
+                  </td> 
+               </tr>  
+               <tr>  
+                  <th scope="row" class="row-header">Denominator</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: Denominator_1 
+                     <br></br>  
+                     <em>Description</em>: 
+                     <p style="white-space: pre-line" class="tab-one">Equals Initial Population</p>   
+                     <em>Logic Definition</em>: 
+                     <a href="#cms816fhirhhhypo-denominator">Denominator</a>  
+                  </td> 
+               </tr>  
+               <tr>  
+                  <th scope="row" class="row-header">Numerator</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: Numerator_1 
+                     <br></br>  
+                     <em>Description</em>: 
+                     <p style="white-space: pre-line" class="tab-one">Inpatient hospitalizations where a severe hypoglycemic event occurred during the encounter. A severe hypoglycemic event is:
+
+ - A glucose result less than 40 mg/dL AND
+ - A hypoglycemic medication was administered within 24 hours before the start of the severe hypoglycemic event (i.e., the glucose test with a result less than 40 mg/dL) AND
+ -There was no subsequent repeat test for glucose with a result greater than 80 mg/dL within five minutes or less from the start of the initial glucose test with a result less than 40mg/dL Only one qualifying severe hypoglycemic event is counted in the numerator, and only one severe hypoglycemic event is counted per encounter.
+
+The 24-hour and 5-minute timeframes are based on the time the glucose was drawn, as this reflects the time the patient was experiencing that specific glucose level.</p>   
+                     <em>Logic Definition</em>: 
+                     <a href="#cms816fhirhhhypo-numerator">Numerator</a>  
+                  </td> 
+               </tr>   
+               <tr> 
+                  <th scope="row" class="row-header">Population Basis</th> 
+                  <td class="content-container">Encounter</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Scoring</th> 
+                  <td class="content-container">[http://terminology.hl7.org/CodeSystem/measure-scoring#proportion: 'Proportion']</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Type</th> 
+                  <td class="content-container">[http://terminology.hl7.org/CodeSystem/measure-type#outcome: 'Outcome']</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Rate Aggregation</th> 
+                  <td class="content-container">None</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Improvement Notation</th> 
+                  <td class="content-container">[http://terminology.hl7.org/CodeSystem/measure-improvement-notation#decrease: 'decrease']</td> 
+               </tr> 
+               <tr> 
+                  <th colspan="2" scope="row" class="row-header">Supplemental Data Elements</th> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Supplemental Data Element</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: sde-ethnicity  
+                     <br></br>   
+                     <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]  
+                     <br></br>  
+                     <em>Description</em>: SDE Ethnicity   
+                     <br></br> 
+                     <em>Logic Definition</em>: 
+                     <a href="#cms816fhirhhhypo-sde-ethnicity">SDE Ethnicity</a>  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Supplemental Data Element</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: sde-payer  
+                     <br></br>   
+                     <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]  
+                     <br></br>  
+                     <em>Description</em>: SDE Payer   
+                     <br></br> 
+                     <em>Logic Definition</em>: 
+                     <a href="#cms816fhirhhhypo-sde-payer">SDE Payer</a>  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Supplemental Data Element</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: sde-race  
+                     <br></br>   
+                     <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]  
+                     <br></br>  
+                     <em>Description</em>: SDE Race   
+                     <br></br> 
+                     <em>Logic Definition</em>: 
+                     <a href="#cms816fhirhhhypo-sde-race">SDE Race</a>  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Supplemental Data Element</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: sde-sex  
+                     <br></br>   
+                     <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]  
+                     <br></br>  
+                     <em>Description</em>: SDE Sex   
+                     <br></br> 
+                     <em>Logic Definition</em>: 
+                     <a href="#cms816fhirhhhypo-sde-sex">SDE Sex</a>  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th colspan="2" scope="row" class="row-header">Measure Logic</th> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Primary Library</th> 
+                  <td class="content-container">https://madie.cms.gov/Library/CMS816FHIRHHHypo</td> 
+               </tr>  
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Library SDE  
+                     <br></br>    
+                     <em>Resource</em>: https://madie.cms.gov/Library/SupplementalDataElements|5.1.000 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>https://madie.cms.gov/Library/SupplementalDataElements|5.1.000</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Library FHIRHelpers  
+                     <br></br>    
+                     <em>Resource</em>: https://madie.cms.gov/Library/FHIRHelpers|4.4.000 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>https://madie.cms.gov/Library/FHIRHelpers|4.4.000</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Library QICoreCommon  
+                     <br></br>    
+                     <em>Resource</em>: https://madie.cms.gov/Library/QICoreCommon|4.0.000 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>https://madie.cms.gov/Library/QICoreCommon|4.0.000</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Library CQMCommon  
+                     <br></br>    
+                     <em>Resource</em>: https://madie.cms.gov/Library/CQMCommon|4.1.000 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>https://madie.cms.gov/Library/CQMCommon|4.1.000</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Code system SNOMEDCT  
+                     <br></br>    
+                     <em>Resource</em>: http://snomed.info/sct 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://snomed.info/sct</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Encounter Inpatient  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Hypoglycemics Severe Hypoglycemia  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1196.393 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1196.393</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Observation Services  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Emergency Department Visit  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Glucose Lab Test Mass Per Volume  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.34 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.34</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Payer Type  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591</tt> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Direct Reference Code</th> 
+                  <td class="content-container"> 
+                     <em>Display</em>: Male (finding) 
+                     <br></br> 
+                     <em>Code</em>: 248153007 
+                     <br></br> 
+                     <em>System</em>: 
+                     <tt>http://snomed.info/sct</tt> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Direct Reference Code</th> 
+                  <td class="content-container"> 
+                     <em>Display</em>: Female (finding) 
+                     <br></br> 
+                     <em>Code</em>: 248152002 
+                     <br></br> 
+                     <em>System</em>: 
+                     <tt>http://snomed.info/sct</tt> 
+                  </td> 
+               </tr>  
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: Measurement Period  
+                     <br></br>  
+                     <em>Use</em>: in  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: 1  
+                     <br></br>  
+                     <em>Type</em>: Period  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: Numerator  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: *  
+                     <br></br>  
+                     <em>Type</em>: Resource  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: Denominator  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: *  
+                     <br></br>  
+                     <em>Type</em>: Resource  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: Initial Population  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: *  
+                     <br></br>  
+                     <em>Type</em>: Resource  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: SDE Sex  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: 1  
+                     <br></br>  
+                     <em>Type</em>: Coding  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: SDE Payer  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: *  
+                     <br></br>  
+                     <em>Type</em>: Resource  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: SDE Ethnicity  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: 1  
+                     <br></br>  
+                     <em>Type</em>: Resource  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: SDE Race  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: 1  
+                     <br></br>  
+                     <em>Type</em>: Resource  
+                  </td> 
+               </tr>  
+               <tr> 
+                  <th colspan="2" scope="row" class="section-header">
+                     <a name="effective-data-requirements"> </a>Measure Logic Data Requirements
+                  </th> 
+               </tr>  
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Patient 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient 
+                     <br></br>   
+                     <em>Must Support Elements</em>: extension, url 
+                     <br></br>  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Encounter 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter 
+                     <br></br>   
+                     <em>Must Support Elements</em>: type, status, status.value, period 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: type
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Encounter 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter 
+                     <br></br>   
+                     <em>Must Support Elements</em>: type, status, status.value, period 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: type
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Encounter 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter 
+                     <br></br>   
+                     <em>Must Support Elements</em>: type, period, status, status.value 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: type
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: MedicationAdministration 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration 
+                     <br></br>   
+                     <em>Must Support Elements</em>: medication, status, status.value, effective 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: medication
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1196.393 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: MedicationAdministration 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration 
+                     <br></br>   
+                     <em>Must Support Elements</em>: medication.reference.value, status, status.value, effective 
+                     <br></br>  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Medication 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medication 
+                     <br></br>   
+                     <em>Must Support Elements</em>: id.value, code 
+                     <br></br>  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Observation 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code, effective, status, status.value, value, id, id.value 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.34 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Coverage 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage 
+                     <br></br>   
+                     <em>Must Support Elements</em>: type, period 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: type
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th colspan="2" scope="row" class="row-header">Measure Logic Definitions</th> 
+               </tr>  
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="supplementaldataelements-sde-sex"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> SupplementalDataElements
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Sex":
+  case
+    when Patient.sex = '248153007' then "Male (finding)"
+    when Patient.sex = '248152002' then "Female (finding)"
+    else null
+  end</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms816fhirhhhypo-sde-sex"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS816FHIRHHHypo
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Sex":
+  SDE."SDE Sex"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms816fhirhhhypo-qualifying-encounter"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS816FHIRHHHypo
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Qualifying Encounter":
+  ["Encounter": "Encounter Inpatient"] InpatientEncounter
+    where AgeInYearsAt(date from start of InpatientEncounter.period) &gt;= 18
+      and InpatientEncounter.period ends during day of "Measurement Period"
+      and InpatientEncounter.status = 'finished'</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms816fhirhhhypo-hypoglycemic-medication-administration"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS816FHIRHHHypo
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Hypoglycemic Medication Administration":
+  ["MedicationAdministration": "Hypoglycemics Severe Hypoglycemia"] HypoMedication
+    where HypoMedication.status = 'completed'</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms816fhirhhhypo-encounter-with-hypoglycemic-medication-administration"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS816FHIRHHHypo
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Encounter With Hypoglycemic Medication Administration":
+  "Qualifying Encounter" InpatientHospitalization
+    with "Hypoglycemic Medication Administration" HypoglycemicMedication
+      such that HypoglycemicMedication.effective.toInterval ( ) starts during InpatientHospitalization.hospitalizationWithObservation ( )</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms816fhirhhhypo-initial-population"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS816FHIRHHHypo
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Initial Population":
+  "Encounter With Hypoglycemic Medication Administration"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms816fhirhhhypo-denominator"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS816FHIRHHHypo
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Denominator":
+  "Initial Population"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms816fhirhhhypo-glucose-test-with-result-less-than-40"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS816FHIRHHHypo
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Glucose Test With Result Less Than 40":
+  from
+    "Denominator" InpatientHospitalization,
+    "Hypoglycemic Medication Administration" HypoglycemicMedication,
+    ["LaboratoryResultObservation": "Glucose Lab Test Mass Per Volume"] GlucoseTest
+    let HospitalizationInterval: InpatientHospitalization.hospitalizationWithObservation ( ),
+    HypoglycemicMedicationStart: HypoglycemicMedication.effective.toInterval ( ),
+    GlucoseTestTime: GlucoseTest.effective.earliest ( )
+    where GlucoseTestTime during HospitalizationInterval
+      and GlucoseTest.status in { 'final', 'amended', 'corrected' }
+      and GlucoseTest.value &lt; 40 'mg/dL'
+      and HypoglycemicMedicationStart starts 24 hours or less before or on GlucoseTestTime
+    return GlucoseTest</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms816fhirhhhypo-low-glucose-test-followed-by-glucose-test-result-greater-than-80"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS816FHIRHHHypo
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Low Glucose Test Followed By Glucose Test Result Greater Than 80":
+  from
+    "Denominator" InpatientHospitalization,
+    "Glucose Test With Result Less Than 40" LowGlucoseTest,
+    ["LaboratoryResultObservation": "Glucose Lab Test Mass Per Volume"] FollowupGlucoseTest
+    let GlucoseTestTime: LowGlucoseTest.effective.earliest ( ),
+    FollowupGlucoseTestTime: FollowupGlucoseTest.effective.earliest ( )
+    where FollowupGlucoseTestTime 5 minutes or less after GlucoseTestTime
+      and GlucoseTestTime during InpatientHospitalization.hospitalizationWithObservation ( )
+      and FollowupGlucoseTestTime during InpatientHospitalization.hospitalizationWithObservation ( )
+      and FollowupGlucoseTest.id !~ LowGlucoseTest.id
+      and FollowupGlucoseTest.status in { 'final', 'amended', 'corrected' }
+      and FollowupGlucoseTest.value &gt; 80 'mg/dL'
+    return LowGlucoseTest</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms816fhirhhhypo-severe-hypoglycemic-harm-event"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS816FHIRHHHypo
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Severe Hypoglycemic Harm Event":
+  "Glucose Test With Result Less Than 40" LowGlucoseTest
+    where not ( LowGlucoseTest.id in "Low Glucose Test Followed By Glucose Test Result Greater Than 80".id )</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms816fhirhhhypo-encounter-with-severe-hypoglycemic-harm-event"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS816FHIRHHHypo
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Encounter With Severe Hypoglycemic Harm Event":
+  from
+    "Denominator" InpatientHospitalization,
+    "Severe Hypoglycemic Harm Event" HypoglycemicEvent
+    let GlucoseTestTime: HypoglycemicEvent.effective.earliest ( ),
+    HospitalizationInterval: InpatientHospitalization.hospitalizationWithObservation ( )
+    where GlucoseTestTime during HospitalizationInterval
+    return InpatientHospitalization</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms816fhirhhhypo-numerator"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS816FHIRHHHypo
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Numerator":
+  "Encounter With Severe Hypoglycemic Harm Event"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="supplementaldataelements-sde-payer"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> SupplementalDataElements
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Payer":
+  [Coverage: type in "Payer Type"] Payer
+    return {
+      code: Payer.type,
+      period: Payer.period
+    }</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms816fhirhhhypo-sde-payer"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS816FHIRHHHypo
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Payer":
+  SDE."SDE Payer"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="supplementaldataelements-sde-ethnicity"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> SupplementalDataElements
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Ethnicity":
+  Patient.ethnicity E
+    return Tuple {
+      codes: { E.ombCategory } union E.detailed,
+      display: E.text
+    }</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms816fhirhhhypo-sde-ethnicity"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS816FHIRHHHypo
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Ethnicity":
+  SDE."SDE Ethnicity"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="supplementaldataelements-sde-race"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> SupplementalDataElements
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Race":
+  Patient.race R
+    return Tuple {
+      codes: R.ombCategory union R.detailed,
+      display: R.text
+    }</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms816fhirhhhypo-sde-race"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS816FHIRHHHypo
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Race":
+  SDE."SDE Race"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="fhirhelpers-tostring"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> FHIRHelpers
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define function ToString(value uri): value.value</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="fhirhelpers-tointerval"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> FHIRHelpers
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Converts the given [Period](https://hl7.org/fhir/datatypes.html#Period)
+value to a CQL DateTime Interval
+@comment: If the start value of the given period is unspecified, the starting
+boundary of the resulting interval will be open (meaning the start of the interval
+is unknown, as opposed to interpreted as the beginning of time).
+*/
+define function ToInterval(period FHIR.Period):
+    if period is null then
+        null
+    else
+        if period."start" is null then
+            Interval(period."start".value, period."end".value]
+        else
+            Interval[period."start".value, period."end".value]</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cqmcommon-hospitalizationwithobservation"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CQMCommon
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Hospitalization with Observation returns the total interval from the start of any immediately prior emergency department visit through the observation visit to the discharge of the given encounter
+*/
+define fluent function hospitalizationWithObservation(TheEncounter Encounter ):
+  TheEncounter Visit
+  		let ObsVisit: Last([Encounter: "Observation Services"] LastObs
+  				where LastObs.status = 'finished'
+            and LastObs.period ends 1 hour or less on or before start of Visit.period
+  				sort by end of period
+  			),
+  			VisitStart: Coalesce(start of ObsVisit.period, start of Visit.period),
+  			EDVisit: Last([Encounter: "Emergency Department Visit"] LastED
+  				where LastED.status = 'finished'
+            and LastED.period ends 1 hour or less on or before VisitStart
+  				sort by end of period
+  			)
+  		return Interval[Coalesce(start of EDVisit.period, VisitStart), end of Visit.period]</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="qicorecommon-earliest"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> QICoreCommon
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Given an interval, return the starting point if the interval has a starting boundary specified,
+otherwise, return the ending point
+*/
+define fluent function earliest(choice Choice&lt;DateTime, Quantity, Interval&lt;DateTime&gt;, Interval&lt;Quantity&gt;&gt; ):
+  (choice.toInterval()) period
+    return
+      if (period."hasStart"()) then start of period
+      else end of period</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="qicorecommon-hasstart"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> QICoreCommon
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Given an interval, return true if the interval has a starting boundary specified
+(i.e. the start of the interval is not null and not the minimum DateTime value)
+*/
+define fluent function hasStart(period Interval&lt;DateTime&gt; ):
+  not ( start of period is null
+      or start of period = minimum DateTime
+  )</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="fhirhelpers-tocode"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> FHIRHelpers
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Converts the given FHIR [Coding](https://hl7.org/fhir/datatypes.html#Coding) value to a CQL Code.
+*/
+define function ToCode(coding FHIR.Coding):
+    if coding is null then
+        null
+    else
+        System.Code {
+          code: coding.code.value,
+          system: coding.system.value,
+          version: coding.version.value,
+          display: coding.display.value
+        }</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th colspan="2" scope="row" class="row-header">Generated using version 0.4.7 of the sample-content-ig Liquid templates</th> 
+               </tr> 
+            </tbody> 
+         </table> 
+      </div>
+   </text>
+   <contained>
+      <Library xmlns="http://hl7.org/fhir">
+         <id value="effective-data-requirements"></id>
+         <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode">
+            <valueCoding>
+               <system value="http://snomed.info/sct"></system>
+               <code value="248153007"></code>
+               <display value="Male (finding)"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode">
+            <valueCoding>
+               <system value="http://snomed.info/sct"></system>
+               <code value="248152002"></code>
+               <display value="Female (finding)"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="SupplementalDataElements"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Sex"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Sex&quot;:
+  case
+    when Patient.sex = '248153007' then &quot;Male (finding)&quot;
+    when Patient.sex = '248152002' then &quot;Female (finding)&quot;
+    else null
+  end"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="0"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS816FHIRHHHypo"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Sex"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Sex&quot;:
+  SDE.&quot;SDE Sex&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="1"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS816FHIRHHHypo"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Qualifying Encounter"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Qualifying Encounter&quot;:
+  [&quot;Encounter&quot;: &quot;Encounter Inpatient&quot;] InpatientEncounter
+    where AgeInYearsAt(date from start of InpatientEncounter.period) &gt;= 18
+      and InpatientEncounter.period ends during day of &quot;Measurement Period&quot;
+      and InpatientEncounter.status = 'finished'"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="2"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS816FHIRHHHypo"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Hypoglycemic Medication Administration"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Hypoglycemic Medication Administration&quot;:
+  [&quot;MedicationAdministration&quot;: &quot;Hypoglycemics Severe Hypoglycemia&quot;] HypoMedication
+    where HypoMedication.status = 'completed'"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="3"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS816FHIRHHHypo"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Encounter With Hypoglycemic Medication Administration"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Encounter With Hypoglycemic Medication Administration&quot;:
+  &quot;Qualifying Encounter&quot; InpatientHospitalization
+    with &quot;Hypoglycemic Medication Administration&quot; HypoglycemicMedication
+      such that HypoglycemicMedication.effective.toInterval ( ) starts during InpatientHospitalization.hospitalizationWithObservation ( )"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="4"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS816FHIRHHHypo"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Initial Population"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Initial Population&quot;:
+  &quot;Encounter With Hypoglycemic Medication Administration&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="5"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS816FHIRHHHypo"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Denominator"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Denominator&quot;:
+  &quot;Initial Population&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="6"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS816FHIRHHHypo"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Glucose Test With Result Less Than 40"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Glucose Test With Result Less Than 40&quot;:
+  from
+    &quot;Denominator&quot; InpatientHospitalization,
+    &quot;Hypoglycemic Medication Administration&quot; HypoglycemicMedication,
+    [&quot;LaboratoryResultObservation&quot;: &quot;Glucose Lab Test Mass Per Volume&quot;] GlucoseTest
+    let HospitalizationInterval: InpatientHospitalization.hospitalizationWithObservation ( ),
+    HypoglycemicMedicationStart: HypoglycemicMedication.effective.toInterval ( ),
+    GlucoseTestTime: GlucoseTest.effective.earliest ( )
+    where GlucoseTestTime during HospitalizationInterval
+      and GlucoseTest.status in { 'final', 'amended', 'corrected' }
+      and GlucoseTest.value &lt; 40 'mg/dL'
+      and HypoglycemicMedicationStart starts 24 hours or less before or on GlucoseTestTime
+    return GlucoseTest"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="7"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS816FHIRHHHypo"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Low Glucose Test Followed By Glucose Test Result Greater Than 80"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Low Glucose Test Followed By Glucose Test Result Greater Than 80&quot;:
+  from
+    &quot;Denominator&quot; InpatientHospitalization,
+    &quot;Glucose Test With Result Less Than 40&quot; LowGlucoseTest,
+    [&quot;LaboratoryResultObservation&quot;: &quot;Glucose Lab Test Mass Per Volume&quot;] FollowupGlucoseTest
+    let GlucoseTestTime: LowGlucoseTest.effective.earliest ( ),
+    FollowupGlucoseTestTime: FollowupGlucoseTest.effective.earliest ( )
+    where FollowupGlucoseTestTime 5 minutes or less after GlucoseTestTime
+      and GlucoseTestTime during InpatientHospitalization.hospitalizationWithObservation ( )
+      and FollowupGlucoseTestTime during InpatientHospitalization.hospitalizationWithObservation ( )
+      and FollowupGlucoseTest.id !~ LowGlucoseTest.id
+      and FollowupGlucoseTest.status in { 'final', 'amended', 'corrected' }
+      and FollowupGlucoseTest.value &gt; 80 'mg/dL'
+    return LowGlucoseTest"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="8"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS816FHIRHHHypo"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Severe Hypoglycemic Harm Event"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Severe Hypoglycemic Harm Event&quot;:
+  &quot;Glucose Test With Result Less Than 40&quot; LowGlucoseTest
+    where not ( LowGlucoseTest.id in &quot;Low Glucose Test Followed By Glucose Test Result Greater Than 80&quot;.id )"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="9"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS816FHIRHHHypo"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Encounter With Severe Hypoglycemic Harm Event"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Encounter With Severe Hypoglycemic Harm Event&quot;:
+  from
+    &quot;Denominator&quot; InpatientHospitalization,
+    &quot;Severe Hypoglycemic Harm Event&quot; HypoglycemicEvent
+    let GlucoseTestTime: HypoglycemicEvent.effective.earliest ( ),
+    HospitalizationInterval: InpatientHospitalization.hospitalizationWithObservation ( )
+    where GlucoseTestTime during HospitalizationInterval
+    return InpatientHospitalization"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="10"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS816FHIRHHHypo"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Numerator"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Numerator&quot;:
+  &quot;Encounter With Severe Hypoglycemic Harm Event&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="11"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="SupplementalDataElements"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Payer"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Payer&quot;:
+  [Coverage: type in &quot;Payer Type&quot;] Payer
+    return {
+      code: Payer.type,
+      period: Payer.period
+    }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="12"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS816FHIRHHHypo"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Payer"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Payer&quot;:
+  SDE.&quot;SDE Payer&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="13"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="SupplementalDataElements"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Ethnicity"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Ethnicity&quot;:
+  Patient.ethnicity E
+    return Tuple {
+      codes: { E.ombCategory } union E.detailed,
+      display: E.text
+    }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="14"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS816FHIRHHHypo"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Ethnicity"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Ethnicity&quot;:
+  SDE.&quot;SDE Ethnicity&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="15"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="SupplementalDataElements"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Race"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Race&quot;:
+  Patient.race R
+    return Tuple {
+      codes: R.ombCategory union R.detailed,
+      display: R.text
+    }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="16"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS816FHIRHHHypo"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Race"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Race&quot;:
+  SDE.&quot;SDE Race&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="17"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="FHIRHelpers"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="ToString"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define function ToString(value uri): value.value"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="18"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="FHIRHelpers"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="ToInterval"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/*
+@description: Converts the given [Period](https://hl7.org/fhir/datatypes.html#Period)
+value to a CQL DateTime Interval
+@comment: If the start value of the given period is unspecified, the starting
+boundary of the resulting interval will be open (meaning the start of the interval
+is unknown, as opposed to interpreted as the beginning of time).
+*/
+define function ToInterval(period FHIR.Period):
+    if period is null then
+        null
+    else
+        if period.&quot;start&quot; is null then
+            Interval(period.&quot;start&quot;.value, period.&quot;end&quot;.value]
+        else
+            Interval[period.&quot;start&quot;.value, period.&quot;end&quot;.value]"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="19"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CQMCommon"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="hospitalizationWithObservation"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/*
+@description: Hospitalization with Observation returns the total interval from the start of any immediately prior emergency department visit through the observation visit to the discharge of the given encounter
+*/
+define fluent function hospitalizationWithObservation(TheEncounter Encounter ):
+  TheEncounter Visit
+  		let ObsVisit: Last([Encounter: &quot;Observation Services&quot;] LastObs
+  				where LastObs.status = 'finished'
+            and LastObs.period ends 1 hour or less on or before start of Visit.period
+  				sort by end of period
+  			),
+  			VisitStart: Coalesce(start of ObsVisit.period, start of Visit.period),
+  			EDVisit: Last([Encounter: &quot;Emergency Department Visit&quot;] LastED
+  				where LastED.status = 'finished'
+            and LastED.period ends 1 hour or less on or before VisitStart
+  				sort by end of period
+  			)
+  		return Interval[Coalesce(start of EDVisit.period, VisitStart), end of Visit.period]"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="20"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="QICoreCommon"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="earliest"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/*
+@description: Given an interval, return the starting point if the interval has a starting boundary specified,
+otherwise, return the ending point
+*/
+define fluent function earliest(choice Choice&lt;DateTime, Quantity, Interval&lt;DateTime&gt;, Interval&lt;Quantity&gt;&gt; ):
+  (choice.toInterval()) period
+    return
+      if (period.&quot;hasStart&quot;()) then start of period
+      else end of period"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="21"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="QICoreCommon"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="hasStart"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/*
+@description: Given an interval, return true if the interval has a starting boundary specified
+(i.e. the start of the interval is not null and not the minimum DateTime value)
+*/
+define fluent function hasStart(period Interval&lt;DateTime&gt; ):
+  not ( start of period is null
+      or start of period = minimum DateTime
+  )"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="22"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="FHIRHelpers"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="ToCode"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/*
+@description: Converts the given FHIR [Coding](https://hl7.org/fhir/datatypes.html#Coding) value to a CQL Code.
+*/
+define function ToCode(coding FHIR.Coding):
+    if coding is null then
+        null
+    else
+        System.Code {
+          code: coding.code.value,
+          system: coding.system.value,
+          version: coding.version.value,
+          display: coding.display.value
+        }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="23"></valueInteger>
+            </extension>
+         </extension>
+         <name value="EffectiveDataRequirements"></name>
+         <status value="active"></status>
+         <type>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/library-type"></system>
+               <code value="module-definition"></code>
+            </coding>
+         </type>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Library SDE"></display>
+            <resource value="https://madie.cms.gov/Library/SupplementalDataElements|5.1.000"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Library FHIRHelpers"></display>
+            <resource value="https://madie.cms.gov/Library/FHIRHelpers|4.4.000"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Library QICoreCommon"></display>
+            <resource value="https://madie.cms.gov/Library/QICoreCommon|4.0.000"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Library CQMCommon"></display>
+            <resource value="https://madie.cms.gov/Library/CQMCommon|4.1.000"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Code system SNOMEDCT"></display>
+            <resource value="http://snomed.info/sct"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Encounter Inpatient"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Hypoglycemics Severe Hypoglycemia"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1196.393"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Observation Services"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Emergency Department Visit"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Glucose Lab Test Mass Per Volume"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.34"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Payer Type"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"></resource>
+         </relatedArtifact>
+         <parameter>
+            <name value="Measurement Period"></name>
+            <use value="in"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="Period"></type>
+         </parameter>
+         <parameter>
+            <name value="Numerator"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="*"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <parameter>
+            <name value="Denominator"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="*"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <parameter>
+            <name value="Initial Population"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="*"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <parameter>
+            <name value="SDE Sex"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="Coding"></type>
+         </parameter>
+         <parameter>
+            <name value="SDE Payer"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="*"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <parameter>
+            <name value="SDE Ethnicity"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <parameter>
+            <name value="SDE Race"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <dataRequirement>
+            <type value="Patient"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient"></profile>
+            <mustSupport value="extension"></mustSupport>
+            <mustSupport value="url"></mustSupport>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="MedicationAdministration"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration"></profile>
+            <mustSupport value="medication"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="effective"></mustSupport>
+            <codeFilter>
+               <path value="medication"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1196.393"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="MedicationAdministration"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration"></profile>
+            <mustSupport value="medication.reference.value"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="effective"></mustSupport>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Medication"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medication"></profile>
+            <mustSupport value="id.value"></mustSupport>
+            <mustSupport value="code"></mustSupport>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Observation"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab"></profile>
+            <mustSupport value="code"></mustSupport>
+            <mustSupport value="effective"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="value"></mustSupport>
+            <mustSupport value="id"></mustSupport>
+            <mustSupport value="id.value"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.34"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Coverage"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+      </Library>
+   </contained>
+   <extension id="supplementalDataGuidance" url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-supplementalDataGuidance">
+      <extension url="guidance">
+         <valueString value="For every patient evaluated by this measure also identify payer, race, ethnicity and sex
+ "></valueString>
+      </extension>
+      <extension url="usage">
+         <valueCodeableConcept>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+               <code value="supplemental-data"></code>
+               <display value="Supplemental Data"></display>
+            </coding>
+            <text value="Supplemental Data Guidance"></text>
+         </valueCodeableConcept>
+      </extension>
+   </extension>
+   <extension url="http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-effectiveDataRequirements">
+      <valueReference>
+         <reference value="#effective-data-requirements"></reference>
+      </valueReference>
+   </extension>
+   <url value="https://madie.cms.gov/Measure/CMS816FHIRHHHypo"></url>
+   <identifier>
+      <use value="usual"></use>
+      <type>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/artifact-identifier-type"></system>
+            <code value="short-name"></code>
+            <display value="Short Name"></display>
+         </coding>
+      </type>
+      <system value="https://madie.cms.gov/measure/shortName"></system>
+      <value value="CMS816FHIR"></value>
+   </identifier>
+   <identifier>
+      <use value="official"></use>
+      <type>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/artifact-identifier-type"></system>
+            <code value="version-independent"></code>
+            <display value="Version Independent"></display>
+         </coding>
+      </type>
+      <system value="urn:ietf:rfc:3986"></system>
+      <value value="urn:uuid:1238aa6c-b533-4289-9ab9-8bb9900e9736"></value>
+   </identifier>
+   <identifier>
+      <use value="official"></use>
+      <type>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/artifact-identifier-type"></system>
+            <code value="version-specific"></code>
+            <display value="Version Specific"></display>
+         </coding>
+      </type>
+      <system value="urn:ietf:rfc:3986"></system>
+      <value value="urn:uuid:d1776eec-2fd2-49f0-9edf-78131aea019e"></value>
+   </identifier>
+   <identifier>
+      <use value="official"></use>
+      <type>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/artifact-identifier-type"></system>
+            <code value="endorser"></code>
+            <display value="Endorser"></display>
+         </coding>
+      </type>
+      <system value="https://madie.cms.gov/measure/cbeId"></system>
+      <value value="3503e"></value>
+      <assigner>
+         <display value="CMS Consensus Based Entity"></display>
+      </assigner>
+   </identifier>
+   <identifier>
+      <use value="official"></use>
+      <type>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/artifact-identifier-type"></system>
+            <code value="publisher"></code>
+            <display value="Publisher"></display>
+         </coding>
+      </type>
+      <system value="https://madie.cms.gov/measure/cmsId"></system>
+      <value value="816FHIR"></value>
+      <assigner>
+         <display value="CMS"></display>
+      </assigner>
+   </identifier>
+   <version value="0.3.000"></version>
+   <name value="CMS816FHIRHHHypo"></name>
+   <title value="Hospital Harm - Severe HypoglycemiaFHIR"></title>
+   <status value="active"></status>
+   <experimental value="false"></experimental>
+   <date value="2025-06-19T19:11:04+00:00"></date>
+   <publisher value="Centers for Medicare &amp; Medicaid Services (CMS)"></publisher>
+   <contact>
+      <telecom>
+         <system value="url"></system>
+         <value value="https://www.cms.gov/"></value>
+      </telecom>
+   </contact>
+   <description value="The measure assesses the number of inpatient hospitalizations for patients age 18 and older who were administered at least one hypoglycemic medication during the encounter, who suffer the harm of a severe hypoglycemic event during the encounter"></description>
+   <usage value="Note the measure is currently confined to using mg/dL as the unit of measurement for glucose results.
+
+Glucose levels are determined by laboratory or point-of-care (POC) tests, including capillary/glucometer blood glucose tests, and by interstitial fluid specimens from continuous glucose monitors. Glucose test results from urine specimens are not considered.
+
+Millimoles per liter (mmol/L) should be converted to milligrams per deciliter (mg/dL) for reporting this measure.
+
+This dQM is an episode-based measure. An episode is defined as each inpatient hospitalization or encounter that ends during the measurement period.
+
+This FHIR-based measure has been derived from the QDM-based measure: CMS816v5. Please refer to the HL7 QI-Core Implementation Guide (https://hl7.org/fhir/us/qicore/STU6/) for more information on QI-Core and mapping recommendations from QDM to QI-Core STU 6 (https://hl7.org/fhir/us/qicore/STU6/qdm-to-qicore.html)."></usage>
+   <copyright value="Limited proprietary coding is contained in the Measure specifications for user convenience. Users of proprietary code sets should obtain all necessary licenses from the owners of the code sets. Mathematica disclaims all liability for use or accuracy of any third-party codes contained in the specifications. 
+
+LOINC(R) copyright 2004-2024 Regenstrief Institute, Inc. This material contains SNOMED Clinical Terms(R) (SNOMED CT[R]) copyright 2004-2024 International Health Terminology Standards Development Organisation. ICD-10 copyright 2024 World Health Organization. All Rights Reserved."></copyright>
+   <effectivePeriod>
+      <start value="2026-01-01"></start>
+      <end value="2026-12-31"></end>
+   </effectivePeriod>
+   <author>
+      <name value="Mathematica"></name>
+      <telecom>
+         <system value="url"></system>
+         <value value="https://www.mathematica.org/"></value>
+      </telecom>
+   </author>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - American Diabetes Association Professional Practice Committee; 16. (2022). Diabetes Care in the Hospital: Standards of Medical Care in Diabetes—2022. Diabetes Care 1 January 2022; 45 (Supplement_1): S244–S253.  https://doi.org/10.2337/dc22-S016
+"></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Classen, D. C. MD, MS; Munier, W. MD; Verzier, N. MSN, RN; Eldridge, N. MS; Hunt, D. MD; Metersky, M. MD,∥; Richards, C. MD, MPH; Wang, Y. PhD; Brady, P. J. MD, MPH; Helwig, A. MD; Battles, J. PhD. (2021). Measuring Patient Safety: The Medicare Patient Safety Monitoring System (Past, Present, and Future). Journal of Patient Safety: April 2021 - Volume 17 - Issue 3 - p e234-e240
+doi: 10.1097/PTS.0000000000000322
+"></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Cruz, P. (2020). Inpatient Hypoglycemia: The Challenge Remains. J Diabetes Sci Technol. 2020;14(3):560-566. doi:10.1177/1932296820918540
+"></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Korytkowski, M.T., Muniyappa, R., Antinori-Lent, K., Donihi, A.C., Drincic, A.T, Hirsch, I.B., Luger, A., McDonnell, M.E., Murad, M.H., Nielsen, C., Pegg, C., Rushakoff, R.J., Santesso, N., Umpierrez, G.E. (2022). Management of Hyperglycemia in Hospitalized Adult Patients in Non-Critical Care Settings: An Endocrine Society Clinical Practice Guideline, The Journal of Clinical Endocrinology &amp; Metabolism, Volume 107, Issue 8, August 2022, Pages 2101–2128,  https://doi.org/10.1210/clinem/dgac278
+"></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Office of Inspector General Adverse Events in Hospitals. (2022). A Quarter of Medicare Patients Experienced Harm in October 2018. https://oig.hhs.gov/oei/reports/OEI-06-18-00400.asp
+"></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Santos, C.A.Q., Conover, C., Shehab, N., et al. (2020). Electronic Measurement of a Clinical Quality Measure for Inpatient Hypoglycemic Events: A Multicenter Validation Study. Med Care. 2020;58(10):927-933. doi:10.1097/MLR.0000000000001398
+"></citation>
+   </relatedArtifact>
+   <library value="https://madie.cms.gov/Library/CMS816FHIRHHHypo"></library>
+   <disclaimer value="This performance measure is not a clinical guideline and does not establish a standard of medical care, and has not been tested for all potential applications.
+
+THE MEASURES AND SPECIFICATIONS ARE PROVIDED “AS IS” WITHOUT WARRANTY OF ANY KIND.
+
+Due to technical limitations, registered trademarks are indicated by (R) or [R] and unregistered trademarks are indicated by (TM) or [TM]."></disclaimer>
+   <rationale value="This measure focuses on severe hypoglycemia as an outcome in the hospital inpatient setting. In a study published by the Office of the Inspector General (OIG), in 2018 adverse drug events represented 43% of all adverse events in hospitals among Medicare patients; of those events, hypoglycemia was among the top 5 adverse drug events (Office of the Inspector General, 2022).
+
+Inpatient hypoglycemia can be life-threatening, and is associated with longer hospital stays and increased medical costs. Severe hypoglycemia (&lt;40 mg/dL) occurs in 2–5% of hospitalized patients with diabetes mellitus, and medication-related hypoglycemic events are common causes of adverse drug events occurring in inpatient settings. Up to half of inpatient adverse drug events may be preventable, and recent studies show that rates of severe hypoglycemia vary across hospitals, suggesting opportunities for improved care (Santos et al., 2020). Rates of inpatient hypoglycemia events are considered an indicator of the quality of care provided by a hospital. Severe hypoglycemia events are largely avoidable by careful use of antihyperglycemic medication. Moreover, the rate of severe hypoglycemia varies across hospitals indicating an opportunity for improvement in care. The Agency for Healthcare Research and Quality (AHRQ) identified insulin and other hypoglycemic agents as high alert medications and associated adverse events to be included as a measure in the Medicare Patient Safety Monitoring System (MPSMS) (Classen et al., 2021). Hypoglycemic events are an adverse outcome that can cause patients to experience drowsiness, confusion, anxiety, irritability, sweating, weakness, increased heart rate, uncontrollable trembling, as well as loss of consciousness and seizure (American Diabetes Association, 2022; Cruz, 2020). It has been found that fasting glucose levels &lt;100 mg/dL are predictors of hypoglycemia within the next 24 hours (ElSayed et al., 2023)."></rationale>
+   <clinicalRecommendationStatement value="From  Section 16, Diabetes Care in the Hospital in the Standards of Medical Care in Diabetes by the American Diabetes Association, (American Diabetes Association, 2024):
+
+16.12 A hypoglycemia management protocol should be adopted and implemented by each hospital or hospital system. A plan for preventing and treating hypoglycemia should be established for each individual. Episodes of hypoglycemia in the hospital should be documented in the electronic health record and tracked for quality assessment and quality improvement. 
+
+16.13 Treatment plans should be reviewed and changed as necessary to prevent hypoglycemia when a blood glucose value of &lt;70 mg/dL (3.9 mmol/L) is documented.
+
+A standardized hospital-wide, nurse-initiated hypoglycemia treatment protocol should be in place to immediately address blood glucose levels of &lt;70 mg/dL (3.9 mmol/L). In addition, individualized plans for preventing and treating hypoglycemia for each patient should also be developed. An American Diabetes Association consensus statement recommends that an individuals treatment plan be reviewed any time a blood glucose value of &lt;70 mg/dL (3.9 mmol/L) occurs, as this level often predict subsequent level 3 hypoglycemia. Episodes of hypoglycemia in the hospital should be documented in the EHR and tracked. A key strategy is embedding hypoglycemia treatment into all insulin and insulin infusion orders.
+
+From the Endocrine Society clinical practice guideline on the Management of Hyperglycemia in Hospitalized Patients in Non-critical Care Setting (Korytkowski et al., 2022) as it relates to patients at high risk of hypoglycemia:
+
+Recommendation 1.1 
+In adults with insulin-treated diabetes hospitalized for noncritical illness who are at high risk of hypoglycemia, we suggest the use of real-time continuous glucose monitoring (CGM) with confirmatory bedside point-of-care blood glucose (POC-BG) monitoring for adjustments in insulin dosing rather than point-of-care blood glucose POC-BG testing alone in hospital settings where resources and training are available.
+
+Recommendation 2.1 
+Management of patients with glucocorticoid (GC)-associated hyperglycemia requires ongoing BG monitoring with adjustment of insulin dosing. All therapies require safeguards to avoid hypoglycemia when doses of GCs are tapered or abruptly discontinued.
+
+Recommendation 10.1   
+In adults with no prior history of diabetes hospitalized for noncritical illness with hyperglycemia [defined as BG &gt; 140 mg/dL (7.8 mmol/L)] during hospitalization, we suggest initial therapy with correctional insulin over scheduled insulin therapy (defined as basal or basal/bolus insulin) to maintain glucose targets in the range of 100 to 180 mg/dL (5.6 to 10.0 mmol/L). For patients with persistent hyperglycemia [≥2 POC-BG measurements ≥ 180 mg/dL (≥10.0 mmol/L) in a 24-hour period on correctional insulin alone], we suggest the addition of scheduled insulin therapy.
+
+Recommendation 10.2
+In adults with diabetes treated with diet or noninsulin diabetes medications prior to admission, we suggest initial therapy with correctional insulin or scheduled insulin therapy to maintain glucose targets in the range of 100 to 180 mg/dL (5.6 to 10.0 mmol/L). For hospitalized adults started on correctional insulin alone and with persistent hyperglycemia [≥2 point-of-care blood glucose (POC-BG) measurements ≥ 180 mg/dL in a 24-hour period (≥10.0 mmol/L)], we suggest addition of scheduled insulin therapy. We suggest initiation of scheduled insulin therapy for patients with confirmed admission blood glucose (BG) ≥ 180 mg/dL (≥10.0 mmol/L). 
+
+Recommendation 10.3
+In adults with insulin-treated diabetes prior to admission who are hospitalized for noncritical illness, we recommend continuation of the scheduled insulin regimen modified for nutritional status and severity of illness to maintain glucose targets in the range of 100 to 180 mg/dL (5.6 to 10.0 mmol/L).
+
+Remarks
+Reductions in the dose of basal insulin (by 10% to 20%) at time of hospitalization may be required for patients on basal heavy insulin regimens (defined as doses of basal insulin ≥ 0.6 to 1.0 units/kg/day), in which basal insulin is being used inappropriately to cover meal-related excursions in BG."></clinicalRecommendationStatement>
+   <group id="Group_1">
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-scoring">
+         <valueCodeableConcept>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-scoring"></system>
+               <code value="proportion"></code>
+               <display value="Proportion"></display>
+            </coding>
+         </valueCodeableConcept>
+      </extension>
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-populationBasis">
+         <valueCode value="Encounter"></valueCode>
+      </extension>
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-type">
+         <valueCodeableConcept>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-type"></system>
+               <code value="outcome"></code>
+               <display value="Outcome"></display>
+            </coding>
+         </valueCodeableConcept>
+      </extension>
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-rateAggregation">
+         <valueCode value="None"></valueCode>
+      </extension>
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-improvementNotation">
+         <valueCodeableConcept>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-improvement-notation"></system>
+               <code value="decrease"></code>
+               <display value="decrease"></display>
+            </coding>
+         </valueCodeableConcept>
+      </extension>
+      <population id="InitialPopulation_1">
+         <code>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-population"></system>
+               <code value="initial-population"></code>
+               <display value="Initial Population"></display>
+            </coding>
+         </code>
+         <description value="Inpatient hospitalizations that end during the measurement period for patients age 18 and older and at least one hypoglycemic medication administration starts during the encounter"></description>
+         <criteria>
+            <language value="text/cql-identifier"></language>
+            <expression value="Initial Population"></expression>
+         </criteria>
+      </population>
+      <population id="Denominator_1">
+         <code>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-population"></system>
+               <code value="denominator"></code>
+               <display value="Denominator"></display>
+            </coding>
+         </code>
+         <description value="Equals Initial Population"></description>
+         <criteria>
+            <language value="text/cql-identifier"></language>
+            <expression value="Denominator"></expression>
+         </criteria>
+      </population>
+      <population id="Numerator_1">
+         <code>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-population"></system>
+               <code value="numerator"></code>
+               <display value="Numerator"></display>
+            </coding>
+         </code>
+         <description value="Inpatient hospitalizations where a severe hypoglycemic event occurred during the encounter. A severe hypoglycemic event is:
+
+ - A glucose result less than 40 mg/dL
+AND
+ - A hypoglycemic medication was administered within 24 hours before the start of the severe hypoglycemic event (i.e., the glucose test with a result less than 40 mg/dL)
+AND
+ -There was no subsequent repeat test for glucose with a result greater than 80 mg/dL within five minutes or less from the start of the initial glucose test with a result less than 40mg/dL
+
+Only one qualifying severe hypoglycemic event is counted in the numerator, and only one severe hypoglycemic event is counted per encounter.
+
+The 24-hour and 5-minute timeframes are based on the time the glucose was drawn, as this reflects the time the patient was experiencing that specific glucose level."></description>
+         <criteria>
+            <language value="text/cql-identifier"></language>
+            <expression value="Numerator"></expression>
+         </criteria>
+      </population>
+   </group>
+   <supplementalData id="sde-ethnicity">
+      <usage>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+            <code value="supplemental-data"></code>
+         </coding>
+      </usage>
+      <description value="SDE Ethnicity"></description>
+      <criteria>
+         <language value="text/cql-identifier"></language>
+         <expression value="SDE Ethnicity"></expression>
+      </criteria>
+   </supplementalData>
+   <supplementalData id="sde-payer">
+      <usage>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+            <code value="supplemental-data"></code>
+         </coding>
+      </usage>
+      <description value="SDE Payer"></description>
+      <criteria>
+         <language value="text/cql-identifier"></language>
+         <expression value="SDE Payer"></expression>
+      </criteria>
+   </supplementalData>
+   <supplementalData id="sde-race">
+      <usage>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+            <code value="supplemental-data"></code>
+         </coding>
+      </usage>
+      <description value="SDE Race"></description>
+      <criteria>
+         <language value="text/cql-identifier"></language>
+         <expression value="SDE Race"></expression>
+      </criteria>
+   </supplementalData>
+   <supplementalData id="sde-sex">
+      <usage>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+            <code value="supplemental-data"></code>
+         </coding>
+      </usage>
+      <description value="SDE Sex"></description>
+      <criteria>
+         <language value="text/cql-identifier"></language>
+         <expression value="SDE Sex"></expression>
+      </criteria>
+   </supplementalData>
+</Measure>

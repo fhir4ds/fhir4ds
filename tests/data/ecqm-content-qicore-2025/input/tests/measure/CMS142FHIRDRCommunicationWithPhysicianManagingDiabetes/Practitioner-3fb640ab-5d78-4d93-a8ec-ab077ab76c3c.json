@@ -1,0 +1,15 @@
+{
+  "resourceType": "Practitioner",
+  "id": "3fb640ab-5d78-4d93-a8ec-ab077ab76c3c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+  },
+  "identifier": [ {
+    "system": "http://hl7.org/fhir/sid/us-npi",
+    "value": "123456"
+  } ],
+  "name": [ {
+    "family": "Goodboy",
+    "prefix": [ "Dr" ]
+  } ]
+}

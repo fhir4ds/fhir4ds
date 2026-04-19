@@ -1,0 +1,58 @@
+{
+  "resourceType": "Patient",
+  "id": "52951a0c-ccd4-4e47-9133-16ff3984ef12",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "text": {
+    "status": "generated",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">PatientExpired <b>DENEXPASS </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>c3d01f7f78785bb49d9eef86bf245a1a</td></tr><tr><td>Date of birth</td><td><span>31 July 1969</span></td></tr></tbody></table></div>"
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "1002-5",
+        "display": "American Indian or Alaska Native",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "American Indian or Alaska Native"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Hispanic or Latino"
+    } ]
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://bonnie-fhir.healthit.gov/",
+    "value": "633c9d020968f8012250fc68"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "family": "DENEXPass",
+    "given": [ "PatientExpired" ]
+  } ],
+  "gender": "male",
+  "birthDate": "1970-07-31"
+}

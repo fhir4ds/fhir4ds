@@ -1,0 +1,43 @@
+{
+  "resourceType": "Condition",
+  "id": "3131f3e0-6de4-409d-a121-ffbc966533fe",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "193349004",
+      "display": "Preproliferative retinopathy due to diabetes mellitus"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2023",
+      "code": "E08.311"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/d9840e8c-3359-42c2-b354-4b236c3c1b15"
+  },
+  "onsetDateTime": "2025-07-01T15:00:00.000+00:00"
+}

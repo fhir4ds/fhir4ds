@@ -1,0 +1,61 @@
+{
+  "resourceType": "Patient",
+  "id": "ac2adb48-5f93-46dc-ba35-11abf0b20c49",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2106-3",
+        "display": "White",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "White"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2186-5",
+        "display": "Not Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Not Hispanic or Latino"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248153007"
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://madie.cms.gov/",
+    "value": "DxStartAftrStart"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "text": "DxStartAftrStart",
+    "family": "MSROBSPass4",
+    "given": [ "DxStartAftrStart" ]
+  } ],
+  "gender": "male",
+  "birthDate": "1965-01-01",
+  "address": [ {
+    "text": "DxStartAftrStart, Screened Not at risk Assessed Severely Malnourished Diagnosed Care Plan, ID=DxStartAftrStart, DOB: 01 Jan 1965"
+  } ]
+}

@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "3ce42cc3-7dd7-4d18-a4c6-bed6f4f2f519",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "procedure",
+      "display": "Procedure"
+    } ]
+  }, {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "73831-0",
+      "display": "Adolescent depression screening assessment",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a09d5edf-2c0a-4b39-86bf-312109f357c0"
+  },
+  "effectiveDateTime": "2026-06-21T08:00:00.000+00:00",
+  "issued": "2026-06-20T08:00:00.000+00:00",
+  "valueBoolean": true
+}

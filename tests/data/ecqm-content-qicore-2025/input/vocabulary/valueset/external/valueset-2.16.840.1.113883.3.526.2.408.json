@@ -1,0 +1,131 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.408-20240202",
+  "meta": {
+    "versionId": "30",
+    "lastUpdated": "2024-02-02T01:09:11.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "AHA Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-31"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2024-02-02"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.408",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.408"
+  } ],
+  "version": "20240202",
+  "name": "Bradycardia",
+  "title": "Bradycardia",
+  "status": "active",
+  "date": "2024-02-02T01:09:11-05:00",
+  "publisher": "AHA Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: Includes concepts that represent the condition of bradycardia.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of bradycardia.),(Exclusion Criteria: No exclusions.)",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "1142110005",
+        "display": "Sinus bradycardia caused by drug (disorder)"
+      }, {
+        "code": "1142111009",
+        "display": "Sinus bradycardia due to metabolic disease (disorder)"
+      }, {
+        "code": "251162005",
+        "display": "Atrio-ventricular-junctional (nodal) bradycardia (disorder)"
+      }, {
+        "code": "29894000",
+        "display": "Vagal autonomic bradycardia (disorder)"
+      }, {
+        "code": "397841007",
+        "display": "Drug-induced bradycardia (disorder)"
+      }, {
+        "code": "444605001",
+        "display": "Symptomatic sinus bradycardia (disorder)"
+      }, {
+        "code": "44602002",
+        "display": "Persistent sinus bradycardia (disorder)"
+      }, {
+        "code": "49044005",
+        "display": "Severe sinus bradycardia (disorder)"
+      }, {
+        "code": "49710005",
+        "display": "Sinus bradycardia (disorder)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:3e6ce0af-6d60-424d-875d-294ee89ed749",
+    "timestamp": "2025-06-20T16:55:20-04:00",
+    "total": 9,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1142110005",
+      "display": "Sinus bradycardia caused by drug (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1142111009",
+      "display": "Sinus bradycardia due to metabolic disease (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "251162005",
+      "display": "Atrio-ventricular-junctional (nodal) bradycardia (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "29894000",
+      "display": "Vagal autonomic bradycardia (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "397841007",
+      "display": "Drug-induced bradycardia (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "444605001",
+      "display": "Symptomatic sinus bradycardia (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "44602002",
+      "display": "Persistent sinus bradycardia (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "49044005",
+      "display": "Severe sinus bradycardia (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "49710005",
+      "display": "Sinus bradycardia (disorder)"
+    } ]
+  }
+}

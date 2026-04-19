@@ -1,0 +1,43 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.3.1090",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:04.238-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1090",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "2.16.840.1.113883.3.526.3.1090"
+  } ],
+  "version": "20170504",
+  "name": "ModerateorSevereLVSD",
+  "title": "Moderate or Severe LVSD",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:969b90dc-c2c6-4d8f-bff9-08b29cdb0a90",
+    "timestamp": "2025-06-20T16:59:00-04:00",
+    "total": 2,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "981000124106",
+      "display": "Moderate left ventricular systolic dysfunction (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "991000124109",
+      "display": "Severe left ventricular systolic dysfunction (disorder)"
+    } ]
+  }
+}

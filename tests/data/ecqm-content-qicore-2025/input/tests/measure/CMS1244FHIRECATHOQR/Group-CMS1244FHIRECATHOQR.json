@@ -1,0 +1,662 @@
+{
+  "resourceType": "Group",
+  "id": "CMS1244FHIRECATHOQR",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS1244FHIRECATHOQR"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/c3284314-fe9b-408a-9b26-a21830f84432",
+      "display": "EDObsBoarded NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c3284314-fe9b-408a-9b26-a21830f84432",
+      "display": "EDObsBoarded NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a11dce52-c6b3-46e5-bc01-8994b0c8f471",
+      "display": "TransferToRehabNotACF NUMEXStrat4Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a11dce52-c6b3-46e5-bc01-8994b0c8f471",
+      "display": "TransferToRehabNotACF NUMEXStrat4Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/37016a05-807e-44a9-83cd-fad3ff37cb07",
+      "display": "DecisionToAdmitAssessment NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/37016a05-807e-44a9-83cd-fad3ff37cb07",
+      "display": "DecisionToAdmitAssessment NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/74855a5c-bb3b-438a-9eb9-7fdc1994d06d",
+      "display": "EDObsBoarded NUMEREXStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/74855a5c-bb3b-438a-9eb9-7fdc1994d06d",
+      "display": "EDObsBoarded NUMEREXStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cc00e728-de5f-4df8-abcb-1e610496be66",
+      "display": "TimeToTx60Min NUMERStrat1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cc00e728-de5f-4df8-abcb-1e610496be66",
+      "display": "TimeToTx60Min NUMERStrat1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9b5e4d84-366b-4082-8409-b7e18e0a3c45",
+      "display": "Boarded241MinOrderAdmit NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9b5e4d84-366b-4082-8409-b7e18e0a3c45",
+      "display": "Boarded241MinOrderAdmit NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9ec1a135-fb47-4c1c-8f6b-98afab15274e",
+      "display": "EDOBSOrderBoarded NUMEXStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9ec1a135-fb47-4c1c-8f6b-98afab15274e",
+      "display": "EDOBSOrderBoarded NUMEXStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dfd5dc6b-3299-4e4f-ae02-45f251e1f75b",
+      "display": "EDOBSOrderBoarded NUMEXStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dfd5dc6b-3299-4e4f-ae02-45f251e1f75b",
+      "display": "EDOBSOrderBoarded NUMEXStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5ae9589c-1301-45a0-af30-ac7b679b649f",
+      "display": "TimeToTx61Min NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5ae9589c-1301-45a0-af30-ac7b679b649f",
+      "display": "TimeToTx61Min NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e37040f5-da02-49eb-98a8-60d5235f8e1f",
+      "display": "EDOBSOrderLOS NUMEXStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e37040f5-da02-49eb-98a8-60d5235f8e1f",
+      "display": "EDOBSOrderLOS NUMEXStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2c2a7958-4d1a-4142-9360-8045067a1c5b",
+      "display": "AdmitInpatientPerformedBoardedTimeGreater240Min NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2c2a7958-4d1a-4142-9360-8045067a1c5b",
+      "display": "AdmitInpatientPerformedBoardedTimeGreater240Min NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/82c3fbd5-6025-4dfd-9a90-881f3df1f97b",
+      "display": "DecisionToAdmitAssessmentOneMinAfterDeparture NUMERStrat1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/82c3fbd5-6025-4dfd-9a90-881f3df1f97b",
+      "display": "DecisionToAdmitAssessmentOneMinAfterDeparture NUMERStrat1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dad5b672-1e5b-437c-91fe-1f69b5d58c70",
+      "display": "BoardedAfterEDEncEnds NUMEXStrat2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dad5b672-1e5b-437c-91fe-1f69b5d58c70",
+      "display": "BoardedAfterEDEncEnds NUMEXStrat2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a8c8b95f-b734-4a56-8a62-2cba1e9ffc77",
+      "display": "TimeToTx61Min NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a8c8b95f-b734-4a56-8a62-2cba1e9ffc77",
+      "display": "TimeToTx61Min NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/30bd1c93-a76f-46ac-9c74-b4499428cf94",
+      "display": "TriageOverlapBeforeEM NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/30bd1c93-a76f-46ac-9c74-b4499428cf94",
+      "display": "TriageOverlapBeforeEM NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/77bbd0e5-2a32-49f7-bddc-f079dfeadbb4",
+      "display": "AdmitInpatientPerformedBoardedTimeGreater240Min NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/77bbd0e5-2a32-49f7-bddc-f079dfeadbb4",
+      "display": "AdmitInpatientPerformedBoardedTimeGreater240Min NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/16cffb87-15ea-48b7-bd68-f211f48d6f19",
+      "display": "LWBS NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/16cffb87-15ea-48b7-bd68-f211f48d6f19",
+      "display": "LWBS NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aeb81393-d181-487a-9bc5-923c7082104e",
+      "display": "BedAssigment NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aeb81393-d181-487a-9bc5-923c7082104e",
+      "display": "BedAssigment NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9b2d612d-b677-4559-870d-b36cc6404ece",
+      "display": "AdmittedInpatient NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9b2d612d-b677-4559-870d-b36cc6404ece",
+      "display": "AdmittedInpatient NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/690efbf3-6087-4c90-a1c7-be572ca734e0",
+      "display": "EMDuringTriage NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/690efbf3-6087-4c90-a1c7-be572ca734e0",
+      "display": "EMDuringTriage NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/01959faf-5ea5-41cb-b960-b74da18cca85",
+      "display": "DecisionToAdmitUsingAssessmentBoarded241m NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/01959faf-5ea5-41cb-b960-b74da18cca85",
+      "display": "DecisionToAdmitUsingAssessmentBoarded241m NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/50270eff-f1ed-4cb3-b22b-467d89937c3a",
+      "display": "PatientBedAssignment240Minutes NUMERStrat1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/50270eff-f1ed-4cb3-b22b-467d89937c3a",
+      "display": "PatientBedAssignment240Minutes NUMERStrat1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8f5243aa-b111-4019-b5d0-d6889315af38",
+      "display": "DecisionToAdmitAssessment NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8f5243aa-b111-4019-b5d0-d6889315af38",
+      "display": "DecisionToAdmitAssessment NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7bcd79b7-7898-437d-b563-cfb9068df210",
+      "display": "LWBS NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7bcd79b7-7898-437d-b563-cfb9068df210",
+      "display": "LWBS NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/040dc7b1-27f9-43a3-82c9-b1a514db3071",
+      "display": "BedAssignment NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/040dc7b1-27f9-43a3-82c9-b1a514db3071",
+      "display": "BedAssignment NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ee13a2d8-61d9-4d2f-8f13-1423bd271950",
+      "display": "StatusRevoked DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ee13a2d8-61d9-4d2f-8f13-1423bd271950",
+      "display": "StatusRevoked DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cee26b56-54cf-444e-8944-6edfbd6d2b93",
+      "display": "LWBS NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cee26b56-54cf-444e-8944-6edfbd6d2b93",
+      "display": "LWBS NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/35fd427f-1233-4f3c-b8b3-9e400755da8f",
+      "display": "EDLOS481Minutes NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/35fd427f-1233-4f3c-b8b3-9e400755da8f",
+      "display": "EDLOS481Minutes NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9dc75857-bf5a-492d-81b5-edd5aee29a66",
+      "display": "DecisionToAdmitUsingOrderBoarded241m NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9dc75857-bf5a-492d-81b5-edd5aee29a66",
+      "display": "DecisionToAdmitUsingOrderBoarded241m NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8e43bc64-4242-494d-b47f-fdbbd3372bbe",
+      "display": "Boarded241MinOrderAdmit NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8e43bc64-4242-494d-b47f-fdbbd3372bbe",
+      "display": "Boarded241MinOrderAdmit NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b312fbc9-083f-4832-8d7c-d3e64df4145b",
+      "display": "BedAssignment NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b312fbc9-083f-4832-8d7c-d3e64df4145b",
+      "display": "BedAssignment NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/16f81b70-aabb-4ef8-9f5c-5c484aa1fa40",
+      "display": "DecisionToAdmitAssessment NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/16f81b70-aabb-4ef8-9f5c-5c484aa1fa40",
+      "display": "DecisionToAdmitAssessment NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d8832769-c838-4f1b-9c1e-fa4ed3a3efb9",
+      "display": "EDObsBoarded NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d8832769-c838-4f1b-9c1e-fa4ed3a3efb9",
+      "display": "EDObsBoarded NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/540b665b-e89c-466a-9ef8-758b3883a37c",
+      "display": "EDLOS480Minutes NUMERStrat3Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/540b665b-e89c-466a-9ef8-758b3883a37c",
+      "display": "EDLOS480Minutes NUMERStrat3Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9bac5045-01af-4350-b54f-63ab17f3ba9f",
+      "display": "EncStartsB4MP NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9bac5045-01af-4350-b54f-63ab17f3ba9f",
+      "display": "EncStartsB4MP NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/eabe386d-5bca-4fdd-acb0-8228b4df83c0",
+      "display": "EncDuringMP DENOMStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/eabe386d-5bca-4fdd-acb0-8228b4df83c0",
+      "display": "EncDuringMP DENOMStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ed5fa616-8b70-4016-b40d-6f87983e2776",
+      "display": "EDLOS481Minutes NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ed5fa616-8b70-4016-b40d-6f87983e2776",
+      "display": "EDLOS481Minutes NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/666528ac-0d94-4b09-8e6c-c5930b7dd17c",
+      "display": "EDLOS481Minutes NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/666528ac-0d94-4b09-8e6c-c5930b7dd17c",
+      "display": "EDLOS481Minutes NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7fbb7e37-228b-4b3b-8974-871a3e798720",
+      "display": "DecisionToAdmitAssessment NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7fbb7e37-228b-4b3b-8974-871a3e798720",
+      "display": "DecisionToAdmitAssessment NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5fb0b78c-ffd3-47c3-91a3-252bc4a70177",
+      "display": "EDObsBoarded NUMEREXStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5fb0b78c-ffd3-47c3-91a3-252bc4a70177",
+      "display": "EDObsBoarded NUMEREXStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c15c97ea-1631-468d-b2d0-420230f6c6d8",
+      "display": "EDOBSBoarded1MinB4MP NUMEXStrat3Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c15c97ea-1631-468d-b2d0-420230f6c6d8",
+      "display": "EDOBSBoarded1MinB4MP NUMEXStrat3Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ae6b86ec-3d29-4e35-88dc-57f997814f47",
+      "display": "EncOverlapsEndOfMP NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ae6b86ec-3d29-4e35-88dc-57f997814f47",
+      "display": "EncOverlapsEndOfMP NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/11703274-1218-440d-bb98-08502a794179",
+      "display": "BedAssigment NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/11703274-1218-440d-bb98-08502a794179",
+      "display": "BedAssigment NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9fe769bc-bd23-4799-9bc6-9945eda0d0cf",
+      "display": "AdmittedInpatient NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9fe769bc-bd23-4799-9bc6-9945eda0d0cf",
+      "display": "AdmittedInpatient NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9f77830b-ff7c-4060-bf38-295b215ab56d",
+      "display": "EDLOS481MinutesLastDayMP NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9f77830b-ff7c-4060-bf38-295b215ab56d",
+      "display": "EDLOS481MinutesLastDayMP NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/42be9d46-4c2f-4493-8299-d33dcbb7170e",
+      "display": "EDObsBoarded NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/42be9d46-4c2f-4493-8299-d33dcbb7170e",
+      "display": "EDObsBoarded NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7dd19e80-23c6-4e31-86a9-bb833cfc676b",
+      "display": "EDLOS480Minutes NUMERStrat2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7dd19e80-23c6-4e31-86a9-bb833cfc676b",
+      "display": "EDLOS480Minutes NUMERStrat2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/024c02ed-8819-45da-a027-ed5fa4369c90",
+      "display": "AdmittedInpatient NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/024c02ed-8819-45da-a027-ed5fa4369c90",
+      "display": "AdmittedInpatient NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7fd4f9cd-8fbb-4935-9bfd-959c538166b2",
+      "display": "LWBSButWrongCode NUMERStrat2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7fd4f9cd-8fbb-4935-9bfd-959c538166b2",
+      "display": "LWBSButWrongCode NUMERStrat2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4c95d881-2e7e-4e81-bb4c-b1ae680ff286",
+      "display": "TimeToTx61Min NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4c95d881-2e7e-4e81-bb4c-b1ae680ff286",
+      "display": "TimeToTx61Min NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6252a858-2362-4c63-8d7d-6db0b7ac9299",
+      "display": "EDOBSOrderBoarded NUMEXStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6252a858-2362-4c63-8d7d-6db0b7ac9299",
+      "display": "EDOBSOrderBoarded NUMEXStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cc01e29c-7ebb-4876-b63a-29de550c62f9",
+      "display": "EDLOS481MinutesLastDayMP NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cc01e29c-7ebb-4876-b63a-29de550c62f9",
+      "display": "EDLOS481MinutesLastDayMP NUMERStrat3Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/21b841f6-b863-4c1d-8798-41c527b04a92",
+      "display": "EDLOS480Minutes NUMERStrat4Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/21b841f6-b863-4c1d-8798-41c527b04a92",
+      "display": "EDLOS480Minutes NUMERStrat4Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e982ec87-76b0-4fe2-b437-ac0503cf2159",
+      "display": "BedAssigned NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e982ec87-76b0-4fe2-b437-ac0503cf2159",
+      "display": "BedAssigned NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/66803f75-5dc5-43fb-9844-f18d765a64ec",
+      "display": "LWBS NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/66803f75-5dc5-43fb-9844-f18d765a64ec",
+      "display": "LWBS NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ee1e306-f3db-4d13-b6ab-b1388a23b378",
+      "display": "AdmittedInpatient NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ee1e306-f3db-4d13-b6ab-b1388a23b378",
+      "display": "AdmittedInpatient NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9fed66ec-d314-4a2e-a6d5-056ec2f702c2",
+      "display": "TimeTx61LOS481MinsObsStay NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9fed66ec-d314-4a2e-a6d5-056ec2f702c2",
+      "display": "TimeTx61LOS481MinsObsStay NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d5fe6f9c-6036-4004-9993-290f3a2be34a",
+      "display": "TimeToTx61Min NUMERStrat1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d5fe6f9c-6036-4004-9993-290f3a2be34a",
+      "display": "TimeToTx61Min NUMERStrat1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a42d4cc2-24ca-4637-889f-276bcdd1e7cf",
+      "display": "EDLOS481Minutes NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a42d4cc2-24ca-4637-889f-276bcdd1e7cf",
+      "display": "EDLOS481Minutes NUMERStrat1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/404c928b-a752-4792-91c4-8a1fd0656759",
+      "display": "EDEncounterStatusFinished NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/404c928b-a752-4792-91c4-8a1fd0656759",
+      "display": "EDEncounterStatusFinished NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8e96f973-9e5d-4c85-9466-83c562f5a2ee",
+      "display": "TriageDuringEM NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8e96f973-9e5d-4c85-9466-83c562f5a2ee",
+      "display": "TriageDuringEM NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c8b6fa9c-0072-45ab-90dc-0b8be521fae4",
+      "display": "DecisionToAdmitAssessment NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c8b6fa9c-0072-45ab-90dc-0b8be521fae4",
+      "display": "DecisionToAdmitAssessment NUMERStrat2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/78cbc6ac-f30d-404b-b539-6b903c7cfeba",
+      "display": "TimeToTx61Min NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/78cbc6ac-f30d-404b-b539-6b903c7cfeba",
+      "display": "TimeToTx61Min NUMERStrat4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/63cea3d6-d2e0-4736-a035-87633ca960bd",
+      "display": "AdmittedInpatientLessThan240Mins NUMERStrat4Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/63cea3d6-d2e0-4736-a035-87633ca960bd",
+      "display": "AdmittedInpatientLessThan240Mins NUMERStrat4Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7bee402e-2687-4813-9b39-37d723663d18",
+      "display": "EDLOS480Minutes NUMERStrat1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7bee402e-2687-4813-9b39-37d723663d18",
+      "display": "EDLOS480Minutes NUMERStrat1Fail"
+    }
+  } ]
+}

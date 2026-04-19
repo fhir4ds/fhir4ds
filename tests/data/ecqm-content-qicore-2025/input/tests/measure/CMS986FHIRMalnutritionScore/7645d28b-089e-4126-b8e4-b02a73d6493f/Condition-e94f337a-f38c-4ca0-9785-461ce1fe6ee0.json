@@ -1,0 +1,46 @@
+{
+  "resourceType": "Condition",
+  "id": "e94f337a-f38c-4ca0-9785-461ce1fe6ee0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "190606006",
+      "display": "Moderate protein energy malnutrition (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/7645d28b-089e-4126-b8e4-b02a73d6493f"
+  },
+  "onsetPeriod": {
+    "start": "2025-12-31T08:00:00.000+00:00"
+  },
+  "recordedDate": "2026-01-04T11:00:00.000+00:00"
+}

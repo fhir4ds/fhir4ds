@@ -1,0 +1,42 @@
+{
+  "resourceType": "Condition",
+  "id": "af9ea155-f3fc-4915-80a8-3879d4bd6dab",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "764680009",
+      "display": "Infection of left ventricular assist device driveline (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f6cdc95d-7796-4dad-a5da-d2e1fddc8687"
+  },
+  "onsetPeriod": {
+    "start": "2025-07-11T08:00:00.000+00:00"
+  }
+}

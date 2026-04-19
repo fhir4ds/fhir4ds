@@ -1,0 +1,16 @@
+{
+  "measure_id": "CMS69",
+  "patient_count": 62,
+  "timings_ms": {
+    "cql_parse_ms": 19.213655992643908,
+    "sql_generation_ms": 2845.0323049910367,
+    "sql_execution_ms": 151.07704501133412,
+    "total_ms": 3015.3230059950147
+  },
+  "patients_per_second": 20.56164459884816,
+  "comparison": {
+    "total_patients": 62,
+    "matching_patients": 62,
+    "accuracy_pct": 100.0
+  }
+}

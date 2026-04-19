@@ -30,7 +30,20 @@ def registerConversionMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # Date/Time conversions
     con.execute("CREATE MACRO IF NOT EXISTS ToDate(x) AS CAST(x AS DATE)")
     con.execute("CREATE MACRO IF NOT EXISTS ToDateTime(x) AS CAST(x AS TIMESTAMP)")
-    con.execute("CREATE MACRO IF NOT EXISTS ToTime(x) AS CAST(x AS TIME)")
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS ToTime(x) AS "
+        "TRY_CAST(system.ltrim(CAST(x AS VARCHAR), 'T') AS TIME)"
+    )
+
+    # Quantity to string: CQL §22.31 — format as "<value> '<unit>'"
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS QuantityToString(q) AS "
+        "CASE WHEN q IS NULL THEN NULL "
+        "WHEN typeof(q) = 'VARCHAR' AND q LIKE '{%' THEN "
+        "CAST(json_extract(q, '$.value') AS VARCHAR) || ' ''' || "
+        "COALESCE(json_extract_string(q, '$.unit'), json_extract_string(q, '$.code'), '1') || '''' "
+        "ELSE CAST(q AS VARCHAR) END"
+    )
 
 
 __all__ = ["registerConversionMacros"]

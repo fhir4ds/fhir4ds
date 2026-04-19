@@ -1,0 +1,279 @@
+{
+  "resourceType": "Bundle",
+  "id": "630307c10968f80122477841",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/f9bc58d1-b545-404a-b5c5-488c157c21f2",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "f9bc58d1-b545-404a-b5c5-488c157c21f2",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "text": {
+        "status": "generated",
+        "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">IPPPopStrat2Fail <b>IPPPOPSTRAT2FAIL </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>013c53416b50921b59196c4457937265</td></tr><tr><td>Date of birth</td><td><span>04 June 1986</span></td></tr></tbody></table></div>"
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2054-5",
+            "display": "Black or African American",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Black or African American"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "630307c10968f80122477841"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "IPPPopStrat2Fail",
+        "given": [ "EncounterBeforeStartofMajorDepression" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1988-06-04"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/f9bc58d1-b545-404a-b5c5-488c157c21f2"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/c261f019-0f48-4b24-af77-fcfb67aeca22",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "c261f019-0f48-4b24-af77-fcfb67aeca22",
+      "status": "finished",
+      "class": {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "code": "90791",
+        "display": "Psychiatric diagnostic evaluation",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "code": "90791"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/f9bc58d1-b545-404a-b5c5-488c157c21f2"
+      },
+      "period": {
+        "start": "2013-02-05T14:30:00+00:00",
+        "end": "2013-02-05T14:50:00+00:00"
+      },
+      "length": {
+        "value": 0,
+        "unit": "days"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/c261f019-0f48-4b24-af77-fcfb67aeca22"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/c31783dd-90bb-4449-ac8d-f9aea89b41bb",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "c31783dd-90bb-4449-ac8d-f9aea89b41bb",
+      "status": "final",
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "44261-6"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/f9bc58d1-b545-404a-b5c5-488c157c21f2"
+      },
+      "effectiveDateTime": "2013-02-05T14:30:00+00:00",
+      "valueInteger": 11
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/c31783dd-90bb-4449-ac8d-f9aea89b41bb"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/6278fd30-84cc-42c5-b7d5-12dc9f67c954",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "6278fd30-84cc-42c5-b7d5-12dc9f67c954",
+      "status": "final",
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "44261-6"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/f9bc58d1-b545-404a-b5c5-488c157c21f2"
+      },
+      "effectiveDateTime": "2014-01-06T14:30:00+00:00",
+      "valueInteger": 4
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/6278fd30-84cc-42c5-b7d5-12dc9f67c954"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/8ef2a782-3754-4b2e-8318-c4e5df1482e8",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "8ef2a782-3754-4b2e-8318-c4e5df1482e8",
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active",
+          "userSelected": true
+        } ]
+      },
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "268621008",
+          "display": "Recurrent major depression (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/f9bc58d1-b545-404a-b5c5-488c157c21f2"
+      },
+      "onsetPeriod": {
+        "start": "2013-02-06T17:00:00+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/8ef2a782-3754-4b2e-8318-c4e5df1482e8"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/6bbae8f4-db99-4098-803e-eae39117b655",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "6bbae8f4-db99-4098-803e-eae39117b655",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "56d869e2-268b-476b-98d3-5eed167b7747-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "f9bc58d1-b545-404a-b5c5-488c157c21f2"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#56d869e2-268b-476b-98d3-5eed167b7747-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient is 26 and had office visit with PHQ9>9 that occurred before start of a major depression diagnosis. Patient should not be in initial population."
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS159FHIRDepressionRemissionatTwelveMonths",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/f9bc58d1-b545-404a-b5c5-488c157c21f2"
+      }, {
+        "reference": "Encounter/c261f019-0f48-4b24-af77-fcfb67aeca22"
+      }, {
+        "reference": "Observation/c31783dd-90bb-4449-ac8d-f9aea89b41bb"
+      }, {
+        "reference": "Observation/6278fd30-84cc-42c5-b7d5-12dc9f67c954"
+      }, {
+        "reference": "Condition/8ef2a782-3754-4b2e-8318-c4e5df1482e8"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/6bbae8f4-db99-4098-803e-eae39117b655"
+    }
+  } ]
+}

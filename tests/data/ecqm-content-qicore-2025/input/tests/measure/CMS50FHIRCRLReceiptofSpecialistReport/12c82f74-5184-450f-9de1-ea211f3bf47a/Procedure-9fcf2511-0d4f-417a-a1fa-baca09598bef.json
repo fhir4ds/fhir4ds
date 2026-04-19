@@ -1,0 +1,25 @@
+{
+  "resourceType": "Procedure",
+  "id": "9fcf2511-0d4f-417a-a1fa-baca09598bef",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-01-01T00:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2021",
+      "code": "90839",
+      "display": "Psychotherapy for crisis; first 60 minutes",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/12c82f74-5184-450f-9de1-ea211f3bf47a"
+  },
+  "performedDateTime": "2026-01-01T00:00:00.000+00:00"
+}

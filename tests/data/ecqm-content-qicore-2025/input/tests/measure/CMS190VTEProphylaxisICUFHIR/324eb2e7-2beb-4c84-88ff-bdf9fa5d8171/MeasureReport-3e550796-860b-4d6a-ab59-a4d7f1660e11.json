@@ -1,0 +1,109 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "3e550796-860b-4d6a-ab59-a4d7f1660e11",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "362d2390-0198-4aa0-899f-312dad787513-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "324eb2e7-2beb-4c84-88ff-bdf9fa5d8171"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#362d2390-0198-4aa0-899f-312dad787513-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Rivaroxaban for VTE Prophylaxis administered 1 day after neuraxial anesthesia which procedure ends 1 day after ICU Adm date\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS190VTEProphylaxisICUFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/324eb2e7-2beb-4c84-88ff-bdf9fa5d8171"
+  }, {
+    "reference": "Encounter/337fb410-abf8-40d5-a763-91a4e416c75f"
+  }, {
+    "reference": "Coverage/f9facdbd-db03-42e8-bc09-d932237e0d29"
+  }, {
+    "reference": "MedicationAdministration/e5b28520-0b79-48a0-b992-57625810485a"
+  }, {
+    "reference": "Procedure/41f6678c-3d88-41e3-baf5-dcb32d98c2f0"
+  }, {
+    "reference": "Location/04e7ad2d-2fdf-4d0a-a452-c05de74a304a"
+  }, {
+    "reference": "Organization/3007c3db-8d47-4646-a71e-d8b9db9cb4eb"
+  }, {
+    "reference": "Practitioner/287094f4-6c30-44b4-9b6d-ddada2fd798f"
+  } ]
+}

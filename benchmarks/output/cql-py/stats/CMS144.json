@@ -1,0 +1,16 @@
+{
+  "measure_id": "CMS144",
+  "patient_count": 51,
+  "timings_ms": {
+    "cql_parse_ms": 15.476573986234143,
+    "sql_generation_ms": 1874.3668959941715,
+    "sql_execution_ms": 118.26742699486203,
+    "total_ms": 2008.1108969752677
+  },
+  "patients_per_second": 25.39700375951305,
+  "comparison": {
+    "total_patients": 39,
+    "matching_patients": 39,
+    "accuracy_pct": 100.0
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.464.1003.109.12.1029",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:14.569-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.109.12.1029",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "2.16.840.1.113883.3.464.1003.109.12.1029"
+  } ],
+  "version": "20240112",
+  "name": "KidneyTransplantRecipient",
+  "title": "Kidney Transplant Recipient",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:a6c932de-e46f-4d1f-ae27-1a8693469961",
+    "timestamp": "2025-06-20T17:02:28-04:00",
+    "total": 1,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "Z94.0",
+      "display": "Kidney transplant status"
+    } ]
+  }
+}

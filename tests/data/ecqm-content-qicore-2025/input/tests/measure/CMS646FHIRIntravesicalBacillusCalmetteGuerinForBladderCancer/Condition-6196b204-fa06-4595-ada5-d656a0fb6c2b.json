@@ -1,0 +1,42 @@
+{
+  "resourceType": "Condition",
+  "id": "6196b204-fa06-4595-ada5-d656a0fb6c2b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "C67.1",
+      "display": "Malignant neoplasm of dome of bladder"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/38ed8b42-1631-4673-aa53-6d2a4db163f3"
+  },
+  "onsetPeriod": {
+    "start": "2026-04-06T08:00:00.000+00:00"
+  }
+}

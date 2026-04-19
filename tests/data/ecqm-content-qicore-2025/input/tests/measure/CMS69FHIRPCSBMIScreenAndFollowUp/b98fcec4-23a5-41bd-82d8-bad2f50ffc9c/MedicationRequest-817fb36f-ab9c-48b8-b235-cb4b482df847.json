@@ -1,0 +1,44 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "817fb36f-ab9c-48b8-b235-cb4b482df847",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "183932001",
+        "display": "Procedure contraindicated (situation)",
+        "userSelected": true
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1928948",
+      "display": "dronabinol 5 MG/ML Oral Solution",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b98fcec4-23a5-41bd-82d8-bad2f50ffc9c"
+  },
+  "authoredOn": "2026-01-01T00:01:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/f007",
+    "display": "Patrick Pump"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "416098002",
+      "display": "Allergy to drug (finding)"
+    } ]
+  } ]
+}

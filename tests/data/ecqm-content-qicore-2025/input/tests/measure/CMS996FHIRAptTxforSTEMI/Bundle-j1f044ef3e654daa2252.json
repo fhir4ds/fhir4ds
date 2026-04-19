@@ -1,0 +1,250 @@
+{
+  "resourceType": "Bundle",
+  "id": "j1f044ef3e654daa2252",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/8a1096f9-08b8-4318-a073-6ee0cfd7f617",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "8a1096f9-08b8-4318-a073-6ee0cfd7f617",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248153007"
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "j1f044ef3e654daa2252"
+      } ],
+      "name": [ {
+        "family": "DENEXCL11PASS",
+        "given": [ "HospiceEncounterPeformedOverlapsED" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1960-04-08"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/8a1096f9-08b8-4318-a073-6ee0cfd7f617"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/6fb75904-a636-4632-8edc-b3848c33263c",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "6fb75904-a636-4632-8edc-b3848c33263c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMER",
+        "display": "emergency",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2020-09",
+          "code": "4525004",
+          "display": "Emergency department patient visit",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/8a1096f9-08b8-4318-a073-6ee0cfd7f617"
+      },
+      "period": {
+        "start": "2026-10-09T05:00:00.000+00:00",
+        "end": "2026-10-13T17:00:00.000+00:00"
+      },
+      "reasonCode": [ {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "code": "I21.21",
+          "display": "ST elevation (STEMI) myocardial infarction involving left circumflex coronary artery",
+          "userSelected": true
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/6fb75904-a636-4632-8edc-b3848c33263c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/94fe8608-bb32-4f47-b0a9-b8b8d8355360",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "94fe8608-bb32-4f47-b0a9-b8b8d8355360",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMER",
+        "display": "emergency",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183921001",
+          "display": "Admission to hospice for respite (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/8a1096f9-08b8-4318-a073-6ee0cfd7f617"
+      },
+      "period": {
+        "start": "2026-09-16T02:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/94fe8608-bb32-4f47-b0a9-b8b8d8355360"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/60cfb0b5-2597-4ec5-a50e-ad6140a68189",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "60cfb0b5-2597-4ec5-a50e-ad6140a68189",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "d94ed849-c6bd-47fa-847c-6d83ba48a786-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "8a1096f9-08b8-4318-a073-6ee0cfd7f617"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#d94ed849-c6bd-47fa-847c-6d83ba48a786-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient has hospice encounter overlapping with ED encounter"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS996FHIRAptTxforSTEMI",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/8a1096f9-08b8-4318-a073-6ee0cfd7f617"
+      }, {
+        "reference": "Encounter/6fb75904-a636-4632-8edc-b3848c33263c"
+      }, {
+        "reference": "Encounter/94fe8608-bb32-4f47-b0a9-b8b8d8355360"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/60cfb0b5-2597-4ec5-a50e-ad6140a68189"
+    }
+  } ]
+}

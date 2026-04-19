@@ -1,0 +1,34 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "a8668265-3c8e-4cdf-980c-578dd9e76b3f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "105480006",
+        "display": "Procedure declined by patient (situation)",
+        "userSelected": true
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "134403003",
+      "display": "Urgent referral (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/86618b52-e0cc-4e90-b48c-cd64bbae8973"
+  },
+  "authoredOn": "2026-12-31T10:20:00.000+00:00"
+}

@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "0a91814d-873f-4584-97dc-72e89e28de62",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "75285-7",
+      "display": "Comparative nutrition assessment standards panel",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f06bb07a-3410-410d-a859-8bd57a79cf51"
+  },
+  "effectiveDateTime": "2026-02-23T10:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "238108007",
+      "display": "Cachexia (finding)",
+      "userSelected": true
+    } ]
+  }
+}

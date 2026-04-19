@@ -1,0 +1,22 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "92e7de30-c72c-4563-b87d-9240e19c80b7",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1010600"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/0653f9dc-8461-484e-a901-f17709f04776"
+  },
+  "authoredOn": "2026-11-12T08:00:00.000+00:00",
+  "requester": {
+    "reference": "Patient/0653f9dc-8461-484e-a901-f17709f04776"
+  }
+}

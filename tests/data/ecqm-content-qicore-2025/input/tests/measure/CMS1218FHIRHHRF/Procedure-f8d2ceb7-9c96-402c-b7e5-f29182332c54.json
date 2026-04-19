@@ -1,0 +1,24 @@
+{
+  "resourceType": "Procedure",
+  "id": "f8d2ceb7-9c96-402c-b7e5-f29182332c54",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-04-11T10:10:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+      "code": "008P0ZZ",
+      "display": "Head and Neck Surgeries with High Risk Airway Compromise"
+    } ],
+    "text": "Head and Neck Surgeries with High Risk Airway Compromise"
+  },
+  "subject": {
+    "reference": "Patient/03fae2d5-3bb7-4730-98fc-98a419a5e555"
+  },
+  "performedDateTime": "2026-04-12T08:00:00.000+00:00"
+}

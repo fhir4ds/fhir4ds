@@ -1,0 +1,292 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.117.1.7.1.258",
+  "meta": {
+    "versionId": "31",
+    "lastUpdated": "2026-02-06T12:43:35.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2021-02-20"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2021-02-20"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.258",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113883.3.117.1.7.1.258"
+    }
+  ],
+  "version": "20210220",
+  "name": "HipFractureSurgery",
+  "title": "Hip Fracture Surgery",
+  "status": "active",
+  "experimental": false,
+  "date": "2022-03-03T18:46:01-05:00",
+  "publisher": "Joint Commission",
+  "expansion": {
+    "identifier": "urn:uuid:845d479f-c0c6-45bf-831c-88b949d40a26",
+    "timestamp": "2026-03-13T13:04:04-04:00",
+    "total": 39,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SQ90ZZ",
+        "display": "Repair Right Hip Joint, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SQ9XZZ",
+        "display": "Repair Right Hip Joint, External Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SQB0ZZ",
+        "display": "Repair Left Hip Joint, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SQBXZZ",
+        "display": "Repair Left Hip Joint, External Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SS904Z",
+        "display": "Reposition Right Hip Joint with Internal Fixation Device, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SS905Z",
+        "display": "Reposition Right Hip Joint with External Fixation Device, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SS90ZZ",
+        "display": "Reposition Right Hip Joint, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SS934Z",
+        "display": "Reposition Right Hip Joint with Internal Fixation Device, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SS935Z",
+        "display": "Reposition Right Hip Joint with External Fixation Device, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SS93ZZ",
+        "display": "Reposition Right Hip Joint, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SS944Z",
+        "display": "Reposition Right Hip Joint with Internal Fixation Device, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SS945Z",
+        "display": "Reposition Right Hip Joint with External Fixation Device, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SS94ZZ",
+        "display": "Reposition Right Hip Joint, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SS9X4Z",
+        "display": "Reposition Right Hip Joint with Internal Fixation Device, External Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SS9X5Z",
+        "display": "Reposition Right Hip Joint with External Fixation Device, External Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SS9XZZ",
+        "display": "Reposition Right Hip Joint, External Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SSB04Z",
+        "display": "Reposition Left Hip Joint with Internal Fixation Device, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SSB05Z",
+        "display": "Reposition Left Hip Joint with External Fixation Device, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SSB0ZZ",
+        "display": "Reposition Left Hip Joint, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SSB34Z",
+        "display": "Reposition Left Hip Joint with Internal Fixation Device, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SSB35Z",
+        "display": "Reposition Left Hip Joint with External Fixation Device, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SSB3ZZ",
+        "display": "Reposition Left Hip Joint, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SSB44Z",
+        "display": "Reposition Left Hip Joint with Internal Fixation Device, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SSB45Z",
+        "display": "Reposition Left Hip Joint with External Fixation Device, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SSB4ZZ",
+        "display": "Reposition Left Hip Joint, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SSBX4Z",
+        "display": "Reposition Left Hip Joint with Internal Fixation Device, External Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SSBX5Z",
+        "display": "Reposition Left Hip Joint with External Fixation Device, External Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0SSBXZZ",
+        "display": "Reposition Left Hip Joint, External Approach"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "119614000",
+        "display": "Hip joint reconstruction (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16174006",
+        "display": "Acetabuloplasty with use of methyl methacrylate (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "239499008",
+        "display": "Excision arthroplasty of joint of hip (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "239500004",
+        "display": "Interposition arthroplasty of the hip (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "32972004",
+        "display": "Acetabuloplasty, Whitman type procedure (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "44167006",
+        "display": "Shelf operation, arthroplasty of hip (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "47458005",
+        "display": "Repair of hip joint (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "61509005",
+        "display": "Acetabuloplasty, Colonna type procedure (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "73764009",
+        "display": "Repair of acetabulum (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "83381006",
+        "display": "Arthroplasty of hip with bone graft (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "87618002",
+        "display": "Acetabuloplasty with resection of femoral head (procedure)"
+      }
+    ]
+  }
+}

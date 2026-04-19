@@ -1,0 +1,22 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "8e8ecef9-6554-4914-a313-539e894c18bd",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "313204009",
+      "display": "Lifestyle education (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c3f55d79-b10c-4d2b-8699-a7538867159d"
+  },
+  "authoredOn": "2026-12-31T10:10:00.000+00:00"
+}

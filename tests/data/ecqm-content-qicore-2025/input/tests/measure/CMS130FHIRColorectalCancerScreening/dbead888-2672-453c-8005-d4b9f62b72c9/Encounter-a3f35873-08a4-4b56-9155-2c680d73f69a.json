@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "a3f35873-08a4-4b56-9155-2c680d73f69a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "3391000175108",
+      "display": "Office visit for pediatric care and assessment (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/dbead888-2672-453c-8005-d4b9f62b72c9"
+  },
+  "period": {
+    "start": "2026-01-01T00:00:00.000+00:00",
+    "end": "2026-01-01T01:00:00.000+00:00"
+  }
+}

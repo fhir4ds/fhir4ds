@@ -1,0 +1,24 @@
+{
+  "resourceType": "Procedure",
+  "id": "3939061a-657a-41a4-97b9-4f2864cfb959",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-01-01T00:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "96116",
+      "display": "Neurobehavioral status exam (clinical assessment of thinking, reasoning and judgment, [eg, acquired knowledge, attention, language, memory, planning and problem solving, and visual spatial abilities]), by physician or other qualified health care professional, both face-to-face time with the patient and time interpreting test results and preparing the report; first hour",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/075f9e36-6a87-47ac-952e-aeb295f184d9"
+  },
+  "performedDateTime": "2026-01-01T00:00:00.000+00:00"
+}

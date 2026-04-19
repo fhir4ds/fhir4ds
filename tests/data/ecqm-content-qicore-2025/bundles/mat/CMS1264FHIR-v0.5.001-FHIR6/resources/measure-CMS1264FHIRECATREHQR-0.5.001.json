@@ -1,0 +1,1415 @@
+{
+  "resourceType": "Measure",
+  "id": "CMS1264FHIRECATREHQR",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-shareablemeasure", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/executable-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cql-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/elm-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/proportion-measure-cqfm" ]
+  },
+  "text": {
+    "status": "extensions",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\" class=\"col-12\">\n  <table class=\"narrative-table\">\n    <tbody>\n<tr>\n\n<th colspan=\"2\" scope=\"row\" class=\"row-header\">Knowledge Artifact Metadata</th>\n\n</tr>\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Name (machine-readable)</th>\n\n<td class=\"content-container\">CMS1264FHIRECATREHQR</td>\n</tr>\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Title (human-readable)</th>\n\n<td class=\"content-container\">Emergency Care Access &amp; Timeliness (REHQR)FHIR</td>\n</tr>\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Status</th>\n\n<td class=\"content-container\">active</td>\n</tr>\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Experimental</th>\n\n<td class=\"content-container\">false</td>\n</tr>\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Description</th>\n\n<td class=\"content-container\">This measure assesses the variation in access and timeliness of emergency care to support rural emergency hospital (REH) quality improvement for patients requiring emergency care in an emergency department (ED). This measure is designed to align with incentives to promote improved care both in EDs and the broader health system to help identify where patients do not receive timely access to emergency care.\n\nEmergency care access and timeliness gaps are inclusive of several concepts pertaining to boarding and crowding in an ED, including significantly longer ED wait times, higher left without being seen rates, longer boarding times, and longer total length of stay in the ED.</td>\n</tr>\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Clinical Usage</th>\n\n<td class=\"content-container\">Measure Score Calculation\nThe measure score is calculated at the individual ED level as the proportion of ED visits where any one of the four outcomes occurred, as defined by the numerator. For CMS Certification Numbers (CCNs) with more than one ED, scores are combined as a weighted average for that CCN. \n\nThis dQM is an episode-based measure. An episode is defined as an ED visit that ends during the measurement period. \n\nThis FHIR-based measure has been derived from the QDM-based measure: CMS1264v1. \n\nPlease refer to the HL7 QI-Core Implementation Guide (https://hl7.org/fhir/us/qicore/STU6/) for more information on QI-Core and mapping recommendations from QDM to QI-Core STU 6. (https://hl7.org/fhir/us/qicore/STU6/qdm-to-qicore.html).</td>\n</tr>\n\n\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Effective Period</th>\n\n<td class=\"content-container\">2027-01-01..2027-12-31</td>\n</tr>\n\n\n\n\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Measure Developer</th>\n\n<td class=\"content-container\">Acumen, LLC</td>\n</tr>\n\n\n\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Measure Steward</th>\n\n<td class=\"content-container\">Centers for Medicare &amp; Medicaid Services (CMS)</td>\n</tr>\n\n\n\n\n\n\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Copyright</th>\n\n<td class=\"content-container\">Limited proprietary coding is contained in these specifications for user convenience. Users of proprietary code sets should obtain all necessary licenses from the owners of the code sets.\n\nThis material contains SNOMED Clinical Terms(R) (SNOMED CT[R]) copyright 2004-2024 International Health Terminology Standards Development Organisation. All rights reserved.\n\nICD-10 copyright 2024 World Health Organization. All Rights Reserved.\n\nCPT(R) contained in the measure specifications is copyright 2004-2024 American Medical Association.</td>\n</tr>\n\n\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: Citation - American Medical Association. (2022). What is Behavioral Health. https://www.ama-assn.org/delivering-care/public-health/what-behavioral-health\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n\n\n\n\n\n\n\n\n\n<tr>\n\n<th colspan=\"2\" scope=\"row\" class=\"row-header\">Measure Metadata</th>\n\n</tr>\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Short Name Identifier</th>\n\n<td class=\"content-container\">CMS1264FHIR</td>\n</tr>\n\n\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Version Independent Identifier</th>\n\n<td class=\"content-container\">urn:uuid:eb3e269b-97ef-4548-9e87-c89b25789184</td>\n</tr>\n\n\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Version Specific Identifier</th>\n\n<td class=\"content-container\">urn:uuid:c9244dc0-5afa-4c82-b3a5-f93794048835</td>\n</tr>\n\n\n\n  \n    \n    \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Publisher (CMS) Identifier</th>\n\n<td class=\"content-container\">1264FHIR</td>\n</tr>\n\n  \n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Version Number</th>\n\n<td class=\"content-container\">0.5.001</td>\n</tr>\n\n\n\n\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Rationale</th>\n\n<td class=\"content-container\">This measure aims to reduce patient harm and improve outcomes for patients requiring emergency care in an ED by addressing the variation in emergency care and measuring access and timeliness of emergency care. There are long-standing concerns about parameters that impact access and timeliness of care in the ED. Currently, there are no national metrics to assess the proportion of patients impacted by access and timeliness of ED care.</td>\n</tr>\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Clinical Recommendation Statement</th>\n\n<td class=\"content-container\">Changes in care provision and workflow are anticipated from implementing this Emergency Care Access &amp; Timeliness (ECAT) REH dQM. To improve time to place a patient in a treatment space (as defined by the numerator below), changes in care may include improving patient flow processes, triaging interventions (such as inclusion of predictive models or different clinical deployment), or increased availability and access to outpatient clinical and social services. Other changes in care may include increases in local healthcare capacity including mental health care (mental health liaisons, co-located mental health services, or specialist psychiatry services), and use of ‘hospital home’ care models. Furthermore, changes to the following may also be considered: staffing models, ED observation units, diagnostic testing and imaging processes, or physical changes to ED layout.\n\nSuch changes may result in the following: decreased waiting room time, decreased door to provider times, higher proportion of patients seen within 1 hour, decrease in proportion of patients who leave without being evaluated, better management of mental health diagnoses, reduced length of stay in the ED, decreased turnaround time for diagnostic tests and imaging, improved time to treatment, and decreased ambulance diversion.\n\nChanges in clinician or patient-reported outcomes and costs may include the following: improved patient experience, decrease in morbidity and mortality, increased ED revenue, and improved patient outcomes.</td>\n</tr>\n\n\n\n\n  \n    \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Supplemental Data Guidance</th>\n\n<td class=\"content-container\">For every patient evaluated by this measure also identify payer, race, ethnicity and sex</td>\n</tr>\n\n  \n\n\n\n\n  \n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Boarding Definition</th>\n\n<td class=\"content-container\">The practice of holding transfer patients in the emergency department after a decision to transfer has been made.</td>\n</tr>\n\n\n  \n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">ED Observation Definition</th>\n\n<td class=\"content-container\">Observation stays are inclusive of both ED observation care in which a patient initially evaluated in the ED is cared for under observation status for an extended period of time in the ED or in a care area dedicated to observation care, as well as hospital observation stays in which a patient initially evaluated in the ED is cared for in observation status often in a hospital bed used for both inpatient or observation status admissions. Because these two forms of observation stays cannot be easily distinguished in a standardized fashion in existing electronic health record data ontologies, for the purposes of this quality measure all observation stays have been considered an exclusion from both numerator outcomes 3 and 4.</td>\n</tr>\n\n\n  \n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Left Without Being Seen (LWBS) Definition</th>\n\n<td class=\"content-container\">Patients arrive to the ED for evaluation and leave before seeing a physician, advanced practice nurse, or physician’s assistant.</td>\n</tr>\n\n\n  \n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Mental Health Definition</th>\n\n<td class=\"content-container\">Mental health generally refers to mental health diagnoses, life stressors and crises, and stress-related physical symptoms (American Medical Association [AMA], 2022). For this measure, mental health conditions will be defined separately from substance use disorders.</td>\n</tr>\n\n\n\n\n  \n    \n    <tr>\n\n<th colspan=\"2\" scope=\"row\" class=\"row-header\">Measure Population Criteria (ID: Group_1)</th>\n\n</tr>\n  \n  \n  \n  \n    <tr>\n      \n        \n<th scope=\"row\" class=\"row-header\">Initial Population</th>\n\n      \n      <td class=\"content-container\">\n        \n        <em>ID</em>: InitialPopulation_1\n        <br/>\n        \n        \n          <em>Description</em>:\n          <p style=\"white-space: pre-line\" class=\"tab-one\">All ED visits at REHs that end during the measurement period for all patients</p>\n        \n        \n          \n            \n            <em>Logic Definition</em>: <a href=\"#cms1264fhirecatrehqr-initial-population\">Initial Population</a> \n          \n        \n      </td>\n    </tr>\n  \n\n  \n    <tr>\n      \n        \n<th scope=\"row\" class=\"row-header\">Denominator</th>\n\n      \n      <td class=\"content-container\">\n        \n        <em>ID</em>: Denominator_1\n        <br/>\n        \n        \n          <em>Description</em>:\n          <p style=\"white-space: pre-line\" class=\"tab-one\">Equals Initial Population</p>\n        \n        \n          \n            \n            <em>Logic Definition</em>: <a href=\"#cms1264fhirecatrehqr-denominator\">Denominator</a> \n          \n        \n      </td>\n    </tr>\n  \n\n  \n    <tr>\n      \n        \n<th scope=\"row\" class=\"row-header\">Numerator</th>\n\n      \n      <td class=\"content-container\">\n        \n        <em>ID</em>: Numerator_1\n        <br/>\n        \n        \n          <em>Description</em>:\n          <p style=\"white-space: pre-line\" class=\"tab-one\">The numerator is comprised of any ED visit in the denominator with any quality gap in access; if the patient experiences any of the following during a visit, the visit is included in the numerator:\n1. The patient waited longer than 60 minutes (1 hour) after arrival to ED to be placed in a treatment room or dedicated treatment area that allows for audiovisual privacy during history-taking and physical examination, or\n2. The patient left the ED without being evaluated, or\n3. The patient, if transferred, boarded for longer than 240 minutes (4 hours), or\n4. The patient had an ED length of stay (LOS) (time from ED arrival to ED departure as defined by the ED departure timestamp indicating when the patient physically left the ED) of longer than 480 minutes (8 hours).\n\nED encounters with ED observation stays are excluded from criteria #3 (boarded) and #4 (ED LOS)</p>\n        \n        \n          \n            \n            <em>Logic Definition</em>: <a href=\"#cms1264fhirecatrehqr-numerator\">Numerator</a> \n          \n        \n      </td>\n    </tr>\n  \n\n  \n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Stratifier</th>\n\n  <td class=\"content-container\">\n    \n      <em>ID</em>: Stratification_1_1\n      \n        <br/>\n      \n    \n    \n    \n      <em>Description</em>: All patients aged less than 18 years seen in the ED who do not have an ED encounter principal diagnosis consistent with mental health diagnosis.  Patients who have an ED encounter principal diagnosis consistent with substance use disorders will be included in this stratification.\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Stratifier</th>\n\n  <td class=\"content-container\">\n    \n      <em>ID</em>: Stratification_1_2\n      \n        <br/>\n      \n    \n    \n    \n      <em>Description</em>: All patients aged 18 years and older seen in the ED who do not have an ED encounter principal diagnosis consistent with mental health diagnosis.  Patients who have an ED encounter principal diagnosis consistent with substance use disorders will be included in this stratification.\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Stratifier</th>\n\n  <td class=\"content-container\">\n    \n      <em>ID</em>: Stratification_1_3\n      \n        <br/>\n      \n    \n    \n    \n      <em>Description</em>: All patients aged less than 18 years seen in the ED who have an ED encounter principal diagnosis consistent with mental health diagnosis.\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Stratifier</th>\n\n  <td class=\"content-container\">\n    \n      <em>ID</em>: Stratification_1_4\n      \n        <br/>\n      \n    \n    \n    \n      <em>Description</em>: All patients aged 18 years and older seen in the ED who have an ED encounter principal diagnosis consistent with mental health diagnosis.\n    \n  </td>\n</tr>\n\n  \n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Population Basis</th>\n\n<td class=\"content-container\">Encounter</td>\n</tr>\n\n\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Scoring</th>\n\n<td class=\"content-container\">[http://terminology.hl7.org/CodeSystem/measure-scoring#proportion: 'Proportion']</td>\n</tr>\n\n\n\n\n\n\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Type</th>\n\n<td class=\"content-container\">[http://terminology.hl7.org/CodeSystem/measure-type#outcome: 'Outcome']</td>\n</tr>\n\n\n\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Rate Aggregation</th>\n\n<td class=\"content-container\">None</td>\n</tr>\n\n\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Improvement Notation</th>\n\n<td class=\"content-container\">[http://terminology.hl7.org/CodeSystem/measure-improvement-notation#decrease: 'Decreased score indicates improvement']</td>\n</tr>\n\n\n\n\n  <tr>\n\n<th colspan=\"2\" scope=\"row\" class=\"row-header\">Supplemental Data Elements</th>\n\n</tr>\n\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Supplemental Data Element</th>\n\n  <td class=\"content-container\">\n    \n      <em>ID</em>: sde-ethnicity\n      \n      <br/>\n      \n    \n    \n      \n        \n          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]\n        \n        <br/>\n      \n    \n    \n      <em>Description</em>: SDE Ethnicity\n    \n    \n      \n        <br/>\n        \n        <em>Logic Definition</em>: <a href=\"#cms1264fhirecatrehqr-sde-ethnicity\">SDE Ethnicity</a> \n      \n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Supplemental Data Element</th>\n\n  <td class=\"content-container\">\n    \n      <em>ID</em>: sde-payer\n      \n      <br/>\n      \n    \n    \n      \n        \n          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]\n        \n        <br/>\n      \n    \n    \n      <em>Description</em>: SDE Payer\n    \n    \n      \n        <br/>\n        \n        <em>Logic Definition</em>: <a href=\"#cms1264fhirecatrehqr-sde-payer\">SDE Payer</a> \n      \n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Supplemental Data Element</th>\n\n  <td class=\"content-container\">\n    \n      <em>ID</em>: sde-race\n      \n      <br/>\n      \n    \n    \n      \n        \n          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]\n        \n        <br/>\n      \n    \n    \n      <em>Description</em>: SDE Race\n    \n    \n      \n        <br/>\n        \n        <em>Logic Definition</em>: <a href=\"#cms1264fhirecatrehqr-sde-race\">SDE Race</a> \n      \n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Supplemental Data Element</th>\n\n  <td class=\"content-container\">\n    \n      <em>ID</em>: sde-sex\n      \n      <br/>\n      \n    \n    \n      \n        \n          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]\n        \n        <br/>\n      \n    \n    \n      <em>Description</em>: SDE Sex\n    \n    \n      \n        <br/>\n        \n        <em>Logic Definition</em>: <a href=\"#cms1264fhirecatrehqr-sde-sex\">SDE Sex</a> \n      \n    \n  </td>\n</tr>\n\n\n<tr>\n\n<th colspan=\"2\" scope=\"row\" class=\"row-header\">Measure Logic</th>\n\n</tr>\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Primary Library</th>\n\n<td class=\"content-container\">https://madie.cms.gov/Library/CMS1264FHIRECATREHQR</td>\n</tr>\n\n\n\n\n  \n  \n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Library SDE\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: https://madie.cms.gov/Library/SupplementalDataElements|5.1.000\n    <br/>\n    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/SupplementalDataElements|5.1.000</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Library FHIRHelpers\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: https://madie.cms.gov/Library/FHIRHelpers|4.4.000\n    <br/>\n    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/FHIRHelpers|4.4.000</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Library CQMCommon\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: https://madie.cms.gov/Library/CQMCommon|4.1.000\n    <br/>\n    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/CQMCommon|4.1.000</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Library QICoreCommon\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: https://madie.cms.gov/Library/QICoreCommon|4.0.000\n    <br/>\n    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/QICoreCommon|4.0.000</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Code system SNOMEDCT\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://snomed.info/sct\n    <br/>\n    <em>Canonical URL</em>: <tt>http://snomed.info/sct</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Code system Diagnosis Type\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://terminology.hl7.org/CodeSystem/ex-diagnosistype\n    <br/>\n    <em>Canonical URL</em>: <tt>http://terminology.hl7.org/CodeSystem/ex-diagnosistype</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Emergency Department Evaluation and Management Visit\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1010\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1010</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Triage\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.279\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.279</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Emergency Department Location\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.284\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.284</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Emergency Department Treatment Location\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.278\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.278</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Decision to Transfer\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.286\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.286</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Observation Services\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Mental Health Diagnosis without Substance Use Disorders\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.285\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.285</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Payer Type\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591</tt>\n    \n  </td>\n</tr>\n\n\n  \n  <tr>\n    <th scope=\"row\" class=\"row-header\">Direct Reference Code</th>\n    <td class=\"content-container\">\n      \n        <em>Display</em>: Male (finding)\n        <br/>\n      \n      <em>Code</em>: 248153007\n      <br/>\n      <em>System</em>: <tt>http://snomed.info/sct</tt>\n    </td>\n  </tr>\n\n  <tr>\n    <th scope=\"row\" class=\"row-header\">Direct Reference Code</th>\n    <td class=\"content-container\">\n      \n        <em>Display</em>: Female (finding)\n        <br/>\n      \n      <em>Code</em>: 248152002\n      <br/>\n      <em>System</em>: <tt>http://snomed.info/sct</tt>\n    </td>\n  </tr>\n\n  <tr>\n    <th scope=\"row\" class=\"row-header\">Direct Reference Code</th>\n    <td class=\"content-container\">\n      \n        <em>Display</em>: Patient left without being seen (finding)\n        <br/>\n      \n      <em>Code</em>: 21541000119102\n      <br/>\n      <em>System</em>: <tt>http://snomed.info/sct</tt>\n    </td>\n  </tr>\n\n  <tr>\n    <th scope=\"row\" class=\"row-header\">Direct Reference Code</th>\n    <td class=\"content-container\">\n      \n        <em>Display</em>: Principal Diagnosis\n        <br/>\n      \n      <em>Code</em>: principal\n      <br/>\n      <em>System</em>: <tt>http://terminology.hl7.org/CodeSystem/ex-diagnosistype</tt>\n    </td>\n  </tr>\n\n  \n  \n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: Measurement Period\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: in\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: 1\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Period\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: Numerator\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: *\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: Denominator\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: *\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: Initial Population\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: *\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: SDE Sex\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: 1\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Coding\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: SDE Payer\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: *\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: SDE Ethnicity\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: 1\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: SDE Race\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: 1\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: Stratification 4\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: *\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: Stratification 3\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: *\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: Stratification 2\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: *\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: Stratification 1\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: *\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n  \n  \n  <tr>\n    <th colspan=\"2\" scope=\"row\" class=\"section-header\"><a name=\"effective-data-requirements\"> </a>Measure Logic Data Requirements</th>\n  </tr>\n  \n  \n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Patient\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: extension, url\n    <br/>\n   \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Encounter\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: type, period, status, status.value, location, location.type, hospitalization, hospitalization.dischargeDisposition, diagnosis, diagnosis.code\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: type</span>\n    <br/>\n  \n  \n  \n    <span class=\"tab-one\"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.279\n    <br/> \n  \n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Encounter\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: type, period, status, status.value, location, location.type, hospitalization, hospitalization.dischargeDisposition, diagnosis, diagnosis.code\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: type</span>\n    <br/>\n  \n  \n  \n    <span class=\"tab-one\"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1010\n    <br/> \n  \n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Encounter\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: period, location, location.type, hospitalization, hospitalization.dischargeDisposition, type, diagnosis, diagnosis.code\n    <br/>\n   \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Encounter\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: type, period, status, status.value, location, location.type, hospitalization, hospitalization.dischargeDisposition, diagnosis, diagnosis.code\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: type</span>\n    <br/>\n  \n  \n  \n    <span class=\"tab-one\"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143\n    <br/> \n  \n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Resource\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/StructureDefinition/Resource\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: id, id.value\n    <br/>\n   \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Location\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-location\n    <br/>        \n  \n   \n   \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: ServiceRequest\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: code, authoredOn, authoredOn.value, intent, intent.value, status, status.value\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: code</span>\n    <br/>\n  \n  \n  \n    <span class=\"tab-one\"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.286\n    <br/> \n  \n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Claim\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-claim\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: status, status.value, use, use.value, item\n    <br/>\n   \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Condition\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis\n    <br/>        \n  \n   \n   \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Condition\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns\n    <br/>        \n  \n   \n   \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Coverage\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: type, period\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: type</span>\n    <br/>\n  \n  \n  \n    <span class=\"tab-one\"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591\n    <br/> \n  \n  \n  \n   \n  </td>\n</tr>\n\n  \n  <tr>\n\n<th colspan=\"2\" scope=\"row\" class=\"row-header\">Measure Logic Definitions</th>\n\n</tr>\n  \n          \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"supplementaldataelements-sde-sex\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> SupplementalDataElements</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Sex&quot;:\n  case\n    when Patient.sex = '248153007' then &quot;Male (finding)&quot;\n    when Patient.sex = '248152002' then &quot;Female (finding)&quot;\n    else null\n  end</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-sde-sex\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Sex&quot;:\n  SDE.&quot;SDE Sex&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-ed-evaluation-and-management\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;ED Evaluation and Management&quot;:\n  [Encounter: &quot;Emergency Department Evaluation and Management Visit&quot;] EDEvalManagementVisit\n    where EDEvalManagementVisit.period ends during day of &quot;Measurement Period&quot;\n      and EDEvalManagementVisit.status = 'finished'</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-ed-triage\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;ED Triage&quot;:\n  [Encounter: &quot;Triage&quot;] EDTriage\n    where EDTriage.period ends during day of &quot;Measurement Period&quot;\n      and EDTriage.status in { 'finished', 'triaged' }</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-ed-triage-excluding-those-prior-to-ed-encounters\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;ED Triage Excluding Those Prior To ED Encounters&quot;:\n  &quot;ED Triage&quot; EDTriageinMP\n    where not exists ( &quot;ED Evaluation and Management&quot; EDEvalManagementinMP\n        where ( ( EDTriageinMP.period overlaps before EDEvalManagementinMP.period )\n            or ( EDTriageinMP.period during EDEvalManagementinMP.period )\n            or ( EDEvalManagementinMP.period during EDTriageinMP.period )\n            or ( EDTriageinMP.period ends 120 minutes or less before start of EDEvalManagementinMP.period )\n        )\n    )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-initial-population\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Initial Population&quot;:\n  &quot;ED Evaluation and Management&quot;\n    union &quot;ED Triage Excluding Those Prior To ED Encounters&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-denominator\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Denominator&quot;:\n  &quot;Initial Population&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-ed-triage-before-evaluation-management\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;ED Triage Before Evaluation Management&quot;:\n  &quot;ED Triage&quot; EDTriageinMP\n    with &quot;Denominator&quot; EDEncounter\n      such that ( ( EDTriageinMP.period overlaps before EDEncounter.period )\n          or ( EDTriageinMP.period during EDEncounter.period )\n          or ( EDEncounter.period during EDTriageinMP.period )\n          or ( EDTriageinMP.period ends 120 minutes or less before start of EDEncounter.period )\n      )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-ed-triage-and-evaluation-management\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;ED Triage and Evaluation Management&quot;:\n  &quot;Denominator&quot;\n    union &quot;ED Triage Before Evaluation Management&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-time-to-treatment-room-greater-than-60-minutes\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Time to Treatment Room Greater Than 60 Minutes&quot;:\n  &quot;ED Evaluation and Management&quot; EDEvalManagementinMP\n    where &quot;EDArrivalTime&quot;(EDEvalManagementinMP) 61 minutes or more before &quot;EDTreatmentRoomTimeArrivalTime&quot;(EDEvalManagementinMP)</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-ed-arrival-left-without-being-seen\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;ED Arrival Left Without Being Seen&quot;:\n  &quot;Denominator&quot; EDEncounter\n    where EDEncounter.hospitalization.dischargeDisposition ~ &quot;Patient left without being seen (finding)&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-boarded-time-greater-than-240-minutes\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Boarded Time Greater Than 240 Minutes&quot;:\n  &quot;Denominator&quot; EDEncounter\n    where &quot;TransferDecisionUsingOrder&quot;(EDEncounter) 241 minutes or more before &quot;EDDepartureTime&quot;(EDEncounter)</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-ed-observation-status\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;ED Observation Status&quot;:\n  [Encounter: &quot;Observation Services&quot;] EDObsEncounter\n    with &quot;Denominator&quot; EDStay\n      such that EDObsEncounter.period during EDStay.period\n        and EDObsEncounter.status = 'finished'</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-boarded-time-greater-than-240-minutes-and-no-observation-stay\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Boarded Time Greater Than 240 Minutes and No Observation Stay&quot;:\n  ( &quot;Boarded Time Greater Than 240 Minutes&quot; Boarding\n      where not exists ( &quot;ED Observation Status&quot; EDO\n          where ( EDO.period during Boarding.period )\n      )\n  )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-ed-length-of-stay-greater-than-480-minutes\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;ED Length of Stay Greater Than 480 Minutes&quot;:\n  &quot;Denominator&quot; EDEncounter\n    where &quot;EDArrivalTime&quot;(EDEncounter) 481 minutes or more before &quot;EDDepartureTime&quot;(EDEncounter)</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-ed-length-of-stay-greater-than-480-minutes-and-no-observation-stay\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;ED Length of Stay Greater Than 480 Minutes and No Observation Stay&quot;:\n  ( &quot;ED Length of Stay Greater Than 480 Minutes&quot; EDStay\n      where not exists ( &quot;ED Observation Status&quot; EDObs\n          where ( EDObs.period during EDStay.period )\n      )\n  )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-numerator\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Numerator&quot;:\n  &quot;Time to Treatment Room Greater Than 60 Minutes&quot;\n    union &quot;ED Arrival Left Without Being Seen&quot;\n    union &quot;Boarded Time Greater Than 240 Minutes and No Observation Stay&quot;\n    union &quot;ED Length of Stay Greater Than 480 Minutes and No Observation Stay&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-ed-encounter-or-triage-of-patients-18-years-and-older\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;ED Encounter or Triage of Patients 18 Years and Older&quot;:\n  &quot;Denominator&quot; EDEncounter\n    where AgeInYearsAt(date from start of EDEncounter.period) &gt;= 18</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-adult-with-mental-health-diagnosis\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Adult With Mental Health Diagnosis&quot;:\n  ( &quot;ED Encounter or Triage of Patients 18 Years and Older&quot; AdultEDEncounters\n      where ( AdultEDEncounters.hasPrincipalDiagnosisOf ( &quot;Mental Health Diagnosis without Substance Use Disorders&quot; ) )\n  )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-stratification-4\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Stratification 4&quot;:\n  &quot;Adult With Mental Health Diagnosis&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-ed-encounter-or-triage-of-patients-less-than-18-years\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;ED Encounter or Triage of Patients Less Than 18 Years&quot;:\n  &quot;Denominator&quot; EDEncounter\n    where AgeInYearsAt(date from start of EDEncounter.period) &lt; 18</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-pediatric-with-mental-health-diagnosis\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Pediatric With Mental Health Diagnosis&quot;:\n  ( &quot;ED Encounter or Triage of Patients Less Than 18 Years&quot; PediatricEDEncounters\n      where ( PediatricEDEncounters.hasPrincipalDiagnosisOf ( &quot;Mental Health Diagnosis without Substance Use Disorders&quot; ) )\n  )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-stratification-3\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Stratification 3&quot;:\n  &quot;Pediatric With Mental Health Diagnosis&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-adult-with-no-mental-health-diagnosis\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Adult With No Mental Health Diagnosis&quot;:\n  ( &quot;ED Encounter or Triage of Patients 18 Years and Older&quot; AdultEDEncounters\n      where not ( AdultEDEncounters.hasPrincipalDiagnosisOf ( &quot;Mental Health Diagnosis without Substance Use Disorders&quot; ) )\n  )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-stratification-2\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Stratification 2&quot;:\n  &quot;Adult With No Mental Health Diagnosis&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-pediatric-with-no-mental-health-diagnosis\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Pediatric With No Mental Health Diagnosis&quot;:\n  ( &quot;ED Encounter or Triage of Patients Less Than 18 Years&quot; PediatricEDEncounters\n      where not ( PediatricEDEncounters.hasPrincipalDiagnosisOf ( &quot;Mental Health Diagnosis without Substance Use Disorders&quot; ) )\n  )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-stratification-1\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Stratification 1&quot;:\n  &quot;Pediatric With No Mental Health Diagnosis&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"supplementaldataelements-sde-payer\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> SupplementalDataElements</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Payer&quot;:\n  [Coverage: type in &quot;Payer Type&quot;] Payer\n    return {\n      code: Payer.type,\n      period: Payer.period\n    }</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-sde-payer\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Payer&quot;:\n  SDE.&quot;SDE Payer&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"supplementaldataelements-sde-ethnicity\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> SupplementalDataElements</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Ethnicity&quot;:\n  Patient.ethnicity E\n    return Tuple {\n      codes: { E.ombCategory } union E.detailed,\n      display: E.text\n    }</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-sde-ethnicity\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Ethnicity&quot;:\n  SDE.&quot;SDE Ethnicity&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"supplementaldataelements-sde-race\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> SupplementalDataElements</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Race&quot;:\n  Patient.race R\n    return Tuple {\n      codes: R.ombCategory union R.detailed,\n      display: R.text\n    }</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-sde-race\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Race&quot;:\n  SDE.&quot;SDE Race&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"fhirhelpers-tostring\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> FHIRHelpers</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define function ToString(value uri): value.value</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"fhirhelpers-tointerval\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> FHIRHelpers</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Converts the given [Period](https://hl7.org/fhir/datatypes.html#Period)\nvalue to a CQL DateTime Interval\n@comment: If the start value of the given period is unspecified, the starting\nboundary of the resulting interval will be open (meaning the start of the interval\nis unknown, as opposed to interpreted as the beginning of time).\n*/\ndefine function ToInterval(period FHIR.Period):\n    if period is null then\n        null\n    else\n        if period.&quot;start&quot; is null then\n            Interval(period.&quot;start&quot;.value, period.&quot;end&quot;.value]\n        else\n            Interval[period.&quot;start&quot;.value, period.&quot;end&quot;.value]</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-edarrivaltime\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define function &quot;EDArrivalTime&quot;(EDEncounter Encounter):\n  Last(&quot;ED Triage and Evaluation Management&quot;.location Location\n      where Location.location.getLocation().type in &quot;Emergency Department Location&quot;\n        and start of Location.period is not null\n        and(Location.period ends 120 minutes or less before start of EDEncounter.period\n            or Location.period overlaps before EDEncounter.period\n            or EDEncounter.period overlaps before Location.period\n            or Location.period starts same as start of EDEncounter.period\n        )\n      return start of Location.period\n      sort ascending\n  )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cqmcommon-getlocation\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CQMCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Returns the Location resource specified by the given reference.\n*/\ndefine fluent function getLocation(reference Reference):\n  singleton from (\n    [Location] L where reference.references(L)\n  )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"qicorecommon-references\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> QICoreCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Returns true if the given reference is to the given resource\n@comment: Returns true if the `id` element of the given resource exactly equals the tail of the given reference.\nNOTE: This function assumes resources from the same source server.\n*/\ndefine fluent function references(reference Reference, resource Resource):\n  resource.id = Last(Split(reference.reference, '/'))</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"fhirhelpers-toconcept\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> FHIRHelpers</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Converts the given FHIR [CodeableConcept](https://hl7.org/fhir/datatypes.html#CodeableConcept) value to a CQL Concept.\n*/\ndefine function ToConcept(concept FHIR.CodeableConcept):\n    if concept is null then\n        null\n    else\n        System.Concept {\n            codes: concept.coding C return ToCode(C),\n            display: concept.text.value\n        }</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"fhirhelpers-tocode\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> FHIRHelpers</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Converts the given FHIR [Coding](https://hl7.org/fhir/datatypes.html#Coding) value to a CQL Code.\n*/\ndefine function ToCode(coding FHIR.Coding):\n    if coding is null then\n        null\n    else\n        System.Code {\n          code: coding.code.value,\n          system: coding.system.value,\n          version: coding.version.value,\n          display: coding.display.value\n        }</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-edtreatmentroomtimearrivaltime\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define function &quot;EDTreatmentRoomTimeArrivalTime&quot;(EDEncounter Encounter):\n  First(EDEncounter.location Location\n      where Location.location.getLocation().type in &quot;Emergency Department Treatment Location&quot;\n        and start of Location.period is not null\n      return start of Location.period\n      sort ascending\n  )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-transferdecisionusingorder\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define function &quot;TransferDecisionUsingOrder&quot;(EDEncounter Encounter):\n  Last([ServiceRequest: &quot;Decision to Transfer&quot;] TransferOrder\n      where TransferOrder.authoredOn during EDEncounter.period\n        and TransferOrder.intent = 'order'\n        and TransferOrder.status in { 'active', 'completed' }\n      return TransferOrder.authoredOn\n      sort ascending\n  )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms1264fhirecatrehqr-eddeparturetime\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS1264FHIRECATREHQR</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define function &quot;EDDepartureTime&quot;(EDEncounter Encounter):\n  Last(&quot;ED Triage and Evaluation Management&quot;.location Location\n      where Location.location.getLocation().type in &quot;Emergency Department Location&quot;\n        and \n        end of Location.period is not null\n        and(Location.period ends 120 minutes or less before start of EDEncounter.period\n            or Location.period overlaps before EDEncounter.period\n            or EDEncounter.period overlaps before Location.period\n            or Location.period starts same as start of EDEncounter.period\n        )\n      return \n      end of Location.period\n      sort ascending\n  )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cqmcommon-hasprincipaldiagnosisof\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CQMCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n @description: Returns the condition that is specified as the principal diagnosis for the encounter and has a code in the given valueSet.\n @comment: See the QICore 6 Authoring Patterns discussion on [Principal Diagnosis and Present on Admission](https://github.com/cqframework/CQL-Formatting-and-Usage-Wiki/wiki/Authoring-Patterns-QICore-v6.0.0#conditions-present-on-admission-and-principal-diagnoses) for more information\n */\n define fluent function hasPrincipalDiagnosisOf(encounter Encounter, valueSet ValueSet):\n   (encounter.principalDiagnosis()) PD\n     return PD.diagnosis in valueSet\n       or PD.diagnosis.getCondition().code in valueSet</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cqmcommon-principaldiagnosis\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CQMCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Returns the claim diagnosis element that is specified as the principal diagnosis for the encounter\n @comment: See the QICore 6 Authoring Patterns discussion on [Principal Diagnosis and Present on Admission](https://github.com/cqframework/CQL-Formatting-and-Usage-Wiki/wiki/Authoring-Patterns-QICore-v6.0.0#conditions-present-on-admission-and-principal-diagnoses) for more information\n*/\ndefine fluent function principalDiagnosis(encounter Encounter):\nsingleton from (\n     (encounter.claimDiagnosis()) CD\n       where CD.type.includesCode(&quot;Principal Diagnosis&quot;)\n   )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cqmcommon-claimdiagnosis\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CQMCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Returns the claim diagnosis elements for the given encounter\n@comment: See the QICore 6 Authoring Patterns discussion on [Principal Diagnosis and Present on Admission](https://github.com/cqframework/CQL-Formatting-and-Usage-Wiki/wiki/Authoring-Patterns-QICore-v6.0.0#conditions-present-on-admission-and-principal-diagnoses) for more information\n*/\ndefine fluent function claimDiagnosis(encounter Encounter):\n  encounter E\n    let \n      claim: ([Claim] C where C.status = 'active' and C.use = 'claim' and exists (C.item I where I.encounter.references(E))),\n      claimItem: (claim.item I where I.encounter.references(E))\n    return claim.diagnosis D where D.sequence in claimItem.diagnosisSequence</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"qicorecommon-references\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> QICoreCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Returns true if any of the given references are to the given resource\n@comment: Returns true if the `id` element of the given resource exactly equals the tail of any of the given references.\nNOTE: This function assumes resources from the same source server.\n*/\ndefine fluent function references(references List&lt;Reference&gt;, resource Resource):\n  exists (references R where R.references(resource))</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"qicorecommon-includescode\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> QICoreCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Returns true if the given code is in the given codeList\n@comment: Returns true if the `code` is equivalent to any of the codes in the given `codeList`, false otherwise.\n*/\ndefine fluent function includesCode(codeList List&lt;Concept&gt;, code Code):\n  exists (codeList C where C ~ code)</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cqmcommon-getcondition\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CQMCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Returns the Condition resource for the given reference\n*/\ndefine fluent function getCondition(reference Reference):\n  singleton from (([ConditionEncounterDiagnosis] union [ConditionProblemsHealthConcerns]) C where reference.references(C.id))</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"qicorecommon-references\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> QICoreCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Returns true if the given reference is to the given resourceId\n@comment: Returns true if the `resourceId` parameter exactly equals the tail of the given reference.\nNOTE: This function assumes resources from the same source server.\n*/\ndefine fluent function references(reference Reference, resourceId String):\n  resourceId = Last(Split(reference.reference, '/'))</code></pre>\n  </td>\n\n</tr>\n\n  \n\n<tr>\n  <th colspan=\"2\" scope=\"row\" class=\"row-header\">Generated using version 0.4.7 of the sample-content-ig Liquid templates</th>\n</tr>\n\n    </tbody>\n  </table>\n</div>"
+  },
+  "contained": [ {
+    "resourceType": "Library",
+    "id": "effective-data-requirements",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "248153007",
+        "display": "Male (finding)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "248152002",
+        "display": "Female (finding)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "21541000119102",
+        "display": "Patient left without being seen (finding)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://terminology.hl7.org/CodeSystem/ex-diagnosistype",
+        "code": "principal",
+        "display": "Principal Diagnosis"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Sex"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Sex\":\n  case\n    when Patient.sex = '248153007' then \"Male (finding)\"\n    when Patient.sex = '248152002' then \"Female (finding)\"\n    else null\n  end"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 0
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "SDE Sex"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Sex\":\n  SDE.\"SDE Sex\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 1
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "ED Evaluation and Management"
+      }, {
+        "url": "statement",
+        "valueString": "define \"ED Evaluation and Management\":\n  [Encounter: \"Emergency Department Evaluation and Management Visit\"] EDEvalManagementVisit\n    where EDEvalManagementVisit.period ends during day of \"Measurement Period\"\n      and EDEvalManagementVisit.status = 'finished'"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 2
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "ED Triage"
+      }, {
+        "url": "statement",
+        "valueString": "define \"ED Triage\":\n  [Encounter: \"Triage\"] EDTriage\n    where EDTriage.period ends during day of \"Measurement Period\"\n      and EDTriage.status in { 'finished', 'triaged' }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 3
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "ED Triage Excluding Those Prior To ED Encounters"
+      }, {
+        "url": "statement",
+        "valueString": "define \"ED Triage Excluding Those Prior To ED Encounters\":\n  \"ED Triage\" EDTriageinMP\n    where not exists ( \"ED Evaluation and Management\" EDEvalManagementinMP\n        where ( ( EDTriageinMP.period overlaps before EDEvalManagementinMP.period )\n            or ( EDTriageinMP.period during EDEvalManagementinMP.period )\n            or ( EDEvalManagementinMP.period during EDTriageinMP.period )\n            or ( EDTriageinMP.period ends 120 minutes or less before start of EDEvalManagementinMP.period )\n        )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 4
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "Initial Population"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Initial Population\":\n  \"ED Evaluation and Management\"\n    union \"ED Triage Excluding Those Prior To ED Encounters\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 5
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "Denominator"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Denominator\":\n  \"Initial Population\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 6
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "ED Triage Before Evaluation Management"
+      }, {
+        "url": "statement",
+        "valueString": "define \"ED Triage Before Evaluation Management\":\n  \"ED Triage\" EDTriageinMP\n    with \"Denominator\" EDEncounter\n      such that ( ( EDTriageinMP.period overlaps before EDEncounter.period )\n          or ( EDTriageinMP.period during EDEncounter.period )\n          or ( EDEncounter.period during EDTriageinMP.period )\n          or ( EDTriageinMP.period ends 120 minutes or less before start of EDEncounter.period )\n      )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 7
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "ED Triage and Evaluation Management"
+      }, {
+        "url": "statement",
+        "valueString": "define \"ED Triage and Evaluation Management\":\n  \"Denominator\"\n    union \"ED Triage Before Evaluation Management\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 8
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "Time to Treatment Room Greater Than 60 Minutes"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Time to Treatment Room Greater Than 60 Minutes\":\n  \"ED Evaluation and Management\" EDEvalManagementinMP\n    where \"EDArrivalTime\"(EDEvalManagementinMP) 61 minutes or more before \"EDTreatmentRoomTimeArrivalTime\"(EDEvalManagementinMP)"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 9
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "ED Arrival Left Without Being Seen"
+      }, {
+        "url": "statement",
+        "valueString": "define \"ED Arrival Left Without Being Seen\":\n  \"Denominator\" EDEncounter\n    where EDEncounter.hospitalization.dischargeDisposition ~ \"Patient left without being seen (finding)\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 10
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "Boarded Time Greater Than 240 Minutes"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Boarded Time Greater Than 240 Minutes\":\n  \"Denominator\" EDEncounter\n    where \"TransferDecisionUsingOrder\"(EDEncounter) 241 minutes or more before \"EDDepartureTime\"(EDEncounter)"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 11
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "ED Observation Status"
+      }, {
+        "url": "statement",
+        "valueString": "define \"ED Observation Status\":\n  [Encounter: \"Observation Services\"] EDObsEncounter\n    with \"Denominator\" EDStay\n      such that EDObsEncounter.period during EDStay.period\n        and EDObsEncounter.status = 'finished'"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 12
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "Boarded Time Greater Than 240 Minutes and No Observation Stay"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Boarded Time Greater Than 240 Minutes and No Observation Stay\":\n  ( \"Boarded Time Greater Than 240 Minutes\" Boarding\n      where not exists ( \"ED Observation Status\" EDO\n          where ( EDO.period during Boarding.period )\n      )\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 13
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "ED Length of Stay Greater Than 480 Minutes"
+      }, {
+        "url": "statement",
+        "valueString": "define \"ED Length of Stay Greater Than 480 Minutes\":\n  \"Denominator\" EDEncounter\n    where \"EDArrivalTime\"(EDEncounter) 481 minutes or more before \"EDDepartureTime\"(EDEncounter)"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 14
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "ED Length of Stay Greater Than 480 Minutes and No Observation Stay"
+      }, {
+        "url": "statement",
+        "valueString": "define \"ED Length of Stay Greater Than 480 Minutes and No Observation Stay\":\n  ( \"ED Length of Stay Greater Than 480 Minutes\" EDStay\n      where not exists ( \"ED Observation Status\" EDObs\n          where ( EDObs.period during EDStay.period )\n      )\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 15
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "Numerator"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Numerator\":\n  \"Time to Treatment Room Greater Than 60 Minutes\"\n    union \"ED Arrival Left Without Being Seen\"\n    union \"Boarded Time Greater Than 240 Minutes and No Observation Stay\"\n    union \"ED Length of Stay Greater Than 480 Minutes and No Observation Stay\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 16
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "ED Encounter or Triage of Patients 18 Years and Older"
+      }, {
+        "url": "statement",
+        "valueString": "define \"ED Encounter or Triage of Patients 18 Years and Older\":\n  \"Denominator\" EDEncounter\n    where AgeInYearsAt(date from start of EDEncounter.period) >= 18"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 17
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "Adult With Mental Health Diagnosis"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Adult With Mental Health Diagnosis\":\n  ( \"ED Encounter or Triage of Patients 18 Years and Older\" AdultEDEncounters\n      where ( AdultEDEncounters.hasPrincipalDiagnosisOf ( \"Mental Health Diagnosis without Substance Use Disorders\" ) )\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 18
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "Stratification 4"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Stratification 4\":\n  \"Adult With Mental Health Diagnosis\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 19
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "ED Encounter or Triage of Patients Less Than 18 Years"
+      }, {
+        "url": "statement",
+        "valueString": "define \"ED Encounter or Triage of Patients Less Than 18 Years\":\n  \"Denominator\" EDEncounter\n    where AgeInYearsAt(date from start of EDEncounter.period) < 18"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 20
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "Pediatric With Mental Health Diagnosis"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Pediatric With Mental Health Diagnosis\":\n  ( \"ED Encounter or Triage of Patients Less Than 18 Years\" PediatricEDEncounters\n      where ( PediatricEDEncounters.hasPrincipalDiagnosisOf ( \"Mental Health Diagnosis without Substance Use Disorders\" ) )\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 21
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "Stratification 3"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Stratification 3\":\n  \"Pediatric With Mental Health Diagnosis\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 22
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "Adult With No Mental Health Diagnosis"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Adult With No Mental Health Diagnosis\":\n  ( \"ED Encounter or Triage of Patients 18 Years and Older\" AdultEDEncounters\n      where not ( AdultEDEncounters.hasPrincipalDiagnosisOf ( \"Mental Health Diagnosis without Substance Use Disorders\" ) )\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 23
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "Stratification 2"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Stratification 2\":\n  \"Adult With No Mental Health Diagnosis\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 24
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "Pediatric With No Mental Health Diagnosis"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Pediatric With No Mental Health Diagnosis\":\n  ( \"ED Encounter or Triage of Patients Less Than 18 Years\" PediatricEDEncounters\n      where not ( PediatricEDEncounters.hasPrincipalDiagnosisOf ( \"Mental Health Diagnosis without Substance Use Disorders\" ) )\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 25
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "Stratification 1"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Stratification 1\":\n  \"Pediatric With No Mental Health Diagnosis\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 26
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Payer"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Payer\":\n  [Coverage: type in \"Payer Type\"] Payer\n    return {\n      code: Payer.type,\n      period: Payer.period\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 27
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "SDE Payer"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Payer\":\n  SDE.\"SDE Payer\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 28
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Ethnicity"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Ethnicity\":\n  Patient.ethnicity E\n    return Tuple {\n      codes: { E.ombCategory } union E.detailed,\n      display: E.text\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 29
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "SDE Ethnicity"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Ethnicity\":\n  SDE.\"SDE Ethnicity\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 30
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Race"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Race\":\n  Patient.race R\n    return Tuple {\n      codes: R.ombCategory union R.detailed,\n      display: R.text\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 31
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "SDE Race"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Race\":\n  SDE.\"SDE Race\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 32
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToString"
+      }, {
+        "url": "statement",
+        "valueString": "define function ToString(value uri): value.value"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 33
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToInterval"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Converts the given [Period](https://hl7.org/fhir/datatypes.html#Period)\nvalue to a CQL DateTime Interval\n@comment: If the start value of the given period is unspecified, the starting\nboundary of the resulting interval will be open (meaning the start of the interval\nis unknown, as opposed to interpreted as the beginning of time).\n*/\ndefine function ToInterval(period FHIR.Period):\n    if period is null then\n        null\n    else\n        if period.\"start\" is null then\n            Interval(period.\"start\".value, period.\"end\".value]\n        else\n            Interval[period.\"start\".value, period.\"end\".value]"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 34
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "EDArrivalTime"
+      }, {
+        "url": "statement",
+        "valueString": "define function \"EDArrivalTime\"(EDEncounter Encounter):\n  Last(\"ED Triage and Evaluation Management\".location Location\n      where Location.location.getLocation().type in \"Emergency Department Location\"\n        and start of Location.period is not null\n        and(Location.period ends 120 minutes or less before start of EDEncounter.period\n            or Location.period overlaps before EDEncounter.period\n            or EDEncounter.period overlaps before Location.period\n            or Location.period starts same as start of EDEncounter.period\n        )\n      return start of Location.period\n      sort ascending\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 35
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CQMCommon"
+      }, {
+        "url": "name",
+        "valueString": "getLocation"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Returns the Location resource specified by the given reference.\n*/\ndefine fluent function getLocation(reference Reference):\n  singleton from (\n    [Location] L where reference.references(L)\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 36
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "references"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Returns true if the given reference is to the given resource\n@comment: Returns true if the `id` element of the given resource exactly equals the tail of the given reference.\nNOTE: This function assumes resources from the same source server.\n*/\ndefine fluent function references(reference Reference, resource Resource):\n  resource.id = Last(Split(reference.reference, '/'))"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 37
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToConcept"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Converts the given FHIR [CodeableConcept](https://hl7.org/fhir/datatypes.html#CodeableConcept) value to a CQL Concept.\n*/\ndefine function ToConcept(concept FHIR.CodeableConcept):\n    if concept is null then\n        null\n    else\n        System.Concept {\n            codes: concept.coding C return ToCode(C),\n            display: concept.text.value\n        }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 38
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToCode"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Converts the given FHIR [Coding](https://hl7.org/fhir/datatypes.html#Coding) value to a CQL Code.\n*/\ndefine function ToCode(coding FHIR.Coding):\n    if coding is null then\n        null\n    else\n        System.Code {\n          code: coding.code.value,\n          system: coding.system.value,\n          version: coding.version.value,\n          display: coding.display.value\n        }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 39
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "EDTreatmentRoomTimeArrivalTime"
+      }, {
+        "url": "statement",
+        "valueString": "define function \"EDTreatmentRoomTimeArrivalTime\"(EDEncounter Encounter):\n  First(EDEncounter.location Location\n      where Location.location.getLocation().type in \"Emergency Department Treatment Location\"\n        and start of Location.period is not null\n      return start of Location.period\n      sort ascending\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 40
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "TransferDecisionUsingOrder"
+      }, {
+        "url": "statement",
+        "valueString": "define function \"TransferDecisionUsingOrder\"(EDEncounter Encounter):\n  Last([ServiceRequest: \"Decision to Transfer\"] TransferOrder\n      where TransferOrder.authoredOn during EDEncounter.period\n        and TransferOrder.intent = 'order'\n        and TransferOrder.status in { 'active', 'completed' }\n      return TransferOrder.authoredOn\n      sort ascending\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 41
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS1264FHIRECATREHQR"
+      }, {
+        "url": "name",
+        "valueString": "EDDepartureTime"
+      }, {
+        "url": "statement",
+        "valueString": "define function \"EDDepartureTime\"(EDEncounter Encounter):\n  Last(\"ED Triage and Evaluation Management\".location Location\n      where Location.location.getLocation().type in \"Emergency Department Location\"\n        and \n        end of Location.period is not null\n        and(Location.period ends 120 minutes or less before start of EDEncounter.period\n            or Location.period overlaps before EDEncounter.period\n            or EDEncounter.period overlaps before Location.period\n            or Location.period starts same as start of EDEncounter.period\n        )\n      return \n      end of Location.period\n      sort ascending\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 42
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CQMCommon"
+      }, {
+        "url": "name",
+        "valueString": "hasPrincipalDiagnosisOf"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n @description: Returns the condition that is specified as the principal diagnosis for the encounter and has a code in the given valueSet.\n @comment: See the QICore 6 Authoring Patterns discussion on [Principal Diagnosis and Present on Admission](https://github.com/cqframework/CQL-Formatting-and-Usage-Wiki/wiki/Authoring-Patterns-QICore-v6.0.0#conditions-present-on-admission-and-principal-diagnoses) for more information\n */\n define fluent function hasPrincipalDiagnosisOf(encounter Encounter, valueSet ValueSet):\n   (encounter.principalDiagnosis()) PD\n     return PD.diagnosis in valueSet\n       or PD.diagnosis.getCondition().code in valueSet"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 43
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CQMCommon"
+      }, {
+        "url": "name",
+        "valueString": "principalDiagnosis"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Returns the claim diagnosis element that is specified as the principal diagnosis for the encounter\n @comment: See the QICore 6 Authoring Patterns discussion on [Principal Diagnosis and Present on Admission](https://github.com/cqframework/CQL-Formatting-and-Usage-Wiki/wiki/Authoring-Patterns-QICore-v6.0.0#conditions-present-on-admission-and-principal-diagnoses) for more information\n*/\ndefine fluent function principalDiagnosis(encounter Encounter):\nsingleton from (\n     (encounter.claimDiagnosis()) CD\n       where CD.type.includesCode(\"Principal Diagnosis\")\n   )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 44
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CQMCommon"
+      }, {
+        "url": "name",
+        "valueString": "claimDiagnosis"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Returns the claim diagnosis elements for the given encounter\n@comment: See the QICore 6 Authoring Patterns discussion on [Principal Diagnosis and Present on Admission](https://github.com/cqframework/CQL-Formatting-and-Usage-Wiki/wiki/Authoring-Patterns-QICore-v6.0.0#conditions-present-on-admission-and-principal-diagnoses) for more information\n*/\ndefine fluent function claimDiagnosis(encounter Encounter):\n  encounter E\n    let \n      claim: ([Claim] C where C.status = 'active' and C.use = 'claim' and exists (C.item I where I.encounter.references(E))),\n      claimItem: (claim.item I where I.encounter.references(E))\n    return claim.diagnosis D where D.sequence in claimItem.diagnosisSequence"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 45
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "references"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Returns true if any of the given references are to the given resource\n@comment: Returns true if the `id` element of the given resource exactly equals the tail of any of the given references.\nNOTE: This function assumes resources from the same source server.\n*/\ndefine fluent function references(references List<Reference>, resource Resource):\n  exists (references R where R.references(resource))"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 46
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "includesCode"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Returns true if the given code is in the given codeList\n@comment: Returns true if the `code` is equivalent to any of the codes in the given `codeList`, false otherwise.\n*/\ndefine fluent function includesCode(codeList List<Concept>, code Code):\n  exists (codeList C where C ~ code)"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 47
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CQMCommon"
+      }, {
+        "url": "name",
+        "valueString": "getCondition"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Returns the Condition resource for the given reference\n*/\ndefine fluent function getCondition(reference Reference):\n  singleton from (([ConditionEncounterDiagnosis] union [ConditionProblemsHealthConcerns]) C where reference.references(C.id))"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 48
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "references"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Returns true if the given reference is to the given resourceId\n@comment: Returns true if the `resourceId` parameter exactly equals the tail of the given reference.\nNOTE: This function assumes resources from the same source server.\n*/\ndefine fluent function references(reference Reference, resourceId String):\n  resourceId = Last(Split(reference.reference, '/'))"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 49
+      } ]
+    } ],
+    "name": "EffectiveDataRequirements",
+    "status": "active",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/library-type",
+        "code": "module-definition"
+      } ]
+    },
+    "relatedArtifact": [ {
+      "type": "depends-on",
+      "display": "Library SDE",
+      "resource": "https://madie.cms.gov/Library/SupplementalDataElements|5.1.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library FHIRHelpers",
+      "resource": "https://madie.cms.gov/Library/FHIRHelpers|4.4.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library CQMCommon",
+      "resource": "https://madie.cms.gov/Library/CQMCommon|4.1.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library QICoreCommon",
+      "resource": "https://madie.cms.gov/Library/QICoreCommon|4.0.000"
+    }, {
+      "type": "depends-on",
+      "display": "Code system SNOMEDCT",
+      "resource": "http://snomed.info/sct"
+    }, {
+      "type": "depends-on",
+      "display": "Code system Diagnosis Type",
+      "resource": "http://terminology.hl7.org/CodeSystem/ex-diagnosistype"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Emergency Department Evaluation and Management Visit",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1010"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Triage",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.279"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Emergency Department Location",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.284"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Emergency Department Treatment Location",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.278"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Decision to Transfer",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.286"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Observation Services",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Mental Health Diagnosis without Substance Use Disorders",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.285"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Payer Type",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"
+    } ],
+    "parameter": [ {
+      "name": "Measurement Period",
+      "use": "in",
+      "min": 0,
+      "max": "1",
+      "type": "Period"
+    }, {
+      "name": "Numerator",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Denominator",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Initial Population",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "SDE Sex",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "Coding"
+    }, {
+      "name": "SDE Payer",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "SDE Ethnicity",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "Resource"
+    }, {
+      "name": "SDE Race",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "Resource"
+    }, {
+      "name": "Stratification 4",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Stratification 3",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Stratification 2",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Stratification 1",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    } ],
+    "dataRequirement": [ {
+      "type": "Patient",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ],
+      "mustSupport": [ "extension", "url" ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type", "period", "status", "status.value", "location", "location.type", "hospitalization", "hospitalization.dischargeDisposition", "diagnosis", "diagnosis.code" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.279"
+      } ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type", "period", "status", "status.value", "location", "location.type", "hospitalization", "hospitalization.dischargeDisposition", "diagnosis", "diagnosis.code" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1010"
+      } ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "period", "location", "location.type", "hospitalization", "hospitalization.dischargeDisposition", "type", "diagnosis", "diagnosis.code" ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type", "period", "status", "status.value", "location", "location.type", "hospitalization", "hospitalization.dischargeDisposition", "diagnosis", "diagnosis.code" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143"
+      } ]
+    }, {
+      "type": "Resource",
+      "profile": [ "http://hl7.org/fhir/StructureDefinition/Resource" ],
+      "mustSupport": [ "id", "id.value" ]
+    }, {
+      "type": "Location",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-location" ]
+    }, {
+      "type": "ServiceRequest",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ],
+      "mustSupport": [ "code", "authoredOn", "authoredOn.value", "intent", "intent.value", "status", "status.value" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.286"
+      } ]
+    }, {
+      "type": "Claim",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-claim" ],
+      "mustSupport": [ "status", "status.value", "use", "use.value", "item" ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+    }, {
+      "type": "Coverage",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ],
+      "mustSupport": [ "type", "period" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"
+      } ]
+    } ]
+  } ],
+  "extension": [ {
+    "id": "supplementalDataGuidance",
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-supplementalDataGuidance",
+    "extension": [ {
+      "url": "guidance",
+      "valueString": "For every patient evaluated by this measure also identify payer, race, ethnicity and sex"
+    }, {
+      "url": "usage",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+          "code": "supplemental-data",
+          "display": "Supplemental Data"
+        } ],
+        "text": "Supplemental Data Guidance"
+      }
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-definitionTerm",
+    "extension": [ {
+      "url": "term",
+      "valueString": "Boarding"
+    }, {
+      "url": "definition",
+      "valueMarkdown": "The practice of holding transfer patients in the emergency department after a decision to transfer has been made."
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-definitionTerm",
+    "extension": [ {
+      "url": "term",
+      "valueString": "ED Observation"
+    }, {
+      "url": "definition",
+      "valueMarkdown": "Observation stays are inclusive of both ED observation care in which a patient initially evaluated in the ED is cared for under observation status for an extended period of time in the ED or in a care area dedicated to observation care, as well as hospital observation stays in which a patient initially evaluated in the ED is cared for in observation status often in a hospital bed used for both inpatient or observation status admissions. Because these two forms of observation stays cannot be easily distinguished in a standardized fashion in existing electronic health record data ontologies, for the purposes of this quality measure all observation stays have been considered an exclusion from both numerator outcomes 3 and 4."
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-definitionTerm",
+    "extension": [ {
+      "url": "term",
+      "valueString": "Left Without Being Seen (LWBS)"
+    }, {
+      "url": "definition",
+      "valueMarkdown": "Patients arrive to the ED for evaluation and leave before seeing a physician, advanced practice nurse, or physician’s assistant."
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-definitionTerm",
+    "extension": [ {
+      "url": "term",
+      "valueString": "Mental Health"
+    }, {
+      "url": "definition",
+      "valueMarkdown": "Mental health generally refers to mental health diagnoses, life stressors and crises, and stress-related physical symptoms (American Medical Association [AMA], 2022). For this measure, mental health conditions will be defined separately from substance use disorders."
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-effectiveDataRequirements",
+    "valueReference": {
+      "reference": "#effective-data-requirements"
+    }
+  } ],
+  "url": "https://madie.cms.gov/Measure/CMS1264FHIRECATREHQR",
+  "identifier": [ {
+    "use": "usual",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "short-name",
+        "display": "Short Name"
+      } ]
+    },
+    "system": "https://madie.cms.gov/measure/shortName",
+    "value": "CMS1264FHIR"
+  }, {
+    "use": "official",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "version-independent",
+        "display": "Version Independent"
+      } ]
+    },
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:uuid:eb3e269b-97ef-4548-9e87-c89b25789184"
+  }, {
+    "use": "official",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "version-specific",
+        "display": "Version Specific"
+      } ]
+    },
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:uuid:c9244dc0-5afa-4c82-b3a5-f93794048835"
+  }, {
+    "use": "official",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "publisher",
+        "display": "Publisher"
+      } ]
+    },
+    "system": "https://madie.cms.gov/measure/cmsId",
+    "value": "1264FHIR",
+    "assigner": {
+      "display": "CMS"
+    }
+  } ],
+  "version": "0.5.001",
+  "name": "CMS1264FHIRECATREHQR",
+  "title": "Emergency Care Access & Timeliness (REHQR)FHIR",
+  "status": "active",
+  "experimental": false,
+  "date": "2025-06-20T16:58:44+00:00",
+  "publisher": "Centers for Medicare & Medicaid Services (CMS)",
+  "contact": [ {
+    "telecom": [ {
+      "system": "url",
+      "value": "https://www.cms.gov/"
+    } ]
+  } ],
+  "description": "This measure assesses the variation in access and timeliness of emergency care to support rural emergency hospital (REH) quality improvement for patients requiring emergency care in an emergency department (ED). This measure is designed to align with incentives to promote improved care both in EDs and the broader health system to help identify where patients do not receive timely access to emergency care.\n\nEmergency care access and timeliness gaps are inclusive of several concepts pertaining to boarding and crowding in an ED, including significantly longer ED wait times, higher left without being seen rates, longer boarding times, and longer total length of stay in the ED.",
+  "usage": "Measure Score Calculation\nThe measure score is calculated at the individual ED level as the proportion of ED visits where any one of the four outcomes occurred, as defined by the numerator. For CMS Certification Numbers (CCNs) with more than one ED, scores are combined as a weighted average for that CCN. \n\nThis dQM is an episode-based measure. An episode is defined as an ED visit that ends during the measurement period. \n\nThis FHIR-based measure has been derived from the QDM-based measure: CMS1264v1. \n\nPlease refer to the HL7 QI-Core Implementation Guide (https://hl7.org/fhir/us/qicore/STU6/) for more information on QI-Core and mapping recommendations from QDM to QI-Core STU 6. (https://hl7.org/fhir/us/qicore/STU6/qdm-to-qicore.html).",
+  "copyright": "Limited proprietary coding is contained in these specifications for user convenience. Users of proprietary code sets should obtain all necessary licenses from the owners of the code sets.\n\nThis material contains SNOMED Clinical Terms(R) (SNOMED CT[R]) copyright 2004-2024 International Health Terminology Standards Development Organisation. All rights reserved.\n\nICD-10 copyright 2024 World Health Organization. All Rights Reserved.\n\nCPT(R) contained in the measure specifications is copyright 2004-2024 American Medical Association.",
+  "effectivePeriod": {
+    "start": "2027-01-01",
+    "end": "2027-12-31"
+  },
+  "author": [ {
+    "name": "Acumen, LLC",
+    "telecom": [ {
+      "system": "url",
+      "value": "https://www.acumenllc.com/"
+    } ]
+  } ],
+  "relatedArtifact": [ {
+    "type": "citation",
+    "citation": "Citation - American Medical Association. (2022). What is Behavioral Health. https://www.ama-assn.org/delivering-care/public-health/what-behavioral-health\n"
+  } ],
+  "library": [ "https://madie.cms.gov/Library/CMS1264FHIRECATREHQR" ],
+  "disclaimer": "These performance specifications are not clinical guidelines, do not establish a standard of medical care, and have not been tested for all potential applications.\n\nTHE MEASURES AND SPECIFICATIONS ARE PROVIDED \"AS IS\" WITHOUT WARRANTY OF ANY KIND.\n\nDue to technical limitations, registered trademarks are indicated by (R) or [R] and unregistered trademarks are indicated by (TM) or [TM].",
+  "rationale": "This measure aims to reduce patient harm and improve outcomes for patients requiring emergency care in an ED by addressing the variation in emergency care and measuring access and timeliness of emergency care. There are long-standing concerns about parameters that impact access and timeliness of care in the ED. Currently, there are no national metrics to assess the proportion of patients impacted by access and timeliness of ED care.",
+  "clinicalRecommendationStatement": "Changes in care provision and workflow are anticipated from implementing this Emergency Care Access & Timeliness (ECAT) REH dQM. To improve time to place a patient in a treatment space (as defined by the numerator below), changes in care may include improving patient flow processes, triaging interventions (such as inclusion of predictive models or different clinical deployment), or increased availability and access to outpatient clinical and social services. Other changes in care may include increases in local healthcare capacity including mental health care (mental health liaisons, co-located mental health services, or specialist psychiatry services), and use of ‘hospital home’ care models. Furthermore, changes to the following may also be considered: staffing models, ED observation units, diagnostic testing and imaging processes, or physical changes to ED layout.\n\nSuch changes may result in the following: decreased waiting room time, decreased door to provider times, higher proportion of patients seen within 1 hour, decrease in proportion of patients who leave without being evaluated, better management of mental health diagnoses, reduced length of stay in the ED, decreased turnaround time for diagnostic tests and imaging, improved time to treatment, and decreased ambulance diversion.\n\nChanges in clinician or patient-reported outcomes and costs may include the following: improved patient experience, decrease in morbidity and mortality, increased ED revenue, and improved patient outcomes.",
+  "group": [ {
+    "id": "Group_1",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-scoring",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-scoring",
+          "code": "proportion",
+          "display": "Proportion"
+        } ]
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-populationBasis",
+      "valueCode": "Encounter"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-type",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-type",
+          "code": "outcome",
+          "display": "Outcome"
+        } ]
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-rateAggregation",
+      "valueCode": "None"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-improvementNotation",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-improvement-notation",
+          "code": "decrease",
+          "display": "Decreased score indicates improvement"
+        } ]
+      }
+    } ],
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "description": "All ED visits at REHs that end during the measurement period for all patients",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Initial Population"
+      }
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "description": "Equals Initial Population",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Denominator"
+      }
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "description": "The numerator is comprised of any ED visit in the denominator with any quality gap in access; if the patient experiences any of the following during a visit, the visit is included in the numerator:\n1. The patient waited longer than 60 minutes (1 hour) after arrival to ED to be placed in a treatment room or dedicated treatment area that allows for audiovisual privacy during history-taking and physical examination, or\n2. The patient left the ED without being evaluated, or\n3. The patient, if transferred, boarded for longer than 240 minutes (4 hours), or\n4. The patient had an ED length of stay (LOS) (time from ED arrival to ED departure as defined by the ED departure timestamp indicating when the patient physically left the ED) of longer than 480 minutes (8 hours).\n\nED encounters with ED observation stays are excluded from criteria #3 (boarded) and #4 (ED LOS)",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Numerator"
+      }
+    } ],
+    "stratifier": [ {
+      "id": "Stratification_1_1",
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-appliesTo",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "initial-population",
+            "display": "Initial Population"
+          } ]
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-appliesTo",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "denominator",
+            "display": "Denominator"
+          } ]
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-appliesTo",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "numerator",
+            "display": "Numerator"
+          } ]
+        }
+      } ],
+      "description": "All patients aged less than 18 years seen in the ED who do not have an ED encounter principal diagnosis consistent with mental health diagnosis.  Patients who have an ED encounter principal diagnosis consistent with substance use disorders will be included in this stratification.",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Stratification 1"
+      }
+    }, {
+      "id": "Stratification_1_2",
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-appliesTo",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "initial-population",
+            "display": "Initial Population"
+          } ]
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-appliesTo",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "denominator",
+            "display": "Denominator"
+          } ]
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-appliesTo",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "numerator",
+            "display": "Numerator"
+          } ]
+        }
+      } ],
+      "description": "All patients aged 18 years and older seen in the ED who do not have an ED encounter principal diagnosis consistent with mental health diagnosis.  Patients who have an ED encounter principal diagnosis consistent with substance use disorders will be included in this stratification.",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Stratification 2"
+      }
+    }, {
+      "id": "Stratification_1_3",
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-appliesTo",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "initial-population",
+            "display": "Initial Population"
+          } ]
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-appliesTo",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "denominator",
+            "display": "Denominator"
+          } ]
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-appliesTo",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "numerator",
+            "display": "Numerator"
+          } ]
+        }
+      } ],
+      "description": "All patients aged less than 18 years seen in the ED who have an ED encounter principal diagnosis consistent with mental health diagnosis.",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Stratification 3"
+      }
+    }, {
+      "id": "Stratification_1_4",
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-appliesTo",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "initial-population",
+            "display": "Initial Population"
+          } ]
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-appliesTo",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "denominator",
+            "display": "Denominator"
+          } ]
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-appliesTo",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+            "code": "numerator",
+            "display": "Numerator"
+          } ]
+        }
+      } ],
+      "description": "All patients aged 18 years and older seen in the ED who have an ED encounter principal diagnosis consistent with mental health diagnosis.",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Stratification 4"
+      }
+    } ]
+  } ],
+  "supplementalData": [ {
+    "id": "sde-ethnicity",
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Ethnicity",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Ethnicity"
+    }
+  }, {
+    "id": "sde-payer",
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Payer",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Payer"
+    }
+  }, {
+    "id": "sde-race",
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Race",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Race"
+    }
+  }, {
+    "id": "sde-sex",
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Sex",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Sex"
+    }
+  } ]
+}

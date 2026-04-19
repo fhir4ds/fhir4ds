@@ -1,0 +1,22 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "b9503ddf-80f7-4839-98e3-e7e2af00bfb0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "doNotPerform": false,
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183524004",
+      "display": "Referral to psychiatry service (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/41664f5f-5280-4b5b-a9f1-289a412dbc18"
+  },
+  "authoredOn": "2026-06-21T08:00:00.000+00:00"
+}

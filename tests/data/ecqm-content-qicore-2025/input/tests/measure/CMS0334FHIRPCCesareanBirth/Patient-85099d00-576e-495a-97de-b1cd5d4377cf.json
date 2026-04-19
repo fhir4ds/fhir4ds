@@ -1,0 +1,58 @@
+{
+  "resourceType": "Patient",
+  "id": "85099d00-576e-495a-97de-b1cd5d4377cf",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "text": {
+    "status": "generated",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">AssessP0RelDateTime42wk1MinB4TimeOfDelivTime <b>DENOMFail</b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>a4f89b063325e93d9c0619322ab83006b1a8a4bc33d4a91258dd77ce8e032520</td></tr><tr><td>Date of birth</td><td><span>14 February 1985</span></td></tr></tbody></table></div>"
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "1002-5",
+        "display": "American Indian or Alaska Native",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "American Indian or Alaska Native"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Hispanic or Latino"
+    } ]
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://bonnie-fhir.healthit.gov/",
+    "value": "63487c2e0968f80122540166"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "family": "DENOMFail",
+    "given": [ "AssessP0RelDateTime42wk1MinB4TimeOfDelivTime" ]
+  } ],
+  "gender": "female",
+  "birthDate": "1998-02-14"
+}

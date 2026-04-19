@@ -1,0 +1,30 @@
+{
+  "resourceType": "Procedure",
+  "id": "eefcfe33-9b07-48ff-bf3d-3c3a46541ea0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-02-23T11:30:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "410175003",
+      "display": "Dietary regime management (procedure)"
+    } ],
+    "text": "Dietary regime management (procedure)"
+  },
+  "subject": {
+    "reference": "Patient/f06bb07a-3410-410d-a859-8bd57a79cf51"
+  },
+  "encounter": {
+    "reference": "Encounter/NoscreRefAsseModDxCp2MSROBSPass4"
+  },
+  "performedPeriod": {
+    "start": "2026-02-23T11:30:00.000+00:00",
+    "end": "2026-02-25T08:15:00.000+00:00"
+  }
+}

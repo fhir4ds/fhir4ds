@@ -1,0 +1,105 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "f175f028-f3df-4ea0-978b-90ff17bb7f0c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "86fcb319-ecbe-466b-857b-b5183b19d1a0-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "b6995e3c-319c-45f1-8aca-4db81b6730f6"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#86fcb319-ecbe-466b-857b-b5183b19d1a0-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient with office visit and patient provider interaction encounters and heart failure diagnosis. Patient included in initial population due to 2 encounters and heart failure diagnosis during measurement period. "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS144FHIRHFBetaBlockerTherapyforLVSD",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/b6995e3c-319c-45f1-8aca-4db81b6730f6"
+  }, {
+    "reference": "Encounter/971fe353-3587-4766-b02c-48f2afd91819"
+  }, {
+    "reference": "Encounter/29fe2ee6-b085-403e-82c4-c9109f51a52d"
+  }, {
+    "reference": "AllergyIntolerance/69c695cb-883b-4187-8159-1b221789dfd8"
+  }, {
+    "reference": "Condition/e2f5f589-8546-4385-8a33-2a6a6ddc199a"
+  }, {
+    "reference": "Condition/e63ced75-f30a-4efd-9520-f3f17dd30fa1"
+  } ]
+}

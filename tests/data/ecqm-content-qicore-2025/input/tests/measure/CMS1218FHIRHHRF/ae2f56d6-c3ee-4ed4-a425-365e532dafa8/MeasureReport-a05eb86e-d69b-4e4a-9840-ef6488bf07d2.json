@@ -1,0 +1,93 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "a05eb86e-d69b-4e4a-9840-ef6488bf07d2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "468aa5bc-f5b0-494e-95fe-3b891b53366a-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "ae2f56d6-c3ee-4ed4-a425-365e532dafa8"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#468aa5bc-f5b0-494e-95fe-3b891b53366a-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Elective hospitalization with procedure (general anesthesia) within first 3 days of encounter. PaCO2 >50 and pH <7.30 at 48 hours of start of procedure. Meets Denom Exclusion.\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS1218FHIRHHRF",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Encounter/623e000c-99df-4c95-b145-d20fa130fb52"
+  }, {
+    "reference": "Observation/99820fe6-765e-4940-82fd-9856ce173c05"
+  }, {
+    "reference": "Procedure/97eb007a-fc52-44a1-8650-d4328a16b725"
+  }, {
+    "reference": "Patient/ae2f56d6-c3ee-4ed4-a425-365e532dafa8"
+  }, {
+    "reference": "Observation/7cb30e80-41bd-49a8-b3d0-756ac57e0b16"
+  } ]
+}

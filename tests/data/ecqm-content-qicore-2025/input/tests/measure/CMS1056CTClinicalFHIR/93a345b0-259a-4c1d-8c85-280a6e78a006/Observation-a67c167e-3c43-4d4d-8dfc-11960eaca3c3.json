@@ -1,0 +1,34 @@
+{
+  "resourceType": "Observation",
+  "id": "a67c167e-3c43-4d4d-8dfc-11960eaca3c3",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "imaging",
+      "display": "Imaging"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "96914-7",
+      "display": "CT dose and image quality category"
+    } ],
+    "text": "CT dose and image quality category"
+  },
+  "subject": {
+    "reference": "Patient/93a345b0-259a-4c1d-8c85-280a6e78a006"
+  },
+  "effectiveDateTime": "2026-03-02T00:00:00+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "LA31753-9",
+      "display": "Abdomen and Pelvis Routine Dose"
+    } ]
+  }
+}

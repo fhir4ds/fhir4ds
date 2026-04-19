@@ -1,0 +1,109 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "b3a10910-bbeb-4862-827f-98b215c54fdf",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "daa1947b-712f-4b5e-bb8b-37453dfea9a3-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "7e7f4563-a628-40ab-990b-ca0837313759"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#daa1947b-712f-4b5e-bb8b-37453dfea9a3-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient refuses LMWH adm in Observation Service\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS190VTEProphylaxisICUFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/7e7f4563-a628-40ab-990b-ca0837313759"
+  }, {
+    "reference": "Encounter/f147f1b4-2b3e-4a14-80d7-6477d5fe6f01"
+  }, {
+    "reference": "Encounter/78caa562-0cf8-490f-a6d9-f2fba962e1d0"
+  }, {
+    "reference": "Coverage/6d071111-00ce-4cef-8c0e-0100a471dfd4"
+  }, {
+    "reference": "MedicationAdministration/1b5312f4-3f93-448e-9c08-dcb77061205e"
+  }, {
+    "reference": "Location/ef6b96a7-ba92-4a8c-9493-2659a52f8991"
+  }, {
+    "reference": "Organization/c58f1d60-ecf0-4a5c-9384-8478f9b2c584"
+  }, {
+    "reference": "Practitioner/fd7e1bae-63c0-4568-badf-800aad3dd872"
+  } ]
+}

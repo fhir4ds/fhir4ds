@@ -1,0 +1,38 @@
+{
+  "resourceType": "Condition",
+  "id": "fac8b9d8-9b0c-4861-9c8e-b67e9f179da7",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "version": "4.0.1",
+      "code": "inactive",
+      "display": "Inactive",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2020-09",
+      "code": "111633007",
+      "display": "Open fracture of sacrum AND/OR coccyx with complete cauda equina lesion (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/ff9913bf-ff27-4b92-b28c-d3eda9866d2f"
+  },
+  "onsetDateTime": "2026-01-08T08:00:00.000+00:00",
+  "abatementDateTime": "2026-10-09T15:15:00.000+00:00"
+}

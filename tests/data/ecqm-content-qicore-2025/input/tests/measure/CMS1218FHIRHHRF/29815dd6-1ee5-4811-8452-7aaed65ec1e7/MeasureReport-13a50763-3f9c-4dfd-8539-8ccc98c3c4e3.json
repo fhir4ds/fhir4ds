@@ -1,0 +1,93 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "13a50763-3f9c-4dfd-8539-8ccc98c3c4e3",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "e5668292-26d4-41e9-a074-8009b0b03a7b-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "29815dd6-1ee5-4811-8452-7aaed65ec1e7"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#e5668292-26d4-41e9-a074-8009b0b03a7b-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Elective hosp with proc (anesthesia) within first 3 days of encounter. Intubated within 30 days after end of anesthesia, outside of OR location. Had mech vent start >1 hr. before start of first proc's relevant datetime. Meets Exc.\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS1218FHIRHHRF",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Procedure/12cc07f6-43de-47ef-9fcb-927bff917ee7"
+  }, {
+    "reference": "Procedure/b4a33157-e86b-4233-9348-967a26a12633"
+  }, {
+    "reference": "Patient/29815dd6-1ee5-4811-8452-7aaed65ec1e7"
+  }, {
+    "reference": "Encounter/ff9b2776-29f7-4abe-baa1-7d49db87ec0e"
+  }, {
+    "reference": "Procedure/761ec1ea-0880-4171-bdad-2424f26236a9"
+  } ]
+}

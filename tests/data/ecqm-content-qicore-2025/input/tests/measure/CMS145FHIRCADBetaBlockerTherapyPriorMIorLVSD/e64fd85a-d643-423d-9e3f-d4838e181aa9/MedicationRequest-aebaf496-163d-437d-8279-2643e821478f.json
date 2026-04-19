@@ -1,0 +1,34 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "aebaf496-163d-437d-8279-2643e821478f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "04012024",
+      "code": "1234256",
+      "display": "4 ML labetalol hydrochloride 5 MG/ML Cartridge"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/e64fd85a-d643-423d-9e3f-d4838e181aa9"
+  },
+  "authoredOn": "2026-08-16T16:00:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/413bf0c2-1899-4a8e-b4af-b093f99aa077"
+  },
+  "dosageInstruction": [ {
+    "timing": {
+      "repeat": {
+        "boundsPeriod": {
+          "start": "2026-08-16T16:00:00.000+00:00",
+          "end": "2026-12-02T16:00:00.000+00:00"
+        }
+      }
+    }
+  } ]
+}

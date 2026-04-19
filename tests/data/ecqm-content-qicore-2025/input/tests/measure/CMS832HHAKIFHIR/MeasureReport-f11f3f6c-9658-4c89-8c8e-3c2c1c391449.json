@@ -1,0 +1,99 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "f11f3f6c-9658-4c89-8c8e-3c2c1c391449",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "b8d15820-d8f2-4d51-abe9-c7b9195112c3-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "75cf10f8-a7a4-4ac5-b60f-f73bfc9ae92e"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#b8d15820-d8f2-4d51-abe9-c7b9195112c3-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "IP Encounter with 0.4mg/dL increase in SCr. Meets Exclusion - must be at least a 0.3 increase. \nVScode: Denominator Exclusion=[Encounter(id=DENEXPass-CreatinineIncrease0.4mg-01)]\nMADiE highlight issue special characters even in titles"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS832HHAKIFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "MeasureReport/e2c30356-be73-430b-8864-8a69510a6480"
+  }, {
+    "reference": "Encounter/3430b7a5-f180-4ff7-b1c0-6bbc60b7445d"
+  }, {
+    "reference": "Observation/0bc84f15-023b-414d-b04e-5a86e5acbe8d"
+  }, {
+    "reference": "Patient/75cf10f8-a7a4-4ac5-b60f-f73bfc9ae92e"
+  }, {
+    "reference": "Observation/f2878d52-32e4-4716-aa1b-a03a7937bdd8"
+  }, {
+    "reference": "Coverage/6e3a402f-fe76-4cfe-b935-453ecc592d1e"
+  }, {
+    "reference": "Organization/462a0014-a3f9-424f-b525-707c0556eef1"
+  }, {
+    "reference": "Observation/0230c2b4-9737-4e3f-8ca2-f7b0f8c125b4"
+  } ]
+}

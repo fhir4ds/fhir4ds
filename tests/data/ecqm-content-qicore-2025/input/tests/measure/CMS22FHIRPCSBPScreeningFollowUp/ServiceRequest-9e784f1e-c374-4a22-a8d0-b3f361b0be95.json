@@ -1,0 +1,33 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "9e784f1e-c374-4a22-a8d0-b3f361b0be95",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "105480006",
+        "display": "Procedure declined by patient (situation)",
+        "userSelected": true
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "plan",
+  "doNotPerform": true,
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183624006",
+      "display": "Follow-up 2-3 months (finding)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/6924b5e5-412b-4135-b74e-7f400676c8bd"
+  },
+  "authoredOn": "2026-12-31T08:20:00.000+00:00"
+}

@@ -1,0 +1,139 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.67.1.101.1.257-20230318",
+  "meta": {
+    "versionId": "27",
+    "lastUpdated": "2023-12-21T17:43:03.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "MNCM Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-02-04"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2023-03-18"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.67.1.101.1.257",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.67.1.101.1.257"
+  } ],
+  "version": "20230318",
+  "name": "Dysthymia",
+  "title": "Dysthymia",
+  "status": "active",
+  "date": "2023-03-18T01:02:41-04:00",
+  "publisher": "MNCM Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts for diagnoses related to dysthymia.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of dysthymia, including early and late onset, and primary and secondary dysthymia.),(Exclusion Criteria: No exclusions.)",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "1153575004",
+        "display": "Persistent depressive disorder (disorder)"
+      }, {
+        "code": "19694002",
+        "display": "Late onset dysthymia (disorder)"
+      }, {
+        "code": "2506003",
+        "display": "Early onset dysthymia (disorder)"
+      }, {
+        "code": "3109008",
+        "display": "Secondary dysthymia early onset (disorder)"
+      }, {
+        "code": "36170009",
+        "display": "Secondary dysthymia late onset (disorder)"
+      }, {
+        "code": "38451003",
+        "display": "Primary dysthymia early onset (disorder)"
+      }, {
+        "code": "67711008",
+        "display": "Primary dysthymia late onset (disorder)"
+      }, {
+        "code": "78667006",
+        "display": "Dysthymia (disorder)"
+      }, {
+        "code": "83176005",
+        "display": "Primary dysthymia (disorder)"
+      }, {
+        "code": "85080004",
+        "display": "Secondary dysthymia (disorder)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:7fd906a6-703f-4a30-8f70-f5f42be8fcda",
+    "timestamp": "2025-06-20T16:57:40-04:00",
+    "total": 10,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1153575004",
+      "display": "Persistent depressive disorder (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "19694002",
+      "display": "Late onset dysthymia (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "2506003",
+      "display": "Early onset dysthymia (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "3109008",
+      "display": "Secondary dysthymia early onset (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "36170009",
+      "display": "Secondary dysthymia late onset (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "38451003",
+      "display": "Primary dysthymia early onset (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "67711008",
+      "display": "Primary dysthymia late onset (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "78667006",
+      "display": "Dysthymia (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "83176005",
+      "display": "Primary dysthymia (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "85080004",
+      "display": "Secondary dysthymia (disorder)"
+    } ]
+  }
+}

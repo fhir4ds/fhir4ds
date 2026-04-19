@@ -1,0 +1,14 @@
+{
+  "resourceType": "Medication",
+  "id": "f36ed433-5af7-49aa-921b-135d0719f1e9",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medication" ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "312836",
+      "display": "rivastigmine 6 MG Oral Capsule"
+    } ]
+  }
+}

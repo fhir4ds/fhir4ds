@@ -1,0 +1,413 @@
+{
+  "resourceType": "Bundle",
+  "id": "62fd4b6a0968f8012246b316",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/c1493a4a-56c3-40ba-b209-edca6d9a0b9d",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "c1493a4a-56c3-40ba-b209-edca6d9a0b9d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "62fd4b6a0968f8012246b316"
+      } ],
+      "name": [ {
+        "family": "NUMERPass",
+        "given": [ "2Referrals1MinApart1stClosed" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1990-12-31"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/c1493a4a-56c3-40ba-b209-edca6d9a0b9d"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Task/576a9eb7-cbd3-4ba4-9afe-4127d5f7f884",
+    "resource": {
+      "resourceType": "Task",
+      "id": "576a9eb7-cbd3-4ba4-9afe-4127d5f7f884",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-task" ]
+      },
+      "identifier": [ {
+        "use": "official",
+        "system": "http:/goodhealth.org/identifiers",
+        "value": "20170201-002"
+      } ],
+      "basedOn": [ {
+        "reference": "ServiceRequest/1ee4dc43-a959-4f25-a26a-f6cc367134b6"
+      } ],
+      "status": "completed",
+      "intent": "order",
+      "priority": "routine",
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.72",
+          "code": "11488-4",
+          "display": "Consult note",
+          "userSelected": true
+        } ]
+      },
+      "for": {
+        "reference": "Patient/c1493a4a-56c3-40ba-b209-edca6d9a0b9d"
+      },
+      "executionPeriod": {
+        "start": "2026-07-06T08:00:00.000+00:00",
+        "end": "2026-07-06T08:10:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Task/576a9eb7-cbd3-4ba4-9afe-4127d5f7f884"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/ServiceRequest/1ee4dc43-a959-4f25-a26a-f6cc367134b6",
+    "resource": {
+      "resourceType": "ServiceRequest",
+      "id": "1ee4dc43-a959-4f25-a26a-f6cc367134b6",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+      },
+      "status": "active",
+      "intent": "order",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "103696004",
+          "display": "Patient referral to specialist (procedure)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/c1493a4a-56c3-40ba-b209-edca6d9a0b9d"
+      },
+      "authoredOn": "2026-06-06T08:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "ServiceRequest/1ee4dc43-a959-4f25-a26a-f6cc367134b6"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Task/0769ced5-abe6-4a0a-8efe-7113a4ba8d69",
+    "resource": {
+      "resourceType": "Task",
+      "id": "0769ced5-abe6-4a0a-8efe-7113a4ba8d69",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-task" ]
+      },
+      "identifier": [ {
+        "use": "official",
+        "system": "http:/goodhealth.org/identifiers",
+        "value": "20170201-002"
+      } ],
+      "basedOn": [ {
+        "reference": "ServiceRequest/f08b896d-6a3c-4aaf-bee6-9f6d93e1e6d7"
+      } ],
+      "status": "failed",
+      "intent": "order",
+      "priority": "routine",
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.72",
+          "code": "11488-4",
+          "display": "Consult note",
+          "userSelected": true
+        } ]
+      },
+      "for": {
+        "reference": "Patient/c1493a4a-56c3-40ba-b209-edca6d9a0b9d"
+      },
+      "executionPeriod": {
+        "start": "2026-07-06T08:01:00.000+00:00",
+        "end": "2026-07-06T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Task/0769ced5-abe6-4a0a-8efe-7113a4ba8d69"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/ServiceRequest/f08b896d-6a3c-4aaf-bee6-9f6d93e1e6d7",
+    "resource": {
+      "resourceType": "ServiceRequest",
+      "id": "f08b896d-6a3c-4aaf-bee6-9f6d93e1e6d7",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+      },
+      "status": "active",
+      "intent": "order",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "103696004",
+          "display": "Patient referral to specialist (procedure)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/c1493a4a-56c3-40ba-b209-edca6d9a0b9d"
+      },
+      "authoredOn": "2026-06-06T08:01:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "ServiceRequest/f08b896d-6a3c-4aaf-bee6-9f6d93e1e6d7"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/d0fbd26c-475d-4e6d-8200-ddfb64750efc",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "d0fbd26c-475d-4e6d-8200-ddfb64750efc",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "359960003",
+          "display": "Ophthalmologic examination and evaluation under general anesthesia, limited (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/c1493a4a-56c3-40ba-b209-edca6d9a0b9d"
+      },
+      "period": {
+        "start": "2026-05-27T08:00:00.000+00:00",
+        "end": "2026-05-27T09:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/d0fbd26c-475d-4e6d-8200-ddfb64750efc"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/a9b94459-2ce2-46a2-8aa5-a60cb1e7789f",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "a9b94459-2ce2-46a2-8aa5-a60cb1e7789f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/c1493a4a-56c3-40ba-b209-edca6d9a0b9d"
+      },
+      "payor": [ {
+        "reference": "Organization/4cb4f32b-446d-48bc-af69-d36e3ce7e927"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/a9b94459-2ce2-46a2-8aa5-a60cb1e7789f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/4cb4f32b-446d-48bc-af69-d36e3ce7e927",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "4cb4f32b-446d-48bc-af69-d36e3ce7e927",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/4cb4f32b-446d-48bc-af69-d36e3ce7e927"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/eeaa6d9f-01d1-490b-baf1-00afe0f30988",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "eeaa6d9f-01d1-490b-baf1-00afe0f30988",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "123456"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/eeaa6d9f-01d1-490b-baf1-00afe0f30988"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/02acaf2f-136e-4707-80ee-6710f0510877",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "02acaf2f-136e-4707-80ee-6710f0510877",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "30543c95-c487-4391-a14b-9d2db547485b-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "c1493a4a-56c3-40ba-b209-edca6d9a0b9d"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#30543c95-c487-4391-a14b-9d2db547485b-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": " 2 referrals 1 minute apart with 1st referral receiving a consultant report. 2nd consultant report with failed status "
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS50FHIRCRLReceiptofSpecialistReport",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/c1493a4a-56c3-40ba-b209-edca6d9a0b9d"
+      }, {
+        "reference": "Task/576a9eb7-cbd3-4ba4-9afe-4127d5f7f884"
+      }, {
+        "reference": "ServiceRequest/1ee4dc43-a959-4f25-a26a-f6cc367134b6"
+      }, {
+        "reference": "Task/0769ced5-abe6-4a0a-8efe-7113a4ba8d69"
+      }, {
+        "reference": "ServiceRequest/f08b896d-6a3c-4aaf-bee6-9f6d93e1e6d7"
+      }, {
+        "reference": "Encounter/d0fbd26c-475d-4e6d-8200-ddfb64750efc"
+      }, {
+        "reference": "Coverage/a9b94459-2ce2-46a2-8aa5-a60cb1e7789f"
+      }, {
+        "reference": "Organization/4cb4f32b-446d-48bc-af69-d36e3ce7e927"
+      }, {
+        "reference": "Practitioner/eeaa6d9f-01d1-490b-baf1-00afe0f30988"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/02acaf2f-136e-4707-80ee-6710f0510877"
+    }
+  } ]
+}

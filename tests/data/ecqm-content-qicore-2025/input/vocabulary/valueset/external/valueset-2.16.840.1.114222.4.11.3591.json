@@ -1,0 +1,183 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.114222.4.11.3591-20250419",
+  "meta": {
+    "versionId": "32",
+    "lastUpdated": "2025-04-19T06:02:35.000-04:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "HL7 US Realm Program Management Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-04-19"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-04-19"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.114222.4.11.3591"
+  } ],
+  "version": "20250419",
+  "name": "PayerType",
+  "title": "Payer Type",
+  "status": "active",
+  "date": "2025-04-19T06:02:35-04:00",
+  "publisher": "HL7 US Realm Program Management Steward",
+  "description": "2025 April version was changed to reduce the amount of granular vs higher level categories of insurance (payer) types. Note that the code system from where these codes are drawn is now owned by the CDC and not owned by NAHDO. CDC Contact: sopt@cdc.gov",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: Categories of types of health care payer entities as defined by the US Public Health Data Consortium SOP code system),(Data Element Scope: Concepts intended to represent categories of insurance (payer) types.),(Inclusion Criteria: Codes representing high level categories of insurance (payer) types),(Exclusion Criteria: Codes representing, subdivisions of insurance categories and or specific private insurance companies)",
+  "compose": {
+    "include": [ {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2"
+    } ],
+    "exclude": [ {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "=",
+        "value": "111"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "=",
+        "value": "1112"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "=",
+        "value": "3111"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "=",
+        "value": "3112"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "=",
+        "value": "3114"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "=",
+        "value": "3115"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "=",
+        "value": "3116"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "=",
+        "value": "3119"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "=",
+        "value": "3121"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "=",
+        "value": "3122"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "descendent-of",
+        "value": "321"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "=",
+        "value": "3222"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "=",
+        "value": "3223"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "=",
+        "value": "3229"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "descendent-of",
+        "value": "371"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "descendent-of",
+        "value": "381"
+      } ]
+    }, {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "filter": [ {
+        "property": "concept",
+        "op": "is-a",
+        "value": "6"
+      } ]
+    } ]
+  }
+}

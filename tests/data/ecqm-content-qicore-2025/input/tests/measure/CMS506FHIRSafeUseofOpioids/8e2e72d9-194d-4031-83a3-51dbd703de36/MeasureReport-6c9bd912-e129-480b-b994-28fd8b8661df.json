@@ -1,0 +1,95 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "6c9bd912-e129-480b-b994-28fd8b8661df",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "6224831d-2b62-4f03-9b25-8035683c1cce-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "8e2e72d9-194d-4031-83a3-51dbd703de36"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#6224831d-2b62-4f03-9b25-8035683c1cce-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Enc start  2 days before end of MP that ended last day of MP, has opioid at discharge although LAMA. "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS506FHIRSafeUseofOpioids",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/8e2e72d9-194d-4031-83a3-51dbd703de36"
+  }, {
+    "reference": "Encounter/64f25869-32c1-4d47-90b0-89bba5a3e549"
+  }, {
+    "reference": "MedicationRequest/6c3c887a-72c6-4ff4-9aed-c12ab53ded2b"
+  }, {
+    "reference": "Practitioner/19440e8f-d78f-4846-a71d-c15264adebdd"
+  }, {
+    "reference": "Coverage/2e711dad-f307-46d0-9da4-f980a3e5879e"
+  }, {
+    "reference": "Organization/34db8ad4-022a-4eed-9e1f-47e200051134"
+  } ]
+}

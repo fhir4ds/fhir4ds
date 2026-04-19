@@ -1,0 +1,58 @@
+{
+  "resourceType": "Patient",
+  "id": "9a297d79-90eb-46f1-9068-1a7c7b6c7147",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "text": {
+    "status": "generated",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">INR2DaysAftEnc_NoEDNoObsBFEnc2DayAft <b>DENEXCEPFAIL </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>0d6e76d46323f24c3cf81599b44a17d5195ef83ae5428435662fa61392810175</td></tr><tr><td>Date of birth</td><td><span>26 September 1975</span></td></tr></tbody></table></div>"
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2054-5",
+        "display": "Black or African American",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Black or African American"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2186-5",
+        "display": "Not Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Not Hispanic or Latino"
+    } ]
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://bonnie-fhir.healthit.gov/",
+    "value": "60f82c2f98086b570510e2a5"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "family": "DENEXCEPFail",
+    "given": [ "INR2DaysAftEnc_NoEDNoObsBFEnc2DayAft" ]
+  } ],
+  "gender": "female",
+  "birthDate": "1976-09-26"
+}

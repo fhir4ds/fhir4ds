@@ -1,0 +1,61 @@
+{
+  "resourceType": "Patient",
+  "id": "2571a635-c375-4aa6-9eef-653062467e10",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2054-5",
+        "display": "Black or African American",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Black or African American"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2186-5",
+        "display": "Not Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Not Hispanic or Latino"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248153007"
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://madie.cms.gov/",
+    "value": "MissingAssessmentResult"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "text": "MissingAssessmentResult",
+    "family": "MSROBSPASS4",
+    "given": [ "MissingAssessmentResult" ]
+  } ],
+  "gender": "male",
+  "birthDate": "1957-03-24",
+  "address": [ {
+    "text": "MissingAssessmentResult, Screened Not at risk Assessed Severely Malnourished Diagnosed Care Plan, ID=MissingAssessmentResult, DOB: 24 Mar 1957"
+  } ]
+}

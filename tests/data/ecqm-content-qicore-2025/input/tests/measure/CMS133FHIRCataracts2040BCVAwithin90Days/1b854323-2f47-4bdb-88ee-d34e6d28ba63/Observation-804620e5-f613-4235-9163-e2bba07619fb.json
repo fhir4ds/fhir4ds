@@ -1,0 +1,37 @@
+{
+  "resourceType": "Observation",
+  "id": "804620e5-f613-4235-9163-e2bba07619fb",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "exam",
+      "display": "Exam",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "419775003",
+      "display": "Best corrected visual acuity (observable entity)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1b854323-2f47-4bdb-88ee-d34e6d28ba63"
+  },
+  "effectiveDateTime": "2026-11-27T08:00:00.000Z",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2021-09",
+      "code": "424703005",
+      "display": "Distance vision 20/40 (finding)",
+      "userSelected": true
+    } ]
+  }
+}

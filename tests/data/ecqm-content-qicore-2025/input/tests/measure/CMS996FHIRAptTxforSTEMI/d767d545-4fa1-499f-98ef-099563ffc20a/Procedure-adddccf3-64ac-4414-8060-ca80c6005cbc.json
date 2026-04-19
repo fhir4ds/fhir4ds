@@ -1,0 +1,36 @@
+{
+  "resourceType": "Procedure",
+  "id": "adddccf3-64ac-4414-8060-ca80c6005cbc",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-10-09T12:15:00.000+00:00"
+  } ],
+  "status": "completed",
+  "category": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "387713003",
+      "display": "Surgical procedure",
+      "userSelected": true
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://www.icd10data.com/icd10pcs",
+      "version": "2021",
+      "code": "0270346",
+      "display": "Dilation of Coronary Artery, One Artery, Bifurcation, with Drug-eluting Intraluminal Device, Percutaneous Approach",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/d767d545-4fa1-499f-98ef-099563ffc20a"
+  },
+  "performedPeriod": {
+    "start": "2026-10-09T09:36:00.000+00:00",
+    "end": "2026-10-09T12:15:00.000+00:00"
+  }
+}

@@ -1,0 +1,147 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1046.286",
+  "meta": {
+    "versionId": "13",
+    "lastUpdated": "2026-02-06T01:00:54.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2026-02-06"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2026-02-06"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.286",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1046.286"
+    }
+  ],
+  "version": "20260206",
+  "name": "DecisionToTransfer",
+  "title": "Decision to Transfer",
+  "status": "active",
+  "date": "2026-02-06T01:00:54-05:00",
+  "publisher": "Acumen OP Steward",
+  "expansion": {
+    "identifier": "urn:uuid:3ae2ace0-ac61-44d1-bd0b-7569cf46cb5d",
+    "timestamp": "2026-03-13T13:02:29-04:00",
+    "total": 15,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "11414009",
+        "display": "Patient transfer to skilled nursing facility for level 4 care (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "19712007",
+        "display": "Patient transfer, to another health care facility (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "23044009",
+        "display": "Patient transfer to skilled nursing facility for level 1 care (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "25675004",
+        "display": "Patient transfer to skilled nursing facility (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "43495009",
+        "display": "Patient transfer to skilled nursing facility for level 3 care (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "442271000124105",
+        "display": "Patient transfer to psychiatric hospital (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "448551000124100",
+        "display": "Patient transfer to another hospital (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "448561000124103",
+        "display": "Patient transfer to non-psychiatric hospital (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "448571000124105",
+        "display": "Patient transfer to substance abuse treatment facility (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "448671000124109",
+        "display": "Voluntary patient transfer to psychiatric hospital (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "448681000124107",
+        "display": "Involuntary patient transfer to psychiatric hospital (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "448691000124105",
+        "display": "Patient transfer to inpatient behavioral healthcare facility (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "54330000",
+        "display": "Patient transfer, to another health care facility, definitive (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "54773006",
+        "display": "Patient transfer, to another health care facility, temporary (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "58413007",
+        "display": "Patient transfer to skilled nursing facility for level 2 care (procedure)"
+      }
+    ]
+  }
+}

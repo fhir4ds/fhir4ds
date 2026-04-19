@@ -1,0 +1,19 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "952ae9ef-bc03-4c73-ac7b-08a04ed86ae9",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "medicationReference": {
+    "reference": "Medication/8150ce01-c2c4-4a3e-a992-fb197ed6d8ba"
+  },
+  "subject": {
+    "reference": "Patient/c095195c-8893-4bf1-aa7d-ad2bfd9bafa5"
+  },
+  "authoredOn": "2026-04-15T10:30:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/0d96a9e4-bdff-4cd7-860e-799797c1f800"
+  }
+}

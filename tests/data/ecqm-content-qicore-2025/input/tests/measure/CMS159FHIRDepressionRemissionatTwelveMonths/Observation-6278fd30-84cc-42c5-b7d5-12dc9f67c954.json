@@ -1,0 +1,16 @@
+{
+  "resourceType": "Observation",
+  "id": "6278fd30-84cc-42c5-b7d5-12dc9f67c954",
+  "status": "final",
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "44261-6"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f9bc58d1-b545-404a-b5c5-488c157c21f2"
+  },
+  "effectiveDateTime": "2014-01-06T14:30:00+00:00",
+  "valueInteger": 4
+}

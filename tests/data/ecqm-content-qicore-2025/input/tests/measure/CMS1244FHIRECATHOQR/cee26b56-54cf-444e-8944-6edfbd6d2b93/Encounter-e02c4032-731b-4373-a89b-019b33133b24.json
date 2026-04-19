@@ -1,0 +1,51 @@
+{
+  "resourceType": "Encounter",
+  "id": "e02c4032-731b-4373-a89b-019b33133b24",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "EMER",
+    "display": "emergency"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2023-09",
+      "code": "225390008",
+      "display": "Triage (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/cee26b56-54cf-444e-8944-6edfbd6d2b93"
+  },
+  "period": {
+    "start": "2027-12-31T08:00:00.000+00:00",
+    "end": "2027-12-31T08:15:00.000+00:00"
+  },
+  "diagnosis": [ {
+    "condition": {
+      "reference": "Condition/f76c27dd-ccab-4520-89a7-f71e82018a21"
+    },
+    "use": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/diagnosis-role",
+        "code": "billing"
+      } ]
+    },
+    "rank": 1
+  } ],
+  "hospitalization": {
+    "dischargeDisposition": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "21541000119102",
+        "display": "Patient left without being seen (finding)",
+        "userSelected": true
+      } ]
+    }
+  }
+}

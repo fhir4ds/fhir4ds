@@ -1,0 +1,28 @@
+{
+  "resourceType": "Observation",
+  "id": "eae44e5d-0a17-4a06-a8ff-4b3e572854c4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "laboratory",
+      "display": "laboratory",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.73",
+      "code": "71486-5"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/8352db6f-c4c7-4eb1-8264-ea3db86f1c6e"
+  },
+  "effectiveDateTime": "2026-01-22T08:00:00.000+00:00",
+  "valueString": "Optic disc neural rim asymmetry of the two eyes consistent with loss of neural tissue"
+}

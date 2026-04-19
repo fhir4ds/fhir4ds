@@ -1,0 +1,105 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "a5a04dd3-b807-4395-b456-a02014232283",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "4c026d89-2cc7-48cf-921c-0181f28aea4f-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "a959f507-685c-4d5e-b8e4-dc02063dba36"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-inputParameters",
+    "valueReference": {
+      "reference": "#4c026d89-2cc7-48cf-921c-0181f28aea4f-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Not 18 on INPT admission\nVScode: Initial Population=[]"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS832HHAKIFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "67b50f879214df46de2f1fdb",
+    "population": [ {
+      "id": "DA0D3694-7F57-4FB9-8410-1F64E44CA01E",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "624D8554-9CB0-4BF0-882D-05C4F88BCC2C",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "000FF050-D4A2-4C8B-8123-4538D35D5441",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "01644D07-D9F8-403E-A66D-109ABA29BB6E",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/a959f507-685c-4d5e-b8e4-dc02063dba36"
+  }, {
+    "reference": "Encounter/4d2f6b73-a9dd-4aa0-9582-74f4a6b60f8c"
+  }, {
+    "reference": "Encounter/deb4dc5d-f945-490f-b7cc-addff6ad20a2"
+  }, {
+    "reference": "MedicationAdministration/c30ca483-cdd2-47ff-baa6-fef2fb9b375d"
+  }, {
+    "reference": "Observation/34f6dabf-19c2-4a1b-b20c-af641f438fe3"
+  }, {
+    "reference": "Observation/f599756d-403b-4c46-b2e6-49665f20c628"
+  }, {
+    "reference": "Observation/99ebe1e8-6231-4a10-a22e-34376365550b"
+  }, {
+    "reference": "Observation/980e0936-4031-4be6-9110-96cecf94b190"
+  }, {
+    "reference": "Observation/706aae5d-2d73-447a-8b09-0d8dc1df7d2b"
+  }, {
+    "reference": "Coverage/3275afa0-cfbd-4689-a865-14aecfe3de37"
+  }, {
+    "reference": "Organization/9b319389-b053-4376-b80d-02d6afb85bdf"
+  } ]
+}

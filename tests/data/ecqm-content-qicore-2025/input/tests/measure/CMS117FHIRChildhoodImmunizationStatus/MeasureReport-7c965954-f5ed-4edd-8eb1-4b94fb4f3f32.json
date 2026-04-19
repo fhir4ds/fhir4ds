@@ -1,0 +1,137 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "7c965954-f5ed-4edd-8eb1-4b94fb4f3f32",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "ae72c6b4-72d8-42ef-87d7-b9b436154cac-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "1e7dc519-5d75-4c07-b23f-ae9421a12943"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#ae72c6b4-72d8-42ef-87d7-b9b436154cac-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "All vaccines met - procedures"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS117FHIRChildhoodImmunizationStatus",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/1e7dc519-5d75-4c07-b23f-ae9421a12943"
+  }, {
+    "reference": "Encounter/02acba17-22fa-425e-b3b6-54972ef0d470"
+  }, {
+    "reference": "Immunization/d0328db3-53fa-46b6-986a-f2215b8c4a80"
+  }, {
+    "reference": "Immunization/ee0ee437-f03f-4dea-9efc-88dc5a2b9f09"
+  }, {
+    "reference": "Immunization/74ee97cb-224b-4af3-b165-ddb489ee089d"
+  }, {
+    "reference": "Procedure/a972e7cb-d410-46fb-8524-579cd7178b75"
+  }, {
+    "reference": "Immunization/f1039e18-641c-448f-ade6-e62b2acf1ba8"
+  }, {
+    "reference": "Immunization/51d2603b-873c-4f13-9743-9de6d00b20d0"
+  }, {
+    "reference": "Procedure/4c4b5bd3-aecb-420c-ba8d-9481433d5195"
+  }, {
+    "reference": "Procedure/1f82f815-d5e9-4a71-935d-cba412cf10a7"
+  }, {
+    "reference": "Immunization/f1b11552-1627-4889-a280-4cb39e688d79"
+  }, {
+    "reference": "Immunization/6932f476-ad83-4156-a504-d971032f9e79"
+  }, {
+    "reference": "Procedure/609451ca-5a95-461b-bf54-19178c42eabd"
+  }, {
+    "reference": "Immunization/518b8df3-10c9-4653-8a92-f3f87fe6ac28"
+  }, {
+    "reference": "Immunization/013dcf74-bdf7-495c-a94b-6be0ecdb3e40"
+  }, {
+    "reference": "Procedure/8935c386-57df-43e7-b4f6-56aaa7ad1b9f"
+  }, {
+    "reference": "Immunization/b15e644c-e9a4-469f-bbc9-ec6447d0119d"
+  }, {
+    "reference": "Immunization/21e54465-1eab-47c9-a8d5-8c11a97bf6f6"
+  }, {
+    "reference": "Immunization/82e40bdc-ad84-4a4f-9037-d0a1b681c6c6"
+  }, {
+    "reference": "Immunization/d5edc64d-31c3-49ad-963f-d9b531379231"
+  }, {
+    "reference": "Procedure/9e35f01c-6b3c-4761-814b-ff6e0bed79c9"
+  }, {
+    "reference": "Procedure/db876c2b-4734-47e3-a31d-8dba0af317f3"
+  }, {
+    "reference": "Immunization/5dcad050-a770-4793-b058-7774e149d9f8"
+  }, {
+    "reference": "Procedure/adf97adb-934d-472d-ab8f-50844e92c2e8"
+  }, {
+    "reference": "Immunization/55faf9b1-ec0f-4483-b6e2-c30ab3cc7d33"
+  }, {
+    "reference": "Procedure/7ad45106-89b5-4aa2-a355-a2bdb2e547b9"
+  }, {
+    "reference": "MeasureReport/f82193ae-f54a-4552-b019-765d642018e4"
+  } ]
+}

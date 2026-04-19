@@ -1,0 +1,38 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "252ed3a0-4b52-4bc9-a2ec-48903df70464",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1191222",
+      "display": "Opioid Antagonist"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/47e2c410-9c00-4f05-96b4-b925e0c158b1"
+  },
+  "context": {
+    "reference": "Encounter/2c50a05f-c67d-47bf-8df6-28a0e39cad5a"
+  },
+  "effectiveDateTime": "2026-02-13T08:00:00.000+00:00",
+  "note": [ {
+    "text": "Administered opioid antagonist as prescribed."
+  } ],
+  "dosage": {
+    "route": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "34206005",
+        "display": "Oral"
+      } ]
+    },
+    "rateQuantity": {
+      "value": 1,
+      "unit": "mg"
+    }
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1045.21",
+  "meta": {
+    "versionId": "39",
+    "lastUpdated": "2023-12-21T17:43:03.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2021-02-20"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2021-02-20"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.21",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1045.21"
+    }
+  ],
+  "version": "20210220",
+  "name": "IntravenousOrIntraarterialThrombolyticTPATherapy",
+  "title": "Intravenous or Intraarterial Thrombolytic tPA Therapy",
+  "status": "active",
+  "experimental": false,
+  "date": "2022-03-03T18:46:01-05:00",
+  "publisher": "TJC EH Steward",
+  "expansion": {
+    "identifier": "urn:uuid:ffd480e7-1b38-47a1-bacf-82708fd0322c",
+    "timestamp": "2026-03-13T13:02:14-04:00",
+    "total": 10,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "307521008",
+        "display": "Intravenous infusion of thrombolytic (procedure)"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "3E03017",
+        "display": "Introduction of Other Thrombolytic into Peripheral Vein, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "3E03317",
+        "display": "Introduction of Other Thrombolytic into Peripheral Vein, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "3E04017",
+        "display": "Introduction of Other Thrombolytic into Central Vein, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "3E04317",
+        "display": "Introduction of Other Thrombolytic into Central Vein, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "3E05017",
+        "display": "Introduction of Other Thrombolytic into Peripheral Artery, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "3E05317",
+        "display": "Introduction of Other Thrombolytic into Peripheral Artery, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "3E06017",
+        "display": "Introduction of Other Thrombolytic into Central Artery, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "3E06317",
+        "display": "Introduction of Other Thrombolytic into Central Artery, Percutaneous Approach"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "69245005",
+        "display": "Intra-arterial infusion of thrombolytic agent (procedure)"
+      }
+    ]
+  }
+}

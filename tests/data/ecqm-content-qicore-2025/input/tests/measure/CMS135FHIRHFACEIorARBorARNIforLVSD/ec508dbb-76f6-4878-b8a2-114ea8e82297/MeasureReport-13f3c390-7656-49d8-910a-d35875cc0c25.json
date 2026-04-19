@@ -1,0 +1,109 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "13f3c390-7656-49d8-910a-d35875cc0c25",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "761ffef7-6d84-4913-b536-c123295302b7-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "ec508dbb-76f6-4878-b8a2-114ea8e82297"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#761ffef7-6d84-4913-b536-c123295302b7-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Angiotensin Medication Request authored 1 minute after edge of encounter is not counted in Numerator"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS135FHIRHFACEIorARBorARNIforLVSD",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/ec508dbb-76f6-4878-b8a2-114ea8e82297"
+  }, {
+    "reference": "Encounter/c367cda0-6ddd-4848-ab0d-478e277b49ff"
+  }, {
+    "reference": "Encounter/ca8bc7c3-7fc4-46b6-b5de-c561aa52cca1"
+  }, {
+    "reference": "Condition/ea171d9b-be72-4f48-af34-dae63dac2bd9"
+  }, {
+    "reference": "Condition/17373ef7-b480-4bea-9e33-e4965383fbe9"
+  }, {
+    "reference": "MedicationRequest/e68eb476-1a3f-456f-aaa0-d69eef019105"
+  }, {
+    "reference": "Practitioner/d0c088b2-5976-4f9b-ba72-d2f78e6a0e33"
+  }, {
+    "reference": "Medication/a6f1c09d-f0ae-4bd0-bebe-9f4bdc4e5841"
+  } ]
+}

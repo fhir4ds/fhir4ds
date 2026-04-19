@@ -1,0 +1,61 @@
+{
+  "resourceType": "Patient",
+  "id": "31ed0db8-1972-40ed-be78-0653f2cd9a95",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2106-3",
+        "display": "White",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "White"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2186-5",
+        "display": "Not Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Not Hispanic or Latino"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248152002"
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://madie.cms.gov/",
+    "value": "2Encounters1007522"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "text": "2Encounters1007522",
+    "family": "MSROBSPass4",
+    "given": [ "2Encounters1007522" ]
+  } ],
+  "gender": "female",
+  "birthDate": "1953-01-01",
+  "address": [ {
+    "text": "2Encounters100752 2, Screened Not at risk Assessed Severely Malnourished Diagnosed Care Plan, ID=2Encounters1007522, DOB: 03 Feb 1956"
+  } ]
+}

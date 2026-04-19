@@ -1,0 +1,1602 @@
+{
+  "resourceType": "Group",
+  "id": "CMS72FHIRSTKAntithromboticDay2",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS72FHIRSTKAntithromboticDay2"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/b86e54d1-f8ca-44b6-99a5-d455c5649104",
+      "display": "PriorTPANegativeTest DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b86e54d1-f8ca-44b6-99a5-d455c5649104",
+      "display": "PriorTPANegativeTest DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/79a2dd53-a342-41d9-a5c9-1b565bd06fe7",
+      "display": "ProcTPALT24hrB4EDTestInterval DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/79a2dd53-a342-41d9-a5c9-1b565bd06fe7",
+      "display": "ProcTPALT24hrB4EDTestInterval DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ab024aef-425c-43ba-a856-882a3e3c91f1",
+      "display": "MedOrdMedReason_eq1dayduringEncIPwEd DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ab024aef-425c-43ba-a856-882a3e3c91f1",
+      "display": "MedOrdMedReason_eq1dayduringEncIPwEd DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9f4bc5cc-b5a4-4d67-a11f-9f171b62fd9f",
+      "display": "TPADocumentB4EncStart DENEXFAIL"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9f4bc5cc-b5a4-4d67-a11f-9f171b62fd9f",
+      "display": "TPADocumentB4EncStart DENEXFAIL"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3b193bfc-511a-49a2-987a-50d8c7d9a0df",
+      "display": "CMPDayOfRelvDat1minB4EDEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3b193bfc-511a-49a2-987a-50d8c7d9a0df",
+      "display": "CMPDayOfRelvDat1minB4EDEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dd40e582-8c3f-44a2-b781-84acead6120f",
+      "display": "INRDayOfObs_ED>1hrObs>1hrBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dd40e582-8c3f-44a2-b781-84acead6120f",
+      "display": "INRDayOfObs_ED>1hrObs>1hrBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a64c6f30-eb93-4973-8f79-b84ed1950962",
+      "display": "CMP<1dayDuringEdRelePer DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a64c6f30-eb93-4973-8f79-b84ed1950962",
+      "display": "CMP<1dayDuringEdRelePer DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/77bba430-02fc-4ac7-ab49-f57fd73daa9b",
+      "display": "CMPDayOfRelvPerStart1minB4IPEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/77bba430-02fc-4ac7-ab49-f57fd73daa9b",
+      "display": "CMPDayOfRelvPerStart1minB4IPEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4b6a9c86-3aad-4828-be61-bab6cd0c3140",
+      "display": "MedAdmMedReason_eq0dayduringEncIPwEd DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4b6a9c86-3aad-4828-be61-bab6cd0c3140",
+      "display": "MedAdmMedReason_eq0dayduringEncIPwEd DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7e3bf20a-7a5b-4d50-aa34-267ab19da7b2",
+      "display": "MedAntithromboticStarteq1dayDuringEncIPwEd NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7e3bf20a-7a5b-4d50-aa34-267ab19da7b2",
+      "display": "MedAntithromboticStarteq1dayDuringEncIPwEd NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a938e0ff-51b3-4001-b33e-5fd2c00a9147",
+      "display": "MedAntithromboticStarteq0dayAtEdStart NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a938e0ff-51b3-4001-b33e-5fd2c00a9147",
+      "display": "MedAntithromboticStarteq0dayAtEdStart NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/29e634bc-c361-4e6b-a44e-444abb79b2de",
+      "display": "LOS<2DaysEDgt1hr2 DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/29e634bc-c361-4e6b-a44e-444abb79b2de",
+      "display": "LOS<2DaysEDgt1hr2 DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b92af729-d556-4af8-bdd6-b2eedf775cdd",
+      "display": "CMPDayOfRelvPerStart1MinB4IPStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b92af729-d556-4af8-bdd6-b2eedf775cdd",
+      "display": "CMPDayOfRelvPerStart1MinB4IPStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e89c4eae-404c-44b9-8be5-c8a8b481813a",
+      "display": "LOS=2Days_EDend_EQ_EncIPStart DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e89c4eae-404c-44b9-8be5-c8a8b481813a",
+      "display": "LOS=2Days_EDend_EQ_EncIPStart DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3264d587-3c02-45ff-b989-044fcc30abae",
+      "display": "LastEdEnd_LT_1hrB4ObsStartDayAft_ValidObs_INRresultDatetime_EQ1minB4EdStart DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3264d587-3c02-45ff-b989-044fcc30abae",
+      "display": "LastEdEnd_LT_1hrB4ObsStartDayAft_ValidObs_INRresultDatetime_EQ1minB4EdStart DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9a8c51a0-bf53-42b6-927d-c1f90b81a31a",
+      "display": "LOSEQ2DaysEDEQ1hr DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9a8c51a0-bf53-42b6-927d-c1f90b81a31a",
+      "display": "LOSEQ2DaysEDEQ1hr DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3432dedb-7130-4614-9283-6c1569fab90f",
+      "display": "MedAdmMedReason_eq1dayduringEncIPwEd DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3432dedb-7130-4614-9283-6c1569fab90f",
+      "display": "MedAdmMedReason_eq1dayduringEncIPwEd DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c5085136-65ef-498f-8aa9-449bf48f6a63",
+      "display": "EncDx=IscheStroke DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c5085136-65ef-498f-8aa9-449bf48f6a63",
+      "display": "EncDx=IscheStroke DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2505f602-4b0b-4e31-bd98-83ea0fac484f",
+      "display": "CMP<1dayDuringEncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2505f602-4b0b-4e31-bd98-83ea0fac484f",
+      "display": "CMP<1dayDuringEncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/96266910-a2b3-4294-9dc5-8a812622b70b",
+      "display": "MedTPAGTEndIPEnd DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/96266910-a2b3-4294-9dc5-8a812622b70b",
+      "display": "MedTPAGTEndIPEnd DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/edd8668f-d541-4869-9bb6-02e9e2c2509d",
+      "display": "CMPDuringDiffEDTestOccurr DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/edd8668f-d541-4869-9bb6-02e9e2c2509d",
+      "display": "CMPDuringDiffEDTestOccurr DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f25baf5f-2980-416c-a8ef-3b9e42d751c3",
+      "display": "MedAntithromboticStart_gt1dayDuringEncIP NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f25baf5f-2980-416c-a8ef-3b9e42d751c3",
+      "display": "MedAntithromboticStart_gt1dayDuringEncIP NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4f8b0ca2-baf1-4ce6-8b9a-c3220097cf7c",
+      "display": "INRDayOfObs_ED<1hrObs<1hrBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4f8b0ca2-baf1-4ce6-8b9a-c3220097cf7c",
+      "display": "INRDayOfObs_ED<1hrObs<1hrBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fed7bfb0-5746-4029-a64c-f40cc30ce946",
+      "display": "INRdurED_ED<1hrDayOfObs>1hrBFEncDayAft DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fed7bfb0-5746-4029-a64c-f40cc30ce946",
+      "display": "INRdurED_ED<1hrDayOfObs>1hrBFEncDayAft DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dc187313-245c-4ed6-b6bb-fcb94c117fec",
+      "display": "MedAdmPatRefus_eq1dayduringEncIPwEd DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dc187313-245c-4ed6-b6bb-fcb94c117fec",
+      "display": "MedAdmPatRefus_eq1dayduringEncIPwEd DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a5feebb4-d3c0-4435-aed5-9579b75a8a52",
+      "display": "LOSEQ2DaysNoED DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a5feebb4-d3c0-4435-aed5-9579b75a8a52",
+      "display": "LOSEQ2DaysNoED DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ab85f43-dd45-4827-8f13-ad9d1208d2e0",
+      "display": "LOSEQ1DayEDB4EncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ab85f43-dd45-4827-8f13-ad9d1208d2e0",
+      "display": "LOSEQ1DayEDB4EncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cc23329d-6635-4347-8669-a98c921f4381",
+      "display": "INRdurED_ED=1hrNoObsBFEncDayOf_INR_Att  DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cc23329d-6635-4347-8669-a98c921f4381",
+      "display": "INRdurED_ED=1hrNoObsBFEncDayOf_INR_Att  DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/20b51a78-5526-4bb9-8d97-a6f149c89182",
+      "display": "MedTPAEQ24hrB4EncIP   DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/20b51a78-5526-4bb9-8d97-a6f149c89182",
+      "display": "MedTPAEQ24hrB4EncIP   DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9915271c-d175-41e1-8550-2f698a2b9dc7",
+      "display": "CMP<1DayDuringGapofEdandEncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9915271c-d175-41e1-8550-2f698a2b9dc7",
+      "display": "CMP<1DayDuringGapofEdandEncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e0286677-4610-4138-b9fe-3ed648ed45f8",
+      "display": "CustomCode NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e0286677-4610-4138-b9fe-3ed648ed45f8",
+      "display": "CustomCode NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/79f6bb60-1bdb-4dff-857d-65311e9ccea5",
+      "display": "INRdurED_ED>1hrObs>1hrBFEncDayAft DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/79f6bb60-1bdb-4dff-857d-65311e9ccea5",
+      "display": "INRdurED_ED>1hrObs>1hrBFEncDayAft DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bb3dcb0a-5efb-4f55-99a3-56084dd48191",
+      "display": "CMPDayOfRelvDat1minAftObsStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bb3dcb0a-5efb-4f55-99a3-56084dd48191",
+      "display": "CMPDayOfRelvDat1minAftObsStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/de4005d0-549c-40bb-93b9-26650c194d04",
+      "display": "CMPDayOfRelvPerStartOnIPEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/de4005d0-549c-40bb-93b9-26650c194d04",
+      "display": "CMPDayOfRelvPerStartOnIPEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/09a132b9-b03c-4a8d-a09f-f18c544bb660",
+      "display": "INR2hoursB4EDstart_EDend1hrB4_OBSend1hrB4DayAft_IPstart DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/09a132b9-b03c-4a8d-a09f-f18c544bb660",
+      "display": "INR2hoursB4EDstart_EDend1hrB4_OBSend1hrB4DayAft_IPstart DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4092bcf1-86bc-4d67-9f45-548a3721085c",
+      "display": "CMPDayOfRelvPerStart1minB4EDEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4092bcf1-86bc-4d67-9f45-548a3721085c",
+      "display": "CMPDayOfRelvPerStart1minB4EDEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0bc6d4d8-81a0-42a2-9efb-9efbfc3ebe2a",
+      "display": "ProcTPALT24hrB4EncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0bc6d4d8-81a0-42a2-9efb-9efbfc3ebe2a",
+      "display": "ProcTPALT24hrB4EncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d0a59b97-c3ab-4028-9109-a31359a93c47",
+      "display": "MedAntithromboticStart_eq0dayB4EdStart NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d0a59b97-c3ab-4028-9109-a31359a93c47",
+      "display": "MedAntithromboticStart_eq0dayB4EdStart NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/11fc1901-7cc7-46c6-bbd0-58b614082170",
+      "display": "INR1DayBFEncStart_NoEDNoObsBFEnc DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/11fc1901-7cc7-46c6-bbd0-58b614082170",
+      "display": "INR1DayBFEncStart_NoEDNoObsBFEnc DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fba66844-a0b7-4a8b-a33b-d75df55e9fea",
+      "display": "PriorTPADiagDurEncStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fba66844-a0b7-4a8b-a33b-d75df55e9fea",
+      "display": "PriorTPADiagDurEncStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/82fd75d8-4816-4d24-b18c-0e454c430eb5",
+      "display": "INRdurED_ED<1hrNoObsBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/82fd75d8-4816-4d24-b18c-0e454c430eb5",
+      "display": "INRdurED_ED<1hrNoObsBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7068d447-aa53-4f18-be8b-8b0edaa74217",
+      "display": "CMPDayOfRelvDatOnObsEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7068d447-aa53-4f18-be8b-8b0edaa74217",
+      "display": "CMPDayOfRelvDatOnObsEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c21e25c9-a450-4e08-b9be-f0ca9dac5389",
+      "display": "CMO_DayOf_AuthDat_1minB4EDStart_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c21e25c9-a450-4e08-b9be-f0ca9dac5389",
+      "display": "CMO_DayOf_AuthDat_1minB4EDStart_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fed17706-6d92-4092-a9b1-9b7e47847f2a",
+      "display": "Med1TPA=EdStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fed17706-6d92-4092-a9b1-9b7e47847f2a",
+      "display": "Med1TPA=EdStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c787d9c8-9645-4da6-a607-85dbefdf129e",
+      "display": "INRDayAftEncEDlt1hrObslt1hrBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c787d9c8-9645-4da6-a607-85dbefdf129e",
+      "display": "INRDayAftEncEDlt1hrObslt1hrBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7ddb2db9-020e-45b1-aaf5-2fbcf281d6b8",
+      "display": "MedAdmMedReason_eq1dayduringEncIP DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7ddb2db9-020e-45b1-aaf5-2fbcf281d6b8",
+      "display": "MedAdmMedReason_eq1dayduringEncIP DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d496f08e-c55b-44b1-97a7-f86cf9ead1e2",
+      "display": "PatientRefusal_NotGiven_IPEnc DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d496f08e-c55b-44b1-97a7-f86cf9ead1e2",
+      "display": "PatientRefusal_NotGiven_IPEnc DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0dde3070-5a99-4be7-94d1-1a7161a7787b",
+      "display": "NoEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0dde3070-5a99-4be7-94d1-1a7161a7787b",
+      "display": "NoEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a0ced1fb-191d-404b-80f4-761e51cf9de2",
+      "display": "PharmContraDayOfEncStart_NoEDNoObsBFEnc DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a0ced1fb-191d-404b-80f4-761e51cf9de2",
+      "display": "PharmContraDayOfEncStart_NoEDNoObsBFEnc DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7317795b-638b-4d0c-9e9e-b55ade45958c",
+      "display": "LOS<1DayEDB4EncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7317795b-638b-4d0c-9e9e-b55ade45958c",
+      "display": "LOS<1DayEDB4EncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/09a4fe70-dc7a-48ed-9b97-47f0a119eabd",
+      "display": "MedTPAGT24HrsB4ED DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/09a4fe70-dc7a-48ed-9b97-47f0a119eabd",
+      "display": "MedTPAGT24HrsB4ED DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5450abfd-a667-4eb9-9b59-e85feed4865c",
+      "display": "ProcTPALT24hrB4ED DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5450abfd-a667-4eb9-9b59-e85feed4865c",
+      "display": "ProcTPALT24hrB4ED DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ab28178c-eadb-41a3-861e-ee22c8f12d16",
+      "display": "PharmContraDayOfObs_ED<1hrObs>1hrDayOfBFEncDayAft DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ab28178c-eadb-41a3-861e-ee22c8f12d16",
+      "display": "PharmContraDayOfObs_ED<1hrObs>1hrDayOfBFEncDayAft DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/58169ea2-037f-4302-9c37-4239fe24f73d",
+      "display": "PharmContraDayOfObs_ED<1hrObs>1hrBFEncDayOf DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/58169ea2-037f-4302-9c37-4239fe24f73d",
+      "display": "PharmContraDayOfObs_ED<1hrObs>1hrBFEncDayOf DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bda91aac-a815-4a22-b505-36cef1080d49",
+      "display": "PharmContraDayOfObs_ED<1hrObs<1hrBFEncDayOf DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bda91aac-a815-4a22-b505-36cef1080d49",
+      "display": "PharmContraDayOfObs_ED<1hrObs<1hrBFEncDayOf DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b4cd9b20-6d41-4034-907c-b24e362a0699",
+      "display": "INRdurED_ED>1hrNoObsBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b4cd9b20-6d41-4034-907c-b24e362a0699",
+      "display": "INRdurED_ED>1hrNoObsBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/89275dc4-f4c1-41b5-a215-9c7228933cc0",
+      "display": "CMP=1Day_DuringEncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/89275dc4-f4c1-41b5-a215-9c7228933cc0",
+      "display": "CMP=1Day_DuringEncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b3043789-f91a-42f6-848d-6bfd7df331fe",
+      "display": "tPADuringInPatientEnc1DayAfterAdmit DENEXPass-LCG"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b3043789-f91a-42f6-848d-6bfd7df331fe",
+      "display": "tPADuringInPatientEnc1DayAfterAdmit DENEXPass-LCG"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1b785f3f-23e7-4b52-889c-d9f66945e7f1",
+      "display": "CMO<1dayDuringEncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1b785f3f-23e7-4b52-889c-d9f66945e7f1",
+      "display": "CMO<1dayDuringEncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f0289acb-3172-4690-8b6a-dbd4d4913db5",
+      "display": "LOS<2DaysNoEd DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f0289acb-3172-4690-8b6a-dbd4d4913db5",
+      "display": "LOS<2DaysNoEd DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/871d38c3-6822-4136-8fe0-2ed0f226888f",
+      "display": "EncDxIschemicStroke IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/871d38c3-6822-4136-8fe0-2ed0f226888f",
+      "display": "EncDxIschemicStroke IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/624c0305-d8a4-41eb-bbc9-30aea2c53304",
+      "display": "Med1TPAStartEQEncIPEnd DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/624c0305-d8a4-41eb-bbc9-30aea2c53304",
+      "display": "Med1TPAStartEQEncIPEnd DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e126cdec-dbc8-4ee8-964f-e88e46c04f88",
+      "display": "LOS<2DaysEDgt1hrstarts1Day23HoursB4IPEncEnds  DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e126cdec-dbc8-4ee8-964f-e88e46c04f88",
+      "display": "LOS<2DaysEDgt1hrstarts1Day23HoursB4IPEncEnds  DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/25317020-6a54-490b-a479-0da6b5d1f355",
+      "display": "CMPDayOfRelvPerStart1MinB4ObsEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/25317020-6a54-490b-a479-0da6b5d1f355",
+      "display": "CMPDayOfRelvPerStart1MinB4ObsEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/93798745-af1c-4eb6-8dc4-446a531c05a4",
+      "display": "MedAntithromboticStarteq1dayDuringEncIPwEd NUMERPass - 3061"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/93798745-af1c-4eb6-8dc4-446a531c05a4",
+      "display": "MedAntithromboticStarteq1dayDuringEncIPwEd NUMERPass - 3061"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2bdb83c0-fcd9-4f06-b908-e373a7dcf91e",
+      "display": "CMPDayOfRelvDat1minAftEDStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2bdb83c0-fcd9-4f06-b908-e373a7dcf91e",
+      "display": "CMPDayOfRelvDat1minAftEDStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/deeafe68-b561-4d1c-9d73-5f343f809d8c",
+      "display": "CMP_DayOf_RelvPerStart_1minAftEDEnd_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/deeafe68-b561-4d1c-9d73-5f343f809d8c",
+      "display": "CMP_DayOf_RelvPerStart_1minAftEDEnd_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3fbd6ec2-8d40-45e7-90d7-747d7c491c1a",
+      "display": "Med1TPAStartinGapofEDandEncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3fbd6ec2-8d40-45e7-90d7-747d7c491c1a",
+      "display": "Med1TPAStartinGapofEDandEncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c075959b-dafd-4dfd-a310-23bd9c53fe68",
+      "display": "CMPDayOfRelvDatOnIPStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c075959b-dafd-4dfd-a310-23bd9c53fe68",
+      "display": "CMPDayOfRelvDatOnIPStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5a329008-fcc1-4168-ab9c-89cb5dd6ff32",
+      "display": "LCG2Enc1WithAntithrombic1WithtPA NUMER&DENECEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5a329008-fcc1-4168-ab9c-89cb5dd6ff32",
+      "display": "LCG2Enc1WithAntithrombic1WithtPA NUMER&DENECEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6bbc3f38-7f5f-4da9-9beb-eb32874fd1ed",
+      "display": "CMPDayOfRelvPerStart1minAftIPEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6bbc3f38-7f5f-4da9-9beb-eb32874fd1ed",
+      "display": "CMPDayOfRelvPerStart1minAftIPEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5adf0120-b2f5-415f-b1ff-1684d9f4af7a",
+      "display": "CMPGT1dayDuringED DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5adf0120-b2f5-415f-b1ff-1684d9f4af7a",
+      "display": "CMPGT1dayDuringED DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7d9affce-5c31-4fcb-b9e5-c0304c3f9406",
+      "display": "PharmContraDayOfObsED1hrObs1hrBFEncDayOf DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7d9affce-5c31-4fcb-b9e5-c0304c3f9406",
+      "display": "PharmContraDayOfObsED1hrObs1hrBFEncDayOf DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a2cb4956-d7e5-45a9-8007-80dcb893203c",
+      "display": "INRDayAftEncEDLT1hrObsLT1hrBFEncDay DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a2cb4956-d7e5-45a9-8007-80dcb893203c",
+      "display": "INRDayAftEncEDLT1hrObsLT1hrBFEncDay DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/205bc592-1309-48f1-a8f7-5d4dc03d8430",
+      "display": "Age=18DayB4Admission IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/205bc592-1309-48f1-a8f7-5d4dc03d8430",
+      "display": "Age=18DayB4Admission IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b83b6e42-6291-4b2c-83e0-06e09e30e973",
+      "display": "CMO_DayOf_AuthDat_OnEDStart_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b83b6e42-6291-4b2c-83e0-06e09e30e973",
+      "display": "CMO_DayOf_AuthDat_OnEDStart_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cbe5f41b-754f-49d8-91c4-85823628ceff",
+      "display": "ProcTPAEQEDStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cbe5f41b-754f-49d8-91c4-85823628ceff",
+      "display": "ProcTPAEQEDStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/072fc02e-93db-449c-a293-2e8525a49694",
+      "display": "INRdurED_ED=1hrNoObsBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/072fc02e-93db-449c-a293-2e8525a49694",
+      "display": "INRdurED_ED=1hrNoObsBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c014ff5d-792f-45c9-9659-4999537005b0",
+      "display": "INRDayOfObs_ED<1hrObs<1hrBFEncDayAft DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c014ff5d-792f-45c9-9659-4999537005b0",
+      "display": "INRDayOfObs_ED<1hrObs<1hrBFEncDayAft DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/09e893a2-26c7-4b6c-8686-7dec938a1c36",
+      "display": "CMPDayOfRelvPerStart1minAftIPStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/09e893a2-26c7-4b6c-8686-7dec938a1c36",
+      "display": "CMPDayOfRelvPerStart1minAftIPStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b569157b-b263-4b72-ab40-132bea1d8f71",
+      "display": "MedAntithromboticStart_eq0dayDuringEncIP  NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b569157b-b263-4b72-ab40-132bea1d8f71",
+      "display": "MedAntithromboticStart_eq0dayDuringEncIP  NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/59f7d72d-7470-46ee-986a-daabe67f64a7",
+      "display": "CMPDayOfRelvDat1minB4IPEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/59f7d72d-7470-46ee-986a-daabe67f64a7",
+      "display": "CMPDayOfRelvDat1minB4IPEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c84cc10b-29f5-41cb-84a7-fbb23f52e0d5",
+      "display": "NonEleInpEncounter_AgeGT18LOSLT120Ethnicity IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c84cc10b-29f5-41cb-84a7-fbb23f52e0d5",
+      "display": "NonEleInpEncounter_AgeGT18LOSLT120Ethnicity IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d82d5f38-a1b7-4f28-a3db-25f42f7e64b2",
+      "display": "INRGT3.5.resultDatetime_EQHospEncStartday DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d82d5f38-a1b7-4f28-a3db-25f42f7e64b2",
+      "display": "INRGT3.5.resultDatetime_EQHospEncStartday DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f0d37c4e-7377-4876-8533-f955963f96f9",
+      "display": "MedTPAGT24HrB4IPEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f0d37c4e-7377-4876-8533-f955963f96f9",
+      "display": "MedTPAGT24HrB4IPEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a3aa4397-179c-4024-929d-2aa45a6ca0a9",
+      "display": "ProcTPAEQEncIPStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a3aa4397-179c-4024-929d-2aa45a6ca0a9",
+      "display": "ProcTPAEQEncIPStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2a1812bc-465a-438c-934c-e85a3591512a",
+      "display": "PharmContraDayOfEncStart_NoEDNoObsBFEnc DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2a1812bc-465a-438c-934c-e85a3591512a",
+      "display": "PharmContraDayOfEncStart_NoEDNoObsBFEnc DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/98fca12d-7318-4ed9-9267-4a8604553ed4",
+      "display": "CMOdurEDEDEQ1hrNoObsBFEncdoNotPerform DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/98fca12d-7318-4ed9-9267-4a8604553ed4",
+      "display": "CMOdurEDEDEQ1hrNoObsBFEncdoNotPerform DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/91c80186-6eab-4021-b80d-03aa63b6eaa0",
+      "display": "CMPDayOfRelvDat1minAftIPStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/91c80186-6eab-4021-b80d-03aa63b6eaa0",
+      "display": "CMPDayOfRelvDat1minAftIPStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e0bae301-79a4-48b0-a174-5eb1bd6cf19e",
+      "display": "MedTPA<24hrB4EDEDETEQEncST DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e0bae301-79a4-48b0-a174-5eb1bd6cf19e",
+      "display": "MedTPA<24hrB4EDEDETEQEncST DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/036c2c6b-c5b7-4e1f-8a85-ac0787e3a15d",
+      "display": "LowINRDayOfEncStartNoEDNoObsBFEncDayOf DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/036c2c6b-c5b7-4e1f-8a85-ac0787e3a15d",
+      "display": "LowINRDayOfEncStartNoEDNoObsBFEncDayOf DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2402a44f-a5bb-4010-9045-123f5cfb976a",
+      "display": "MedTPALT24hrB4ED DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2402a44f-a5bb-4010-9045-123f5cfb976a",
+      "display": "MedTPALT24hrB4ED DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4e232654-578a-4526-bd7d-1b354c3c748f",
+      "display": "CMPDayOfRelvDat1minB4ObsEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4e232654-578a-4526-bd7d-1b354c3c748f",
+      "display": "CMPDayOfRelvDat1minB4ObsEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/70e86911-43d6-41de-bfb9-933d8f539b98",
+      "display": "INR1minBFDayOfEncStart_NoEDNoObsBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/70e86911-43d6-41de-bfb9-933d8f539b98",
+      "display": "INR1minBFDayOfEncStart_NoEDNoObsBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c97d55e0-29b4-4387-b9ed-ca0647eeb376",
+      "display": "CMPDayOfRelvDat1minAftObsEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c97d55e0-29b4-4387-b9ed-ca0647eeb376",
+      "display": "CMPDayOfRelvDat1minAftObsEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0ccb9c3c-d834-4769-a68a-6b01ce1e868e",
+      "display": "CMP_DayOf_RelvDat_1minAftIPEnd_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0ccb9c3c-d834-4769-a68a-6b01ce1e868e",
+      "display": "CMP_DayOf_RelvDat_1minAftIPEnd_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fae00e73-06c9-4b0b-aa8f-0b6586fdd38b",
+      "display": "CMP_DayOf_RelvDat_1minB4ObsStart_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fae00e73-06c9-4b0b-aa8f-0b6586fdd38b",
+      "display": "CMP_DayOf_RelvDat_1minB4ObsStart_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/54381296-da32-4474-85b7-209d99c52e7e",
+      "display": "MedTPAStartAfterEncIPEnd DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/54381296-da32-4474-85b7-209d99c52e7e",
+      "display": "MedTPAStartAfterEncIPEnd DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0c8a299c-b082-4383-b0b4-aebbb0fa9fb4",
+      "display": "MedAntithromboticStart_gt1dayDuringEncIP NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0c8a299c-b082-4383-b0b4-aebbb0fa9fb4",
+      "display": "MedAntithromboticStart_gt1dayDuringEncIP NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/febd4b3e-99bc-4c55-bba9-3b2136c2160b",
+      "display": "4Enc2WithAntithrombic2WithtPA NUMER&DENEXPass-LCG"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/febd4b3e-99bc-4c55-bba9-3b2136c2160b",
+      "display": "4Enc2WithAntithrombic2WithtPA NUMER&DENEXPass-LCG"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9bfee327-99be-48de-ba09-5b64e4435f8d",
+      "display": "LOSEQ1Day DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9bfee327-99be-48de-ba09-5b64e4435f8d",
+      "display": "LOSEQ1Day DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cb7c95fc-6d6b-4e07-81e8-a79385142b94",
+      "display": "3Enc2WithAntithrombic1WithtPA NUMER&DENEXPass-LCG"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cb7c95fc-6d6b-4e07-81e8-a79385142b94",
+      "display": "3Enc2WithAntithrombic1WithtPA NUMER&DENEXPass-LCG"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/82399522-ba6c-4997-afc9-23f55bb7da89",
+      "display": "MedOrdMedReason_eq1dayduringEncIP DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/82399522-ba6c-4997-afc9-23f55bb7da89",
+      "display": "MedOrdMedReason_eq1dayduringEncIP DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2b3d9d90-4c15-43cc-b738-faeae8b0836b",
+      "display": "CMPDayOfRelvPerStartOnIPStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2b3d9d90-4c15-43cc-b738-faeae8b0836b",
+      "display": "CMPDayOfRelvPerStartOnIPStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1216ea1e-aee7-4c75-8e5d-7f712f6ba3f7",
+      "display": "INRDayOfObs_ED<1hrDayOfObs>1hrDayAftBFEnc2DayAft DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1216ea1e-aee7-4c75-8e5d-7f712f6ba3f7",
+      "display": "INRDayOfObs_ED<1hrDayOfObs>1hrDayAftBFEnc2DayAft DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ac23e6a6-3f36-49db-9eba-2da744a41c57",
+      "display": "INR1minB4EDstart_EDend1hrB4_OBSend1hrB4DayAft_IPstart DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ac23e6a6-3f36-49db-9eba-2da744a41c57",
+      "display": "INR1minB4EDstart_EDend1hrB4_OBSend1hrB4DayAft_IPstart DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9a42c820-29ec-464e-b2f5-eb8114985a0c",
+      "display": "PharmContraDayAftEncStart_NoEDNoObsBFEnc_DateTime DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9a42c820-29ec-464e-b2f5-eb8114985a0c",
+      "display": "PharmContraDayAftEncStart_NoEDNoObsBFEnc_DateTime DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d8ca26ff-f3dd-42e7-ab8c-17647582f5bb",
+      "display": "EncEndsAfterMP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d8ca26ff-f3dd-42e7-ab8c-17647582f5bb",
+      "display": "EncEndsAfterMP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9843e92a-751f-4b3c-86b8-50397a64c8fd",
+      "display": "INRDayOfObs_ED<1hrDayOfObs<1hrDayAftBFEncDayAft DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9843e92a-751f-4b3c-86b8-50397a64c8fd",
+      "display": "INRDayOfObs_ED<1hrDayOfObs<1hrDayAftBFEncDayAft DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2ecbb381-211e-421a-8053-21c820f33043",
+      "display": "INRDayOfObs_ED>1hrDayOfObs>1hrDayfAftBFEncDayAft DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2ecbb381-211e-421a-8053-21c820f33043",
+      "display": "INRDayOfObs_ED>1hrDayOfObs>1hrDayfAftBFEncDayAft DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/07663bba-9abe-46e2-b2e6-bcfc26e57a45",
+      "display": "TPADocumentDurEncStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/07663bba-9abe-46e2-b2e6-bcfc26e57a45",
+      "display": "TPADocumentDurEncStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/64a75df8-8bed-49ea-9c90-ee3569d233df",
+      "display": "NUMPass_MedAntithromboticStart_eq0dayDuringEd NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/64a75df8-8bed-49ea-9c90-ee3569d233df",
+      "display": "NUMPass_MedAntithromboticStart_eq0dayDuringEd NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fcfbed2b-7381-4b5f-8d42-a2c2de464dae",
+      "display": "CMPDayOfRelvDat1minB4IPStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fcfbed2b-7381-4b5f-8d42-a2c2de464dae",
+      "display": "CMPDayOfRelvDat1minB4IPStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/53e176e2-42f5-4c27-a1fe-23a280982bde",
+      "display": "EncPrinDxIschemicStrokeTestOccurr IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/53e176e2-42f5-4c27-a1fe-23a280982bde",
+      "display": "EncPrinDxIschemicStrokeTestOccurr IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ac56c88f-5f25-4f75-946a-cadf775f0f8f",
+      "display": "STKAgeGT18LOSLT120 IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ac56c88f-5f25-4f75-946a-cadf775f0f8f",
+      "display": "STKAgeGT18LOSLT120 IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4a276dfb-e77e-4b19-96af-96bd653b21b7",
+      "display": "CMPDayOfRelvDatOnObsStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4a276dfb-e77e-4b19-96af-96bd653b21b7",
+      "display": "CMPDayOfRelvDatOnObsStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f53d8150-0e5a-43b1-be8e-7a356f74f045",
+      "display": "CMP_DayOf_RelvDat_1minAftEDEnd_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f53d8150-0e5a-43b1-be8e-7a356f74f045",
+      "display": "CMP_DayOf_RelvDat_1minAftEDEnd_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/145ddce1-5ecd-4bcb-b58d-6c39b55e4f54",
+      "display": "EncB4MP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/145ddce1-5ecd-4bcb-b58d-6c39b55e4f54",
+      "display": "EncB4MP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ae29ae5-1ae5-4eaf-ba7b-1e7b7780982a",
+      "display": "PrincDxIschemicSTK IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ae29ae5-1ae5-4eaf-ba7b-1e7b7780982a",
+      "display": "PrincDxIschemicSTK IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2f7681fa-66b0-4395-aa35-7622e37709ae",
+      "display": "MedAdmPatRefus_eq0dayduringEncIPwEd DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2f7681fa-66b0-4395-aa35-7622e37709ae",
+      "display": "MedAdmPatRefus_eq0dayduringEncIPwEd DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ad35c913-a8ba-4d29-b6e9-8652aa5ca20c",
+      "display": "Med1TPA=EdStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ad35c913-a8ba-4d29-b6e9-8652aa5ca20c",
+      "display": "Med1TPA=EdStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/075dc91f-0aef-4a59-aee5-a95ec22fe2b5",
+      "display": "CMPDayOfRelvDat1minB4EDStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/075dc91f-0aef-4a59-aee5-a95ec22fe2b5",
+      "display": "CMPDayOfRelvDat1minB4EDStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/05ec524f-1d2d-4f9e-8eaa-cc2662030fc6",
+      "display": "INRdurED_ED<1hrObs<1hrBFEncDayAft DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/05ec524f-1d2d-4f9e-8eaa-cc2662030fc6",
+      "display": "INRdurED_ED<1hrObs<1hrBFEncDayAft DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c7382fb6-053b-4424-b5c2-87d79179b016",
+      "display": "INRdurED_ED>1hrNoObsBFEncDayAft DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c7382fb6-053b-4424-b5c2-87d79179b016",
+      "display": "INRdurED_ED>1hrNoObsBFEncDayAft DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/77a6cd7b-4322-4c29-b248-64d8af106ce7",
+      "display": "LOSEQ2DaysEDB4EncIP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/77a6cd7b-4322-4c29-b248-64d8af106ce7",
+      "display": "LOSEQ2DaysEDB4EncIP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/89884742-86cd-4b6f-bed3-00f1929e06b2",
+      "display": "CMP_DayOf_RelvDat_OnIPEnd_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/89884742-86cd-4b6f-bed3-00f1929e06b2",
+      "display": "CMP_DayOf_RelvDat_OnIPEnd_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f5f317c7-69f1-4a89-850a-8a58789c80f2",
+      "display": "PharmContra2DayAftEncStart_NoEDNoObsBFEnc DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f5f317c7-69f1-4a89-850a-8a58789c80f2",
+      "display": "PharmContra2DayAftEncStart_NoEDNoObsBFEnc DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b8af7899-c18a-4070-a987-202949b4446a",
+      "display": "ProcTPAEQ24HrsB4IPEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b8af7899-c18a-4070-a987-202949b4446a",
+      "display": "ProcTPAEQ24HrsB4IPEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a1a37483-1a67-4dd9-a8ca-b4d49a28a19d",
+      "display": "MedAdmPatRefus_eq1dayduringEncIP DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a1a37483-1a67-4dd9-a8ca-b4d49a28a19d",
+      "display": "MedAdmPatRefus_eq1dayduringEncIP DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ed638412-155e-4349-8461-4550fd4fae3b",
+      "display": "PatientRefusal_AntithromboticNotOrdered_ED DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ed638412-155e-4349-8461-4550fd4fae3b",
+      "display": "PatientRefusal_AntithromboticNotOrdered_ED DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/844d9440-ab79-4206-9893-bcf9a786970e",
+      "display": "MedAntithromboticStarteq0dayDuringEncIPwEd NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/844d9440-ab79-4206-9893-bcf9a786970e",
+      "display": "MedAntithromboticStarteq0dayDuringEncIPwEd NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/47b12717-f90f-406a-a114-16fddfbaf8c2",
+      "display": "EncPrinDxAfibFlutter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/47b12717-f90f-406a-a114-16fddfbaf8c2",
+      "display": "EncPrinDxAfibFlutter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5736982d-6c82-4815-b0d2-3416ebe105f4",
+      "display": "PriorThrombolyticTherapy DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5736982d-6c82-4815-b0d2-3416ebe105f4",
+      "display": "PriorThrombolyticTherapy DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c48c3487-44cf-4a09-bc17-e60e66d19002",
+      "display": "PharmContraDayAftObs_ED<1hrDayOfObs<1hrDayAftBFEnc DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c48c3487-44cf-4a09-bc17-e60e66d19002",
+      "display": "PharmContraDayAftObs_ED<1hrDayOfObs<1hrDayAftBFEnc DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/144370a9-c9cf-43db-ba18-f92f4f8cec29",
+      "display": "INRDayAftEnc_ED<1hrObs<1hrBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/144370a9-c9cf-43db-ba18-f92f4f8cec29",
+      "display": "INRDayAftEnc_ED<1hrObs<1hrBFEncDayOf DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ea737165-ca06-4304-9964-c157d504c3ee",
+      "display": "CMO_DayOf_AuthDat_1MinAftEDStart_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ea737165-ca06-4304-9964-c157d504c3ee",
+      "display": "CMO_DayOf_AuthDat_1MinAftEDStart_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7abd0282-c461-4c61-9669-f261a689f485",
+      "display": "CMPDayOfRelvDatOnEDStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7abd0282-c461-4c61-9669-f261a689f485",
+      "display": "CMPDayOfRelvDatOnEDStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/eafd6c1f-c099-48b8-8101-b24b4a49cd0b",
+      "display": "TPADocumentDurEncStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/eafd6c1f-c099-48b8-8101-b24b4a49cd0b",
+      "display": "TPADocumentDurEncStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/da480fb9-7501-46f5-9575-f15a638bc751",
+      "display": "LOSGT2DaysEDB4EncIP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/da480fb9-7501-46f5-9575-f15a638bc751",
+      "display": "LOSGT2DaysEDB4EncIP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/daede659-35ef-47bc-90f0-7882f07f6c50",
+      "display": "CMPDayOfRelvPerStartOnObsEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/daede659-35ef-47bc-90f0-7882f07f6c50",
+      "display": "CMPDayOfRelvPerStartOnObsEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c417d5e6-4cef-4d7b-93c6-d25a61a8a6ca",
+      "display": "CMPDayOfRelvPerStart1MinAfterObsEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c417d5e6-4cef-4d7b-93c6-d25a61a8a6ca",
+      "display": "CMPDayOfRelvPerStart1MinAfterObsEndEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1ef5e77a-dea5-4f1f-873b-44ea79810330",
+      "display": "MedAntithromboticStart_eq0dayDuringEncIP NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1ef5e77a-dea5-4f1f-873b-44ea79810330",
+      "display": "MedAntithromboticStart_eq0dayDuringEncIP NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c1ee2b07-f5a7-451c-8bc5-cb97b1cbcca2",
+      "display": "MedOrdMedReason_gt1dayduringEncIPwEd DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c1ee2b07-f5a7-451c-8bc5-cb97b1cbcca2",
+      "display": "MedOrdMedReason_gt1dayduringEncIPwEd DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f1d38509-ab13-4afe-9dc5-4dbc6ac213c3",
+      "display": "CMP_DayOf_RelvDat_OnEDEnd_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f1d38509-ab13-4afe-9dc5-4dbc6ac213c3",
+      "display": "CMP_DayOf_RelvDat_OnEDEnd_EDEndLT1hrB4Obs_ObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dce7a5ea-accf-4d47-acee-26bbf654eb56",
+      "display": "CMPDayOfRelvPerStartOnEDStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dce7a5ea-accf-4d47-acee-26bbf654eb56",
+      "display": "CMPDayOfRelvPerStartOnEDStartEDEndLT1hrB4ObsObsEndLT1hrB4IP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/67023b3d-31a7-444d-a689-76697cc9dfd5",
+      "display": "Age18 IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/67023b3d-31a7-444d-a689-76697cc9dfd5",
+      "display": "Age18 IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8873f644-9b17-4ee1-9152-8c77c7374bd1",
+      "display": "CMP=1DayDuringEncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8873f644-9b17-4ee1-9152-8c77c7374bd1",
+      "display": "CMP=1DayDuringEncIP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9a297d79-90eb-46f1-9068-1a7c7b6c7147",
+      "display": "INR2DaysAftEnc_NoEDNoObsBFEnc2DayAft DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9a297d79-90eb-46f1-9068-1a7c7b6c7147",
+      "display": "INR2DaysAftEnc_NoEDNoObsBFEnc2DayAft DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fac8c35b-89c4-4ff0-bf5b-32147a59e18f",
+      "display": "MedTPAdurObsEDLT1hrObsLT1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fac8c35b-89c4-4ff0-bf5b-32147a59e18f",
+      "display": "MedTPAdurObsEDLT1hrObsLT1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0eecd949-77bf-4ded-bb95-40e11c2116c7",
+      "display": "Age18onDayOfAdmission IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0eecd949-77bf-4ded-bb95-40e11c2116c7",
+      "display": "Age18onDayOfAdmission IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aadbfade-4898-4931-9e11-e5d7ba64ab27",
+      "display": "PharmContraDayAftEncStart_NoEDNoObsBFEnc_RelePer DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aadbfade-4898-4931-9e11-e5d7ba64ab27",
+      "display": "PharmContraDayAftEncStart_NoEDNoObsBFEnc_RelePer DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/155afb0b-baef-4e1a-8255-dd3bc96c9c0d",
+      "display": "PharmContra2DayAftObs_ED<1hrDayOfObs<1hrDayAftBFEnc DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/155afb0b-baef-4e1a-8255-dd3bc96c9c0d",
+      "display": "PharmContra2DayAftObs_ED<1hrDayOfObs<1hrDayAftBFEnc DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/388557b1-cf25-4750-88b2-751e475b433f",
+      "display": "MedOrdMedReason_gt1dayduringEncIP DENEXCEPfail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/388557b1-cf25-4750-88b2-751e475b433f",
+      "display": "MedOrdMedReason_gt1dayduringEncIP DENEXCEPfail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/be5c4068-2639-4b0c-bea3-5b7c80a6fe3b",
+      "display": "INRGT3pt5ptresultDatetimeEQHospEncStartday DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/be5c4068-2639-4b0c-bea3-5b7c80a6fe3b",
+      "display": "INRGT3pt5ptresultDatetimeEQHospEncStartday DENEXCEPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7ce35cc8-ed8f-46f0-9ba1-8421a760bdc8",
+      "display": "INRLT 3.5 DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7ce35cc8-ed8f-46f0-9ba1-8421a760bdc8",
+      "display": "INRLT 3.5 DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/763c581d-7398-47e7-ba78-eaa5853df551",
+      "display": "CMPGT1dayduringIP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/763c581d-7398-47e7-ba78-eaa5853df551",
+      "display": "CMPGT1dayduringIP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6678ed6f-3c94-4630-a7c5-d35a003b4535",
+      "display": "MedAntithromboticStart_gt1dayDuringEd NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6678ed6f-3c94-4630-a7c5-d35a003b4535",
+      "display": "MedAntithromboticStart_gt1dayDuringEd NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ff9ea2c7-7a68-486d-809e-f0e2cd94d6eb",
+      "display": "LOSEQ2DaysEDstarts1Day23HoursB4IPEncEnds DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ff9ea2c7-7a68-486d-809e-f0e2cd94d6eb",
+      "display": "LOSEQ2DaysEDstarts1Day23HoursB4IPEncEnds DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e02da389-37c1-49c2-a97d-45192e5f1891",
+      "display": "EncB4MP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e02da389-37c1-49c2-a97d-45192e5f1891",
+      "display": "EncB4MP IPPFail"
+    }
+  } ]
+}

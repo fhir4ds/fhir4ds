@@ -29,11 +29,12 @@ def registerMathMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute("CREATE MACRO IF NOT EXISTS Ceiling(x) AS system.ceiling(x)")
     con.execute("CREATE MACRO IF NOT EXISTS Floor(x) AS system.floor(x)")
 
-    # Round - two versions:
-    # Round(x) defaults to 0 decimal places (CQL default)
-    # RoundTo(x, precision) allows specifying precision
-    con.execute("CREATE MACRO IF NOT EXISTS Round(x) AS system.round(x, 0)")
-    con.execute("CREATE MACRO IF NOT EXISTS RoundTo(x, prec) AS system.round(x, prec)")
+    # Round - CQL §16.16: Round half up (toward positive infinity).
+    # DuckDB's built-in ROUND uses half-away-from-zero which gives wrong
+    # results for negative ties (-0.5 → -1 instead of 0).
+    # Use FLOOR(x + 0.5) for the 0-precision case.
+    con.execute("CREATE OR REPLACE MACRO Round(x) AS CASE WHEN x IS NULL THEN NULL ELSE CAST(FLOOR(CAST(x AS DOUBLE) + 0.5) AS DECIMAL(38, 8)) END")
+    con.execute("CREATE OR REPLACE MACRO RoundTo(x, prec) AS CASE WHEN x IS NULL THEN NULL ELSE CAST(FLOOR(CAST(x AS DOUBLE) * POWER(10, prec) + 0.5) / POWER(10, prec) AS DECIMAL(38, 8)) END")
 
     # Other math functions
     con.execute("CREATE MACRO IF NOT EXISTS Sqrt(x) AS system.sqrt(x)")

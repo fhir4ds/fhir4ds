@@ -1,0 +1,41 @@
+{
+  "resourceType": "Encounter",
+  "id": "5b4dc4ec-a7da-4b04-aa4b-51aaee72e97b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient encounter"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "183452005",
+      "display": "Emergency hospital admission (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/59c3a231-ef45-424a-89f7-8e9e8b037633"
+  },
+  "period": {
+    "start": "2026-01-01T23:59:00.000+00:00",
+    "end": "2026-01-03T23:59:00.000+00:00"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "735935009",
+      "display": "Chronic pain due to malignant neoplastic disease (finding)"
+    } ]
+  } ],
+  "diagnosis": [ {
+    "condition": {
+      "reference": "Condition/b8245ee2-9a20-4374-b69d-6f1ba401a9fe"
+    }
+  } ]
+}

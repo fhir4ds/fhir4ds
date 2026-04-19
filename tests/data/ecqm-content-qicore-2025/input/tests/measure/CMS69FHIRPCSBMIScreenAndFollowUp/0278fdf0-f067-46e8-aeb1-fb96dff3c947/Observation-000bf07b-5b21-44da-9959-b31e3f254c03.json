@@ -1,0 +1,56 @@
+{
+  "resourceType": "Observation",
+  "id": "000bf07b-5b21-44da-9959-b31e3f254c03",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/bp" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "vital-signs",
+      "display": "Vital Signs"
+    } ],
+    "text": "Vital Signs"
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "85354-9",
+      "display": "Blood pressure panel"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/0278fdf0-f067-46e8-aeb1-fb96dff3c947"
+  },
+  "effectiveDateTime": "2026-01-01T08:29:00.000Z",
+  "component": [ {
+    "code": {
+      "coding": [ {
+        "system": "http://loinc.org",
+        "code": "8480-6",
+        "display": "Systolic blood pressure"
+      } ]
+    },
+    "valueQuantity": {
+      "value": 130,
+      "unit": "mmHg",
+      "system": "http://unitsofmeasure.org",
+      "code": "mm[Hg]"
+    }
+  }, {
+    "code": {
+      "coding": [ {
+        "system": "http://loinc.org",
+        "code": "8462-4",
+        "display": "Diastolic blood pressure"
+      } ]
+    },
+    "valueQuantity": {
+      "value": 79,
+      "unit": "mmHg",
+      "system": "http://unitsofmeasure.org",
+      "code": "mm[Hg]"
+    }
+  } ]
+}

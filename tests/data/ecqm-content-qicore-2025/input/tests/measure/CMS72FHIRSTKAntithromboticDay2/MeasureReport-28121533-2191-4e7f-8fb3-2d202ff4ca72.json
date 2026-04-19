@@ -1,0 +1,111 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "28121533-2191-4e7f-8fb3-2d202ff4ca72",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "ea8e4580-a90c-4d42-ba3e-bcc713bcb954-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "3264d587-3c02-45ff-b989-044fcc30abae"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#ea8e4580-a90c-4d42-ba3e-bcc713bcb954-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient receives INR of 3.6 1 minute before ED start.  ED less than 1 hour before OBS starts at midnight (day after). Case will pass due to day of.\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS72FHIRSTKAntithromboticDay2",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 1
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/3264d587-3c02-45ff-b989-044fcc30abae"
+  }, {
+    "reference": "Encounter/90fd3bc8-4027-461a-84dd-10c54101ca07"
+  }, {
+    "reference": "Encounter/7aa92539-d33a-4efd-9ae1-f1a858e6f05f"
+  }, {
+    "reference": "Encounter/76cb236a-3c6a-45f0-9816-7345e098990e"
+  }, {
+    "reference": "Claim/5ca62962b8484628b8de1ec5"
+  }, {
+    "reference": "Observation/c32d8d00-0651-4c02-b139-a5a4f2e0b240"
+  }, {
+    "reference": "Coverage/9678ffa6-4af3-4a6a-96bd-ace95eb5cd64"
+  }, {
+    "reference": "Condition/d9f911e4-b7fb-4a3b-bf09-f5e218538323"
+  }, {
+    "reference": "Organization/0b427100-b7c1-4290-9d5a-e2392ea2b398"
+  } ]
+}

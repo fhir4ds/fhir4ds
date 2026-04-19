@@ -1,0 +1,20 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "f3962b1d-9405-4af0-872e-401deb3510f9",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1804799"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/fed17706-6d92-4092-a9b1-9b7e47847f2a"
+  },
+  "effectivePeriod": {
+    "start": "2026-10-10T06:00:00Z"
+  }
+}

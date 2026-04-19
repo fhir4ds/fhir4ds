@@ -1,0 +1,84 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.600.2388-20220217",
+  "meta": {
+    "versionId": "35",
+    "lastUpdated": "2024-08-09T14:15:06.000-04:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Institutes for Research Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-02"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2022-02-17"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.2388",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.600.2388"
+  } ],
+  "version": "20220217",
+  "name": "Underweight",
+  "title": "Underweight",
+  "status": "active",
+  "experimental": false,
+  "date": "2022-02-17T01:02:24-05:00",
+  "publisher": "American Institutes for Research Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: This value set contains concepts that represent identifying underweight patients.),(Data Element Scope: This value set may use the Quality Data Model (QDM) category or attribute related to Diagnosis.),(Inclusion Criteria: Includes only relevant concepts associated with identifying patients who are currently underweight.),(Exclusion Criteria: No exclusions.)",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "248342006",
+        "display": "Underweight (finding)"
+      }, {
+        "code": "427090001",
+        "display": "Body mass index less than 16.5 (finding)"
+      }, {
+        "code": "717933005",
+        "display": "Severe thinness in adulthood (finding)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:313e92a6-6f71-4bfc-aa93-b35e9feadb0d",
+    "timestamp": "2025-06-20T16:55:30-04:00",
+    "total": 3,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "248342006",
+      "display": "Underweight (finding)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "427090001",
+      "display": "Body mass index less than 16.5 (finding)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "717933005",
+      "display": "Severe thinness in adulthood (finding)"
+    } ]
+  }
+}

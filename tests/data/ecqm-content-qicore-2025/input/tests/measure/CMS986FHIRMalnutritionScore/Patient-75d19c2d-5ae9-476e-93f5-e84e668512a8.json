@@ -1,0 +1,61 @@
+{
+  "resourceType": "Patient",
+  "id": "75d19c2d-5ae9-476e-93f5-e84e668512a8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2028-9",
+        "display": "Asian",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "White"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2186-5",
+        "display": "Not Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Not Hispanic or Latino"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248152002"
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://madie.cms.gov/",
+    "value": "MultEncwithMultAsses"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "text": "MultEncwithMultAsses",
+    "family": "MSROBSPass4",
+    "given": [ "MultEncwithMultAsses" ]
+  } ],
+  "gender": "female",
+  "birthDate": "1984-04-04",
+  "address": [ {
+    "text": "MultEncwithMultAsses, Screened Not at risk Assessed Severely Malnourished Diagnosed Care Plan, ID=ScreAtriRefAsseModDxCp2, DOB: 03 Feb 1956"
+  } ]
+}

@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "cb0d6510-2d1e-416f-809d-b6fece3f97db",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "101807-6",
+      "display": "Malnutrition risk screen results indicator",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1ae7790b-bb1d-41d1-9454-deac8ef63ea2"
+  },
+  "effectiveDateTime": "2026-07-01T09:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "129845004",
+      "display": "At increased risk for imbalanced nutrition, less than body requirements (finding)",
+      "userSelected": true
+    } ]
+  }
+}

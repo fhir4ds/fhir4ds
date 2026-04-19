@@ -1,0 +1,44 @@
+{
+  "resourceType": "Condition",
+  "id": "71656d2c-5a16-478e-a1ce-cb7fe9ef24bf",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "version": "4.0.1",
+      "code": "inactive",
+      "display": "Inactive",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2020-09",
+      "code": "195186005",
+      "display": "Cerebral infarction due to embolism of precerebral arteries (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1a75e113-5ea8-4341-b940-deb8b5a152e6"
+  },
+  "onsetDateTime": "2026-08-20T08:00:00.000+00:00",
+  "abatementDateTime": "2026-10-01T09:15:00.000+00:00"
+}

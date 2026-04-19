@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "13761ccd-540a-4ec6-a41a-9d0430d8a25c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2016-01-01T01:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "1209098000",
+      "display": "Fiberoptic colonoscopy with biopsy of lesion of colon (procedure)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b20cd591-3625-4d95-8081-6f2566c51fa6"
+  },
+  "performedPeriod": {
+    "start": "2017-01-01T01:00:00.000+00:00",
+    "end": "2017-01-01T01:15:00.000+00:00"
+  }
+}

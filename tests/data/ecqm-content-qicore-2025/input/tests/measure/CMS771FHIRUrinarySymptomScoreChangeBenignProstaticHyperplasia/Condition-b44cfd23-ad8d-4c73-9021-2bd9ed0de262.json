@@ -1,0 +1,45 @@
+{
+  "resourceType": "Condition",
+  "id": "b44cfd23-ad8d-4c73-9021-2bd9ed0de262",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "resolved",
+      "display": "Resolved",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "236648008",
+      "display": "Acute retention of urine (disorder)",
+      "userSelected": false
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/3ab3ac1d-9b5e-4087-8862-dcb2562fb90f"
+  },
+  "onsetPeriod": {
+    "start": "2025-12-31T00:00:00.000+00:00"
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "00f3308f-2dec-42ec-b038-963f0c947ad8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "8ef334c6-5e7f-48a1-80f0-eeef3a329147-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "eedc0219-de6f-4e2c-88a8-c3547d7e72eb"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#8ef334c6-5e7f-48a1-80f0-eeef3a329147-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "IP Encounter with High Risk Procedure starts before ED and hospitalization start date/time. Must start during the encounter to meet the denominator exclusion, so fails.  "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS832HHAKIFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/eedc0219-de6f-4e2c-88a8-c3547d7e72eb"
+  }, {
+    "reference": "Encounter/4fde94c6-bed2-421a-95bb-12a3dac9eae8"
+  }, {
+    "reference": "Observation/473b8e2a-8dde-474c-94a1-2ec86b57b904"
+  }, {
+    "reference": "Observation/d0084630-77da-4faf-9337-d870fda4d8c9"
+  }, {
+    "reference": "Observation/c9c0e413-0417-41fb-9f4b-8537b22fac21"
+  }, {
+    "reference": "Encounter/e899823a-59e9-4e91-b223-69bbee7ef7b9"
+  }, {
+    "reference": "Procedure/e1676d93-b5e6-44a0-9f08-e2f4377cb232"
+  } ]
+}

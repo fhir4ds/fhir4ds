@@ -1,0 +1,35 @@
+{
+  "resourceType": "Condition",
+  "id": "d7bc4f37-e964-4006-a35a-63b77c3c0b35",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "981000124106",
+      "display": "Moderate left ventricular systolic dysfunction (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f00cb244-a7cc-408f-ab47-7c3ac82469b1"
+  },
+  "onsetPeriod": {
+    "start": "2026-05-13T14:40:00.000+00:00"
+  }
+}

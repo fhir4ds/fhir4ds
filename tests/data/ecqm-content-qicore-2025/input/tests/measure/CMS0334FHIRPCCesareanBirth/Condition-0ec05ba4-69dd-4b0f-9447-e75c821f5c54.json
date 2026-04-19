@@ -1,0 +1,30 @@
+{
+  "resourceType": "Condition",
+  "id": "0ec05ba4-69dd-4b0f-9447-e75c821f5c54",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-09",
+      "code": "169826009",
+      "display": "Single live birth from singleton pregnancy (finding)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/d2556dbf-f07b-4208-921b-86d33f321760"
+  },
+  "encounter": {
+    "reference": "Encounter/f369c74b-4118-4e45-b8b1-6cb9494171f4"
+  },
+  "recordedDate": "2026-10-14T08:00:00.000+00:00"
+}

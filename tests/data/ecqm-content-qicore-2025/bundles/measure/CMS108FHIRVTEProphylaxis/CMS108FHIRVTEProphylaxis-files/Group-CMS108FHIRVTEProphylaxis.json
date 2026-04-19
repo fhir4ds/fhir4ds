@@ -1,0 +1,712 @@
+{
+  "resourceType": "Group",
+  "id": "CMS108FHIRVTEProphylaxis",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS108FHIRVTEProphylaxis"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/4fda37ce-d4ce-487f-84dd-6274e7c0114a",
+      "display": "INR3_0_DayOfAnesthesia NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0190ef4b-c22d-4177-b293-874f1a9030a6",
+      "display": "DxVTEduringEDGT1hrB4Enc IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d8c5ec26-7d98-4461-899e-edfcfed7b058",
+      "display": "MedReasonMOLDUHepDOVFPIPEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6b1471ba-f1b5-4c2f-ae25-779c5694dfb8",
+      "display": "EncDxIschemicStrokeRank2 DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/77c1bf41-fce8-4044-9eeb-c205b8fdc0a9",
+      "display": "MAInjXa1MinAfterAnesEndTime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b6d4f313-21b9-4cd8-9e6f-b682d176a73f",
+      "display": "TestMultipleOccur1inDen1inNum NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8961c16d-d6a2-4da2-bbe0-d66f7ed6d85a",
+      "display": "CMPerfGT1DayAfterIPEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e3ec8d52-9b22-4b4d-8dad-a411a1053e83",
+      "display": "EncDxVTE IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a97b19dd-82f7-4b7b-960b-3c8b1101caeb",
+      "display": "VTERiskAssessDayOfAnes NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5f739500-ee12-4662-8980-ef95d8fa74c8",
+      "display": "PtRefDOVFPTaskReject NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4df4e9bf-dff3-448c-a6f1-6415d8ebb8a6",
+      "display": "MAGlycoIPEncMedAdmRvltDT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/900f47c2-3615-4ffe-a9e0-3e7e70469ffb",
+      "display": "CMPerfDuringEDEDendsOnEncStartTime DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cd776813-caeb-4f71-97a9-6c40882c7041",
+      "display": "SCIP_HipFxRank1 DENEXPass "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/543248c8-b6af-407d-b435-7e867c4770b4",
+      "display": "DxAFibStartsOnEncEndTime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d9b7ffa9-ed78-484c-8880-b4cbf2b4b6a1",
+      "display": "DxVTEClinicalStatusResolved NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a6abc191-21b3-4a69-9555-9c2cdff6feef",
+      "display": "MAGlycEDGT1HrB4SameDayOfAdm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/265998f3-4ef6-4345-8ae1-fb6ab204318e",
+      "display": "MAOralXaApixabanNoSurg NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3c35a3b2-736b-43e8-8514-43f5caa382ac",
+      "display": "SCIPNeuroRank2 DENEXFail "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8eb00db0-32af-43c6-9c00-79eb2a4462ad",
+      "display": "MALDUHep2DaysAfterAnesth NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bc83eb4d-4953-4995-9a14-5e2a764a6728",
+      "display": "TestMultipleOccur_1inExcl1inNum NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/76f42831-b31b-48f0-9053-60754a77451c",
+      "display": "HipSurgRank1 DENEXPass "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4367cc89-c597-45b8-99b9-ccf6c84f2929",
+      "display": "MAWarfarinDayOfAnes NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9696b1d1-693b-42f8-96a2-95f379e245a4",
+      "display": "MARixDuringED NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d7f4c185-c735-4827-9ab8-b7f1f882f206",
+      "display": "PtRefMALDUHepIPEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fa6ecbf0-8dd9-4c03-a8ed-2bd82cb8206f",
+      "display": "ProphylaxisDuringSameDayOf2ndObs NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2899457d-5309-43e4-a7f0-a4ff34276b9d",
+      "display": "DAVFPDayOfICUWICULOSEQ0Day NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/eda87b8e-5b2a-46f5-af96-a7c0b75131ec",
+      "display": "ICUStartOnEncStartTime DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/afad0252-21ef-48ee-9a5a-33dab92d8709",
+      "display": "CMOPerfDayofAnes DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ce7eb418-e867-4474-af7b-b185145e6abe",
+      "display": "MAThrombDT23HrAfterAnes NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1cc5371c-a4d4-4912-a9be-76d2b31e1edd",
+      "display": "VTERiskAssessED NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5741c41a-04ec-4967-83b2-b0d746bd0ed5",
+      "display": "INRGT31DayAFEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/91c8a4a4-2789-4459-bf83-7720f660e89b",
+      "display": "MALDUHepDayOfAdm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/393c7827-5136-4a2d-916d-3da088d2c053",
+      "display": "MAOralXaDayAFEncStartKneeSurgRvltDT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d9317b8a-ccf3-4fdb-bcee-da027b403708",
+      "display": "CMO2DayAfterAnesthesia DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5648dea0-7f2d-4611-b87a-4bc5586c3780",
+      "display": "EncDxObstetricsRsnCode IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/29bd19cc-e5fc-431b-b308-ce5f816533d3",
+      "display": "RixDuringOBS_OBSGT1hr NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0ddb05b5-03af-4d2a-9d9c-0be8034d1ff4",
+      "display": "CMPerfDuringObsObsLT1HrBFAdm DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3c8c427a-d756-456a-8f4e-e909b364e4fb",
+      "display": "MAOralXaOnDayAFAnesMedAdmDT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8da72843-3486-4507-99f5-c9622a389384",
+      "display": "EncDxHemStrokeRank2 DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fa475afd-7282-48cc-95bc-747bf3dac16a",
+      "display": "WarfarinAFDisch2Encounters NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/83b9921c-2768-4dec-be0c-a93e20f7eaf9",
+      "display": "WarfarinAFDisch2Encounters NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/96c7b8e3-2c28-4b46-a579-f56d644cf762",
+      "display": "CMPerfDayAfterAnesEnd2DayAFAdm DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d205878e-b861-43a8-92e8-47f680987e4d",
+      "display": "PtRefMOWarfarinTaskReject NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dd5a1e46-1b99-45a3-b4d3-1fde205d8a11",
+      "display": "DxVTEClinicalStatusRemission NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e9b691aa-5cdd-4f8b-9030-67b151285461",
+      "display": "SCIP_GynRank1 DENEXPass "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3d6571e7-25b8-4ec7-a4a7-0e41fafeadb5",
+      "display": "MARixDrgOBSEDEQ1hr NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c0ddfe7a-d2b7-43d2-a51f-7190870e39c5",
+      "display": "LOSLT2Days DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fa49d072-3d0c-4140-b2f8-d29c55346aa8",
+      "display": "MAUHepEDendTimeOnIPEncStrtTm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a3af6a3d-6334-44db-a39a-23db9018a190",
+      "display": "MedReasonMOLMWHepDOGSCDayOfAnes NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/96744bfd-c149-412a-8578-fb3f8c91e874",
+      "display": "INR3_DayAFAnes2DayAFAdm NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0f3bb677-2879-45da-b93d-70efd50381e1",
+      "display": "MAPtRefInjXaDayOfAnes NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ef0bebdc-61bf-4233-abd3-1f3c99a2cd8d",
+      "display": "MAOralXaDayAFEncStartHipSurgDrgEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5da7c3c7-9663-47f5-90b8-b1e754127a6f",
+      "display": "DAIPCDayOfAnesProcRvltDT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4e39ae5f-5b8a-4bc2-a550-002d1ba16c33",
+      "display": "SCIP_HipFxRank2 DENEXPass "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d04c2856-3708-4809-b4e3-4d1746ff274b",
+      "display": "PtRefusalEDGT1HrAdm1DayBFAdm NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8e2cfc29-0925-45b9-857f-b9ee9b9fa248",
+      "display": "MedRsnMAWarfDAIPCDrgEDGT1hrSameDayAdm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9ee0f965-4287-41db-bd8e-5631e408c116",
+      "display": "PrincDxHemStroke DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d69b5757-4a47-4f3f-b138-88a11272880b",
+      "display": "SCIPNeuroRank1ProRvltDTDuringEncWRef DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1f59fbfd-286a-4d4e-bd11-17769e86e872",
+      "display": "CMPerfRvltStartNULLEndDayAfAdm DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2eff6dbd-f3a2-43ee-9ad3-aab4d3b84812",
+      "display": "PtRefMOInjXaTaskReject NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c2dfc5ca-96db-4ae2-bbe1-7bfed219cb72",
+      "display": "ProphylaxisDuringFirstED1DayBFAdm NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dc0dcb01-87f0-4e65-9c36-8cf6174abef1",
+      "display": "INR4WOdecimalAfterEndOfAnes NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/104887a9-056e-4fd3-b47a-176eefbd090b",
+      "display": "CMODrgED2HrsBFAdmSameDateAdmDateDoNotPerformFalse DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/861fe7f8-9bab-4e23-9b85-419e1aa0b1d8",
+      "display": "PrincDxMHWRef DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/525e73f2-77be-49b1-920f-6fc31ef38d22",
+      "display": "PtRefMOLMWHTaskReject NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e5a098bd-f673-46ec-961f-1e00d7400af8",
+      "display": "MedReasonMOWarfDOIPCIPEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2de13e4e-32bf-4b79-8750-9e0820d2eb4d",
+      "display": "PtRefMALMWHOBS NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/70a5b41a-14ac-4e08-b661-d5523ad80fbf",
+      "display": "SCIPNeuroRank1RvltDTDrgEncSMD DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1b7603d3-81d1-45be-8b6f-a483827e9eb8",
+      "display": "MALMWHDayOfAdmit NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/541ccffb-c1be-4c94-ab24-168d52e3a36b",
+      "display": "MedReasonMARixDAVFPDuringOBS NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ca65cc7-2f5b-4d0b-987f-dfd9a26fd0ea",
+      "display": "CMOPerfRvltDTDayofAnesRvltDT DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0dae06f1-1e15-4905-ae46-86ea310c2f1f",
+      "display": "EncEndsOnLastMinOfMP IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/848277a1-a657-4474-a474-733a962f44a5",
+      "display": "EncDxAfibMAOralXaMedAdmRvltDT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/41f2785f-4c4f-4497-a46b-e17fd8b5ee3f",
+      "display": "CMODrgEDHrsBFAdmDoNotPerformTrue DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e6416748-51e0-4103-b9dd-680aa0b0ccdb",
+      "display": "HipSurgRank1 DENEXPass "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ccd7f9d7-35e8-4623-9f2e-f229cf7d829c",
+      "display": "PtRefDAIPCDuringOBS NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d2d1c27e-28f2-4536-a398-27d60f83bf54",
+      "display": "ICULT1Day DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4c649ec3-846e-46e2-bee4-6ace6da48f68",
+      "display": "INR3WOdecimal NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/52790be5-0f6e-4ebd-85f5-57f35db8b56b",
+      "display": "MAInjXaAnesEndTime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/29ed471c-3393-43d4-a234-2550851b2bc7",
+      "display": "TestMultipleOccur1inIPP1FailIPPdueToDx NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1d907390-04db-46f5-b429-955aa427e815",
+      "display": "NOccur1FailIP1NumMAWarfSameDayBFAdmit NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/91ff5f1a-cfdb-472d-b8c3-144f499d1ccc",
+      "display": "PtRefDOIPCTaskReject NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cbd1de91-441a-4588-b000-2e589d099ab6",
+      "display": "MAOralXaHipOnEncStartTime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/23f1ece5-35ea-4446-8305-f6f023dfb1a3",
+      "display": "MAOralXaapixabanWVTEdiagnosisAFProc NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8bb999a1-696a-497b-a5f4-aa55e146a16e",
+      "display": "INR41DayAfterAnes2DayAFAdm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e2e5ba36-0d4d-425e-9e9a-6c8a64155fc7",
+      "display": "MAOralXaKneeOnEncStartTime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3db5c5a1-2eec-4e01-8e59-ac389a0a2179",
+      "display": "INRGT3ED NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/eb754c68-82c7-48cd-a2f0-26ee1cd92544",
+      "display": "SCIPHipFxRank1SMDCT DENEXPass "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dfc6a903-e637-4fff-8619-996099874454",
+      "display": "INR_InvalidValue NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d183d785-95f8-4d8c-a2eb-a80322ebdd4d",
+      "display": "LOSEQ2Days IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/73673965-9b35-446e-bad7-1701991e6906",
+      "display": "VTERiskAssStartEDendOnIPEncStart NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dba7c9af-eb6f-4836-ba24-650a5acc87e7",
+      "display": "MedReasonMOInjXaDAVFPDayAfAnes NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/316da95d-60f2-4a74-9a28-7a4adb7c0098",
+      "display": "EncB4MP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a3e0cca4-bdb1-4972-b6ca-84841cb66859",
+      "display": "VTERiskAssessDayAfAnesProcRvltDT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ee7d6d89-bc00-4a58-ada5-8ee8c867ec74",
+      "display": "PtRefDOGCS1DayAFAnes NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fee36f91-f35f-4d50-a89c-51ecd0d3ee4f",
+      "display": "MedRsnAllDvcWMAWarfDrgEDDayBFAdm NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e193ed34-00f9-4da1-b347-20d720b30517",
+      "display": "ICUDayAfterAdmit DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9b105e54-ec6c-4235-a051-ee4da0ee4a40",
+      "display": "DAVFPDayOfAdmBfAdmDT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/610c90c9-f387-40f8-9bd7-710d20dfd6f0",
+      "display": "MALMWHDayOfAnes NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/575f2da0-c890-47a3-b17f-f9e134a1096e",
+      "display": "PtRefDAGCSDuringED NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/61e522ed-d51b-4398-bb65-6cf7fefe179f",
+      "display": "PtRefMORivDayOfAnesProcRvltDT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/898693f7-3efa-4240-bc7f-cfe7019a594b",
+      "display": "ICU3DaysAfterAdmit DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0306790e-8c5b-40cb-b164-e5d7f79eef8f",
+      "display": "MAWarfarinDayOfAdmit NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3dcb32cf-6ad1-4a44-89da-1125e19b5c8c",
+      "display": "PtRefDOIPCDayAFEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/54851bea-ea21-497a-ad7d-fc9819a6a1c8",
+      "display": "MedRsnMOInjXaDOIPCOnAnesEndTime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d170a0a8-b5ad-4303-b6df-e304dd5f92ad",
+      "display": "PrincDxIschStroke DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5c5e2a11-a194-40b0-bc16-8e7302dafd24",
+      "display": "CMODuringEDED2HrsBFAdm1dayBFAdm DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a7a685d8-d95a-489a-a3ae-a461d945bcb3",
+      "display": "EncEndsAfterMP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3c854f27-5103-4367-bdef-97c3cde1edb8",
+      "display": "PtRefDOGCSTaskReject NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/26a3b808-8c5e-4fcb-80ee-91932e3880e8",
+      "display": "SCIPUroSrgRank1ProRvltDTDrgEncWRef DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9b925e9e-1c3a-4e98-b156-0583323e2d6e",
+      "display": "CMODuringObsObsLT1hrBFAdm DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ea49dc35-7378-4436-aa37-53ec9f13b05d",
+      "display": "TestMultipleOccur2inNum NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ff814452-be6d-4e4b-905b-c1ae2a551645",
+      "display": "PtRefMOLMWHTaskReject NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9f11ba0f-2fd8-4f45-87c8-98fd7f81e42b",
+      "display": "SCIPGenSurgRank1 DENEXPass "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/068814f1-4270-4e10-b470-9a5433bceb3e",
+      "display": "MedReasonMALDUHepDAGCSDuringED NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1701c7fe-de21-4bb9-8404-92cb1ef4e638",
+      "display": "PtRefMOWarfEDendTimeEQEncStartTime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4c2e4fec-cf58-4a6e-be40-af9b9e4232c9",
+      "display": "DAGSC1DayAFAnes NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/90914261-db25-4012-b8c8-f75aab8ec6c9",
+      "display": "Age18DayAfterEncStart IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/554c649c-cc35-489d-9216-31ccf349a841",
+      "display": "VTERiskAssesOnAnesEndTime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4fe13533-3514-48d8-aba0-a7c790e796cc",
+      "display": "MAGlyco1DayAfterAnes NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7520f4b4-3bde-465e-b6b0-07c5ac3da4de",
+      "display": "MedReasonMAWarfDOIPCDayOfAnes NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fb5c51ec-7a7f-4085-9782-97cf438f7247",
+      "display": "CMOEDvisitEDendsOnEncStart DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/92b4eee9-78aa-4f58-9ccf-750556dfa62c",
+      "display": "EncDxObstetrics IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4b739978-837b-4de8-a137-6388cfce6a5f",
+      "display": "RixDuringED_EDGT1hr1minAdm NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/04048fd6-1b9a-4061-a8a9-9a4879c42b04",
+      "display": "INR3_0 NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/87532ec3-3437-4936-a22f-c33c134a9779",
+      "display": "EncDxObstetricsVTE IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f546eaac-8f7c-4325-ae6a-af049231ef5f",
+      "display": "MALDUHep1DayAfAnesMedAdmRvltDT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f02a4a69-6e70-465f-a3f8-9e9c369d72c3",
+      "display": "CMODayofAdmit DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6ce8d015-efcf-4c8e-a715-cc7c460e3ba8",
+      "display": "MAGlyco1DayAFIPEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b621464f-6e8d-4a28-b5a9-ec0178cf33ae",
+      "display": "DAGCSOnAnesEndTimeEncStartTime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/33d162ce-3bc7-4b0a-8c04-fec0a42a6263",
+      "display": "DxVTEB4EncStartWMAOralXa NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1b450176-8caa-4133-bc9a-c066969f72ce",
+      "display": "CMPerfRvltStartDayAFAdmEndNull DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9b6d2fc2-6e25-4c0a-b4cb-3ca7f85be9b4",
+      "display": "CMPerfDrgObsGT1HrBFAdmCMODayBFAdm DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/810ee9c4-bb4d-43b6-a552-d7326e9e7a7b",
+      "display": "VTERiskAssessIPEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/182103c1-0a38-4d85-819c-148e4e105716",
+      "display": "PtRefMORixTaskReject NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a8083d97-85af-4e1e-8770-30c49a287194",
+      "display": "VTERiskAssEndEDendOnIPEncStart NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b0932ba4-4dfc-43ad-aa67-fbaee9638d3b",
+      "display": "SCIPGenSurgRank1ProRvltDTDrgEnc DENEXPass "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b7783b8c-ba46-4509-a75e-203659abab3d",
+      "display": "PtRefDAVFPIPEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5e4231e6-dc8e-423e-9107-003da9d26548",
+      "display": "MedReasonMALMWHDOGCSIPEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b30e1235-fe5d-4cd1-a536-4baafc680d7b",
+      "display": "2Encounters1PassIPPDENDENEX DENEXPass"
+    }
+  } ]
+}

@@ -1,0 +1,33 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "4bf2c3dd-0a85-4442-bcda-9739841200b8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+      "code": "community",
+      "display": "Community",
+      "userSelected": true
+    } ]
+  } ],
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "2022-01",
+      "code": "308351",
+      "display": "2.5 ML argatroban 100 MG/ML Injection",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f07b7d1a-b0da-4d44-acc6-eb2a6dfa0da3"
+  },
+  "authoredOn": "2026-11-24T08:00:00Z",
+  "requester": {
+    "reference": "Practitioner/example"
+  }
+}

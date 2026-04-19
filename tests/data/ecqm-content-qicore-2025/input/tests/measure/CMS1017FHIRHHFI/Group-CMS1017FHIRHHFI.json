@@ -1,0 +1,432 @@
+{
+  "resourceType": "Group",
+  "id": "CMS1017FHIRHHFI",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS1017FHIRHHFI"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/6916a60d-ffa4-4d2c-8d96-73a31aa18854",
+      "display": "RVDeliriumDxPOA DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6916a60d-ffa4-4d2c-8d96-73a31aa18854",
+      "display": "RVDeliriumDxPOA DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/76c1dbbc-10c3-43af-acd3-41cf5d4838eb",
+      "display": "FallDxPOAByIndicatorW DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/76c1dbbc-10c3-43af-acd3-41cf5d4838eb",
+      "display": "FallDxPOAByIndicatorW DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/814eb904-2889-4c31-9dfe-5b682eb473a4",
+      "display": "Enc1FallPOAEnc2FallNPOAAndInjuryNPOA IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/814eb904-2889-4c31-9dfe-5b682eb473a4",
+      "display": "Enc1FallPOAEnc2FallNPOAAndInjuryNPOA IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/56d5fe48-53b2-4599-870c-58bfc4ba0145",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/56d5fe48-53b2-4599-870c-58bfc4ba0145",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/55931284-058b-4776-882c-720caddd3366",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/55931284-058b-4776-882c-720caddd3366",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4d82afdc-16a1-4f82-849f-10ed8bf9d9a0",
+      "display": "BothMOsFailDueToFallPOA OBSERVFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4d82afdc-16a1-4f82-849f-10ed8bf9d9a0",
+      "display": "BothMOsFailDueToFallPOA OBSERVFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f771a339-74f0-4651-90f3-1c820edea547",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f771a339-74f0-4651-90f3-1c820edea547",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e287cd76-85bd-4f51-9c41-f19551e83c14",
+      "display": "RVPrincipalDiagnosis DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e287cd76-85bd-4f51-9c41-f19551e83c14",
+      "display": "RVPrincipalDiagnosis DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5829147b-0a83-464b-bc92-cebb96b4ae38",
+      "display": "Enc1FallPOAEnc2FallNPOAAndInjuryNPOA IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5829147b-0a83-464b-bc92-cebb96b4ae38",
+      "display": "Enc1FallPOAEnc2FallNPOAAndInjuryNPOA IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/113d43da-4cad-4907-804e-63afb7652b27",
+      "display": "ModerateInjuryPOAandModInjNPOA NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/113d43da-4cad-4907-804e-63afb7652b27",
+      "display": "ModerateInjuryPOAandModInjNPOA NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f90151aa-9bd6-4c0c-bed8-5d43fe7fb8bb",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f90151aa-9bd6-4c0c-bed8-5d43fe7fb8bb",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a2b51ea0-5a72-4bda-abe5-dd393bfa0545",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a2b51ea0-5a72-4bda-abe5-dd393bfa0545",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5ff2713d-ca89-42ae-91bb-cba3e1d9a487",
+      "display": "1stEncExcluded2ndEncNumHit NUMEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5ff2713d-ca89-42ae-91bb-cba3e1d9a487",
+      "display": "1stEncExcluded2ndEncNumHit NUMEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/21d7f7e1-3977-4227-8792-2e316460326f",
+      "display": "FallPOAModInjuryNPOA NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/21d7f7e1-3977-4227-8792-2e316460326f",
+      "display": "FallPOAModInjuryNPOA NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/02d5c5f5-9487-42af-bb5e-dfc3aaeb70eb",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/02d5c5f5-9487-42af-bb5e-dfc3aaeb70eb",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/38d7ec48-dc28-4875-8f24-451ecd3dab5a",
+      "display": "InjuryNPOANoFall NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/38d7ec48-dc28-4875-8f24-451ecd3dab5a",
+      "display": "InjuryNPOANoFall NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/972573e8-bd51-4b77-a954-39babec1a055",
+      "display": "MajorInjuryPOAandNPOA DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/972573e8-bd51-4b77-a954-39babec1a055",
+      "display": "MajorInjuryPOAandNPOA DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0653f9dc-8461-484e-a901-f17709f04776",
+      "display": "RVOpioidActive DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0653f9dc-8461-484e-a901-f17709f04776",
+      "display": "RVOpioidActive DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4402a9b9-3d48-4472-a000-579b7baa88fa",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4402a9b9-3d48-4472-a000-579b7baa88fa",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ea6b3f44-c6cd-4417-ae60-e97564bf24f9",
+      "display": "DenomObsPassDueTo1DayPlus23Hrs59M OBSERVPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ea6b3f44-c6cd-4417-ae60-e97564bf24f9",
+      "display": "DenomObsPassDueTo1DayPlus23Hrs59M OBSERVPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ee27450-2fd5-4930-bfbb-e718074e4087",
+      "display": "DenomMeasObsPassDueTo1DayAnd1MinLOS OBSERVPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ee27450-2fd5-4930-bfbb-e718074e4087",
+      "display": "DenomMeasObsPassDueTo1DayAnd1MinLOS OBSERVPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/559b63eb-fb48-45f5-bf6c-4f7c2901007d",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/559b63eb-fb48-45f5-bf6c-4f7c2901007d",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ca728a1a-9a25-46b6-80bc-bfffae233f6c",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ca728a1a-9a25-46b6-80bc-bfffae233f6c",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/966cc666-8f6e-4d6e-93a9-0c4b6345e966",
+      "display": "FallNullPOAInjuryNullPOA NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/966cc666-8f6e-4d6e-93a9-0c4b6345e966",
+      "display": "FallNullPOAInjuryNullPOA NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/55b18e1a-c949-4d85-b1c5-caa91fc6ac4b",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/55b18e1a-c949-4d85-b1c5-caa91fc6ac4b",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e6383b7c-aa91-42f7-8dc8-693a8c7dcaf3",
+      "display": "MajorInjuryPOAandModInjNPOA NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e6383b7c-aa91-42f7-8dc8-693a8c7dcaf3",
+      "display": "MajorInjuryPOAandModInjNPOA NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/404570c9-b21f-4fa2-be5d-6d02c910fea6",
+      "display": "Enc1FallPOAEnc2FallNPOAAndInjuryNPOA DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/404570c9-b21f-4fa2-be5d-6d02c910fea6",
+      "display": "Enc1FallPOAEnc2FallNPOAAndInjuryNPOA DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d305cce9-ad3c-4259-9f9d-6026974fa847",
+      "display": "EncounterFallandModInjuryNPOA NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d305cce9-ad3c-4259-9f9d-6026974fa847",
+      "display": "EncounterFallandModInjuryNPOA NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/65163106-0b19-4548-a994-f44b35e162e0",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/65163106-0b19-4548-a994-f44b35e162e0",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/77178177-d553-4bf3-8c92-65382bfbee73",
+      "display": "PtAgeNot18EncounterStart IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/77178177-d553-4bf3-8c92-65382bfbee73",
+      "display": "PtAgeNot18EncounterStart IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/951a2d40-7274-4820-bfa5-51d28cfd91ab",
+      "display": "FallPOAisW DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/951a2d40-7274-4820-bfa5-51d28cfd91ab",
+      "display": "FallPOAisW DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3279a237-292f-47b1-9039-ba46b57e765a",
+      "display": "FallNPOANoInjury NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3279a237-292f-47b1-9039-ba46b57e765a",
+      "display": "FallNPOANoInjury NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c04e2f24-703c-4999-a9b7-ca1d65aac5b5",
+      "display": "DenomMeasObsFailsLT1day OBSERVFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c04e2f24-703c-4999-a9b7-ca1d65aac5b5",
+      "display": "DenomMeasObsFailsLT1day OBSERVFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6442de45-b65d-4bda-8143-0e9c28d19485",
+      "display": "FallAdvEventNoDates NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6442de45-b65d-4bda-8143-0e9c28d19485",
+      "display": "FallAdvEventNoDates NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f18417e1-5990-40b7-b927-5b50015380a2",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f18417e1-5990-40b7-b927-5b50015380a2",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1e2ddc95-76d4-4be7-8273-2b35371a727b",
+      "display": "RVOsteoporosisPOA DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1e2ddc95-76d4-4be7-8273-2b35371a727b",
+      "display": "RVOsteoporosisPOA DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/25c753a7-b6b4-4335-bd7c-05b68b0324a4",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/25c753a7-b6b4-4335-bd7c-05b68b0324a4",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e3212bfa-f3a9-4323-8993-9ef74c2f8d89",
+      "display": "FallNullPOAModerateInjuryNullPOA NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e3212bfa-f3a9-4323-8993-9ef74c2f8d89",
+      "display": "FallNullPOAModerateInjuryNullPOA NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3c34a5af-1ef1-4b86-a41f-ac1d44e96ca0",
+      "display": "DenomMOFailsLT12HrIPStayWithFall OBSERVFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3c34a5af-1ef1-4b86-a41f-ac1d44e96ca0",
+      "display": "DenomMOFailsLT12HrIPStayWithFall OBSERVFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fbbd3f4a-3e8e-40b9-ac83-0e80b2c129ec",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fbbd3f4a-3e8e-40b9-ac83-0e80b2c129ec",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/735a7993-89b8-4b21-87c2-d5f57df0f5a8",
+      "display": "TwoInjuriesOnePOAOneNPOAOneFallNPOA NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/735a7993-89b8-4b21-87c2-d5f57df0f5a8",
+      "display": "TwoInjuriesOnePOAOneNPOAOneFallNPOA NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8b63d691-46a8-4ce6-8dee-60aea7f34f82",
+      "display": "IPStartsGTOneHrFromObservationEnd NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8b63d691-46a8-4ce6-8dee-60aea7f34f82",
+      "display": "IPStartsGTOneHrFromObservationEnd NUMERFail"
+    }
+  } ]
+}

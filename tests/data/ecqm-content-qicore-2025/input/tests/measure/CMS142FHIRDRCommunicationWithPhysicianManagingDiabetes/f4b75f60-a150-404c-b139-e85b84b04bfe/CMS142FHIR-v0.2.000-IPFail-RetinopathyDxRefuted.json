@@ -1,0 +1,304 @@
+{
+  "resourceType": "Bundle",
+  "id": "61168b8798086b77ef9c5ec1",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/f4b75f60-a150-404c-b139-e85b84b04bfe",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "f4b75f60-a150-404c-b139-e85b84b04bfe",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2054-5",
+            "display": "Black or African American",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Black or African American"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://myGoodHealthCare.com/",
+        "value": "61168b8798086b77ef9c5ec1"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "IPFail",
+        "given": [ "RetinopathyDxRefuted" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1979-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/f4b75f60-a150-404c-b139-e85b84b04bfe"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/08f3b87e-5e7c-41b5-a7b4-7ce826fcc05b",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "08f3b87e-5e7c-41b5-a7b4-7ce826fcc05b",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active",
+          "userSelected": true
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "refuted",
+          "display": "Refuted",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/202303",
+          "code": "314014002"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/f4b75f60-a150-404c-b139-e85b84b04bfe"
+      },
+      "onsetDateTime": "2026-09-10T10:45:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/08f3b87e-5e7c-41b5-a7b4-7ce826fcc05b"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/93c8484b-c95a-4103-9fd6-7bdb516eec3f",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "93c8484b-c95a-4103-9fd6-7bdb516eec3f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "version": "2023",
+          "code": "99205"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/f4b75f60-a150-404c-b139-e85b84b04bfe"
+      },
+      "period": {
+        "start": "2026-09-11T10:00:00.000+00:00",
+        "end": "2026-09-11T11:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/93c8484b-c95a-4103-9fd6-7bdb516eec3f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/7cc04933-f9f3-4c8d-ba14-f04257cd6062",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "7cc04933-f9f3-4c8d-ba14-f04257cd6062",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/f4b75f60-a150-404c-b139-e85b84b04bfe"
+      },
+      "payor": [ {
+        "reference": "Organization/86d07626-9757-4556-a56c-c13e8a2f2dc7"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/7cc04933-f9f3-4c8d-ba14-f04257cd6062"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/86d07626-9757-4556-a56c-c13e8a2f2dc7",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "86d07626-9757-4556-a56c-c13e8a2f2dc7",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/86d07626-9757-4556-a56c-c13e8a2f2dc7"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/e202d148-676f-476c-9bdb-0d769c2c53a5",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "e202d148-676f-476c-9bdb-0d769c2c53a5",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "e971c90e-547b-459f-8ddf-eb1fa11d6c92-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "f4b75f60-a150-404c-b139-e85b84b04bfe"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#e971c90e-547b-459f-8ddf-eb1fa11d6c92-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient with Qualifying Encounter and Retinopathy Diagnosis does not meet IPP because of the verification status of the diagnosis."
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS142FHIRDRCommunicationWithPhysicianManagingDiabetes",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/f4b75f60-a150-404c-b139-e85b84b04bfe"
+      }, {
+        "reference": "Condition/08f3b87e-5e7c-41b5-a7b4-7ce826fcc05b"
+      }, {
+        "reference": "Encounter/93c8484b-c95a-4103-9fd6-7bdb516eec3f"
+      }, {
+        "reference": "Coverage/7cc04933-f9f3-4c8d-ba14-f04257cd6062"
+      }, {
+        "reference": "Organization/86d07626-9757-4556-a56c-c13e8a2f2dc7"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/e202d148-676f-476c-9bdb-0d769c2c53a5"
+    }
+  } ]
+}

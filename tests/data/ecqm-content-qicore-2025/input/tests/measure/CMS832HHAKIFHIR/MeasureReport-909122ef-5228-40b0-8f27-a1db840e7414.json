@@ -1,0 +1,105 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "909122ef-5228-40b0-8f27-a1db840e7414",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "82af6904-60d7-4196-86e8-4e33fbfb3d48-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "056c566e-f0d0-4fd7-930e-b9ea1e5caa84"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#82af6904-60d7-4196-86e8-4e33fbfb3d48-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Encounter similar to MultipleCreatinine and following tests\n1\t09-20 08:13 AM\t0.9\n2\t09-21 07:13 AM\t1.0\n3\t09-22 01:06 PM\t1.13\n4\t09-23 10:01 AM\t1.9\n5\t09-29 07:01 AM\t1.7\n6\t10-02 10:00 AM\t1.5\n7\t10-06 10:00 AM\t1.7\n8\t10-07 09:00 AM\t1.8\n9\t10-08 08:00 AM\t2.0"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS832HHAKIFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Observation/22d5e9f7-3d2f-4d98-8ad0-48be8e5a3541"
+  }, {
+    "reference": "Observation/bdb616c0-2dc8-40e0-b38e-69ef38d8e45d"
+  }, {
+    "reference": "Observation/88a34abe-76c9-449a-801f-e4c546575efb"
+  }, {
+    "reference": "Encounter/5d135d42-b5be-43d7-8703-ce00e0c1cea1"
+  }, {
+    "reference": "Observation/fcce536c-a6fe-4497-872d-fe2319a40d3d"
+  }, {
+    "reference": "Observation/aa183620-7229-456a-9ffa-2bd6a0ab26f8"
+  }, {
+    "reference": "Observation/7509c671-1446-4d02-ac83-85c8c31d63a1"
+  }, {
+    "reference": "Observation/9efa4a82-83b2-4597-9e7f-b05a872d9448"
+  }, {
+    "reference": "Observation/7b93291f-bee3-4a70-bf5b-8682b5571c7f"
+  }, {
+    "reference": "Patient/056c566e-f0d0-4fd7-930e-b9ea1e5caa84"
+  }, {
+    "reference": "Observation/ee5981fd-245b-4d71-8441-c7149963b7a5"
+  } ]
+}

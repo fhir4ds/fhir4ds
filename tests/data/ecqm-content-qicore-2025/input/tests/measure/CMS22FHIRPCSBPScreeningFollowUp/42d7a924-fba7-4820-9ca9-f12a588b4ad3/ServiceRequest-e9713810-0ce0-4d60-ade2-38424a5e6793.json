@@ -1,0 +1,30 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "e9713810-0ce0-4d60-ade2-38424a5e6793",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "134403003",
+      "display": "Urgent referral (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/42d7a924-fba7-4820-9ca9-f12a588b4ad3"
+  },
+  "authoredOn": "2026-12-31T10:20:00.000+00:00",
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "R03.0",
+      "display": "Elevated blood-pressure reading, without diagnosis of hypertension",
+      "userSelected": true
+    } ]
+  } ]
+}

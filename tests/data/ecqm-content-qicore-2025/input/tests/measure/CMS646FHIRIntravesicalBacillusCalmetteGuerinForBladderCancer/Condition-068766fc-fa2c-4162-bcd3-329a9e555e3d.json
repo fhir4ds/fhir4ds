@@ -1,0 +1,42 @@
+{
+  "resourceType": "Condition",
+  "id": "068766fc-fa2c-4162-bcd3-329a9e555e3d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "25629007",
+      "display": "Acute tuberculosis (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b786e9d7-b4ae-4cd1-b7eb-a6d4f789424e"
+  },
+  "onsetPeriod": {
+    "start": "2026-04-06T08:00:00.000+00:00"
+  }
+}

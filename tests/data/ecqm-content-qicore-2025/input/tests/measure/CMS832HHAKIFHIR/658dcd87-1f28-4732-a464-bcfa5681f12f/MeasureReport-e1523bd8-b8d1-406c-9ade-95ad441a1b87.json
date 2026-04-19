@@ -1,0 +1,97 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "e1523bd8-b8d1-406c-9ade-95ad441a1b87",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "b959bbd0-21ed-49dc-a786-00535f9384b0-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "658dcd87-1f28-4732-a464-bcfa5681f12f"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#b959bbd0-21ed-49dc-a786-00535f9384b0-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient is High Risk Diagnosis of AKI"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS832HHAKIFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/658dcd87-1f28-4732-a464-bcfa5681f12f"
+  }, {
+    "reference": "Encounter/ffc54c1b-697a-4748-8b90-b4ec760e21a1"
+  }, {
+    "reference": "Encounter/d9912cd5-55b5-4129-bec0-cc7adfaa8272"
+  }, {
+    "reference": "Observation/cfd9c2fa-584f-404c-860d-19a49781986d"
+  }, {
+    "reference": "Observation/67e98c2a-23d2-4702-a4e8-dea9582658b5"
+  }, {
+    "reference": "Condition/f03b9e28-b497-48d7-afaa-4457fe55a925"
+  }, {
+    "reference": "Observation/e84f8b10-d65a-4b38-a7f7-f33b13499466"
+  } ]
+}

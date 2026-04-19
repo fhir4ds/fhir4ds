@@ -1,0 +1,42 @@
+{
+  "resourceType": "Condition",
+  "id": "62aaee2c-9b8b-4947-8b1b-f4a1b52e817a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem list Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2025-09",
+      "code": "120041000119109",
+      "display": "Atrial fibrillation with rapid ventricular response (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a2563ca7-fda7-4cfd-a5cf-a688225749e2"
+  },
+  "onsetPeriod": {
+    "start": "2026-12-26T08:15:00.000+00:00"
+  },
+  "recordedDate": "2026-10-20T08:00:00.000+00:00"
+}

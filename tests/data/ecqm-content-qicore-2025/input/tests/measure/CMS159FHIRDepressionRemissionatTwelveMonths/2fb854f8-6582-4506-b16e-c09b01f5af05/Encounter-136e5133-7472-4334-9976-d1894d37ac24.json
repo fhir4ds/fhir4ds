@@ -1,0 +1,32 @@
+{
+  "resourceType": "Encounter",
+  "id": "136e5133-7472-4334-9976-d1894d37ac24",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://www.ama-assn.org/go/cpt",
+    "version": "2024",
+    "code": "99205",
+    "display": "Office or other outpatient visit for the evaluation and management of a new patient, which requires a medically appropriate history and/or examination and high level of medical decision making. When using time for code selection, 60-74 minutes of total time is spent on the date of the encounter."
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2024",
+      "code": "90791"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/2fb854f8-6582-4506-b16e-c09b01f5af05"
+  },
+  "period": {
+    "start": "2025-10-31T14:35:00+00:00",
+    "end": "2025-10-31T14:45:00+00:00"
+  },
+  "length": {
+    "value": 0,
+    "unit": "days"
+  }
+}

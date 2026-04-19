@@ -1,0 +1,39 @@
+{
+  "resourceType": "Observation",
+  "id": "0bab3743-3a61-450a-bf0d-0fd35be1d511",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observationcancelled" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "35688006",
+        "display": "Complication of medical care (disorder)",
+        "userSelected": true
+      } ]
+    }
+  } ],
+  "status": "amended",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "procedure",
+      "display": "Procedure"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "39156-5",
+      "display": "Body mass index (BMI) [Ratio]",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/8c89947a-a52b-4a41-86a8-166b0560355b"
+  },
+  "effectiveDateTime": "2026-01-01T00:30:00.000+00:00",
+  "valueBoolean": true
+}

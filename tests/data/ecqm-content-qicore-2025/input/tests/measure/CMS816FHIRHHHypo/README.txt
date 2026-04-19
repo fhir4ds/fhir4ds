@@ -1,0 +1,29 @@
+The purpose of this file is to allow users to view the mapping of test case names to their test case UUIDs. In order to find a specific test case file in the export, first locate the test case name in this document and then use the associated UUID to find the name of the folder in the export.
+
+Case # 9 - 8301c6c8-e50c-4457-add0-1ebd909c8ca7 = DENOMPass MedsEndOfEncounterEdgeCase
+Case # 8 - ecde4132-9028-420a-aa7c-d1d14e5c1ab0 = DENOMPass TwoEncountersOneWithMed
+Case # 7 - 05c8cd12-addd-4b94-8f92-da093c556a84 = DENOMPass MedPeriodEndsAfterEnc
+Case # 5 - 1d2bb25a-21a7-4529-9486-a320d4864719 = DENOMPass MedRelPeriodStartsNoEnd
+Case # 4 - 8eca4ab8-49f0-45e4-b1ee-dc34e54dd430 = NUMERPass GlucoseLabTestLT40
+Case # 3 - 1a89fbca-df20-4f17-97d0-9fa5990860b2 = NUMERFail GlucoseLabResultGT80within5minutes
+Case # 2 - d26ca5cd-9415-4c14-8a0b-947747c29ec2 = IPPFail MedsinEDNotPartofEncounter
+Case # 1 - e360ffc2-5b98-425a-a2bd-b051ba5ec506 = DENOMPass Age17inEDAge18StartOfIPEncounter
+Case # 16 - 7df60531-857d-45bc-ad5b-31b5462f3f54 = NUMERFail GlucoseLT40BeforeHypoMed
+Case # 6 - 41c102cb-d7f0-421d-ac76-5ac1c8dbe56a = DENOMPass HypoMedRelativeDateTimeDuringER
+Case # 26 - 3fdd92df-f418-45ef-93a6-920e3d813f32 = NUMERPass 2EncOneNumerator
+Case # 27 - 1d298cf0-aa38-4943-ba4c-f7209cf59e63 = NUMERPass LabTest2Equals80
+Case # 24 - f58dcdc6-cce9-4b49-b657-7e1e2593e428 = NUMERPass 3Encounters3Harms
+Case # 25 - 7cb05de4-6b74-4ce5-a2ea-be59635a74f6 = NUMERPass LabLT80within5minutes
+Case # 23 - 37fd9c7e-bf9e-4769-b448-094ed97bd3e8 = NUMERPass Lab2is81AfterEncounterEnd
+Case # 22 - 339a989b-722c-4452-9d25-454e2d53eea8 = NUMERPass 1Enc2ResultsLT40UsedRelevantPeriod
+Case # 21 - 2adf5469-46a1-4020-be3b-01f91f8acc9d = NUMERPass 1Encounter3GlucoseResultsLT40
+Case # 20 - aa5f21cc-2d56-4749-a190-2828d579f790 = NUMERFail LabBeforeMed
+Case # 19 - 304052f7-e416-4da4-87ae-488e6589cab3 = NUMERFail LabTest2GT80
+Case # 18 - 5bfa3b7e-2b6f-4eb5-b09b-7c6f1145780b = NUMERFail TwoLabTestsNoGlucoseResults
+Case # 17 - 6bc18290-1925-4239-81d7-0118bd062225 = NUMERFail LabTest2Equals81Exactly5MinBasedOnRelDateTime
+Case # 15 - 61a026c6-be9e-4a0f-b495-8ea421edfe39 = IPPFail OutpatientEncounter
+Case # 14 - 423a396b-7d81-476d-b2ea-bc8bba062ce2 = IPPFail MedGivenInObservTransferToIPMoreThan1Hour
+Case # 13 - 5570227b-f288-4a0c-9df5-807d2afa241a = IPPFail NoHypoglycemicGiven
+Case # 12 - 480245d6-3ce8-4944-b6c8-339cf2f69acb = IPPFail MedGivenIsNotHypoglycemic
+Case # 11 - cf9c230a-adc0-4830-bf04-fed4ab5ff6c8 = IPPFail MedIsNotHypoMedGlucoseLT40
+Case # 10 - 974284eb-fc89-452a-9b38-a884c0e0477e = DENOMPass Age18EDEnc

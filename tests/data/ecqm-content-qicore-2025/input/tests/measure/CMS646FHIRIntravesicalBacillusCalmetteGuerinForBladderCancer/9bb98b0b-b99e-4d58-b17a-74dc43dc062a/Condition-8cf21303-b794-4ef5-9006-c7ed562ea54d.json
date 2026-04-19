@@ -1,0 +1,40 @@
+{
+  "resourceType": "Condition",
+  "id": "8cf21303-b794-4ef5-9006-c7ed562ea54d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "C67.3",
+      "display": "Malignant neoplasm of anterior wall of bladder"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/9bb98b0b-b99e-4d58-b17a-74dc43dc062a"
+  },
+  "onsetDateTime": "2025-07-01T08:15:00.000+00:00"
+}

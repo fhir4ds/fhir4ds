@@ -1,0 +1,32 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "4602c12a-cc53-4d13-94ec-6c42a461aa78",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "443390004",
+        "display": "Refusal of treatment by patient (situation)"
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "348681001",
+      "display": "Graduated compression elastic hosiery (physical object)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/d280541b-5f7a-4b19-b82b-c2d933006f52"
+  },
+  "authoredOn": "2026-11-03T11:00:00.000+00:00"
+}

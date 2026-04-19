@@ -1,0 +1,34 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "5319621f-88dd-41e1-b905-7d6eca9bb463",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "version": "2022-03",
+        "code": "183945002",
+        "display": "Procedure declined for religious reason (situation)",
+        "userSelected": true
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183625007",
+      "display": "Follow-up 4-6 months (finding)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/ef9a58ac-e252-480a-bed8-2309c503587d"
+  },
+  "authoredOn": "2026-12-31T08:25:00.000+00:00"
+}

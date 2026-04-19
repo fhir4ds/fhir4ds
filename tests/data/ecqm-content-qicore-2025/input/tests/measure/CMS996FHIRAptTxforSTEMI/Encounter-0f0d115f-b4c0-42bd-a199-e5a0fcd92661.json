@@ -1,0 +1,39 @@
+{
+  "resourceType": "Encounter",
+  "id": "0f0d115f-b4c0-42bd-a199-e5a0fcd92661",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "EMER",
+    "display": "emergency",
+    "userSelected": true
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2020-09",
+      "code": "4525004",
+      "display": "Emergency department patient visit (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/e592576b-4078-4793-b3d2-0b7256f306a3"
+  },
+  "period": {
+    "start": "2026-10-09T08:05:00.000+00:00",
+    "end": "2026-10-10T07:15:00.000+00:00"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2020-09",
+      "code": "703211006",
+      "display": "Subsequent ST segment elevation myocardial infarction (disorder)",
+      "userSelected": true
+    } ]
+  } ]
+}

@@ -1,0 +1,27 @@
+{
+  "resourceType": "Observation",
+  "id": "b5cb11ac-9088-48fa-bd2f-5c45d7a4e090",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "vital-signs",
+      "display": "Vital Signs"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.73",
+      "code": "32451-7"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/d9840e8c-3359-42c2-b354-4b236c3c1b15"
+  },
+  "effectiveDateTime": "2026-07-09T08:00:00.000+00:00",
+  "valueBoolean": true
+}

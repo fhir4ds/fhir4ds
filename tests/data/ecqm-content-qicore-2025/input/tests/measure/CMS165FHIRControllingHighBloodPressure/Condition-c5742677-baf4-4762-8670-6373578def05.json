@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "c5742677-baf4-4762-8670-6373578def05",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "371125006",
+      "display": "Labile essential hypertension (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/aa87ac34-227b-4424-84d2-62aaba57c232"
+  },
+  "onsetDateTime": "2026-06-29T23:59:59.000+00:00"
+}

@@ -1,0 +1,33 @@
+{
+  "resourceType": "Observation",
+  "id": "18feac83-0b39-400c-9086-925353ba0dc0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-respiratory-rate" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "vital-signs",
+      "display": "Vital Signs"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "9279-1",
+      "display": "Respiratory rate"
+    } ],
+    "text": "Respiratory rate"
+  },
+  "subject": {
+    "reference": "Patient/9e0ef8df-189b-40f1-9eac-724254bd86e2"
+  },
+  "effectiveDateTime": "2026-10-01T09:00:00.000+00:00",
+  "valueQuantity": {
+    "value": 18,
+    "unit": "breaths/minute",
+    "system": "http://unitsofmeasure.org",
+    "code": "/min"
+  }
+}

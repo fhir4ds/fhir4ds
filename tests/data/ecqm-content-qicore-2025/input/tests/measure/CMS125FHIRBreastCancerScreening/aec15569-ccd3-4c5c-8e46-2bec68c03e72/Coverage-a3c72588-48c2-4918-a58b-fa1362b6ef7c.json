@@ -1,0 +1,44 @@
+{
+  "resourceType": "Coverage",
+  "id": "a3c72588-48c2-4918-a58b-fa1362b6ef7c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+  },
+  "identifier": [ {
+    "system": "http://benefitsinc.com/certificate",
+    "value": "12345"
+  } ],
+  "status": "active",
+  "type": {
+    "coding": [ {
+      "system": "https://nahdo.org/sopt",
+      "code": "59",
+      "display": "Other Private Insurance"
+    } ]
+  },
+  "policyHolder": {
+    "reference": "Patient/aec15569-ccd3-4c5c-8e46-2bec68c03e72"
+  },
+  "subscriber": {
+    "reference": "Patient/aec15569-ccd3-4c5c-8e46-2bec68c03e72"
+  },
+  "subscriberId": "12191",
+  "beneficiary": {
+    "reference": "Patient/aec15569-ccd3-4c5c-8e46-2bec68c03e72"
+  },
+  "dependent": "0",
+  "relationship": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+      "code": "self"
+    } ]
+  },
+  "period": {
+    "start": "2023-01-01T06:00:00.000+00:00",
+    "end": "2023-01-01T11:06:01.000+00:00"
+  },
+  "payor": [ {
+    "reference": "Patient/aec15569-ccd3-4c5c-8e46-2bec68c03e72"
+  } ],
+  "order": 9
+}

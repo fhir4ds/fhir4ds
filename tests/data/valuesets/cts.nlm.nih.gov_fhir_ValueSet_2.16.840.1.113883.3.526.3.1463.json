@@ -1,0 +1,326 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.3.1463-20210219",
+  "meta": {
+    "versionId": "29",
+    "lastUpdated": "2023-12-21T17:43:03.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+      "valueContactDetail": {
+        "name": "American Academy of Ophthalmology Author"
+      }
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+      "valueDate": "2024-12-23"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDate": "2021-02-19"
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1463",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113883.3.526.3.1463"
+    }
+  ],
+  "version": "20210219",
+  "name": "HereditaryRetinalDystrophies",
+  "title": "Hereditary Retinal Dystrophies",
+  "status": "active",
+  "experimental": false,
+  "date": "2021-02-19T01:00:28-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [
+    {
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+          "valueCode": "unknown"
+        }
+      ]
+    }
+  ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts for diagnoses of hereditary retinal dystrophies.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of hereditary retinal or vitreoretinal dystrophies, including Usher syndrome.),(Exclusion Criteria: Excludes concepts that represent a diagnosis for 'unspecified eye.')",
+  "compose": {
+    "include": [
+      {
+        "valueSet": [
+          "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1671"
+        ]
+      },
+      {
+        "valueSet": [
+          "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1673"
+        ]
+      }
+    ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:2a02bc24-bdb1-46a1-9f09-b330c51ec6d4",
+    "timestamp": "2025-06-20T16:53:53-04:00",
+    "total": 40,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "1010610007",
+        "display": "Retinitis pigmentosa-deafness syndrome type 3 (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "1172605003",
+        "display": "Retinitis pigmentosa, hearing loss, premature aging, short stature, facial dysmorphism syndrome (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "1220597000",
+        "display": "Retinitis pigmentosa, juvenile cataract, short stature, intellectual disability syndrome (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "15059000",
+        "display": "Retinal dystrophy in systemic lipidosis (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "15699201000119104",
+        "display": "Retinitis pigmentosa of left eye (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "15699241000119102",
+        "display": "Retinitis pigmentosa of right eye (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "15699281000119107",
+        "display": "Retinitis pigmentosa of bilateral eyes (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "192788009",
+        "display": "Retinal dystrophy in cerebroretinal lipidosis (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "193400007",
+        "display": "Hereditary retinal dystrophies in lipidoses (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "193409008",
+        "display": "Hyaline retinal dystrophy (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "193415008",
+        "display": "Tapetoretinal dystrophy (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "232052009",
+        "display": "Autosomal dominant retinitis pigmentosa (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "232053004",
+        "display": "Autosomal recessive retinitis pigmentosa (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "232054005",
+        "display": "X-linked retinitis pigmentosa (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "232055006",
+        "display": "X-linked retinitis pigmentosa heterozygote (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "232056007",
+        "display": "Progressive rod dystrophy (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "232057003",
+        "display": "Usher syndrome type 1 (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "232058008",
+        "display": "Usher syndrome type 2 (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "237611007",
+        "display": "Muscular atrophy, ataxia, retinitis pigmentosa, and diabetes mellitus (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "237984008",
+        "display": "Neurogenic muscle weakness, ataxia and retinitis pigmentosa (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "267613004",
+        "display": "Progressive cone dystrophy (without rod involvement) (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "28835009",
+        "display": "Retinitis pigmentosa (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "312917007",
+        "display": "Cone dystrophy (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "313003009",
+        "display": "Rod dystrophy (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "41799005",
+        "display": "Hereditary retinal dystrophy (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "514793471000119104",
+        "display": "Usher syndrome type 1F (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "57838006",
+        "display": "Retinitis pigmentosa-deafness syndrome (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "698847000",
+        "display": "Hereditary retinal dystrophy primarily involving retinal pigment epithelium (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "698848005",
+        "display": "Hereditary retinal dystrophy primarily involving sensory retina (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "719282008",
+        "display": "Primary ciliary dyskinesia and retinitis pigmentosa syndrome (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "723452007",
+        "display": "Polyneuropathy, hearing loss, ataxia, retinitis pigmentosa, cataract syndrome (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "764939004",
+        "display": "Fundus albipunctatus (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "79556007",
+        "display": "Vitreoretinal dystrophy (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "80328002",
+        "display": "Progressive cone-rod dystrophy (disorder)"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2024",
+        "code": "H35.50",
+        "display": "Unspecified hereditary retinal dystrophy"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2024",
+        "code": "H35.51",
+        "display": "Vitreoretinal dystrophy"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2024",
+        "code": "H35.52",
+        "display": "Pigmentary retinal dystrophy"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2024",
+        "code": "H35.53",
+        "display": "Other dystrophies primarily involving the sensory retina"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2024",
+        "code": "H35.54",
+        "display": "Dystrophies primarily involving the retinal pigment epithelium"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2024",
+        "code": "H36.89",
+        "display": "Other retinal disorders in diseases classified elsewhere"
+      }
+    ]
+  }
+}

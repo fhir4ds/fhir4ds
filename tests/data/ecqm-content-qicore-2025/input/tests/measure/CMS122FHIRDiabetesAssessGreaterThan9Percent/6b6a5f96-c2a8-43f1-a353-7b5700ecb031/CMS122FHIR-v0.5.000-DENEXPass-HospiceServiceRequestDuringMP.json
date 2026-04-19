@@ -1,0 +1,272 @@
+{
+  "resourceType": "Bundle",
+  "id": "Patient-17-DENEXPass-HospiceServiceReqestDuringMP",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/6b6a5f96-c2a8-43f1-a353-7b5700ecb031",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "6b6a5f96-c2a8-43f1-a353-7b5700ecb031",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "Bertha",
+        "given": [ "Betty" ]
+      } ],
+      "gender": "female",
+      "birthDate": "2006-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/6b6a5f96-c2a8-43f1-a353-7b5700ecb031"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/70c7cfc1-c303-44b4-8414-cb8ab31f1b8d",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "70c7cfc1-c303-44b4-8414-cb8ab31f1b8d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "185460008",
+          "display": "Home visit request by patient (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/6b6a5f96-c2a8-43f1-a353-7b5700ecb031"
+      },
+      "period": {
+        "start": "2026-01-01T00:00:00.000+00:00",
+        "end": "2026-01-01T00:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/70c7cfc1-c303-44b4-8414-cb8ab31f1b8d"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/cc175e90-d776-4e71-8cef-d052c1606235",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "cc175e90-d776-4e71-8cef-d052c1606235",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "102781000119107",
+          "display": "Sensory neuropathy due to type 1 diabetes mellitus (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/6b6a5f96-c2a8-43f1-a353-7b5700ecb031"
+      },
+      "onsetDateTime": "2026-01-01T23:59:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/cc175e90-d776-4e71-8cef-d052c1606235"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/ServiceRequest/9e2b33fb-01de-4c0e-8c66-6efc90398c00",
+    "resource": {
+      "resourceType": "ServiceRequest",
+      "id": "9e2b33fb-01de-4c0e-8c66-6efc90398c00",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+      },
+      "status": "completed",
+      "intent": "order",
+      "category": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "387713003",
+          "display": "Surgical procedure"
+        } ]
+      } ],
+      "priority": "routine",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "385763009",
+          "display": "Hospice care (regime/therapy)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/6b6a5f96-c2a8-43f1-a353-7b5700ecb031"
+      },
+      "authoredOn": "2026-01-02T00:00:00.000+00:00",
+      "performerType": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "405279007",
+          "display": "Attending physician (occupation)"
+        } ]
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "ServiceRequest/9e2b33fb-01de-4c0e-8c66-6efc90398c00"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/d880087a-b6d9-4a20-b0bb-2ae57cd617f2",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "d880087a-b6d9-4a20-b0bb-2ae57cd617f2",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "af4d2038-95d3-4001-bd52-9e96bcba2c3e-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "6b6a5f96-c2a8-43f1-a353-7b5700ecb031"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#af4d2038-95d3-4001-bd52-9e96bcba2c3e-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Hospice service required during the MP"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS122FHIRDiabetesAssessGreaterThan9Percent",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/6b6a5f96-c2a8-43f1-a353-7b5700ecb031"
+      }, {
+        "reference": "Encounter/70c7cfc1-c303-44b4-8414-cb8ab31f1b8d"
+      }, {
+        "reference": "Condition/cc175e90-d776-4e71-8cef-d052c1606235"
+      }, {
+        "reference": "ServiceRequest/9e2b33fb-01de-4c0e-8c66-6efc90398c00"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/d880087a-b6d9-4a20-b0bb-2ae57cd617f2"
+    }
+  } ]
+}

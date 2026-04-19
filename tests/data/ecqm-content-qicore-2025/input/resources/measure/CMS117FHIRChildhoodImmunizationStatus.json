@@ -1,0 +1,2761 @@
+{
+  "resourceType": "Measure",
+  "id": "CMS117FHIRChildhoodImmunizationStatus",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-shareablemeasure", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/executable-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cql-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/elm-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/proportion-measure-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Library",
+    "id": "effective-data-requirements",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "248153007",
+        "display": "Male (finding)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "248152002",
+        "display": "Female (finding)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "471321000124106",
+        "display": "Anaphylaxis caused by vaccine product containing human poliovirus antigen (disorder)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "471331000124109",
+        "display": "Anaphylaxis caused by vaccine product containing Measles morbillivirus and Mumps orthorubulavirus and Rubella virus antigens (disorder)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+        "code": "active",
+        "display": "Active"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+        "code": "recurrence",
+        "display": "Recurrence"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+        "code": "relapse",
+        "display": "Relapse"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "433621000124101",
+        "display": "Anaphylaxis caused by vaccine product containing only Haemophilus influenzae type b antigen (disorder)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "code": "3E0234Z",
+        "display": "Introduction of Serum, Toxoid and Vaccine into Muscle, Percutaneous Approach"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "428321000124101",
+        "display": "Anaphylaxis caused by vaccine product containing Hepatitis B virus antigen (disorder)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "471341000124104",
+        "display": "Anaphylaxis caused by vaccine containing Human alphaherpesvirus 3 antigen (disorder)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "471141000124102",
+        "display": "Anaphylaxis caused by vaccine product containing Streptococcus pneumoniae antigen (disorder)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "471311000124103",
+        "display": "Anaphylaxis caused by vaccine product containing Hepatitis A virus antigen (disorder)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://hl7.org/fhir/sid/cvx",
+        "code": "119",
+        "display": "rotavirus, live, monovalent vaccine"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "428331000124103",
+        "display": "Anaphylaxis due to rotavirus vaccine (disorder)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "471361000124100",
+        "display": "Anaphylaxis caused by vaccine product containing Influenza virus antigen (disorder)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "code": "99211",
+        "display": "Office or other outpatient visit for the evaluation and management of an established patient that may not require the presence of a physician or other qualified health care professional"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "428361000124107",
+        "display": "Discharge to home for hospice care (procedure)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "428371000124100",
+        "display": "Discharge to healthcare facility for hospice care (procedure)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://loinc.org",
+        "code": "45755-6",
+        "display": "Hospice care [Minimum Data Set]"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "373066001",
+        "display": "Yes (qualifier value)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Sex"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Sex\":\n  case\n    when Patient.sex = '248153007' then \"Male (finding)\"\n    when Patient.sex = '248152002' then \"Female (finding)\"\n    else null\n  end"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 0
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "SDE Sex"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Sex\":\n  SDE.\"SDE Sex\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 1
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Date of Second Birthday"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Date of Second Birthday\":\n  Patient.birthDate + 2 years"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 2
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Vaccine Administration Interval - 42 Days up to 2 Years Old"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Vaccine Administration Interval - 42 Days up to 2 Years Old\":\n  Interval[date from Patient.birthDate + 42 days, \"Date of Second Birthday\"]"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 3
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "DTaP Immunizations or Procedures"
+      }, {
+        "url": "statement",
+        "valueString": "define \"DTaP Immunizations or Procedures\":\n  ( ( ( [Immunization: \"DTaP Vaccine\"] ).isImmunizationAdministered ( ) ) DTaPVaccination\n      where date from DTaPVaccination.occurrence.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n      return date from DTaPVaccination.occurrence.earliest ( )\n  )\n    union ( ( ( [Procedure: \"DTaP Vaccine Administered\"] ).isProcedurePerformed ( ) ) DTaPProcedure\n        where date from DTaPProcedure.performed.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n        return date from DTaPProcedure.performed.earliest ( )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 4
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Four DTaP Vaccinations"
+      }, {
+        "url": "statement",
+        "valueString": "//DTaP\n\n\ndefine \"Four DTaP Vaccinations\":\n  from\n    \"DTaP Immunizations or Procedures\" DTaPVaccination1,\n    \"DTaP Immunizations or Procedures\" DTaPVaccination2,\n    \"DTaP Immunizations or Procedures\" DTaPVaccination3,\n    \"DTaP Immunizations or Procedures\" DTaPVaccination4\n    where date from DTaPVaccination2.earliest ( ) 1 day or more after day of date from DTaPVaccination1.earliest ( )\n      and date from DTaPVaccination3.earliest ( ) 1 day or more after day of DTaPVaccination2.earliest ( )\n      and date from DTaPVaccination4.earliest ( ) 1 day or more after day of DTaPVaccination3.earliest ( )\n    return all DTaPVaccination1"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 5
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "First Two Years"
+      }, {
+        "url": "statement",
+        "valueString": "define \"First Two Years\":\n  Interval[date from Patient.birthDate, \"Date of Second Birthday\"]"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 6
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "DTaP Numerator Inclusion Conditions"
+      }, {
+        "url": "statement",
+        "valueString": "define \"DTaP Numerator Inclusion Conditions\":\n  ( ( [ConditionEncounterDiagnosis: \"Anaphylactic Reaction to DTaP Vaccine\"]\n      union [ConditionProblemsHealthConcerns: \"Anaphylactic Reaction to DTaP Vaccine\"]\n      union [ConditionEncounterDiagnosis: \"Encephalitis Due to Diphtheria, Tetanus or Pertussis Vaccine\"]\n      union [ConditionProblemsHealthConcerns: \"Encephalitis Due to Diphtheria, Tetanus or Pertussis Vaccine\"]\n  ) ) DTaPConditions\n    where date from start of DTaPConditions.prevalenceInterval ( ) during day of \"First Two Years\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 7
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Polio Immunizations or Procedures"
+      }, {
+        "url": "statement",
+        "valueString": "//Polio\n\n\ndefine \"Polio Immunizations or Procedures\":\n  ( ( ( [Immunization: \"Inactivated Polio Vaccine (IPV)\"] ).isImmunizationAdministered ( ) ) PolioVaccination\n      where date from PolioVaccination.occurrence.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n      return date from PolioVaccination.occurrence.earliest ( )\n  )\n    union ( ( ( [Procedure: \"Inactivated Polio Vaccine (IPV) Administered\"] ).isProcedurePerformed ( ) ) PolioProcedure\n        where date from PolioProcedure.performed.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n        return date from PolioProcedure.performed.earliest ( )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 8
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Three Polio Vaccinations"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Three Polio Vaccinations\":\n  from\n    \"Polio Immunizations or Procedures\" PolioVaccination1,\n    \"Polio Immunizations or Procedures\" PolioVaccination2,\n    \"Polio Immunizations or Procedures\" PolioVaccination3\n    where date from PolioVaccination2.earliest ( ) 1 day or more after date from PolioVaccination1.earliest ( )\n      and date from PolioVaccination3.earliest ( ) 1 day or more after date from PolioVaccination2.earliest ( )\n    return date from PolioVaccination1.earliest ( )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 9
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Polio Numerator Inclusion Conditions"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Polio Numerator Inclusion Conditions\":\n  ( [ConditionEncounterDiagnosis: \"Anaphylaxis caused by vaccine product containing human poliovirus antigen (disorder)\"]\n    union [ConditionProblemsHealthConcerns: \"Anaphylaxis caused by vaccine product containing human poliovirus antigen (disorder)\"] ) PolioConditions\n    where date from start of PolioConditions.prevalenceInterval ( ) during day of \"First Two Years\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 10
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Date of First Birthday"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Date of First Birthday\":\n  date from Patient.birthDate + 1 year"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 11
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Date of First Birthday to Date of Second Birthday"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Date of First Birthday to Date of Second Birthday\":\n  Interval[\"Date of First Birthday\", \"Date of Second Birthday\"]"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 12
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "One MMR Vaccination"
+      }, {
+        "url": "statement",
+        "valueString": "//MMR\n\n\ndefine \"One MMR Vaccination\":\n  ( ( ( [Immunization: \"Measles, Mumps and Rubella (MMR) Vaccine\"] ).isImmunizationAdministered ( ) ) MMRVaccination\n      where date from MMRVaccination.occurrence.earliest ( ) during \"Date of First Birthday to Date of Second Birthday\"\n      return date from MMRVaccination.occurrence.earliest ( )\n  )\n    union ( ( ( [Procedure: \"Measles, Mumps and Rubella (MMR) Vaccine Administered\"] ).isProcedurePerformed ( ) ) MMRProcedure\n        where date from MMRProcedure.performed.earliest ( ) during \"Date of First Birthday to Date of Second Birthday\"\n        return date from MMRProcedure.performed.earliest ( )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 13
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "MMR Numerator Inclusion Conditions"
+      }, {
+        "url": "statement",
+        "valueString": "define \"MMR Numerator Inclusion Conditions\":\n  ( [ConditionEncounterDiagnosis: \"Anaphylaxis caused by vaccine product containing Measles morbillivirus and Mumps orthorubulavirus and Rubella virus antigens (disorder)\"]\n    union [ConditionProblemsHealthConcerns: \"Anaphylaxis caused by vaccine product containing Measles morbillivirus and Mumps orthorubulavirus and Rubella virus antigens (disorder)\"] ) MMRConditions\n    where date from start of MMRConditions.prevalenceInterval ( ) during day of \"First Two Years\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 14
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Measles Indicators"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Measles Indicators\":\n  ( [ConditionEncounterDiagnosis: \"Measles\"]\n    union [ConditionEncounterDiagnosis: \"Measles\"] ) MeaslesDiagnosis\n    where date from start of MeaslesDiagnosis.prevalenceInterval ( ) during day of \"First Two Years\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 15
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Mumps Indicators"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Mumps Indicators\":\n  ( [ConditionEncounterDiagnosis: \"Mumps\"]\n    union [ConditionProblemsHealthConcerns: \"Mumps\"] ) MumpsDiagnosis\n    where date from start of MumpsDiagnosis.prevalenceInterval ( ) during day of \"First Two Years\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 16
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Rubella Indicators"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Rubella Indicators\":\n  ( [ConditionEncounterDiagnosis: \"Rubella\"]\n    union [ConditionProblemsHealthConcerns: \"Rubella\"] ) RubellaDiagnosis\n    where date from start of RubellaDiagnosis.prevalenceInterval ( ) during day of \"First Two Years\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 17
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Hib 3 Dose Immunizations or Procedures"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Hib 3 Dose Immunizations or Procedures\":\n  ( ( ( [Immunization: \"Hib Vaccine (3 dose schedule)\"] ).isImmunizationAdministered ( ) ) ThreeDoseHibVaccine\n      where date from ThreeDoseHibVaccine.occurrence.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n      return date from ThreeDoseHibVaccine.occurrence.earliest ( )\n  )\n    union ( ( ( [Procedure: \"Hib Vaccine (3 dose schedule) Administered\"] ).isProcedurePerformed ( ) ) ThreeDoseHibProcedure\n        where date from ThreeDoseHibProcedure.performed.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n        return date from ThreeDoseHibProcedure.performed.earliest ( )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 18
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Hib 4 Dose Immunizations or Procedures"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Hib 4 Dose Immunizations or Procedures\":\n  ( ( ( [Immunization: \"Hib Vaccine (4 dose schedule)\"] ).isImmunizationAdministered ( ) ) HibVaccine\n      where date from HibVaccine.occurrence.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n      return date from HibVaccine.occurrence.earliest ( )\n  )\n    union ( ( ( [Procedure: \"Hib Vaccine (4 dose schedule) Administered\"] ).isProcedurePerformed ( ) ) HibProcedure\n        where date from HibProcedure.performed.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n        return date from HibProcedure.performed.earliest ( )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 19
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Hib 3 or 4 Dose Immunizations"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Hib 3 or 4 Dose Immunizations\":\n  \"Hib 3 Dose Immunizations or Procedures\"\n    union \"Hib 4 Dose Immunizations or Procedures\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 20
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Has Appropriate Number of Hib Immunizations"
+      }, {
+        "url": "statement",
+        "valueString": "//HiB\n\n\ndefine \"Has Appropriate Number of Hib Immunizations\":\n  exists ( \"Hib 3 or 4 Dose Immunizations\" HibImmunization //4 dose test\n      \n      let HasFourDose: Count(\"Hib 4 Dose Immunizations or Procedures\") > 0\n      where ( HasFourDose //if pt had at least one 4 dose code\n          \n          and Count(distinct(\"Hib 3 or 4 Dose Immunizations\" HibVaccinations\n                return date from HibVaccinations.earliest()\n            )\n          ) >= 4 //pt must have 4 regimens (e.g., 3,3,4,4 or 4,3,4,4)\n      \n      )\n        or ( HasFourDose is false //if pt did not have at least one 4 dose code\n            \n            and Count(distinct(\"Hib 3 or 4 Dose Immunizations\" HibVaccinations\n                  return date from HibVaccinations.earliest()\n              )\n            ) >= 3 //pt must have 3 regimens of 3 dose codes\n        \n        )\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 21
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Hib Numerator Inclusion Conditions"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Hib Numerator Inclusion Conditions\":\n  ( [ConditionEncounterDiagnosis: \"Anaphylaxis caused by vaccine product containing only Haemophilus influenzae type b antigen (disorder)\"]\n    union [ConditionProblemsHealthConcerns: \"Anaphylaxis caused by vaccine product containing only Haemophilus influenzae type b antigen (disorder)\"] ) HibReaction\n    where date from start of HibReaction.prevalenceInterval ( ) during day of \"First Two Years\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 22
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Hepatitis B Immunizations or Procedures"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Hepatitis B Immunizations or Procedures\":\n  ( ( ( [Immunization: \"Hepatitis B Vaccine\"] ).isImmunizationAdministered ( ) ) HepatitisBVaccination\n      where date from HepatitisBVaccination.occurrence.earliest ( ) during day of \"First Two Years\"\n      return date from HepatitisBVaccination.occurrence.earliest ( )\n  )\n    union ( ( ( [Procedure: \"Hepatitis B Vaccine Administered\"] ).isProcedurePerformed ( ) ) HepatitisBProcedure\n        where date from HepatitisBProcedure.performed.earliest ( ) during day of \"First Two Years\"\n        return date from HepatitisBProcedure.performed.earliest ( )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 23
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Three Hepatitis B Vaccinations"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Three Hepatitis B Vaccinations\":\n  from\n    \"Hepatitis B Immunizations or Procedures\" HepatitisBVaccination1,\n    \"Hepatitis B Immunizations or Procedures\" HepatitisBVaccination2,\n    \"Hepatitis B Immunizations or Procedures\" HepatitisBVaccination3\n    where date from HepatitisBVaccination2.earliest ( ) 1 day or more after date from HepatitisBVaccination1.earliest ( )\n      and date from HepatitisBVaccination3.earliest ( ) 1 day or more after date from HepatitisBVaccination2.earliest ( )\n    return date from HepatitisBVaccination1.earliest ( )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 24
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "NewBorn Vaccine Requirement"
+      }, {
+        "url": "statement",
+        "valueString": "define \"NewBorn Vaccine Requirement\":\n  ( ( [Procedure: \"Introduction of Serum, Toxoid and Vaccine into Muscle, Percutaneous Approach\"] ).isProcedurePerformed ( ) ) NewBornVaccine\n    where date from NewBornVaccine.performed.earliest ( ) during day of Interval[date from Patient.birthDate, date from Patient.birthDate + 7 days]\n    return date from NewBornVaccine.performed.earliest ( )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 25
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Meets HepB Vaccination Requirement"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Meets HepB Vaccination Requirement\":\n  from\n    \"Hepatitis B Immunizations or Procedures\" HepatitisBVaccination1,\n    \"Hepatitis B Immunizations or Procedures\" HepatitisBVaccination2,\n    \"NewBorn Vaccine Requirement\" NewBornVaccine3\n    where date from HepatitisBVaccination2.earliest ( ) 1 day or more after date from HepatitisBVaccination1.earliest ( )\n      and date from HepatitisBVaccination1.earliest ( ) 1 day or more after date from NewBornVaccine3.earliest ( )\n      and date from HepatitisBVaccination2.earliest ( ) 1 day or more after date from NewBornVaccine3.earliest ( )\n    return date from HepatitisBVaccination1.earliest ( )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 26
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Hepatitis B Numerator Inclusion Conditions"
+      }, {
+        "url": "statement",
+        "valueString": "//HepB\n\n\ndefine \"Hepatitis B Numerator Inclusion Conditions\":\n  ( [ConditionEncounterDiagnosis: \"Anaphylaxis caused by vaccine product containing Hepatitis B virus antigen (disorder)\"]\n    union [ConditionProblemsHealthConcerns: \"Anaphylaxis caused by vaccine product containing Hepatitis B virus antigen (disorder)\"]\n    union [ConditionEncounterDiagnosis: \"Hepatitis B\"]\n    union [ConditionProblemsHealthConcerns: \"Hepatitis B\"] ) HepBConditions\n    where date from start of HepBConditions.prevalenceInterval ( ) during day of \"First Two Years\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 27
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "One Chicken Pox Vaccination"
+      }, {
+        "url": "statement",
+        "valueString": "//VZV\n\n\ndefine \"One Chicken Pox Vaccination\":\n  ( ( ( [Immunization: \"Varicella Zoster Vaccine (VZV)\"] ).isImmunizationAdministered ( ) ) ChickenPoxVaccination\n      where date from ChickenPoxVaccination.occurrence.earliest ( ) during \"Date of First Birthday to Date of Second Birthday\"\n      return date from ChickenPoxVaccination.occurrence.earliest ( )\n  )\n    union ( ( ( [Procedure: \"Varicella Zoster Vaccine (VZV) Administered\"] ).isProcedurePerformed ( ) ) ChickenPoxProcedure\n        where date from ChickenPoxProcedure.performed.earliest ( ) during \"Date of First Birthday to Date of Second Birthday\"\n        return date from ChickenPoxProcedure.performed.earliest ( )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 28
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Varicella Zoster Numerator Inclusion Conditions"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Varicella Zoster Numerator Inclusion Conditions\":\n  ( ( [ConditionEncounterDiagnosis: \"Varicella Zoster\"]\n      union [ConditionProblemsHealthConcerns: \"Varicella Zoster\"]\n      union [ConditionEncounterDiagnosis: \"Anaphylaxis caused by vaccine containing Human alphaherpesvirus 3 antigen (disorder)\"]\n      union [ConditionProblemsHealthConcerns: \"Anaphylaxis caused by vaccine containing Human alphaherpesvirus 3 antigen (disorder)\"]\n  ) ) VaricellaZoster\n    where date from start of VaricellaZoster.prevalenceInterval ( ) during day of \"First Two Years\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 29
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Pneumococcal Conjugate Immunizations or Procedures"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Pneumococcal Conjugate Immunizations or Procedures\":\n  ( ( ( [Immunization: \"Pneumococcal Conjugate Vaccine\"] ).isImmunizationAdministered ( ) ) PneumococcalVaccination\n      where date from PneumococcalVaccination.occurrence.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n      return date from PneumococcalVaccination.occurrence.earliest ( )\n  )\n    union ( ( ( [Procedure: \"Pneumococcal Conjugate Vaccine Administered\"] ).isProcedurePerformed ( ) ) PneumococcalProcedure\n        where date from PneumococcalProcedure.performed.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n        return date from PneumococcalProcedure.performed.earliest ( )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 30
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Four Pneumococcal Conjugate Vaccinations"
+      }, {
+        "url": "statement",
+        "valueString": "//PCV\n\n\ndefine \"Four Pneumococcal Conjugate Vaccinations\":\n  from\n    \"Pneumococcal Conjugate Immunizations or Procedures\" PneumococcalVaccination1,\n    \"Pneumococcal Conjugate Immunizations or Procedures\" PneumococcalVaccination2,\n    \"Pneumococcal Conjugate Immunizations or Procedures\" PneumococcalVaccination3,\n    \"Pneumococcal Conjugate Immunizations or Procedures\" PneumococcalVaccination4\n    where date from PneumococcalVaccination2.earliest ( ) 1 day or more after date from PneumococcalVaccination1.earliest ( )\n      and date from PneumococcalVaccination3.earliest ( ) 1 day or more after date from PneumococcalVaccination2.earliest ( )\n      and date from PneumococcalVaccination4.earliest ( ) 1 day or more after date from PneumococcalVaccination3.earliest ( )\n    return date from PneumococcalVaccination1.earliest ( )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 31
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Pneumococcal Conjugate Numerator Inclusion Conditions"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Pneumococcal Conjugate Numerator Inclusion Conditions\":\n  ( [ConditionEncounterDiagnosis: \"Anaphylaxis caused by vaccine product containing Streptococcus pneumoniae antigen (disorder)\"]\n    union [ConditionProblemsHealthConcerns: \"Anaphylaxis caused by vaccine product containing Streptococcus pneumoniae antigen (disorder)\"] ) PneumococcalReaction\n    where date from start of PneumococcalReaction.prevalenceInterval ( ) during day of \"First Two Years\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 32
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "One Hepatitis A Vaccinations"
+      }, {
+        "url": "statement",
+        "valueString": "//HepA\n\n\ndefine \"One Hepatitis A Vaccinations\":\n  ( ( ( [Immunization: \"Hepatitis A Vaccine\"] ).isImmunizationAdministered ( ) ) HepatitisAVaccination\n      where date from HepatitisAVaccination.occurrence.earliest ( ) during \"Date of First Birthday to Date of Second Birthday\"\n      return date from HepatitisAVaccination.occurrence.earliest ( )\n  )\n    union ( ( ( [Procedure: \"Hepatitis A Vaccine Administered\"] ).isProcedurePerformed ( ) ) HepatitisAProcedure\n        where date from HepatitisAProcedure.performed.earliest ( ) during \"Date of First Birthday to Date of Second Birthday\"\n        return date from HepatitisAProcedure.performed.earliest ( )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 33
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Hepatitis A Numerator Inclusion Conditions"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Hepatitis A Numerator Inclusion Conditions\":\n  ( [ConditionEncounterDiagnosis: \"Hepatitis A\"]\n    union [ConditionProblemsHealthConcerns: \"Hepatitis A\"]\n    union [ConditionEncounterDiagnosis: \"Anaphylaxis caused by vaccine product containing Hepatitis A virus antigen (disorder)\"]\n    union [ConditionProblemsHealthConcerns: \"Anaphylaxis caused by vaccine product containing Hepatitis A virus antigen (disorder)\"] ) HepatitisADiagnosis\n    where date from start of HepatitisADiagnosis.prevalenceInterval ( ) during day of \"First Two Years\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 34
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Rotavirus 2 Dose Immunizations or Procedures"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Rotavirus 2 Dose Immunizations or Procedures\":\n  ( ( ( [Immunization: \"rotavirus, live, monovalent vaccine\"] ).isImmunizationAdministered ( ) ) TwoDoseRotavirusVaccine\n      where date from TwoDoseRotavirusVaccine.occurrence.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n      return date from TwoDoseRotavirusVaccine.occurrence.earliest ( )\n  )\n    union ( ( ( [Procedure: \"Rotavirus Vaccine (2 dose schedule) Administered\"] ).isProcedurePerformed ( ) ) TwoDoseRotavirusProcedure\n        where date from TwoDoseRotavirusProcedure.performed.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n        return date from TwoDoseRotavirusProcedure.performed.earliest ( )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 35
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Rotavirus 3 Dose Immunizations or Procedures"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Rotavirus 3 Dose Immunizations or Procedures\":\n  ( ( ( [Immunization: \"Rotavirus Vaccine (3 dose schedule)\"] ).isImmunizationAdministered ( ) ) ThreeDoseRotavirusVaccine\n      where date from ThreeDoseRotavirusVaccine.occurrence.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n      return date from ThreeDoseRotavirusVaccine.occurrence.earliest ( )\n  )\n    union ( ( ( [Procedure: \"Rotavirus Vaccine (3 dose schedule) Administered\"] ).isProcedurePerformed ( ) ) ThreeDoseRotavirusAdministered\n        where date from ThreeDoseRotavirusAdministered.performed.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n        return date from ThreeDoseRotavirusAdministered.performed.earliest ( )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 36
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Rotavirus 2 or 3 Dose Immunizations"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Rotavirus 2 or 3 Dose Immunizations\":\n  \"Rotavirus 2 Dose Immunizations or Procedures\"\n    union \"Rotavirus 3 Dose Immunizations or Procedures\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 37
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Has Appropriate Number of Rotavirus Immunizations"
+      }, {
+        "url": "statement",
+        "valueString": "//RV\n\n\ndefine \"Has Appropriate Number of Rotavirus Immunizations\":\n  exists ( \"Rotavirus 2 or 3 Dose Immunizations\" RotavirusImmunization\n      let HasThreeDose: Count(\"Rotavirus 3 Dose Immunizations or Procedures\") > 0\n      where ( HasThreeDose\n          and Count(distinct(\"Rotavirus 2 or 3 Dose Immunizations\" RotavirusVaccinations\n                return date from RotavirusVaccinations.earliest()\n            )\n          ) >= 3\n      )\n        or ( HasThreeDose is false\n            and Count(distinct(\"Rotavirus 2 or 3 Dose Immunizations\" RotavirusVaccinations\n                  return date from RotavirusVaccinations.earliest()\n              )\n            ) >= 2\n        )\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 38
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Rotavirus Numerator Inclusion Conditions"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Rotavirus Numerator Inclusion Conditions\":\n  ( [ConditionEncounterDiagnosis: \"Anaphylaxis due to rotavirus vaccine (disorder)\"]\n    union [ConditionProblemsHealthConcerns: \"Anaphylaxis due to rotavirus vaccine (disorder)\"] ) RotavirusConditions\n    where date from start of RotavirusConditions.prevalenceInterval ( ) during day of \"First Two Years\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 39
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Vaccine Administration Interval - 180 Days up to 2 Years Old"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Vaccine Administration Interval - 180 Days up to 2 Years Old\":\n  Interval[date from Patient.birthDate + 180 days, \"Date of Second Birthday\"]"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 40
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Influenza Immunizations or Procedures"
+      }, {
+        "url": "statement",
+        "valueString": "//Flu\n\n\ndefine \"Influenza Immunizations or Procedures\":\n  ( ( ( [Immunization: \"Child Influenza Vaccine\"] ).isImmunizationAdministered ( ) ) InfluenzaVaccine\n      where date from InfluenzaVaccine.occurrence.earliest ( ) during day of \"Vaccine Administration Interval - 42 Days up to 2 Years Old\"\n      return date from InfluenzaVaccine.occurrence.earliest ( )\n  )\n    union ( ( ( [Procedure: \"Child Influenza Vaccine Administered\"] ).isProcedurePerformed ( ) ) InfluenzaAdministration\n        where date from InfluenzaAdministration.performed.earliest ( ) during day of \"Vaccine Administration Interval - 180 Days up to 2 Years Old\"\n        return date from InfluenzaAdministration.performed.earliest ( )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 41
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Two Influenza Vaccinations"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Two Influenza Vaccinations\":\n  from\n    \"Influenza Immunizations or Procedures\" FluVaccination1,\n    \"Influenza Immunizations or Procedures\" FluVaccination2\n    where date from FluVaccination2.earliest ( ) 1 day or more after date from FluVaccination1.earliest ( )\n    return date from FluVaccination1.earliest ( )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 42
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "LAIV Vaccinations"
+      }, {
+        "url": "statement",
+        "valueString": "define \"LAIV Vaccinations\":\n  ( ( ( [Immunization: \"Influenza Virus LAIV Vaccine\"] ).isImmunizationAdministered ( ) ) LAIVVaccine\n      where date from LAIVVaccine.occurrence.earliest ( ) during day of Interval[\"Date of Second Birthday\", \"Date of Second Birthday\"]\n      return date from LAIVVaccine.occurrence.earliest ( )\n  )\n    union ( ( ( [Procedure: \"Influenza Virus LAIV Vaccine Administered\"] ).isProcedurePerformed ( ) ) InfluenzaAdministration\n        where date from InfluenzaAdministration.performed.earliest ( ) during day of Interval[\"Date of Second Birthday\", \"Date of Second Birthday\"]\n        return date from InfluenzaAdministration.performed.earliest ( )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 43
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Two Influenza Vaccinations Including One LAIV Vaccination"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Two Influenza Vaccinations Including One LAIV Vaccination\":\n  exists \"LAIV Vaccinations\"\n    and exists \"Influenza Immunizations or Procedures\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 44
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Influenza Numerator Inclusion Conditions"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Influenza Numerator Inclusion Conditions\":\n  ( [ConditionEncounterDiagnosis: \"Anaphylaxis caused by vaccine product containing Influenza virus antigen (disorder)\"]\n    union [ConditionProblemsHealthConcerns: \"Anaphylaxis caused by vaccine product containing Influenza virus antigen (disorder)\"] ) InfluenzaConditions\n    where date from start of InfluenzaConditions.prevalenceInterval ( ) during day of \"First Two Years\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 45
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Numerator"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Numerator\":\n  ( exists ( \"Four DTaP Vaccinations\" )\n      or exists ( \"DTaP Numerator Inclusion Conditions\" )\n  )\n    and ( exists ( \"Three Polio Vaccinations\" )\n        or exists ( \"Polio Numerator Inclusion Conditions\" )\n    )\n    and ( exists ( \"One MMR Vaccination\" )\n        or exists ( \"MMR Numerator Inclusion Conditions\" )\n        or ( exists ( \"Measles Indicators\" )\n            and exists ( \"Mumps Indicators\" )\n            and exists ( \"Rubella Indicators\" )\n        )\n    )\n    and ( \"Has Appropriate Number of Hib Immunizations\"\n        or exists ( \"Hib Numerator Inclusion Conditions\" )\n    )\n    and ( exists ( \"Three Hepatitis B Vaccinations\" )\n        or ( exists ( \"Meets HepB Vaccination Requirement\" )\n            or exists ( \"Hepatitis B Numerator Inclusion Conditions\" )\n        )\n    )\n    and ( exists ( \"One Chicken Pox Vaccination\" )\n        or exists ( \"Varicella Zoster Numerator Inclusion Conditions\" )\n    )\n    and ( exists ( \"Four Pneumococcal Conjugate Vaccinations\" )\n        or exists ( \"Pneumococcal Conjugate Numerator Inclusion Conditions\" )\n    )\n    and ( exists ( \"One Hepatitis A Vaccinations\" )\n        or exists ( \"Hepatitis A Numerator Inclusion Conditions\" )\n    )\n    and ( \"Has Appropriate Number of Rotavirus Immunizations\"\n        or exists ( \"Rotavirus Numerator Inclusion Conditions\" )\n    )\n    and ( exists ( \"Two Influenza Vaccinations\" )\n        or ( \"Two Influenza Vaccinations Including One LAIV Vaccination\" )\n        or exists ( \"Influenza Numerator Inclusion Conditions\" )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 46
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Qualifying Encounters"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Qualifying Encounters\":\n  ( ( [Encounter: \"Office Visit\"]\n      union [Encounter: \"Home Healthcare Services\"]\n      union [Encounter: \"Preventive Care, Established Office Visit, 0 to 17\"]\n      union [Encounter: \"Preventive Care Services, Initial Office Visit, 0 to 17\"]\n      union ( [Encounter] E\n          where exists ( ( E.type ) T\n              where T ~ \"Office or other outpatient visit for the evaluation and management of an established patient that may not require the presence of a physician or other qualified health care professional\"\n          )\n      )\n      union [Encounter: \"Virtual Encounter\"]\n      union [Encounter: \"Telephone Visits\"]\n  ).isEncounterPerformed ( ) ) ValidEncounters\n    where ValidEncounters.period.toInterval ( ) during day of \"Measurement Period\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 47
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Initial Population"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Initial Population\":\n  AgeInYearsAt(date from \n    end of \"Measurement Period\"\n  ) = 2\n    and exists ( \"Qualifying Encounters\" )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 48
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Denominator"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Denominator\":\n  \"Initial Population\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 49
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Payer"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Payer\":\n  [Coverage: type in \"Payer Type\"] Payer\n    return {\n      code: Payer.type,\n      period: Payer.period\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 50
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "SDE Payer"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Payer\":\n  SDE.\"SDE Payer\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 51
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Initial Population"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Initial Population\":\n  AgeInYearsAt(date from \n    end of \"Measurement Period\"\n  ) = 2\n    and exists ( \"Qualifying Encounters\" )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 52
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Ethnicity"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Ethnicity\":\n  Patient.ethnicity E\n    return Tuple {\n      codes: { E.ombCategory } union E.detailed,\n      display: E.text\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 53
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "SDE Ethnicity"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Ethnicity\":\n  SDE.\"SDE Ethnicity\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 54
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "Hospice"
+      }, {
+        "url": "name",
+        "valueString": "Has Hospice Services"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Has Hospice Services\":\n  exists ((([Encounter: \"Encounter Inpatient\"]).isEncounterPerformed()) InpatientEncounter\n      where (InpatientEncounter.hospitalization.dischargeDisposition ~ \"Discharge to home for hospice care (procedure)\"\n          or InpatientEncounter.hospitalization.dischargeDisposition ~ \"Discharge to healthcare facility for hospice care (procedure)\"\n      )\n        and InpatientEncounter.period.toInterval() ends during day of \"Measurement Period\"\n  )\n    or exists ((([Encounter: \"Hospice Encounter\"]).isEncounterPerformed()) HospiceEncounter\n        where HospiceEncounter.period.toInterval() overlaps day of \"Measurement Period\"\n    )\n    or exists ((([ObservationScreeningAssessment: \"Hospice care [Minimum Data Set]\"]).isAssessmentPerformed()) HospiceAssessment\n        where HospiceAssessment.value ~ \"Yes (qualifier value)\"\n          and HospiceAssessment.effective.toInterval() overlaps day of \"Measurement Period\"\n    )\n    or exists ((([ServiceRequest: \"Hospice Care Ambulatory\"]).isInterventionOrder()) HospiceOrder\n        where HospiceOrder.authoredOn.toInterval() during day of \"Measurement Period\"\n    )\n    or exists ((([Procedure: \"Hospice Care Ambulatory\"]).isInterventionPerformed()) HospicePerformed\n        where HospicePerformed.performed.toInterval() overlaps day of \"Measurement Period\"\n    )\n    or exists ((([ConditionProblemsHealthConcerns: \"Hospice Diagnosis\"])\n        union ([ConditionEncounterDiagnosis: \"Hospice Diagnosis\"])) HospiceCareDiagnosis\n        where HospiceCareDiagnosis.prevalenceInterval() overlaps day of \"Measurement Period\"\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 55
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Has Severe Combined Immunodeficiency"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Has Severe Combined Immunodeficiency\":\n  exists ( ( [ConditionEncounterDiagnosis: \"Severe Combined Immunodeficiency\"]\n      union [ConditionProblemsHealthConcerns: \"Severe Combined Immunodeficiency\"] ) SevereImmuneDisorder\n      where date from start of SevereImmuneDisorder.prevalenceInterval ( ) during day of \"First Two Years\"\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 56
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Has Immunodeficiency"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Has Immunodeficiency\":\n  exists ( ( [ConditionEncounterDiagnosis: \"Disorders of the Immune System\"]\n      union [ConditionProblemsHealthConcerns: \"Disorders of the Immune System\"] ) ImmuneDisorder\n      where date from start of ImmuneDisorder.prevalenceInterval ( ) during day of \"First Two Years\"\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 57
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Has HIV"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Has HIV\":\n  exists ( ( [ConditionEncounterDiagnosis: \"HIV\"]\n      union [ConditionProblemsHealthConcerns: \"HIV\"] ) HIVDiagnosis\n      where date from start of HIVDiagnosis.prevalenceInterval ( ) during day of \"First Two Years\"\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 58
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Has Lymphoreticular Cancer, Multiple Myeloma or Leukemia"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Has Lymphoreticular Cancer, Multiple Myeloma or Leukemia\":\n  exists ( ( [ConditionEncounterDiagnosis: \"Malignant Neoplasm of Lymphatic and Hematopoietic Tissue\"]\n      union [ConditionProblemsHealthConcerns: \"Malignant Neoplasm of Lymphatic and Hematopoietic Tissue\"] ) LymphaticMalignantNeoplasm\n      where date from start of LymphaticMalignantNeoplasm.prevalenceInterval ( ) during day of \"First Two Years\"\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 59
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Has Intussusception"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Has Intussusception\":\n  exists ( ( [ConditionEncounterDiagnosis: \"Intussusception\"]\n      union [ConditionProblemsHealthConcerns: \"Intussusception\"] ) IntussusceptionDisorder\n      where date from start of IntussusceptionDisorder.prevalenceInterval ( ) during day of \"First Two Years\"\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 60
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "Denominator Exclusions"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Denominator Exclusions\":\n  Hospice.\"Has Hospice Services\"\n    or \"Has Severe Combined Immunodeficiency\"\n    or \"Has Immunodeficiency\"\n    or \"Has HIV\"\n    or \"Has Lymphoreticular Cancer, Multiple Myeloma or Leukemia\"\n    or \"Has Intussusception\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 61
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Race"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Race\":\n  Patient.race R\n    return Tuple {\n      codes: R.ombCategory union R.detailed,\n      display: R.text\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 62
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS117FHIRChildhoodImmunizationStatus"
+      }, {
+        "url": "name",
+        "valueString": "SDE Race"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Race\":\n  SDE.\"SDE Race\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 63
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToString"
+      }, {
+        "url": "statement",
+        "valueString": "define function ToString(value uri): value.value"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 64
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "Status"
+      }, {
+        "url": "name",
+        "valueString": "isImmunizationAdministered"
+      }, {
+        "url": "statement",
+        "valueString": "//Immunization, Administered\ndefine fluent function isImmunizationAdministered(Immunization List<Immunization>):\n  Immunization I\n    where I.status ~ 'completed'"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 65
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "earliest"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Given an interval, return the starting point if the interval has a starting boundary specified,\notherwise, return the ending point\n*/\ndefine fluent function earliest(choice Choice<DateTime, Quantity, Interval<DateTime>, Interval<Quantity>> ):\n  (choice.toInterval()) period\n    return\n      if (period.\"hasStart\"()) then start of period\n      else end of period"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 66
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "hasStart"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Given an interval, return true if the interval has a starting boundary specified\n(i.e. the start of the interval is not null and not the minimum DateTime value)\n*/\ndefine fluent function hasStart(period Interval<DateTime> ):\n  not ( start of period is null\n      or start of period = minimum DateTime\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 67
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "Status"
+      }, {
+        "url": "name",
+        "valueString": "isProcedurePerformed"
+      }, {
+        "url": "statement",
+        "valueString": "//Procedure, Performed\ndefine fluent function isProcedurePerformed(Proc List<Procedure>):\n  Proc P\n    where P.status ~ 'completed'"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 68
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "prevalenceInterval"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Returns an interval representing the normalized prevalence period of a given Condition.\n@comment: Uses the ToInterval and ToAbatementInterval functions to determine the widest potential interval from\nonset to abatement as specified in the given Condition. If the condition is active, or has an abatement date the resulting \ninterval will have a closed ending boundary. Otherwise, the resulting interval will have an open ending boundary.\n*/\ndefine fluent function prevalenceInterval(condition Choice<\"ConditionEncounterDiagnosis\", \"ConditionProblemsHealthConcerns\">):\nif condition.clinicalStatus ~ \"active\"\n  or condition.clinicalStatus ~ \"recurrence\"\n  or condition.clinicalStatus ~ \"relapse\" then\n  Interval[start of condition.onset.toInterval(), end of condition.abatementInterval()]\nelse\n    (end of condition.abatementInterval()) abatementDate\n    return if abatementDate is null then\n      Interval[start of condition.onset.toInterval(), abatementDate)\n    else\n      Interval[start of condition.onset.toInterval(), abatementDate]"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 69
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "abatementInterval"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Returns an interval representing the normalized abatement of a given Condition.\n@comment: If the abatement element of the Condition is represented as a DateTime, the result\nis an interval beginning and ending on that DateTime.\nIf the abatement is represented as a Quantity, the quantity is expected to be a calendar-duration and is interpreted as the age of the patient. The\nresult is an interval from the date the patient turned that age to immediately before one year later.\nIf the abatement is represented as a Quantity Interval, the quantities are expected to be calendar-durations and are interpreted as an age range during\nwhich the abatement occurred. The result is an interval from the date the patient turned the starting age of the quantity interval, and ending immediately\nbefore one year later than the date the patient turned the ending age of the quantity interval.\n*/\ndefine fluent function abatementInterval(condition Choice<\"ConditionEncounterDiagnosis\", \"ConditionProblemsHealthConcerns\">):\n\tif condition.abatement is DateTime then\n\t  Interval[condition.abatement as DateTime, condition.abatement as DateTime]\n\telse if condition.abatement is Quantity then\n\t\tInterval[Patient.birthDate + (condition.abatement as Quantity),\n\t\t\tPatient.birthDate + (condition.abatement as Quantity) + 1 year)\n\telse if condition.abatement is Interval<Quantity> then\n\t  Interval[Patient.birthDate + (condition.abatement.low as Quantity),\n\t\t  Patient.birthDate + (condition.abatement.high as Quantity) + 1 year)\n\telse if condition.abatement is Interval<DateTime> then\n\t  Interval[condition.abatement.low, condition.abatement.high)\n\telse null as Interval<DateTime>"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 70
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "Status"
+      }, {
+        "url": "name",
+        "valueString": "isEncounterPerformed"
+      }, {
+        "url": "statement",
+        "valueString": "//Encounter, Performed\n//General usage unless required otherwise by measure intent (e.g., follow-up encounters)\ndefine fluent function isEncounterPerformed(Enc List<Encounter>):\n  Enc E\n    where E.status in {'finished', 'arrived', 'triaged', 'in-progress', 'onleave'}"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 71
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToConcept"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Converts the given FHIR [CodeableConcept](https://hl7.org/fhir/datatypes.html#CodeableConcept) value to a CQL Concept.\n*/\ndefine function ToConcept(concept FHIR.CodeableConcept):\n    if concept is null then\n        null\n    else\n        System.Concept {\n            codes: concept.coding C return ToCode(C),\n            display: concept.text.value\n        }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 72
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToCode"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Converts the given FHIR [Coding](https://hl7.org/fhir/datatypes.html#Coding) value to a CQL Code.\n*/\ndefine function ToCode(coding FHIR.Coding):\n    if coding is null then\n        null\n    else\n        System.Code {\n          code: coding.code.value,\n          system: coding.system.value,\n          version: coding.version.value,\n          display: coding.display.value\n        }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 73
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "toInterval"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Normalizes a value that is a choice of timing-valued types to an equivalent interval\n@comment: Normalizes a choice type of DateTime, Quanitty, Interval<DateTime>, or Interval<Quantity> types\nto an equivalent interval. This selection of choice types is a superset of the majority of choice types that are used as possible\nrepresentations for timing-valued elements in QICore, allowing this function to be used across any resource.\nThe input can be provided as a DateTime, Quantity, Interval<DateTime> or Interval<Quantity>.\nThe intent of this function is to provide a clear and concise mechanism to treat single\nelements that have multiple possible representations as intervals so that logic doesn't have to account\nfor the variability. More complex calculations (such as medication request period or dispense period\ncalculation) need specific guidance and consideration. That guidance may make use of this function, but\nthe focus of this function is on single element calculations where the semantics are unambiguous.\nIf the input is a DateTime, the result a DateTime Interval beginning and ending on that DateTime.\nIf the input is a Quantity, the quantity is expected to be a calendar-duration interpreted as an Age,\nand the result is a DateTime Interval beginning on the Date the patient turned that age and ending immediately before one year later.\nIf the input is a DateTime Interval, the result is the input.\nIf the input is a Quantity Interval, the quantities are expected to be calendar-durations interpreted as an Age, and the result\nis a DateTime Interval beginning on the date the patient turned the age given as the start of the quantity interval, and ending\nimmediately before one year later than the date the patient turned the age given as the end of the quantity interval.\nIf the input is a Timing, an error will be thrown indicating that Timing calculations are not implemented. Any other input will reslt in a null DateTime Interval\n*/\ndefine fluent function toInterval(choice Choice<DateTime, Quantity, Interval<DateTime>, Interval<Quantity>, Timing>):\n  case\n\t  when choice is DateTime then\n    \tInterval[choice as DateTime, choice as DateTime]\n\t\twhen choice is Interval<DateTime> then\n  \t\tchoice as Interval<DateTime>\n\t\twhen choice is Quantity then\n\t\t  Interval[Patient.birthDate + (choice as Quantity),\n\t\t\t  Patient.birthDate + (choice as Quantity) + 1 year)\n\t\twhen choice is Interval<Quantity> then\n\t\t  Interval[Patient.birthDate + (choice.low as Quantity),\n\t\t\t  Patient.birthDate + (choice.high as Quantity) + 1 year)\n\t\twhen choice is Timing then\n      Message(null, true, 'NOT_IMPLEMENTED', 'Error', 'Calculation of an interval from a Timing value is not supported') as Interval<DateTime>\n\t\telse\n\t\t\tnull as Interval<DateTime>\n\tend"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 74
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToInterval"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Converts the given [Period](https://hl7.org/fhir/datatypes.html#Period)\nvalue to a CQL DateTime Interval\n@comment: If the start value of the given period is unspecified, the starting\nboundary of the resulting interval will be open (meaning the start of the interval\nis unknown, as opposed to interpreted as the beginning of time).\n*/\ndefine function ToInterval(period FHIR.Period):\n    if period is null then\n        null\n    else\n        if period.\"start\" is null then\n            Interval(period.\"start\".value, period.\"end\".value]\n        else\n            Interval[period.\"start\".value, period.\"end\".value]"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 75
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "Status"
+      }, {
+        "url": "name",
+        "valueString": "isAssessmentPerformed"
+      }, {
+        "url": "statement",
+        "valueString": "//This library contains functions used to constrain FHIR resource elements for measures authored by NCQA, based on QICore 6.0.0 resources including IG and authoring patterns. The functions may appear similar to some QICoreCommon functions but differ in that they have constraints that are relevant for measures authored by NCQA.\n\n//Assessment, Performed\ndefine fluent function isAssessmentPerformed(Obs List<ObservationScreeningAssessment>):\n  Obs O\n    where O.status in { 'final', 'amended', 'corrected' }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 76
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "Status"
+      }, {
+        "url": "name",
+        "valueString": "isInterventionOrder"
+      }, {
+        "url": "statement",
+        "valueString": "//Intervention, Order\ndefine fluent function isInterventionOrder(ServiceRequest List<ServiceRequest>):\n  ServiceRequest S\n    where S.status in { 'active', 'completed' }\n      and S.intent = 'order'"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 77
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "Status"
+      }, {
+        "url": "name",
+        "valueString": "isInterventionPerformed"
+      }, {
+        "url": "statement",
+        "valueString": "//Intervention, Performed\ndefine fluent function isInterventionPerformed(Proc List<Procedure>):\n  Proc P\n    where P.status ~ 'completed'"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 78
+      } ]
+    } ],
+    "name": "EffectiveDataRequirements",
+    "status": "active",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/library-type",
+        "code": "module-definition"
+      } ]
+    },
+    "relatedArtifact": [ {
+      "type": "depends-on",
+      "display": "Library SDE",
+      "resource": "Library/SupplementalDataElements|5.1.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library FHIRHelpers",
+      "resource": "Library/FHIRHelpers|4.4.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library Status",
+      "resource": "Library/Status|1.13.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library QICoreCommon",
+      "resource": "Library/QICoreCommon|4.0.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library FHIRHelpers",
+      "resource": "Library/FHIRHelpers|4.4.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library FHIRHelpers",
+      "resource": "Library/FHIRHelpers|4.4.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library Hospice",
+      "resource": "Library/Hospice|6.15.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library Status",
+      "resource": "Library/Status|1.13.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library FHIRHelpers",
+      "resource": "Library/FHIRHelpers|4.4.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library QICoreCommon",
+      "resource": "Library/QICoreCommon|4.0.000"
+    }, {
+      "type": "depends-on",
+      "display": "Code system SNOMEDCT",
+      "resource": "http://snomed.info/sct"
+    }, {
+      "type": "depends-on",
+      "display": "Code system SNOMEDCT",
+      "resource": "http://snomed.info/sct"
+    }, {
+      "type": "depends-on",
+      "display": "Code system ConditionClinicalStatusCodes",
+      "resource": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+    }, {
+      "type": "depends-on",
+      "display": "Code system ICD10",
+      "resource": "http://www.cms.gov/Medicare/Coding/ICD10"
+    }, {
+      "type": "depends-on",
+      "display": "Code system CVX",
+      "resource": "http://hl7.org/fhir/sid/cvx"
+    }, {
+      "type": "depends-on",
+      "display": "Code system CPT",
+      "resource": "http://www.ama-assn.org/go/cpt"
+    }, {
+      "type": "depends-on",
+      "display": "Code system SNOMEDCT",
+      "resource": "http://snomed.info/sct"
+    }, {
+      "type": "depends-on",
+      "display": "Code system LOINC",
+      "resource": "http://loinc.org"
+    }, {
+      "type": "depends-on",
+      "display": "Value set DTaP Vaccine",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1214"
+    }, {
+      "type": "depends-on",
+      "display": "Value set DTaP Vaccine Administered",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1022"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Anaphylactic Reaction to DTaP Vaccine",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.199.12.1031"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Encephalitis Due to Diphtheria, Tetanus or Pertussis Vaccine",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1164"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Inactivated Polio Vaccine (IPV)",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1219"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Inactivated Polio Vaccine (IPV) Administered",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1045"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Measles, Mumps and Rubella (MMR) Vaccine",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1224"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Measles, Mumps and Rubella (MMR) Vaccine Administered",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1031"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Measles",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1053"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Mumps",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1032"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Rubella",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1037"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Hib Vaccine (3 dose schedule)",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1083"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Hib Vaccine (3 dose schedule) Administered",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1084"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Hib Vaccine (4 dose schedule)",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1085"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Hib Vaccine (4 dose schedule) Administered",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1086"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Hepatitis B Vaccine",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1216"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Hepatitis B Vaccine Administered",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1042"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Hepatitis B",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1025"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Varicella Zoster Vaccine (VZV)",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1170"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Varicella Zoster Vaccine (VZV) Administered",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1040"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Varicella Zoster",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1039"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Pneumococcal Conjugate Vaccine",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1221"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Pneumococcal Conjugate Vaccine Administered",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1046"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Hepatitis A Vaccine",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1215"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Hepatitis A Vaccine Administered",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1041"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Hepatitis A",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1024"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Rotavirus Vaccine (2 dose schedule) Administered",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1048"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Rotavirus Vaccine (3 dose schedule)",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1223"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Rotavirus Vaccine (3 dose schedule) Administered",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1047"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Child Influenza Vaccine",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1218"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Child Influenza Vaccine Administered",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1044"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Influenza Virus LAIV Vaccine",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1087"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Influenza Virus LAIV Vaccine Administered",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1088"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Office Visit",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Home Healthcare Services",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1016"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Preventive Care, Established Office Visit, 0 to 17",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1024"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Preventive Care Services, Initial Office Visit, 0 to 17",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1022"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Virtual Encounter",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1089"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Telephone Visits",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1080"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Payer Type",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Encounter Inpatient",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Hospice Encounter",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1003"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Hospice Care Ambulatory",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Hospice Diagnosis",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Severe Combined Immunodeficiency",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.120.12.1007"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Disorders of the Immune System",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.120.12.1001"
+    }, {
+      "type": "depends-on",
+      "display": "Value set HIV",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.120.12.1003"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Malignant Neoplasm of Lymphatic and Hematopoietic Tissue",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.108.12.1009"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Intussusception",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.199.12.1056"
+    } ],
+    "parameter": [ {
+      "name": "Measurement Period",
+      "use": "in",
+      "min": 0,
+      "max": "1",
+      "type": "Period"
+    }, {
+      "name": "SDE Sex",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "Coding"
+    }, {
+      "name": "Numerator",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "boolean"
+    }, {
+      "name": "Denominator",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "boolean"
+    }, {
+      "name": "SDE Payer",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Initial Population",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "boolean"
+    }, {
+      "name": "SDE Ethnicity",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "Resource"
+    }, {
+      "name": "Denominator Exclusions",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "boolean"
+    }, {
+      "name": "SDE Race",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "Resource"
+    } ],
+    "dataRequirement": [ {
+      "type": "Patient",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+    }, {
+      "type": "Patient",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ],
+      "mustSupport": [ "url", "value.value" ]
+    }, {
+      "type": "Patient",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ],
+      "mustSupport": [ "url", "value.value" ]
+    }, {
+      "type": "Patient",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+    }, {
+      "type": "Immunization",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ],
+      "mustSupport": [ "vaccineCode", "occurrence" ],
+      "codeFilter": [ {
+        "path": "vaccineCode",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1214"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1022"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.199.12.1031"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.199.12.1031"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1164"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1164"
+      } ]
+    }, {
+      "type": "Immunization",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ],
+      "mustSupport": [ "vaccineCode", "occurrence" ],
+      "codeFilter": [ {
+        "path": "vaccineCode",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1219"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1045"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "471321000124106",
+          "display": "Anaphylaxis caused by vaccine product containing human poliovirus antigen (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "471321000124106",
+          "display": "Anaphylaxis caused by vaccine product containing human poliovirus antigen (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Immunization",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ],
+      "mustSupport": [ "vaccineCode", "occurrence" ],
+      "codeFilter": [ {
+        "path": "vaccineCode",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1224"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1031"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "471331000124109",
+          "display": "Anaphylaxis caused by vaccine product containing Measles morbillivirus and Mumps orthorubulavirus and Rubella virus antigens (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "471331000124109",
+          "display": "Anaphylaxis caused by vaccine product containing Measles morbillivirus and Mumps orthorubulavirus and Rubella virus antigens (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Patient",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1053"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1053"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1032"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1032"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1037"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1037"
+      } ]
+    }, {
+      "type": "Immunization",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ],
+      "mustSupport": [ "vaccineCode", "occurrence" ],
+      "codeFilter": [ {
+        "path": "vaccineCode",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1083"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1084"
+      } ]
+    }, {
+      "type": "Immunization",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ],
+      "mustSupport": [ "vaccineCode", "occurrence" ],
+      "codeFilter": [ {
+        "path": "vaccineCode",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1085"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1086"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "433621000124101",
+          "display": "Anaphylaxis caused by vaccine product containing only Haemophilus influenzae type b antigen (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "433621000124101",
+          "display": "Anaphylaxis caused by vaccine product containing only Haemophilus influenzae type b antigen (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Immunization",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ],
+      "mustSupport": [ "vaccineCode", "occurrence" ],
+      "codeFilter": [ {
+        "path": "vaccineCode",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1216"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1042"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+          "code": "3E0234Z",
+          "display": "Introduction of Serum, Toxoid and Vaccine into Muscle, Percutaneous Approach"
+        } ]
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+          "code": "3E0234Z",
+          "display": "Introduction of Serum, Toxoid and Vaccine into Muscle, Percutaneous Approach"
+        } ]
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "428321000124101",
+          "display": "Anaphylaxis caused by vaccine product containing Hepatitis B virus antigen (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "428321000124101",
+          "display": "Anaphylaxis caused by vaccine product containing Hepatitis B virus antigen (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1025"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1025"
+      } ]
+    }, {
+      "type": "Immunization",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ],
+      "mustSupport": [ "vaccineCode", "occurrence" ],
+      "codeFilter": [ {
+        "path": "vaccineCode",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1170"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1040"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1039"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1039"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "471341000124104",
+          "display": "Anaphylaxis caused by vaccine containing Human alphaherpesvirus 3 antigen (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "471341000124104",
+          "display": "Anaphylaxis caused by vaccine containing Human alphaherpesvirus 3 antigen (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Immunization",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ],
+      "mustSupport": [ "vaccineCode", "occurrence" ],
+      "codeFilter": [ {
+        "path": "vaccineCode",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1221"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1046"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "471141000124102",
+          "display": "Anaphylaxis caused by vaccine product containing Streptococcus pneumoniae antigen (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "471141000124102",
+          "display": "Anaphylaxis caused by vaccine product containing Streptococcus pneumoniae antigen (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Immunization",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ],
+      "mustSupport": [ "vaccineCode", "occurrence" ],
+      "codeFilter": [ {
+        "path": "vaccineCode",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1215"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1041"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1024"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1024"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "471311000124103",
+          "display": "Anaphylaxis caused by vaccine product containing Hepatitis A virus antigen (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "471311000124103",
+          "display": "Anaphylaxis caused by vaccine product containing Hepatitis A virus antigen (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Immunization",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ],
+      "mustSupport": [ "vaccineCode", "occurrence" ],
+      "codeFilter": [ {
+        "path": "vaccineCode",
+        "code": [ {
+          "system": "http://hl7.org/fhir/sid/cvx",
+          "code": "119",
+          "display": "rotavirus, live, monovalent vaccine"
+        } ]
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1048"
+      } ]
+    }, {
+      "type": "Immunization",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ],
+      "mustSupport": [ "vaccineCode", "occurrence" ],
+      "codeFilter": [ {
+        "path": "vaccineCode",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1223"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1047"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "428331000124103",
+          "display": "Anaphylaxis due to rotavirus vaccine (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "428331000124103",
+          "display": "Anaphylaxis due to rotavirus vaccine (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Immunization",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ],
+      "mustSupport": [ "vaccineCode", "occurrence" ],
+      "codeFilter": [ {
+        "path": "vaccineCode",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.12.1218"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1044"
+      } ]
+    }, {
+      "type": "Immunization",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ],
+      "mustSupport": [ "vaccineCode", "occurrence" ],
+      "codeFilter": [ {
+        "path": "vaccineCode",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1087"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1088"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "471361000124100",
+          "display": "Anaphylaxis caused by vaccine product containing Influenza virus antigen (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://snomed.info/sct",
+          "code": "471361000124100",
+          "display": "Anaphylaxis caused by vaccine product containing Influenza virus antigen (disorder)"
+        } ]
+      } ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001"
+      } ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1016"
+      } ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1024"
+      } ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1022"
+      } ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type" ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1089"
+      } ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1080"
+      } ]
+    }, {
+      "type": "Coverage",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ],
+      "mustSupport": [ "type", "period" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"
+      } ]
+    }, {
+      "type": "Patient",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ],
+      "mustSupport": [ "url" ]
+    }, {
+      "type": "Patient",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ],
+      "mustSupport": [ "url", "extension" ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type", "hospitalization", "hospitalization.dischargeDisposition", "period" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307"
+      } ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type", "period" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1003"
+      } ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ],
+      "mustSupport": [ "code", "value", "effective" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://loinc.org",
+          "code": "45755-6",
+          "display": "Hospice care [Minimum Data Set]"
+        } ]
+      } ]
+    }, {
+      "type": "ServiceRequest",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ],
+      "mustSupport": [ "code", "authoredOn", "authoredOn.value" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.120.12.1007"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.120.12.1007"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.120.12.1001"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.120.12.1001"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.120.12.1003"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.120.12.1003"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.108.12.1009"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.108.12.1009"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.199.12.1056"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ],
+      "mustSupport": [ "code" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.199.12.1056"
+      } ]
+    }, {
+      "type": "Patient",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ],
+      "mustSupport": [ "url" ]
+    }, {
+      "type": "Patient",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ],
+      "mustSupport": [ "url", "extension" ]
+    }, {
+      "type": "Coverage",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ],
+      "mustSupport": [ "type", "period" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"
+      } ]
+    }, {
+      "type": "Patient",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ],
+      "mustSupport": [ "url", "extension" ]
+    }, {
+      "type": "Patient",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ],
+      "mustSupport": [ "url", "extension" ]
+    } ]
+  } ],
+  "extension": [ {
+    "id": "supplementalDataGuidance",
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-supplementalDataGuidance",
+    "extension": [ {
+      "url": "guidance",
+      "valueString": "For every patient evaluated by this measure also identify payer, race, ethnicity and sex"
+    }, {
+      "url": "usage",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+          "code": "supplemental-data",
+          "display": "Supplemental Data"
+        } ],
+        "text": "Supplemental Data Guidance"
+      }
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-effectiveDataRequirements",
+    "valueCanonical": "#effective-data-requirements"
+  }, {
+    "id": "effective-data-requirements",
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-effectiveDataRequirements",
+    "valueReference": {
+      "reference": "#effective-data-requirements"
+    }
+  } ],
+  "url": "https://madie.cms.gov/Measure/CMS117FHIRChildhoodImmunizationStatus",
+  "identifier": [ {
+    "use": "usual",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "short-name",
+        "display": "Short Name"
+      } ]
+    },
+    "system": "https://madie.cms.gov/measure/shortName",
+    "value": "CMS117FHIR"
+  }, {
+    "use": "official",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "version-independent",
+        "display": "Version Independent"
+      } ]
+    },
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:uuid:020b451b-0c5e-4582-b069-90128f33a482"
+  }, {
+    "use": "official",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "version-specific",
+        "display": "Version Specific"
+      } ]
+    },
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:uuid:544269e8-9f92-4b99-8e21-d1ca9f41e420"
+  }, {
+    "use": "official",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "publisher",
+        "display": "Publisher"
+      } ]
+    },
+    "system": "https://madie.cms.gov/measure/cmsId",
+    "value": "117FHIR",
+    "assigner": {
+      "display": "CMS"
+    }
+  } ],
+  "version": "0.3.000",
+  "name": "CMS117FHIRChildhoodImmunizationStatus",
+  "title": "Childhood Immunization StatusFHIR",
+  "status": "active",
+  "experimental": false,
+  "date": "2025-07-15T13:37:40+00:00",
+  "publisher": "National Committee for Quality Assurance",
+  "contact": [ {
+    "telecom": [ {
+      "system": "url",
+      "value": "https://www.ncqa.org/"
+    } ]
+  } ],
+  "description": "Percentage of children 2 years of age who had four diphtheria, tetanus and acellular pertussis (DTaP); three polio (IPV), one measles, mumps and rubella (MMR); three or four H influenza type B (HiB); three hepatitis B (HepB); one chicken pox (VZV); four pneumococcal conjugate (PCV); one hepatitis A (HepA); two or three rotavirus (RV); and two influenza (flu) vaccines by their second birthday",
+  "usage": "The measure allows a grace period by measuring compliance with these recommendations between birth and age two.\n\nThis eCQM is a patient-based measure.\n \nThis FHIR-based measure has been derived from the QDM-based measure: CMS117v13.\n\nPlease refer to the HL7 QI-Core Implementation Guide (http://hl7.org/fhir/us/qicore/STU4.1.1/) for more information on QI-Core and mapping recommendations from QDM to QI-Core 4.1.1 (http://hl7.org/fhir/us/qicore/STU4.1.1/qdm-to-qicore.html).",
+  "copyright": "This Physician Performance Measure (Measure) and related data specifications are owned and were developed by the National Committee for Quality Assurance (NCQA). NCQA is not responsible for any use of the Measure. NCQA makes no representations, warranties, or endorsement about the quality of any organization or physician that uses or reports performance measures and NCQA has no liability to anyone who relies on such measures or specifications. NCQA holds a copyright in the Measure. The Measure can be reproduced and distributed, without modification, for noncommercial purposes (e.g., use by healthcare providers in connection with their practices) without obtaining approval from NCQA. Commercial use is defined as the sale, licensing, or distribution of the Measure for commercial gain, or incorporation of the Measure into a product or service that is sold, licensed or distributed for commercial gain. All commercial uses or requests for modification must be approved by NCQA and are subject to a license at the discretion of NCQA. (C) 2012-2024 National Committee for Quality Assurance. All Rights Reserved.\n\nLimited proprietary coding is contained in the Measure specifications for user convenience. Users of proprietary code sets should obtain all necessary licenses from the owners of the code sets. NCQA disclaims all liability for use or accuracy of any third-party codes contained in the specifications.\n\nCPT(R) codes, descriptions and other data are copyright 2024. American Medical Association. All rights reserved. CPT is a trademark of the American Medical Association. Fee schedules, relative value units, conversion factors and/or related components are not assigned by the AMA, are not part of CPT, and the AMA is not recommending their use. The AMA does not directly or indirectly practice medicine or dispense medical services. The AMA assumes no liability for data contained or not contained herein. Applicable FARS/DFARS restrictions apply to government use.\n\nSome measure specifications contain coding from LOINC(R) (http://loinc.org). The LOINC table, LOINC codes, LOINC panels and form file, LOINC linguistic variants file, LOINC/RSNA Radiology Playbook, and LOINC/IEEE Medical Device Code Mapping Table are copyright 2004-2024 Regenstrief Institute, Inc. and the Logical Observation Identifiers Names and Codes (LOINC) Committee, and are available at no cost under the license at http://loinc.org/terms-of-use.\n\nThis material contains SNOMED Clinical Terms(R) (SNOMED CT[R]) copyright 2004-2023 International Health Terminology Standards Development Organisation.\n\nICD-10 copyright 2024 World Health Organization. All Rights Reserved.\n\nSome measures use RxNorm, a standardized nomenclature and coding for clinical drugs and drug delivery devices, which is made publicly available courtesy of the U.S. National Library of Medicine (NLM), National Institutes of Health, Department of Health and Human Services. NLM is not responsible for the measures and does not endorse or recommend this or any other product.\n\n“HL7” is the registered trademark of Health Level Seven International.",
+  "effectivePeriod": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "author": [ {
+    "name": "National Committee for Quality Assurance",
+    "telecom": [ {
+      "system": "url",
+      "value": "https://www.ncqa.org/"
+    } ]
+  } ],
+  "library": [ "https://madie.cms.gov/Library/CMS117FHIRChildhoodImmunizationStatus" ],
+  "disclaimer": "The performance Measure is not a clinical guideline and does not establish a standard of medical care, and has not been tested for all potential applications. THE MEASURE AND SPECIFICATIONS ARE PROVIDED \"AS IS\" WITHOUT WARRANTY OF ANY KIND.\n \nDue to technical limitations, registered trademarks are indicated by (R) or [R] and unregistered trademarks are indicated by (TM) or [TM].",
+  "rationale": "Infants and toddlers are particularly vulnerable to infectious diseases because their immune systems have not built up the necessary defenses to fight infection (HHS-OIDP, 2022). One study estimated that routine childhood vaccines administered in 2019 prevented 24 million diseases (Talbird et al., 2022). Another recent study estimated that routine childhood vaccinations prevented 17.8 million cases of disease and 31,000 deaths for children born in 2017, in addition to saving $13.7 billion in health care costs (Carrico et al., 2022).\n\nImmunizing a child not only protects that child's health but also the health of the community, especially for those who are not immunized or are unable to be immunized due to other health complications (HHS-OIDP, 2022).",
+  "clinicalRecommendationStatement": "This measure looks for childhood vaccinations that should be completed by age 2, in accordance with the Centers for Disease Control and Prevention Advisory Committee on Immunization Practices (CDC ACIP) recommended child and adolescent immunization schedule (CDC, 2023). \n\n-- For the 2023–24 season, see the 2023–24 ACIP influenza vaccine recommendations (Grohskopf, 2023).",
+  "guidance": "The measure allows a grace period by measuring compliance with these recommendations between birth and age two.\n\nThis eCQM is a patient-based measure.\n \nThis FHIR-based measure has been derived from the QDM-based measure: CMS117v13.\n\nPlease refer to the HL7 QI-Core Implementation Guide (http://hl7.org/fhir/us/qicore/STU4.1.1/) for more information on QI-Core and mapping recommendations from QDM to QI-Core 4.1.1 (http://hl7.org/fhir/us/qicore/STU4.1.1/qdm-to-qicore.html).",
+  "group": [ {
+    "id": "Group_1",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-scoring",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-scoring",
+          "code": "proportion",
+          "display": "Proportion"
+        } ]
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-populationBasis",
+      "valueCode": "boolean"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-type",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-type",
+          "code": "process",
+          "display": "Process"
+        } ]
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-rateAggregation",
+      "valueCode": "None"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-improvementNotation",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-improvement-notation",
+          "code": "increase",
+          "display": "Increased score indicates improvement"
+        } ]
+      }
+    } ],
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "description": "Children who turn 2 years of age during the measurement period and have a visit during the measurement period",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Initial Population"
+      }
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "description": "Equals Initial Population",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Denominator"
+      }
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "description": "Exclude children who are in hospice care for any part of the measurement period.\n\nExclude children with any of the following on or before the child’s second birthday:\n- Severe combined immunodeficiency\n- Immunodeficiency\n- Human Immunodeficiency Virus (HIV)\n- Lymphoreticular cancer, multiple myeloma or leukemia\n- Intussusception",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Denominator Exclusions"
+      }
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "description": "DTaP\nChildren with any of the following on or before the child’s second birthday meet criteria:\n- At least four DTaP vaccinations, with different dates of service. Do not count a vaccination administered prior to 42 days after birth.\n- Anaphylaxis due to the diphtheria, tetanus or pertussis vaccine.\n- Encephalitis due to the diphtheria, tetanus or pertussis vaccine.\n\nIPV\nChildren with either of the following on or before the child’s second birthday meet criteria:\n- At least three IPV vaccinations, with different dates of service. Do not count a vaccination administered prior to 42 days after birth.\n- Anaphylaxis due to the IPV vaccine.\n\nMMR\nChildren with any of the following meet criteria:\n- At least one MMR vaccination on or between the child’s first and second birthdays.\n- Anaphylaxis due to the MMR vaccine on or before the child’s second birthday.\n- All of the following anytime on or before the child’s second birthday (on the same or different date of service):\n       - History of measles.\n       - History of mumps.\n       - History of rubella.\n\nHiB\nChildren with either of the following meet criteria on or before the child’s second birthday:\n- At least three HiB vaccinations, with different dates of service. Do not count a vaccination administered prior to 42 days after birth.\n- Anaphylaxis due to the HiB vaccine.\n\nHepB\nChildren with any of the following on or before the child’s second birthday meet criteria:\n- At least three hepatitis B vaccinations, with different dates of service.\n       - One of the three vaccinations can be a newborn hepatitis B vaccination during the eight-day period that begins on the date of birth and ends seven days after the date of birth. For example, if the member’s date of birth is December 1, the newborn hepatitis B vaccination must be on or between December 1 and December 8.\n- Anaphylaxis due to the hepatitis B vaccine.\n- History of hepatitis B illness.\n\nVZV\nChildren with any of the following meet criteria:\n- At least one VZV vaccination, with a date of service on or between the child’s first and second birthdays.\n- Anaphylaxis due to the VZV vaccine on or before the child’s second birthday.\n- History of varicella zoster (e.g., chicken pox) illness on or before the child’s second birthday.\n\nPCV\nChildren with either of the following on or before the child’s second birthday meet criteria:\n- At least four pneumococcal conjugate vaccinations, with different dates of service on or before the child’s second birthday. Do not count a vaccination administered prior to 42 days after birth.\n- Anaphylaxis due to the pneumococcal vaccine.\n\nHepA\nChildren with any of the following meet criteria:\n- At least one hepatitis A vaccination, with a date of service on or between the child’s first and second birthdays.\n- Anaphylaxis due to the hepatitis A vaccine on or before the child’s second birthday.\n- History of hepatitis A illness on or before the child’s second birthday.\n\nRV\nChildren with any of the following meet criteria:\n- At least two doses of the two-dose rotavirus vaccine on different dates of service on or before the child’s second birthday. Do not count a vaccination administered prior to 42 days after birth.\n- At least three doses of the three-dose rotavirus vaccine on different dates of service on or before the child’s second birthday. Do not count a vaccination administered prior to 42 days after birth.\n- At least one dose of the two-dose rotavirus vaccine and at least two doses of the three-dose rotavirus vaccine, all on different dates of service, on or before the child’s second birthday. Do not count a vaccination administered prior to 42 days after birth.\n- Anaphylaxis due to the rotavirus vaccine on or before the child’s second birthday.\n\nFlu\nChildren with either of the following on or before their second birthday meet criteria:\n- At least two influenza vaccinations, with different dates of service on or before the child’s second birthday. Do not count a vaccination administered prior to 6 months (180 days) after birth.\n       - One of the two vaccinations can be a Live Attenuated Influenza Vaccine (LAIV) vaccination administered on the child’s second birthday. Do not count a LAIV vaccination administered before the child’s second birthday.\n- Anaphylaxis due to the influenza vaccine.",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Numerator"
+      }
+    } ]
+  } ],
+  "supplementalData": [ {
+    "id": "sde-ethnicity",
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Ethnicity",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Ethnicity"
+    }
+  }, {
+    "id": "sde-payer",
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Payer",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Payer"
+    }
+  }, {
+    "id": "sde-race",
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Race",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Race"
+    }
+  }, {
+    "id": "sde-sex",
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Sex",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Sex"
+    }
+  } ]
+}

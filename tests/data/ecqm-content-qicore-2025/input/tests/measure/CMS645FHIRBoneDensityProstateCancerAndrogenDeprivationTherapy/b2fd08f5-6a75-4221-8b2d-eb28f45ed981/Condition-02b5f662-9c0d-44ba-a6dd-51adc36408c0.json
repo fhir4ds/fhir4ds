@@ -1,0 +1,42 @@
+{
+  "resourceType": "Condition",
+  "id": "02b5f662-9c0d-44ba-a6dd-51adc36408c0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "254900004",
+      "display": "Carcinoma of prostate (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b2fd08f5-6a75-4221-8b2d-eb28f45ed981"
+  },
+  "onsetPeriod": {
+    "start": "2026-09-01T08:00:00.000+00:00"
+  }
+}

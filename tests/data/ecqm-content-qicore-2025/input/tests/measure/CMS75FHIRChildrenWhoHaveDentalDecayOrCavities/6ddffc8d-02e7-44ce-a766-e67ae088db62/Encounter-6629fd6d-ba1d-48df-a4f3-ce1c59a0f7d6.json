@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "6629fd6d-ba1d-48df-a4f3-ce1c59a0f7d6",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.ada.org/cdt",
+      "code": "D0120",
+      "display": "periodic oral evaluation - established patient"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/6ddffc8d-02e7-44ce-a766-e67ae088db62"
+  },
+  "period": {
+    "start": "2026-01-01T00:00:00.000Z",
+    "end": "2026-01-01T01:15:00.000Z"
+  }
+}

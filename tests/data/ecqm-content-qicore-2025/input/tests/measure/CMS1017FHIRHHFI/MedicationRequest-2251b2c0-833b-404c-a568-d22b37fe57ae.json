@@ -1,0 +1,40 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "2251b2c0-833b-404c-a568-d22b37fe57ae",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+      "code": "community",
+      "display": "Community"
+    } ]
+  } ],
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1000048"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a2b51ea0-5a72-4bda-abe5-dd393bfa0545"
+  },
+  "authoredOn": "2026-10-15",
+  "dispenseRequest": {
+    "quantity": {
+      "value": 14,
+      "unit": "tablet",
+      "system": "http://unitsofmeasure.org",
+      "code": "{tablet}"
+    },
+    "expectedSupplyDuration": {
+      "value": 14,
+      "unit": "days",
+      "system": "http://unitsofmeasure.org",
+      "code": "d"
+    }
+  }
+}

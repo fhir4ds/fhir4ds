@@ -1,0 +1,21 @@
+{
+  "resourceType": "Immunization",
+  "id": "5133edd6-2ffe-4799-984a-4d13c8f5d923",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ]
+  },
+  "status": "completed",
+  "vaccineCode": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/cvx",
+      "code": "215",
+      "display": "Pneumococcal conjugate vaccine 15-valent (PCV15), polysaccharide CRM197 conjugate, adjuvant, preservative free"
+    } ]
+  },
+  "patient": {
+    "reference": "Patient/6b9e1f1b-90db-42f2-8591-f1a1858ca27a"
+  },
+  "occurrenceDateTime": "2025-01-12T00:00:00.000Z",
+  "recorded": "2025-01-02T00:00:00.000Z",
+  "primarySource": true
+}

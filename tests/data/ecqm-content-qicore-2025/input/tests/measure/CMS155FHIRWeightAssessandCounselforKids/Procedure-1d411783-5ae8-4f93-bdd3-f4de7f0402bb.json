@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "1d411783-5ae8-4f93-bdd3-f4de7f0402bb",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-12-31T00:00:00.000Z"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "385763009",
+      "display": "Hospice care (regime/therapy)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/598662b8-30c9-4f9b-a2d1-d91bea113d77"
+  },
+  "performedPeriod": {
+    "start": "2026-12-31T00:00:00.000Z",
+    "end": "2026-12-31T23:59:59.000Z"
+  }
+}

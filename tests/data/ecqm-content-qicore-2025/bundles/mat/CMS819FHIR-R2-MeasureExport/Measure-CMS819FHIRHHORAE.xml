@@ -1,0 +1,906 @@
+<Measure xmlns="http://hl7.org/fhir">
+   <id value="CMS819FHIRHHORAE"></id>
+   <meta>
+      <profile value="http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-shareablemeasure"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/executable-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cql-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/elm-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/proportion-measure-cqfm"></profile>
+   </meta>
+   <contained>
+      <Library xmlns="http://hl7.org/fhir">
+         <id value="effective-data-requirements"></id>
+         <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode">
+            <valueCoding>
+               <system value="http://snomed.info/sct"></system>
+               <code value="248153007"></code>
+               <display value="Male (finding)"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode">
+            <valueCoding>
+               <system value="http://snomed.info/sct"></system>
+               <code value="248152002"></code>
+               <display value="Female (finding)"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="SupplementalDataElements"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Sex"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Sex&quot;:   case     when Patient.sex = '248153007' then &quot;Male (finding)&quot;     when Patient.sex = '248152002' then &quot;Female (finding)&quot;     else null   end"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="0"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS819FHIRHHORAE"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Sex"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Sex&quot;:   SDE.&quot;SDE Sex&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="1"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS819FHIRHHORAE"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Non Enteral Opioid Antagonist Administration"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Non Enteral Opioid Antagonist Administration&quot;:   [&quot;MedicationAdministration&quot;: &quot;Opioid Antagonist&quot;] AntagonistGiven     where AntagonistGiven.status = 'completed'"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="2"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS819FHIRHHORAE"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Opioid Administration"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Opioid Administration&quot;:   [&quot;MedicationAdministration&quot;: &quot;Opioids, All&quot;] Opioids     where Opioids.status = 'completed'"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="3"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS819FHIRHHORAE"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Qualifying Encounter"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Qualifying Encounter&quot;:   [&quot;Encounter&quot;: &quot;Encounter Inpatient&quot;] InpatientEncounter     where AgeInYearsAt(date from start of InpatientEncounter.period) &gt;= 18       and InpatientEncounter.period ends during day of &quot;Measurement Period&quot;       and InpatientEncounter.status = 'finished'"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="4"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS819FHIRHHORAE"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Encounter With Opioid Administration Outside Of Operating Room"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Encounter With Opioid Administration Outside Of Operating Room&quot;:   &quot;Qualifying Encounter&quot; InpatientEncounter     with &quot;Opioid Administration&quot; OpioidGiven       such that OpioidGiven.effective.toInterval ( ) starts during InpatientEncounter.hospitalizationWithObservation ( )         and not exists ( InpatientEncounter.location EncounterLocation             where EncounterLocation.location.getLocation ( ).type in &quot;Operating Room Suite&quot;               and OpioidGiven.effective.toInterval ( ) starts during EncounterLocation.period         )"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="5"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS819FHIRHHORAE"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Initial Population"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Initial Population&quot;:   &quot;Encounter With Opioid Administration Outside Of Operating Room&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="6"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS819FHIRHHORAE"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Denominator"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Denominator&quot;:   &quot;Initial Population&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="7"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS819FHIRHHORAE"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Encounter With NonOperating Room Opioid And Antagonist Administration"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Encounter With NonOperating Room Opioid And Antagonist Administration&quot;:   // Excludes opioid antagonist administered in operating room AND excludes opioids administered in operating room AND opioid is administered before opioid antagonist AND limits opioid antagonist to non-enteral routes//      from     &quot;Non Enteral Opioid Antagonist Administration&quot; NonEnteralOpioidAntagonistGiven,     &quot;Opioid Administration&quot; OpioidGiven,     &quot;Denominator&quot; InpatientHospitalization     where not exists ( InpatientHospitalization.location EncounterLocation         where EncounterLocation.location.getLocation ( ).type in &quot;Operating Room Suite&quot;           and NonEnteralOpioidAntagonistGiven.effective.toInterval ( ) starts during EncounterLocation.period     )       and ( NonEnteralOpioidAntagonistGiven.effective.toInterval ( ) starts during InpatientHospitalization.hospitalizationWithObservation ( )           and OpioidGiven.effective.toInterval ( ) starts during InpatientHospitalization.hospitalizationWithObservation ( )           and OpioidGiven.effective.toInterval ( ) ends 12 hours or less before start of NonEnteralOpioidAntagonistGiven.effective.toInterval ( )           and NonEnteralOpioidAntagonistGiven.dosage.route in &quot;Routes of Administration for Opioid Antagonists&quot;       )     return InpatientHospitalization"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="8"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS819FHIRHHORAE"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Numerator"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Numerator&quot;:   &quot;Encounter With NonOperating Room Opioid And Antagonist Administration&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="9"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="SupplementalDataElements"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Payer"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Payer&quot;:   [Coverage: type in &quot;Payer Type&quot;] Payer     return {       code: Payer.type,       period: Payer.period     }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="10"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS819FHIRHHORAE"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Payer"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Payer&quot;:   SDE.&quot;SDE Payer&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="11"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="SupplementalDataElements"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Ethnicity"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Ethnicity&quot;:   Patient.ethnicity E     return Tuple {       codes: { E.ombCategory } union E.detailed,       display: E.text     }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="12"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS819FHIRHHORAE"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Ethnicity"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Ethnicity&quot;:   SDE.&quot;SDE Ethnicity&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="13"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="SupplementalDataElements"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Race"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Race&quot;:   Patient.race R     return Tuple {       codes: R.ombCategory union R.detailed,       display: R.text     }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="14"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS819FHIRHHORAE"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Race"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Race&quot;:   SDE.&quot;SDE Race&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="15"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="FHIRHelpers"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="ToString"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define function ToString(value uri): value.value"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="16"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="FHIRHelpers"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="ToInterval"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/* @description: Converts the given [Period](https://hl7.org/fhir/datatypes.html#Period) value to a CQL DateTime Interval @comment: If the start value of the given period is unspecified, the starting boundary of the resulting interval will be open (meaning the start of the interval is unknown, as opposed to interpreted as the beginning of time). */ define function ToInterval(period FHIR.Period):     if period is null then         null     else         if period.&quot;start&quot; is null then             Interval(period.&quot;start&quot;.value, period.&quot;end&quot;.value]         else             Interval[period.&quot;start&quot;.value, period.&quot;end&quot;.value]"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="17"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CQMCommon"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="hospitalizationWithObservation"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/* @description: Hospitalization with Observation returns the total interval from the start of any immediately prior emergency department visit through the observation visit to the discharge of the given encounter */ define fluent function hospitalizationWithObservation(TheEncounter Encounter ):   TheEncounter Visit     let ObsVisit: Last([Encounter: &quot;Observation Services&quot;] LastObs       where LastObs.status = 'finished'             and LastObs.period ends 1 hour or less on or before start of Visit.period       sort by end of period      ),      VisitStart: Coalesce(start of ObsVisit.period, start of Visit.period),      EDVisit: Last([Encounter: &quot;Emergency Department Visit&quot;] LastED       where LastED.status = 'finished'             and LastED.period ends 1 hour or less on or before VisitStart       sort by end of period      )     return Interval[Coalesce(start of EDVisit.period, VisitStart), end of Visit.period]"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="18"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CQMCommon"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="getLocation"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/* @description: Returns the Location resource specified by the given reference. */ define fluent function getLocation(reference Reference):   singleton from (     [Location] L where reference.references(L)   )"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="19"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="QICoreCommon"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="references"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/* @description: Returns true if the given reference is to the given resource @comment: Returns true if the `id` element of the given resource exactly equals the tail of the given reference. NOTE: This function assumes resources from the same source server. */ define fluent function references(reference Reference, resource Resource):   resource.id = Last(Split(reference.reference, '/'))"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="20"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="FHIRHelpers"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="ToConcept"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/* @description: Converts the given FHIR [CodeableConcept](https://hl7.org/fhir/datatypes.html#CodeableConcept) value to a CQL Concept. */ define function ToConcept(concept FHIR.CodeableConcept):     if concept is null then         null     else         System.Concept {             codes: concept.coding C return ToCode(C),             display: concept.text.value         }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="21"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="FHIRHelpers"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="ToCode"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/* @description: Converts the given FHIR [Coding](https://hl7.org/fhir/datatypes.html#Coding) value to a CQL Code. */ define function ToCode(coding FHIR.Coding):     if coding is null then         null     else         System.Code {           code: coding.code.value,           system: coding.system.value,           version: coding.version.value,           display: coding.display.value         }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="22"></valueInteger>
+            </extension>
+         </extension>
+         <name value="EffectiveDataRequirements"></name>
+         <status value="active"></status>
+         <type>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/library-type"></system>
+               <code value="module-definition"></code>
+            </coding>
+         </type>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Library SDE"></display>
+            <resource value="https://madie.cms.gov/Library/SupplementalDataElements|5.1.000"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Library FHIRHelpers"></display>
+            <resource value="https://madie.cms.gov/Library/FHIRHelpers|4.4.000"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Library QICoreCommon"></display>
+            <resource value="https://madie.cms.gov/Library/QICoreCommon|4.0.000"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Library CQMCommon"></display>
+            <resource value="https://madie.cms.gov/Library/CQMCommon|4.1.000"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Code system SNOMEDCT"></display>
+            <resource value="http://snomed.info/sct"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Opioid Antagonist"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.119"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Opioids, All"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1196.226"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Encounter Inpatient"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Observation Services"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Emergency Department Visit"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Operating Room Suite"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.141"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Routes of Administration for Opioid Antagonists"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.187"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Payer Type"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"></resource>
+         </relatedArtifact>
+         <parameter>
+            <name value="Measurement Period"></name>
+            <use value="in"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="Period"></type>
+         </parameter>
+         <parameter>
+            <name value="Numerator"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="*"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <parameter>
+            <name value="Denominator"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="*"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <parameter>
+            <name value="Initial Population"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="*"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <parameter>
+            <name value="SDE Sex"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="Coding"></type>
+         </parameter>
+         <parameter>
+            <name value="SDE Payer"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="*"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <parameter>
+            <name value="SDE Ethnicity"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <parameter>
+            <name value="SDE Race"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <dataRequirement>
+            <type value="Patient"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient"></profile>
+            <mustSupport value="extension"></mustSupport>
+            <mustSupport value="url"></mustSupport>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="MedicationAdministration"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration"></profile>
+            <mustSupport value="medication"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="effective"></mustSupport>
+            <mustSupport value="dosage"></mustSupport>
+            <mustSupport value="dosage.route"></mustSupport>
+            <codeFilter>
+               <path value="medication"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.119"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="MedicationAdministration"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration"></profile>
+            <mustSupport value="medication"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="effective"></mustSupport>
+            <mustSupport value="dosage"></mustSupport>
+            <mustSupport value="dosage.route"></mustSupport>
+            <codeFilter>
+               <path value="medication"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1196.226"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="MedicationAdministration"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration"></profile>
+            <mustSupport value="medication.reference.value"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="effective"></mustSupport>
+            <mustSupport value="dosage"></mustSupport>
+            <mustSupport value="dosage.route"></mustSupport>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Medication"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medication"></profile>
+            <mustSupport value="id.value"></mustSupport>
+            <mustSupport value="code"></mustSupport>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <mustSupport value="location"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <mustSupport value="location"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="location"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Resource"></type>
+            <profile value="http://hl7.org/fhir/StructureDefinition/Resource"></profile>
+            <mustSupport value="id"></mustSupport>
+            <mustSupport value="id.value"></mustSupport>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Location"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-location"></profile>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Coverage"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+      </Library>
+   </contained>
+   <extension id="supplementalDataGuidance" url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-supplementalDataGuidance">
+      <extension url="guidance">
+         <valueString value="For every patient evaluated by this measure also identify payer, race, ethnicity and sex"></valueString>
+      </extension>
+      <extension url="usage">
+         <valueCodeableConcept>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+               <code value="supplemental-data"></code>
+               <display value="Supplemental Data"></display>
+            </coding>
+            <text value="Supplemental Data Guidance"></text>
+         </valueCodeableConcept>
+      </extension>
+   </extension>
+   <extension url="http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-effectiveDataRequirements">
+      <valueReference>
+         <reference value="#effective-data-requirements"></reference>
+      </valueReference>
+   </extension>
+   <url value="https://madie.cms.gov/Measure/CMS819FHIRHHORAE"></url>
+   <identifier>
+      <use value="usual"></use>
+      <type>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/artifact-identifier-type"></system>
+            <code value="short-name"></code>
+            <display value="Short Name"></display>
+         </coding>
+      </type>
+      <system value="https://madie.cms.gov/measure/shortName"></system>
+      <value value="CMS819FHIR"></value>
+   </identifier>
+   <identifier>
+      <use value="official"></use>
+      <type>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/artifact-identifier-type"></system>
+            <code value="version-independent"></code>
+            <display value="Version Independent"></display>
+         </coding>
+      </type>
+      <system value="urn:ietf:rfc:3986"></system>
+      <value value="urn:uuid:30256069-ee4f-45b8-895a-5452cf8e9e4e"></value>
+   </identifier>
+   <identifier>
+      <use value="official"></use>
+      <type>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/artifact-identifier-type"></system>
+            <code value="version-specific"></code>
+            <display value="Version Specific"></display>
+         </coding>
+      </type>
+      <system value="urn:ietf:rfc:3986"></system>
+      <value value="urn:uuid:761866af-769b-465b-aef0-36f70c94e921"></value>
+   </identifier>
+   <identifier>
+      <use value="official"></use>
+      <type>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/artifact-identifier-type"></system>
+            <code value="endorser"></code>
+            <display value="Endorser"></display>
+         </coding>
+      </type>
+      <system value="https://madie.cms.gov/measure/cbeId"></system>
+      <value value="3501e"></value>
+      <assigner>
+         <display value="CMS Consensus Based Entity"></display>
+      </assigner>
+   </identifier>
+   <identifier>
+      <use value="official"></use>
+      <type>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/artifact-identifier-type"></system>
+            <code value="publisher"></code>
+            <display value="Publisher"></display>
+         </coding>
+      </type>
+      <system value="https://madie.cms.gov/measure/cmsId"></system>
+      <value value="819FHIR"></value>
+      <assigner>
+         <display value="CMS"></display>
+      </assigner>
+   </identifier>
+   <version value="0.4.000"></version>
+   <name value="CMS819FHIRHHORAE"></name>
+   <title value="Hospital Harm - Opioid-Related Adverse EventsFHIR"></title>
+   <status value="active"></status>
+   <experimental value="false"></experimental>
+   <date value="2025-06-19T19:39:00+00:00"></date>
+   <publisher value="Centers for Medicare &amp; Medicaid Services (CMS)"></publisher>
+   <contact>
+      <telecom>
+         <system value="url"></system>
+         <value value="https://www.cms.gov/"></value>
+      </telecom>
+   </contact>
+   <description value="This measure assesses the number of inpatient hospitalizations for patients age 18 and older who have been administered an opioid medication and are subsequently administered an opioid antagonist within 12 hours, an indication of an opioid-related adverse event"></description>
+   <usage value="Qualifying encounters (denominator) include all patients 18 years of age or older with at least one opioid medication administered outside of the operating room.  To create the numerator:   1. First, start with those encounters meeting denominator criteria.  2. Next, remove all events where an opioid or opioid antagonist was administered in the operating room.   Opioid antagonist administrations in the operating room are excluded because they could be part of the sedation plan as administered by an anesthesiologist. Encounters that include use of opioid antagonists for procedures and recovery outside of the operating room (e.g., bone marrow biopsy and PACU) are included in the numerator, as it would indicate the patient was over-sedated. Note that should a facility not utilize temporary patient locations, alternative times may be used to determine whether a patient is in the operating room during opioid antagonist administration. Since anesthesia end time could represent the time the anesthesiologist signed off, and thus may include the patient’s time in the PACU, this should be avoided.  3. Next, remove all events where the opioid antagonist was administered via an enteral route. Only opioid antagonists given by a non-enteral (i.e., intravenous, intramuscular, subcutaneous, intranasal, inhalation) route are considered.  4. Finally, remove all administrations of opioid antagonist that were given greater than 12 hours following hospital administration of an opioid medication.  This dQM is an episode-based measure. An episode is defined as each inpatient hospitalization or encounter that ends during the measurement period.  This FHIR-based measure has been derived from the QDM-based measure: CMS819v4. Please refer to the HL7 QI-Core Implementation Guide (https://hl7.org/fhir/us/qicore/STU6/) for more information on QI-Core and mapping recommendations from QDM to QI-Core STU 6 (https://hl7.org/fhir/us/qicore/STU6/qdm-to-qicore.html)."></usage>
+   <copyright value="Limited proprietary coding is contained in the Measure specifications for user convenience. Users of proprietary code sets should obtain all necessary licenses from the owners of the code sets. Mathematica disclaims all liability for use or accuracy of any third-party codes contained in the specifications.   LOINC(R) copyright 2004-2024 Regenstrief Institute, Inc. This material contains SNOMED Clinical Terms(R) (SNOMED CT[R]) copyright 2004-2024 International Health Terminology Standards Development Organisation. ICD-10 copyright 2024 World Health Organization. All Rights Reserved."></copyright>
+   <effectivePeriod>
+      <start value="2026-01-01"></start>
+      <end value="2026-12-31"></end>
+   </effectivePeriod>
+   <author>
+      <name value="Mathematica"></name>
+      <telecom>
+         <system value="url"></system>
+         <value value="https://www.mathematica.org/"></value>
+      </telecom>
+   </author>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Agency for Healthcare Research and Quality. (2019). Medication Errors and Adverse Drug Events. Rockville: US Department of Health &amp; Human Services. Retrieved from https://psnet.ahrq.gov/primer/medication-errors-and-adverse-drug-events "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - American Heart Association. (2020). Highlights of the 2020 American Heart Association's Guidelines for CPR and ECC. https://cpr.heart.org/-/media/cpr-files/cpr-guidelines-files/highlights/hghlghts_2020_ecc_guidelines_english.pdf "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - American Heart Association and American Society of Anesthesiologists. (2021). Naloxone in CPR/AED Training and Public Access to Defibrillation.  Retrieved from https://www.heart.org/-/media/Files/About-Us/Policy-Research/Policy-Positions/CPR-and-AED/Naloxone-Position-Statement.pdf "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Baker, J., Brovman, E.Y., Rao, N., Beutler, S.S., Urman, R.D. (2020). Potential Opioid-Related Adverse Drug Events Are Associated With Decreased Revenue in Hip Replacement Surgery in the Older Population. Geriatric Orthopaedic Surgery &amp; Rehabilitation. January 2020. doi:10.1177/2151459320915328 "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Britch, S.C., Walsh, S.L. (2022). Treatment of opioid overdose: current approaches and recent advances. Psychopharmacology (Berl). 2022;239(7):2063-2081. doi:10.1007/s00213-022-06125-5 "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Food and Drug Administration. (2022). Nalmefene Hydrochloride Injection 2mg/2mL (1mg/1mL) [Full Prescribing Information]. Stamford, CT: Purdue Pharma L.P., 02/08/2022. https://www.accessdata.fda.gov/spl/data/d4bb0797-a4ed-4ed4-9904-604433eea4ff/d4bb0797-a4ed-4ed4-9904-604433eea4ff.xml "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Kessler, E. R., Shah, M., Gruschkus, S. K., &amp; Raju, A. (2013). Cost and quality implications of opioid-based postsurgical pain control using administrative claims data from a large health system: opioid-related adverse events and their impact on clinical and economic outcomes. Pharmacotherapy, 33(4), 383-391. doi: 10.1002/phar.1223 "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Khanna, A.K., Saager, L., Bergese, S.D., et al. (2021). Opioid-induced respiratory depression increases hospital costs and length of stay in patients recovering on the general care floor. BMC Anesthesiol. 2021;21(1):88. Published 2021 Mar 20. doi:10.1186/s12871-021-01307-8 "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Lavonas, E. J., Drennan, I. R., Gabrielli, A., Heffner, A. C., Hoyte, C. O., Orkin, A. M., Donnino, M. W. (2015). Part 10: Special Circumstances of Resuscitation. 2015 American Heart Association Guidelines Update for Cardiopulmonary Resuscitation and Emergency Cardiovascular Care, 132(18 suppl 2), S501-S518. doi: 10.1161/cir.0000000000000264 "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Lee, L. A., Caplan, R. A., Stephens, L. S., Posner, K. L., Terman, G. W., Voepel-Lewis, T., &amp; Domino, K. B. (2015). Postoperative opioid-induced respiratory depression: a closed claims analysis. Anesthesiology, 122(3), 659-665 "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Lynn, R. R., Galinkin, J. (2017). Naloxone dosage for opioid reversal: Current evidence and clinical implications. Therapeutic Advances in Drug Safety, 9(1), 63-88. doi:10.1177/204209861774416 "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Makary, M. A., Daniel, M. (2016). Medical error-the third leading cause of death in the US. BMJ, 353, i2139. doi: 10.1136/bmj.i2139 "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Med Lett Drugs Ther. (2022). Nalmefene Returns for Reversal of Opioid Overdose. Sep 5;64(1658):141-2 "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Nwulu, U., Nirantharakumar, K., Odesanya, R., McDowell, S. E., Coleman, J. J. (2013). Improvement in the detection of adverse drug events by the use of electronic health and prescription records: an evaluation of two trigger tools. Eur J Clin Pharmacol, 69(2), 255-259. doi: 10.1007/s00228-012-1327-1 "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Shafi, S., Collinsworth, A.W., Copeland, L.A., et al. (2018). Association of Opioid-Related Adverse Drug Events With Clinical and Cost Outcomes Among Surgical Patients in a Large Integrated Health Care Delivery System. JAMA Surg. 2018;153(8):757-763. doi:10.1001/jamasurg.2018.1039. PMID: 29799927; PMCID: PMC6142954 "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Urman, R.D., Khanna, A.K., Bergese, S.D., et al. (2021). Postoperative opioid administration characteristics associated with opioid-induced respiratory depression: Results from the PRODIGY trial. J Clin Anesth. 2021;70:110167. doi:10.1016/j.jclinane.110167 "></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - Urman, R.D., Seger, D.L., Fiskio, J.M., et al. (2021). The Burden of Opioid-Related Adverse Drug Events on Hospitalized Previously Opioid-Free Surgical Patients. J Patient Saf. 2021;17(2):e76-e83 "></citation>
+   </relatedArtifact>
+   <library value="https://madie.cms.gov/Library/CMS819FHIRHHORAE"></library>
+   <disclaimer value="This performance measure is not a clinical guideline, does not establish a standard of medical care and has not been tested for all potential applications.  THE MEASURES AND SPECIFICATIONS ARE PROVIDED &quot;AS IS&quot; WITHOUT WARRANTY OF ANY KIND.  Due to technical limitations, registered trademarks are indicated by (R) or [R] and unregistered trademarks are indicated by (TM) or [TM]."></disclaimer>
+   <rationale value="Opioids are often the foundation for sedation and pain relief. Opioid-based analgesia continues to be the most commonly used treatment in postoperative pain management, with more than 95% of surgical patients receiving opioids during their hospitalization (Baker et al., 2020). However, use of opioids can also lead to serious adverse events, including constipation, over sedation, delirium, and respiratory depression (Urman et al., 2021a). Opioid-related adverse events (ORADE) have both patient-level and financial implications. The presence of an ORADE was associated with a 55% longer postoperative length of stay, 29% lower odds of discharge home, and 2.9 times the odds of death (Urman et al., 2021b). For surgical patients, occurrence of opioid-related adverse events was associated with an increase of 1.6 days in length of stay (LOS) and $8225 more in cost for the index hospitalization. Patients who experienced ORADEs while in a hospitalized setting were more likely to have received a higher total dose of opioids during hospitalization (Cone et al., 2023; Shafi et al., 2018). Numerous studies report the additive (risk-adjusted) hospitalization cost burden of surgical patients with ORADEs to be between $4350–$8225, representing a 27–47% increase in (risk-adjusted) admission costs (Khanna et al., 2021).  Most opioid-related adverse events are preventable. Each year, adverse drug events (ADE) account for nearly 700,000 emergency department visits and 100,000 hospitalizations (AHRQ, 2019). An estimated one-third of all adverse events that occur in the inpatient setting are adverse drug events (ODPHP, 2020). Additionally, in a closed-claims analysis, 97% of adverse events were judged preventable with better monitoring and response (Lee et al., 2015). Naloxone administration is often used as an indicator of a severe opioid-related adverse event, and implementation of this measure can advance safe use of opioids in hospitals and prevent these serious and potentially lethal adverse drug events."></rationale>
+   <clinicalRecommendationStatement value="Naloxone is an opioid reversal agent typically used for severe opioid-related adverse events. Naloxone administration has been used in a number of studies as an indicator of opioid-related adverse events (Yiu, et al., 2022; Lynn &amp; Galinkin, 2017; Nwulu et al., 2013).  From Section 10 of the 2015 American Heart Association Guidelines Update for Cardiopulmonary Resuscitation and Emergency Cardiovascular Care (Lavonas et al., 2015), the following recommendation is listed for use of naloxone:  Naloxone is a potent opioid receptor antagonist in the brain, spinal cord, and gastrointestinal system. Naloxone has an excellent safety profile and can rapidly reverse central nervous system (CNS) and respiratory depression in a patient with an opioid-associated resuscitative emergency.  The 2020 American Heart Association guidelines update for cardiopulmonary resuscitation continue to recommend naloxone for a patient with suspected opioid overdose who has a definite pulse but no normal breathing or only gasping (i.e., a respiratory arrest), in addition to providing standard Pediatric Basic Life Support (PBLS) or Pediatric Advanced Life Support (PALS), it is reasonable for responders to administer intramuscular or intranasal naloxone. These recommendations are identical for adults (American Heart Association, 2020).  In February 2022, the Food and Drug Administration (FDA) approved its abbreviated new drug application for nalmefene hydrochloride injection, 2mg/2mL (1mg/1mL). Nalmefene is an opioid antagonist indicated for the complete or partial reversal of opioid drug effects, including respiratory depression, induced by either natural or synthetic opioids, and in the management of known or suspected opioid overdose (FDA, 2022). In contrast to naloxone, the long half-life of nalmefene is similar to or greater than that of many opioid receptor agonists (Britch &amp; Walsh, 2022), which could decrease the need for repeat drug administration. In May 2023, FDA approved nalmefene hydrochloride nasal spray that delivers 2.7 milligrams (mg) of nalmefene into the nasal cavity (FDA, 2023)."></clinicalRecommendationStatement>
+   <group id="Group_1">
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-scoring">
+         <valueCodeableConcept>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-scoring"></system>
+               <code value="proportion"></code>
+               <display value="Proportion"></display>
+            </coding>
+         </valueCodeableConcept>
+      </extension>
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-populationBasis">
+         <valueCode value="Encounter"></valueCode>
+      </extension>
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-type">
+         <valueCodeableConcept>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-type"></system>
+               <code value="outcome"></code>
+               <display value="Outcome"></display>
+            </coding>
+         </valueCodeableConcept>
+      </extension>
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-rateAggregation">
+         <valueCode value="None"></valueCode>
+      </extension>
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-improvementNotation">
+         <valueCodeableConcept>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-improvement-notation"></system>
+               <code value="decrease"></code>
+               <display value="decrease"></display>
+            </coding>
+         </valueCodeableConcept>
+      </extension>
+      <population id="InitialPopulation_1">
+         <code>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-population"></system>
+               <code value="initial-population"></code>
+               <display value="Initial Population"></display>
+            </coding>
+         </code>
+         <description value="Inpatient hospitalizations that end during the measurement period for patients age 18 and older and at least one opioid medication administration starts during the hospitalization outside of the operating room"></description>
+         <criteria>
+            <language value="text/cql-identifier"></language>
+            <expression value="Initial Population"></expression>
+         </criteria>
+      </population>
+      <population id="Denominator_1">
+         <code>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-population"></system>
+               <code value="denominator"></code>
+               <display value="Denominator"></display>
+            </coding>
+         </code>
+         <description value="Equals Initial Population"></description>
+         <criteria>
+            <language value="text/cql-identifier"></language>
+            <expression value="Denominator"></expression>
+         </criteria>
+      </population>
+      <population id="Numerator_1">
+         <code>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-population"></system>
+               <code value="numerator"></code>
+               <display value="Numerator"></display>
+            </coding>
+         </code>
+         <description value="Inpatient hospitalizations where a non-enteral opioid antagonist administration starts during the hospitalization outside of the operating room and 12 hours or less following an opioid medication administered outside of the operating room.   The route of administration of the opioid antagonist must be by intranasal spray, inhalation, intramuscular, subcutaneous, or intravenous injection.   Only one numerator event is counted per encounter."></description>
+         <criteria>
+            <language value="text/cql-identifier"></language>
+            <expression value="Numerator"></expression>
+         </criteria>
+      </population>
+   </group>
+   <supplementalData id="sde-ethnicity">
+      <usage>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+            <code value="supplemental-data"></code>
+         </coding>
+      </usage>
+      <description value="SDE Ethnicity"></description>
+      <criteria>
+         <language value="text/cql-identifier"></language>
+         <expression value="SDE Ethnicity"></expression>
+      </criteria>
+   </supplementalData>
+   <supplementalData id="sde-payer">
+      <usage>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+            <code value="supplemental-data"></code>
+         </coding>
+      </usage>
+      <description value="SDE Payer"></description>
+      <criteria>
+         <language value="text/cql-identifier"></language>
+         <expression value="SDE Payer"></expression>
+      </criteria>
+   </supplementalData>
+   <supplementalData id="sde-race">
+      <usage>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+            <code value="supplemental-data"></code>
+         </coding>
+      </usage>
+      <description value="SDE Race"></description>
+      <criteria>
+         <language value="text/cql-identifier"></language>
+         <expression value="SDE Race"></expression>
+      </criteria>
+   </supplementalData>
+   <supplementalData id="sde-sex">
+      <usage>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+            <code value="supplemental-data"></code>
+         </coding>
+      </usage>
+      <description value="SDE Sex"></description>
+      <criteria>
+         <language value="text/cql-identifier"></language>
+         <expression value="SDE Sex"></expression>
+      </criteria>
+   </supplementalData>
+</Measure>

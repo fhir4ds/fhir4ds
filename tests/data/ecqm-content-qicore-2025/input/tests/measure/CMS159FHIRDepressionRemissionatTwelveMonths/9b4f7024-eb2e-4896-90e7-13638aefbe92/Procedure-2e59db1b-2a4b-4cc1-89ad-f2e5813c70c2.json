@@ -1,0 +1,27 @@
+{
+  "resourceType": "Procedure",
+  "id": "2e59db1b-2a4b-4cc1-89ad-f2e5813c70c2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-02-01T08:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "170936009",
+      "display": "Shared care - hospice and general practitioner (finding)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/9b4f7024-eb2e-4896-90e7-13638aefbe92"
+  },
+  "performedPeriod": {
+    "start": "2026-01-01T08:00:00.000+00:00",
+    "end": "2026-02-01T08:15:00.000+00:00"
+  }
+}

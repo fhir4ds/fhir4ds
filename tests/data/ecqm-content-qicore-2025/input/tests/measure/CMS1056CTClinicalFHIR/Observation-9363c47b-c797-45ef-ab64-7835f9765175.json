@@ -1,0 +1,63 @@
+{
+  "resourceType": "Observation",
+  "id": "9363c47b-c797-45ef-ab64-7835f9765175",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "imaging",
+      "display": "Imaging"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "96914-7",
+      "display": "CT dose and image quality category"
+    } ],
+    "text": "CT dose and image quality category"
+  },
+  "subject": {
+    "reference": "Patient/d735a266-abd3-4392-b9f4-7eb953ea9529"
+  },
+  "effectiveDateTime": "2026-01-02T00:00:00+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "LA31851-1",
+      "display": "Simultaneous Thoracic and Lumbar Spine"
+    } ]
+  },
+  "component": [ {
+    "code": {
+      "coding": [ {
+        "system": "http://loinc.org",
+        "code": "96912-1",
+        "display": "Calculated CT global noise"
+      } ]
+    },
+    "valueQuantity": {
+      "value": 24,
+      "unit": "[hnsf'U]",
+      "system": "http://unitsofmeasure.org",
+      "code": "[hnsf'U]"
+    }
+  }, {
+    "code": {
+      "coding": [ {
+        "system": "http://loinc.org",
+        "code": "96913-9",
+        "display": "Calculated CT size-adjusted dose"
+      } ]
+    },
+    "valueQuantity": {
+      "value": 2519,
+      "unit": "mGy.cm",
+      "system": "http://unitsofmeasure.org",
+      "code": "mGy.cm"
+    }
+  } ]
+}

@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "5a2c159a-42aa-49f0-93b5-eb866859990e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "98970",
+      "display": "Qualified nonphysician health care professional online digital assessment and management, for an established patient, for up to 7 days, cumulative time during the 7 days; 5-10 minutes"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/54db46c1-fa2a-4e6e-96aa-da6dd67c5f18"
+  },
+  "period": {
+    "start": "2026-01-01T01:00:00.000+00:00",
+    "end": "2026-01-01T01:15:00.000+00:00"
+  }
+}

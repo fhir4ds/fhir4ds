@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "671a78e7-22b3-47bc-8d91-71b88cd94c8c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "75282-4",
+      "display": "Nutrition assessment panel",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/8dcae048-a632-4b49-b0d1-0d9355e57078"
+  },
+  "effectiveDateTime": "2026-11-01T10:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "448765001",
+      "display": "Unintentional weight loss (finding)",
+      "userSelected": true
+    } ]
+  }
+}

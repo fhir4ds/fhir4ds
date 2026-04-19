@@ -1,0 +1,109 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "7ebc5d0a-db44-457b-8bc3-2f65be19bf44",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "be318b02-d6eb-4144-88a5-b3a64ee4639d-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "32be0d28-bd59-41eb-bfe0-fb09a24eed31"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#be318b02-d6eb-4144-88a5-b3a64ee4639d-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "LMWH 2 days after ICU admission, no anesthesia.\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS190VTEProphylaxisICUFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/32be0d28-bd59-41eb-bfe0-fb09a24eed31"
+  }, {
+    "reference": "Encounter/57fa7669-90ca-434e-80bc-321976cc1fc9"
+  }, {
+    "reference": "Encounter/47fcc1b2-1368-4f5b-996f-456cbe09c325"
+  }, {
+    "reference": "Coverage/ad6a334a-94bd-4091-9eb2-7a521b1066a3"
+  }, {
+    "reference": "MedicationAdministration/02ab4837-c4d5-4ac2-8cb4-c171dfc60b8f"
+  }, {
+    "reference": "Location/3fc9a721-87ad-470d-b130-8b4902adad4b"
+  }, {
+    "reference": "Organization/8522cfcd-4db6-46cf-a50d-483973d90a78"
+  }, {
+    "reference": "Practitioner/505ab02a-cc40-40d1-8294-027f0671ab50"
+  } ]
+}

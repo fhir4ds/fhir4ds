@@ -1,0 +1,29 @@
+{
+  "resourceType": "Condition",
+  "id": "ea07e9fc-ade7-4618-956e-4b7bbe543a65",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "18559007",
+      "display": "Frank breech presentation (finding)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1ec8fccf-d982-4dcd-a0df-94b9c1150fd6"
+  },
+  "encounter": {
+    "reference": "Encounter/240e201e-76de-4a01-a626-3f8c4393b0a7"
+  },
+  "recordedDate": "2026-10-17T08:00:00.000+00:00"
+}

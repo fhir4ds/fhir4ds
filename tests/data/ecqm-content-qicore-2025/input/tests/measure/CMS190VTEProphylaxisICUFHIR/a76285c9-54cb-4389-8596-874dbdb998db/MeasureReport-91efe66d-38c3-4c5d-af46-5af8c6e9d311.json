@@ -1,0 +1,111 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "91efe66d-38c3-4c5d-af46-5af8c6e9d311",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "fcd162a7-44cf-47f0-9ab6-fb6399db846c-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "a76285c9-54cb-4389-8596-874dbdb998db"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#fcd162a7-44cf-47f0-9ab6-fb6399db846c-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "IPC not applied and unfractionated heparin not administered due to medical reason after neuraxial anesthesia. But Medication is 16 days  after Procedure\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS190VTEProphylaxisICUFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/a76285c9-54cb-4389-8596-874dbdb998db"
+  }, {
+    "reference": "Encounter/ea2b4b40-f1ef-41bd-a775-35b98a0c424a"
+  }, {
+    "reference": "Coverage/9b3cc0f2-f3b3-4e8d-806e-43f435f04685"
+  }, {
+    "reference": "Procedure/4bf10704-013c-4ecb-964f-cfb84916f36d"
+  }, {
+    "reference": "MedicationAdministration/46a0e24f-afd9-4ee3-a8f1-ceeebe866595"
+  }, {
+    "reference": "Procedure/d1e981e2-a67c-40cf-a889-de985539fc63"
+  }, {
+    "reference": "Location/95dda47e-78c4-4354-bd2a-6397b9d78375"
+  }, {
+    "reference": "Organization/f566d073-ead4-4886-8200-ffad3b00920c"
+  }, {
+    "reference": "Practitioner/a30260f7-f6e7-44fd-b694-4a9fe5fe469d"
+  } ]
+}

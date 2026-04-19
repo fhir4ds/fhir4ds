@@ -1,0 +1,35 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "d06b528f-4dab-42c1-8bce-53e104fecb16",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1361574"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/298f3f92-5047-46fc-ad92-9f27887ffc55"
+  },
+  "effectivePeriod": {
+    "start": "2026-12-02T23:59:00.000+00:00"
+  },
+  "dosage": {
+    "route": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "34206005",
+        "display": "Subcutaneous route"
+      } ]
+    },
+    "dose": {
+      "value": 20000,
+      "unit": "UNT/ML",
+      "system": "http://unitsofmeasure.org",
+      "code": "ML"
+    }
+  }
+}

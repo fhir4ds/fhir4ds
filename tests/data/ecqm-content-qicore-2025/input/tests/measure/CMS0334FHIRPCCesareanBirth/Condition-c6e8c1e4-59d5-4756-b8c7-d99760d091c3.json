@@ -1,0 +1,24 @@
+{
+  "resourceType": "Condition",
+  "id": "c6e8c1e4-59d5-4756-b8c7-d99760d091c3",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-09",
+      "code": "18559007",
+      "display": "Frank breech presentation (finding)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/2d756eed-2ff2-4147-9380-e25de99dce16"
+  },
+  "recordedDate": "2026-10-21T08:00:00.000+00:00"
+}

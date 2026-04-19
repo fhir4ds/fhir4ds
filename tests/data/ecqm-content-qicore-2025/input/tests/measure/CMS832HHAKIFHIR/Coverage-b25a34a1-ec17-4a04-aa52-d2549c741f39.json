@@ -1,0 +1,25 @@
+{
+  "resourceType": "Coverage",
+  "id": "b25a34a1-ec17-4a04-aa52-d2549c741f39",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+  },
+  "status": "active",
+  "type": {
+    "coding": [ {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "code": "211",
+      "display": "Medicaid HMO"
+    } ]
+  },
+  "beneficiary": {
+    "reference": "Patient/b85c0ae2-2a8c-4c27-9a31-efc62576b203"
+  },
+  "period": {
+    "start": "2024-12-01T00:00:00.000+00:00"
+  },
+  "payor": [ {
+    "reference": "Organization/8754b1a0-f5f8-4ea2-9c29-0032ae39e0ab"
+  } ]
+}

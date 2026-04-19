@@ -1,0 +1,48 @@
+{
+  "resourceType": "Encounter",
+  "id": "2ae43ff9-06d9-4921-950d-0e85a771a414",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient encounter"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "112689000",
+      "display": "Hospital admission, elective, with complete pre-admission work-up"
+    } ],
+    "text": "Hospital admission, elective, with complete pre-admission work-up"
+  } ],
+  "priority": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "103390000"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/ea9c34ee-b50e-4d13-bd9c-ab2033d15717"
+  },
+  "period": {
+    "start": "2026-04-10T08:00:00.000+00:00",
+    "end": "2026-04-14T08:15:00.000+00:00"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "O00.01",
+      "display": "Abdominal pregnancy with intrauterine pregnancy"
+    } ],
+    "text": "Abdominal pregnancy with intrauterine pregnancy"
+  } ],
+  "diagnosis": [ {
+    "condition": {
+      "reference": "Condition/4cadcb9c-e687-4e3d-82e2-61e4c09c1b05"
+    },
+    "rank": 1
+  } ]
+}

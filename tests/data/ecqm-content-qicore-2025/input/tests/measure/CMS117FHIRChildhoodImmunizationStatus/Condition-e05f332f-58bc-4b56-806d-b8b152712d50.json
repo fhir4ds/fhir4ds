@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "e05f332f-58bc-4b56-806d-b8b152712d50",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "471331000124109",
+      "display": "Anaphylaxis caused by vaccine product containing Measles morbillivirus and Mumps orthorubulavirus and Rubella virus antigens (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a5ca4525-88bc-4b67-b880-ca1cf54daa88"
+  },
+  "onsetDateTime": "2025-01-02T00:00:00.000Z"
+}

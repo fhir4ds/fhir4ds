@@ -1,0 +1,21 @@
+{
+  "resourceType": "Coverage",
+  "id": "b11c7ccd-c567-4d6c-81a6-8f071eb4b19f",
+  "status": "active",
+  "subscriberId": "523435",
+  "beneficiary": {
+    "reference": "Patient/93e2d9e6-00b4-4dfc-a404-f0bd5e73fa7b"
+  },
+  "relationship": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+      "code": "self"
+    } ]
+  },
+  "period": {
+    "start": "1986-09-18T08:00:00Z"
+  },
+  "payor": [ {
+    "reference": "Organization/e2e0696d-61f1-4e1b-bc23-a159ce1b9201"
+  } ]
+}

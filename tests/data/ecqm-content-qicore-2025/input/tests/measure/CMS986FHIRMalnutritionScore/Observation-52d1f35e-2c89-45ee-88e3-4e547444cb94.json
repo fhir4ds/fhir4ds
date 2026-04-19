@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "52d1f35e-2c89-45ee-88e3-4e547444cb94",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "101807-6",
+      "display": "Malnutrition risk screen results indicator",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/abe408d9-f5a5-4bdc-952b-7162a2aa7d31"
+  },
+  "effectiveDateTime": "2026-01-30T09:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "LA27538-0",
+      "display": "At risk for malnutrition",
+      "userSelected": true
+    } ]
+  }
+}

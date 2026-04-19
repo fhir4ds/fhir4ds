@@ -1,0 +1,372 @@
+{
+  "resourceType": "Group",
+  "id": "CMS2FHIRPCSDepressionScreenAndFollowUp",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS2FHIRPCSDepressionScreenAndFollowUp"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/82134291-214a-4e6e-9969-9ccb6df412f0",
+      "display": "PositiveAdultDepressionScreeningandFollowUp NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/82134291-214a-4e6e-9969-9ccb6df412f0",
+      "display": "PositiveAdultDepressionScreeningandFollowUp NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6f3808b3-69a2-4080-9529-8582b4d5c5d5",
+      "display": "AdultHistoryOfBipolarRelapse DENOMEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6f3808b3-69a2-4080-9529-8582b4d5c5d5",
+      "display": "AdultHistoryOfBipolarRelapse DENOMEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d5f7630a-6fcf-4cfc-ba20-dfd5ee88af9a",
+      "display": "12yoPosAdolDepScreenandFollowUpPrescription NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d5f7630a-6fcf-4cfc-ba20-dfd5ee88af9a",
+      "display": "12yoPosAdolDepScreenandFollowUpPrescription NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/328248a7-33d6-4923-a99a-a56ec88c515e",
+      "display": "12yoPosAdolDepScreenandFUPrescripWI2DAfterEndOfEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/328248a7-33d6-4923-a99a-a56ec88c515e",
+      "display": "12yoPosAdolDepScreenandFUPrescripWI2DAfterEndOfEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fa943373-f62b-4494-8c9a-fb17e9b9a2bd",
+      "display": "12yoNegativeAdolescentDepressionScreening NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fa943373-f62b-4494-8c9a-fb17e9b9a2bd",
+      "display": "12yoNegativeAdolescentDepressionScreening NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/39c99530-08b9-4ed2-bac7-6a59c1e1ad71",
+      "display": "AdultDepressionScreening DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/39c99530-08b9-4ed2-bac7-6a59c1e1ad71",
+      "display": "AdultDepressionScreening DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a7ad97c4-9769-4630-8ad7-8cf354384aa1",
+      "display": "NegativeAdultDepressionScreening NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a7ad97c4-9769-4630-8ad7-8cf354384aa1",
+      "display": "NegativeAdultDepressionScreening NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2ee18ee0-f67a-4694-8411-fda20e6d108d",
+      "display": "12yoPosAdolDepScreenandFollowUpProcedure NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2ee18ee0-f67a-4694-8411-fda20e6d108d",
+      "display": "12yoPosAdolDepScreenandFollowUpProcedure NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f256f4bb-e5ad-4e93-bee7-7237b1fa275a",
+      "display": "17yoNegativeAdultDepressionScreening NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f256f4bb-e5ad-4e93-bee7-7237b1fa275a",
+      "display": "17yoNegativeAdultDepressionScreening NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/12786a64-c20e-4542-a4c0-bf3129d6a9e0",
+      "display": "AdultMedicalReasonForNoDepressionScreenAge18 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/12786a64-c20e-4542-a4c0-bf3129d6a9e0",
+      "display": "AdultMedicalReasonForNoDepressionScreenAge18 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/41664f5f-5280-4b5b-a9f1-289a412dbc18",
+      "display": "12yoPosAdolDepScreenandFollowUpReferral NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/41664f5f-5280-4b5b-a9f1-289a412dbc18",
+      "display": "12yoPosAdolDepScreenandFollowUpReferral NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a09d5edf-2c0a-4b39-86bf-312109f357c0",
+      "display": "AdolPtReasonForNoDepScreenandHadDepScreenAWeekAgo DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a09d5edf-2c0a-4b39-86bf-312109f357c0",
+      "display": "AdolPtReasonForNoDepScreenandHadDepScreenAWeekAgo DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0e463fc3-d1bf-4e19-882b-fad6342aa668",
+      "display": "AdolescentMedicalReasonForNoDepressionScreenAge17 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0e463fc3-d1bf-4e19-882b-fad6342aa668",
+      "display": "AdolescentMedicalReasonForNoDepressionScreenAge17 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/41df0dbe-ae84-4496-b355-320ff8707a85",
+      "display": "AdultPatientReasonForNoDepressionScreenAge17 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/41df0dbe-ae84-4496-b355-320ff8707a85",
+      "display": "AdultPatientReasonForNoDepressionScreenAge17 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6f17c306-5df4-431a-8364-d44ab5bad34a",
+      "display": "AdultPtReasonForNoDepScreenandDepScreenAWeekAgo DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6f17c306-5df4-431a-8364-d44ab5bad34a",
+      "display": "AdultPtReasonForNoDepScreenandDepScreenAWeekAgo DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6078e73e-3265-4022-ae63-216c096b6246",
+      "display": "AdolescentPatientReasonForNoDepressionScreenAge12 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6078e73e-3265-4022-ae63-216c096b6246",
+      "display": "AdolescentPatientReasonForNoDepressionScreenAge12 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d1fc6b6d-025e-446b-a941-e62a76217e28",
+      "display": "PosAdultDepScreenandFU3DAfterEndOfEnc NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d1fc6b6d-025e-446b-a941-e62a76217e28",
+      "display": "PosAdultDepScreenandFU3DAfterEndOfEnc NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d2cde80b-5a6c-48e9-b38a-de938f019096",
+      "display": "17yoPositiveAdultDepressionScreeningandFollowUp NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d2cde80b-5a6c-48e9-b38a-de938f019096",
+      "display": "17yoPositiveAdultDepressionScreeningandFollowUp NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/86761769-1b1b-44c1-81cb-3f034a6a0bc2",
+      "display": "AdultTelephoneVisit DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/86761769-1b1b-44c1-81cb-3f034a6a0bc2",
+      "display": "AdultTelephoneVisit DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cf76e904-95bd-445d-8384-62be012b76f6",
+      "display": "AdolescentHistoryOfBipolarRemission DENOMEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cf76e904-95bd-445d-8384-62be012b76f6",
+      "display": "AdolescentHistoryOfBipolarRemission DENOMEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ff6f7416-7e1d-4712-b4f5-aab79b2a7c01",
+      "display": "17yoPositiveAdolescentDepressionScreeningandMedsActive NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ff6f7416-7e1d-4712-b4f5-aab79b2a7c01",
+      "display": "17yoPositiveAdolescentDepressionScreeningandMedsActive NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6aaff09e-4a7b-4efa-93f8-13033e95c230",
+      "display": "AdultPatientReasonForNoDepressionScreenAge18 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6aaff09e-4a7b-4efa-93f8-13033e95c230",
+      "display": "AdultPatientReasonForNoDepressionScreenAge18 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/be498e62-5ef2-47fa-8127-dfc5a7eb6ac9",
+      "display": "11yoDepressionScreening IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/be498e62-5ef2-47fa-8127-dfc5a7eb6ac9",
+      "display": "11yoDepressionScreening IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/28bf1260-965f-4682-b427-2c2a2084312a",
+      "display": "17yoPositiveAdultDepressionScreeningandFollowUp NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/28bf1260-965f-4682-b427-2c2a2084312a",
+      "display": "17yoPositiveAdultDepressionScreeningandFollowUp NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e1b6a53f-c856-41c2-b1fe-ec50d3f23333",
+      "display": "AdultHistoryOfBipolarRemission DENOMEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e1b6a53f-c856-41c2-b1fe-ec50d3f23333",
+      "display": "AdultHistoryOfBipolarRemission DENOMEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f29e2786-fade-4dca-b14d-7037a34ef498",
+      "display": "AdultMedicalReasonForNoDepressionScreenAge17 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f29e2786-fade-4dca-b14d-7037a34ef498",
+      "display": "AdultMedicalReasonForNoDepressionScreenAge17 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7009a1c3-93a8-4028-b42a-0bd9953f6ebb",
+      "display": "AdultHistoryOfBipolarRecurrence DENOMEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7009a1c3-93a8-4028-b42a-0bd9953f6ebb",
+      "display": "AdultHistoryOfBipolarRecurrence DENOMEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/75a5223a-3a62-418a-bcc6-4522cfe71726",
+      "display": "PosAdultDepScreenandFUWI2DAfterEndOfEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/75a5223a-3a62-418a-bcc6-4522cfe71726",
+      "display": "PosAdultDepScreenandFUWI2DAfterEndOfEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4a1f1d8c-0de8-4819-a0a3-28f6caaf6265",
+      "display": "AdultPhysicalTherapyEvaluation DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4a1f1d8c-0de8-4819-a0a3-28f6caaf6265",
+      "display": "AdultPhysicalTherapyEvaluation DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/15ad723f-b561-4cdd-9a11-7e6619780459",
+      "display": "AdultHistoryOfBipolarActive DENOMEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/15ad723f-b561-4cdd-9a11-7e6619780459",
+      "display": "AdultHistoryOfBipolarActive DENOMEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d0ba1182-26fa-4cfa-9f91-960503b7fe53",
+      "display": "AdolescentMedicalReasonForNoDepressionScreenAge12 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d0ba1182-26fa-4cfa-9f91-960503b7fe53",
+      "display": "AdolescentMedicalReasonForNoDepressionScreenAge12 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4149c02e-ee5c-4b8d-a4ee-425dfa2460e7",
+      "display": "17yoPositiveAdolescentDepressionScreeningandFollowUp NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4149c02e-ee5c-4b8d-a4ee-425dfa2460e7",
+      "display": "17yoPositiveAdolescentDepressionScreeningandFollowUp NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1eaf0b86-afe8-488c-8f32-6321ecfe0fca",
+      "display": "11yoDepressionScreening IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1eaf0b86-afe8-488c-8f32-6321ecfe0fca",
+      "display": "11yoDepressionScreening IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bc433eb4-fba6-45e0-a24b-de907e551556",
+      "display": "12yoPosAdolDepScreenandFUPrescript3DAfterEndOfEnc NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bc433eb4-fba6-45e0-a24b-de907e551556",
+      "display": "12yoPosAdolDepScreenandFUPrescript3DAfterEndOfEnc NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/86ca7528-efcb-44ed-9203-6f21f37f4332",
+      "display": "AdolescentPatientReasonForNoDepressionScreenAge17 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/86ca7528-efcb-44ed-9203-6f21f37f4332",
+      "display": "AdolescentPatientReasonForNoDepressionScreenAge17 DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ce2c72d-d347-4fde-82cf-dc9992c73aad",
+      "display": "17yoNegativeAdolescentDepressionScreening NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ce2c72d-d347-4fde-82cf-dc9992c73aad",
+      "display": "17yoNegativeAdolescentDepressionScreening NUMERPass"
+    }
+  } ]
+}

@@ -1,0 +1,75 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1248.353-20250312",
+  "meta": {
+    "versionId": "8",
+    "lastUpdated": "2025-03-12T01:08:28.000-04:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Institutes for Research Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-03-12"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-03-12"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.353",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113762.1.4.1248.353"
+  } ],
+  "version": "20250312",
+  "name": "BacillusCalmetteGuerinForUrologyCare",
+  "title": "Bacillus Calmette Guerin for Urology Care",
+  "status": "active",
+  "date": "2025-03-12T01:08:28-04:00",
+  "publisher": "American Institutes for Research Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of medications of Bacillus Calmette Guerin (BCG) .),(Data Element Scope: This value set may use a model element related to Medication.),(Inclusion Criteria: Includes concepts that identify a medication of Bacillus Calmette Guerin (BCG) for intravesical use.),(Exclusion Criteria: No exclusions.)",
+  "compose": {
+    "include": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "concept": [ {
+        "code": "1653484",
+        "display": "BCG, live, Tice strain 50 MG/ML Topical Suspension"
+      }, {
+        "code": "1653579",
+        "display": "BCG, live, Tice strain 50 MG Injection"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:0984421d-b40c-4c47-a1c3-3efdf2495c48",
+    "timestamp": "2025-06-20T17:03:24-04:00",
+    "total": 2,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "01022024",
+      "code": "1653484",
+      "display": "BCG, live, Tice strain 50 MG/ML Topical Suspension"
+    }, {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "01022024",
+      "code": "1653579",
+      "display": "BCG, live, Tice strain 50 MG Injection"
+    } ]
+  }
+}

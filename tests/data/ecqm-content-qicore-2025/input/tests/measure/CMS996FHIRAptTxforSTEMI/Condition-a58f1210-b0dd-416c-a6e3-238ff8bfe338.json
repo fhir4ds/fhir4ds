@@ -1,0 +1,35 @@
+{
+  "resourceType": "Condition",
+  "id": "a58f1210-b0dd-416c-a6e3-238ff8bfe338",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "I51.81",
+      "display": "Takotsubo syndrome",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/872dbe15-b15d-4baf-b202-874278bbb317"
+  },
+  "onsetDateTime": "2026-10-08T05:00:00.000+00:00"
+}

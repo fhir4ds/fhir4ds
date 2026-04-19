@@ -1,0 +1,38 @@
+{
+  "resourceType": "Encounter",
+  "id": "f2e3938a-016e-47e4-b862-40453ab479a1",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "EMER",
+    "display": "emergency",
+    "userSelected": true
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2020-09",
+      "code": "4525004",
+      "display": "Emergency department patient visit",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/765db4ae-8924-4673-87f6-03924b0fe23d"
+  },
+  "period": {
+    "start": "2026-10-09T05:00:00.000+00:00",
+    "end": "2026-10-13T17:00:00.000+00:00"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "I21.21",
+      "display": "ST elevation (STEMI) myocardial infarction involving left circumflex coronary artery",
+      "userSelected": true
+    } ]
+  } ]
+}

@@ -1,0 +1,99 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "346b28c6-ae31-4f0d-9461-e66a641f3b29",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "3465d1e7-6431-4eca-ae73-069922aec0ec-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "8942da50-6322-4df7-bd03-21aecbc427a4"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#3465d1e7-6431-4eca-ae73-069922aec0ec-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "1st encounter excluded - MV starts more than 1 hr prior to first proc. 2nd encounter meets numerator 1 intubation outside of procedural area. "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS1218FHIRHHRF",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 2
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 2
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Procedure/a39755d1-5e3d-4e12-a7ff-e9bc17a9399d"
+  }, {
+    "reference": "Procedure/f6980b7d-57d1-474b-9ad6-9da6e2355364"
+  }, {
+    "reference": "Procedure/086d3362-4f00-4a7a-b6ef-e365b8897cc4"
+  }, {
+    "reference": "Encounter/47b5f374-5ba1-4f72-8653-7e5f39d26af9"
+  }, {
+    "reference": "Patient/8942da50-6322-4df7-bd03-21aecbc427a4"
+  }, {
+    "reference": "Procedure/f495e622-b065-4884-a5fa-5b4a6278d89b"
+  }, {
+    "reference": "Procedure/cd5748c9-50fe-47ac-8054-f706994bd777"
+  }, {
+    "reference": "Encounter/2da524ca-75b2-4296-a443-c585baef79ed"
+  } ]
+}

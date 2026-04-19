@@ -1,0 +1,31 @@
+{
+  "resourceType": "Procedure",
+  "id": "949c1d11-d942-4cc3-8b2b-c63a619b35e9",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-10-01T08:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "category": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "387713003",
+      "display": "Surgical procedure",
+      "userSelected": true
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+      "code": "02100J3",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/aaebb88a-2098-4fdb-8966-c4d5204ef546"
+  },
+  "performedDateTime": "2026-10-09T09:00:00.000+00:00"
+}

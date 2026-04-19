@@ -1,0 +1,36 @@
+The purpose of this file is to allow users to view the mapping of test case names to their test case UUIDs. In order to find a specific test case file in the export, first locate the test case name in this document and then use the associated UUID to find the name of the folder in the export.
+
+Case # 34 - 27981b44-c26e-4bce-957c-f9e82f62f05d = SDEFail SDECoverage
+Case # 29 - 0e296f04-855b-42ad-aa20-295a719a96e5 = DENEXPass PalliativeCareEncOverlapsMP
+Case # 28 - 05cbc93d-e748-4bca-b68d-3011ebf68e28 = DENEXPass PalliativeCareSurveyOverlapsMP
+Case # 27 - 7e41f717-097e-45a7-9a00-1e0ad852cb44 = DENEXPass PalliativeCareDiagnosisDuringMP
+Case # 26 - 62bd7a1e-f946-435f-8898-39db9d870940 = DENEXPass HospiceObsValueIsYes
+Case # 25 - d986061c-de3e-4d5d-95e7-f5ec93c5665c = DENEXPass HospiceEncOverlapsMP
+Case # 24 - 65a9a258-c453-484f-902c-743e678b44a4 = DENEXPass HospiceDischargeDuringMP
+Case # 23 - cadbffa0-20b2-4c26-b202-75b9edfd0a07 = DENEXPass HospiceDiagnosisOverlapsMP
+Case # 22 - 8723dbb4-f60f-488a-9da3-f02f04ea03bf = DENEXPass DischargeToHomeInpatient
+Case # 21 - dd04ce68-da5f-415e-b5e6-9f808a0edb6d = DENEXPass AbsenceOfCervixConditionDuringMP
+Case # 20 - e8813151-9334-41d7-ab4b-1d597f08d4a9 = DENEXPass HospiceServiceRequestCompleted
+Case # 19 - d15cf8c6-5f36-4874-83a5-d726945721c6 = IPPass 64WithQualifyingEncounter
+Case # 18 - b565dc44-4428-417d-bdf6-144e408ad815 = IPFail 65WithQualifyingEncounter
+Case # 17 - c5ea33df-060b-484a-b6c4-17c600559077 = NUMFail 29FemaleWithHPVTestFourYearsPriorMP
+Case # 16 - 1104f4a8-5328-4629-8b7f-77f7b2e62225 = NUMFail 29FemaleWithHPVTestDuringMP
+Case # 15 - 59ef157d-1417-4a8e-9193-06d9c66ba8e1 = NUMFail 30FemaleWithHPVTestBeforeFourYearsPriorMP
+Case # 14 - 908f935e-43b9-4666-982a-f211d1cfcd50 = NUMFail 30FemaleWithHPVTestAfterMP
+Case # 13 - 4c40d1e6-3943-4a0e-a95c-6e6b845f0851 = NUMPass 30FemaleWithHPVTestFourYearsPriorMP
+Case # 12 - b8c73916-4520-47e1-9456-a36cd1575693 = NUMFail 24FemaleWithCervicalCytologyBeforeTwoYearsPriorMP
+Case # 11 - dc5b8054-7432-4905-aaef-3acd6f3f75b9 = NUMFail 24FemaleWithCervicalCytologyAfterMP 
+Case # 10 - 321abfa0-2c0e-4885-8b5b-20208512e605 = NUMPass 24FemaleWithCervicalCytologyTwoYearsPriorMP 
+Case # 9 - 6005d1fd-e9f5-414d-88d6-23087b4f3e94 = NUMPass 30FemaleWithHPVTestDuringMP
+Case # 8 - 25727adc-4495-4e13-9dfc-8b9cb6bf17b9 = NUMPass 24FemaleWithCervicalCytologyDuringMP
+Case # 7 - 3e21058f-64cc-4b0a-8c84-1122df974dae = DENEXFail 24FemaleWithPalliativeCareAfterMP
+Case # 6 - c0d1f27d-249b-4d74-a493-a4796fb8e833 = DENEXFail 24FemaleWithHospiceServiceBeforeMP
+Case # 5 - 3aef97c8-9529-433c-95d3-ea01f188e156 = DENEXPass 24FemaleWithPalliativeCareDuringMP
+Case # 4 - 71b8882f-bb0f-4402-a4b7-adc60e2008a8 = DENEXPass 24FemaleWithAbsenceofCervixDuringMP
+Case # 3 - 72af08cd-4f6d-4e7a-b3da-a7ebb2bd3887 = IPFail 23FemaleWithQualifyingEncounter
+Case # 2 - ab346cb5-2c55-4171-93ea-aac9d266e6c7 = DENEXPass 24FemaleWithHospiceServiceDuringMP
+Case # 1 - e8e5b4c8-0e07-415f-a534-9143ecef5f10 = IPPass 24FemaleWithQualifyingEncounter
+Case # 30 - 679e022b-0ae1-414a-a2fa-f1af1d2eeef7 = DENEXPass AbsenceOfCervixConditionEncDxDuringMP
+Case # 31 - c6ec1681-b011-425a-a850-4e187e9fd927 = DENEXPass HospiceCondEncDiagnosisOverlapsMP
+Case # 32 - 6ee7c92c-c8cd-4025-8002-ca1253ba830b = DENEXPass PalliativeCareCondEncDiagnosisDuringMP
+Case # 35 - e0fdd5df-7671-417c-9eef-20873cd647d6 = SDEFail SDECoverage2

@@ -1,0 +1,32 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "b6f233e3-a330-4f52-9c54-127d69fcd488",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministrationnotdone" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-11-01T06:00:00.000+00:00"
+  } ],
+  "status": "not-done",
+  "statusReason": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183932001",
+      "display": "Procedure contraindicated (situation)",
+      "userSelected": true
+    } ]
+  } ],
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "855288"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f859dd94-f201-4517-a368-32b98dd486c9"
+  },
+  "effectivePeriod": {
+    "start": "2026-11-01T07:00:00.000+00:00"
+  }
+}

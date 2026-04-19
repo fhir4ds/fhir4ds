@@ -1,0 +1,255 @@
+{
+  "resourceType": "Bundle",
+  "id": "DENEXPass-DialysisServiceDuringMP",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/4ade2900-b5fd-4bed-bacb-1e048c83366f",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "4ade2900-b5fd-4bed-bacb-1e048c83366f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "DENEXPass",
+        "given": [ "DialysisServiceDuringMP" ]
+      } ],
+      "gender": "female",
+      "birthDate": "2007-12-31"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/4ade2900-b5fd-4bed-bacb-1e048c83366f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/d999f665-c3ac-405f-bbfe-d8752c716a53",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "d999f665-c3ac-405f-bbfe-d8752c716a53",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "3391000175108",
+          "display": "Office visit for pediatric care and assessment (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/4ade2900-b5fd-4bed-bacb-1e048c83366f"
+      },
+      "period": {
+        "start": "2026-01-01T00:00:00.000+00:00",
+        "end": "2026-01-01T01:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/d999f665-c3ac-405f-bbfe-d8752c716a53"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/98a34de9-0952-46cf-90c7-680c77793d46",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "98a34de9-0952-46cf-90c7-680c77793d46",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "371125006",
+          "display": "Labile essential hypertension (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/4ade2900-b5fd-4bed-bacb-1e048c83366f"
+      },
+      "onsetDateTime": "2026-06-30T23:59:59.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/98a34de9-0952-46cf-90c7-680c77793d46"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/3b7d3b6c-4008-412f-bbcb-5f8e79ed4234",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "3b7d3b6c-4008-412f-bbcb-5f8e79ed4234",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2025-12-31T00:00:00.000+00:00"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "108241001",
+          "display": "Dialysis procedure (procedure)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/4ade2900-b5fd-4bed-bacb-1e048c83366f"
+      },
+      "performedPeriod": {
+        "start": "2026-12-30T00:00:00.000+00:00",
+        "end": "2026-12-30T23:59:59.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/3b7d3b6c-4008-412f-bbcb-5f8e79ed4234"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/68d2877b-22b4-44ae-a8b4-4c5c1d51d9da",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "68d2877b-22b4-44ae-a8b4-4c5c1d51d9da",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "9c56be6d-91e9-492e-8d9f-868d6cca743d-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "4ade2900-b5fd-4bed-bacb-1e048c83366f"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#9c56be6d-91e9-492e-8d9f-868d6cca743d-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Dialysis service during MP"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS165FHIRControllingHighBloodPressure",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/4ade2900-b5fd-4bed-bacb-1e048c83366f"
+      }, {
+        "reference": "Encounter/d999f665-c3ac-405f-bbfe-d8752c716a53"
+      }, {
+        "reference": "Condition/98a34de9-0952-46cf-90c7-680c77793d46"
+      }, {
+        "reference": "Procedure/3b7d3b6c-4008-412f-bbcb-5f8e79ed4234"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/68d2877b-22b4-44ae-a8b4-4c5c1d51d9da"
+    }
+  } ]
+}

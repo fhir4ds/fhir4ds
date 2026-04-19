@@ -1,0 +1,427 @@
+{
+  "resourceType": "Bundle",
+  "id": "63f628d8d289cd498bb84238",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/afe0cb42-4b07-4874-8ea2-46e9ecc94787",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "afe0cb42-4b07-4874-8ea2-46e9ecc94787",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "63f628d8d289cd498bb84238"
+      } ],
+      "name": [ {
+        "family": "DENOMFail",
+        "given": [ "FundusExam1MinAfterEncEnd" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1967-10-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/afe0cb42-4b07-4874-8ea2-46e9ecc94787"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/d40d1aa3-6ce6-48c2-ba87-bf3dd01361e2",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "d40d1aa3-6ce6-48c2-ba87-bf3dd01361e2",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "version": "2023",
+          "code": "99212"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/afe0cb42-4b07-4874-8ea2-46e9ecc94787"
+      },
+      "period": {
+        "start": "2026-03-01T08:00:00.000+00:00",
+        "end": "2026-03-01T08:20:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/d40d1aa3-6ce6-48c2-ba87-bf3dd01361e2"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/77898303-4054-4df6-b830-229e34fb9437",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "77898303-4054-4df6-b830-229e34fb9437",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "confirmed",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20230301",
+          "code": "312903003",
+          "display": "Mild nonproliferative retinopathy due to diabetes mellitus (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/afe0cb42-4b07-4874-8ea2-46e9ecc94787"
+      },
+      "onsetDateTime": "2026-01-09T08:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/77898303-4054-4df6-b830-229e34fb9437"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/5550a1b4-4f7d-4228-afd8-21b2369cba79",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "5550a1b4-4f7d-4228-afd8-21b2369cba79",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "confirmed",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.73",
+          "code": "32451-7",
+          "display": "Physical findings of Macula"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/afe0cb42-4b07-4874-8ea2-46e9ecc94787"
+      },
+      "effectiveDateTime": "2026-03-01T08:21:00.000+00:00",
+      "issued": "2026-03-01T08:21:00.000+00:00",
+      "valueBoolean": true
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/5550a1b4-4f7d-4228-afd8-21b2369cba79"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Communication/5ea2e8f7-bf11-4758-aa11-79373db6c7c5",
+    "resource": {
+      "resourceType": "Communication",
+      "id": "5ea2e8f7-bf11-4758-aa11-79373db6c7c5",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone" ]
+      },
+      "status": "not-done",
+      "statusReason": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "182890002",
+          "display": "Patient requests alternative treatment (finding)",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/202303",
+          "code": "312903003",
+          "display": "Mild nonproliferative retinopathy due to diabetes mellitus (disorder)",
+          "userSelected": true
+        } ]
+      } ],
+      "sent": "2026-03-09T08:03:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Communication/5ea2e8f7-bf11-4758-aa11-79373db6c7c5"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Communication/4109292a-6975-425d-bb10-dc0dfae57ca6",
+    "resource": {
+      "resourceType": "Communication",
+      "id": "4109292a-6975-425d-bb10-dc0dfae57ca6",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone" ]
+      },
+      "status": "not-done",
+      "statusReason": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "105480006",
+          "display": "Refusal of treatment by patient (situation)",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/202303",
+          "code": "193350004",
+          "display": "Advanced maculopathy due to diabetes mellitus (disorder)",
+          "userSelected": true
+        } ]
+      } ],
+      "sent": "2025-03-09T08:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Communication/4109292a-6975-425d-bb10-dc0dfae57ca6"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/b21ef96c-0a52-4540-a76a-b8a8009e5cda",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "b21ef96c-0a52-4540-a76a-b8a8009e5cda",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/afe0cb42-4b07-4874-8ea2-46e9ecc94787"
+      },
+      "payor": [ {
+        "reference": "Organization/20058c07-ad98-478e-b096-b29625b68107"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/b21ef96c-0a52-4540-a76a-b8a8009e5cda"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/20058c07-ad98-478e-b096-b29625b68107",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "20058c07-ad98-478e-b096-b29625b68107",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/20058c07-ad98-478e-b096-b29625b68107"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/06d1ba30-0ced-43b3-be35-3ee9906bbefa",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "06d1ba30-0ced-43b3-be35-3ee9906bbefa",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "123456"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/06d1ba30-0ced-43b3-be35-3ee9906bbefa"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/8dc2eddd-f2f5-41ee-8d2f-af5a4991f7c5",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "8dc2eddd-f2f5-41ee-8d2f-af5a4991f7c5",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "005b0543-ebfb-4f1f-9361-68f391b31dc9-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "afe0cb42-4b07-4874-8ea2-46e9ecc94787"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#005b0543-ebfb-4f1f-9361-68f391b31dc9-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Fundus Examination performed 1 minute after Encounter End will  not pass denominator (edge)"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS142FHIRDRCommunicationWithPhysicianManagingDiabetes",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/afe0cb42-4b07-4874-8ea2-46e9ecc94787"
+      }, {
+        "reference": "Encounter/d40d1aa3-6ce6-48c2-ba87-bf3dd01361e2"
+      }, {
+        "reference": "Condition/77898303-4054-4df6-b830-229e34fb9437"
+      }, {
+        "reference": "Observation/5550a1b4-4f7d-4228-afd8-21b2369cba79"
+      }, {
+        "reference": "Communication/5ea2e8f7-bf11-4758-aa11-79373db6c7c5"
+      }, {
+        "reference": "Communication/4109292a-6975-425d-bb10-dc0dfae57ca6"
+      }, {
+        "reference": "Coverage/b21ef96c-0a52-4540-a76a-b8a8009e5cda"
+      }, {
+        "reference": "Organization/20058c07-ad98-478e-b096-b29625b68107"
+      }, {
+        "reference": "Practitioner/06d1ba30-0ced-43b3-be35-3ee9906bbefa"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/8dc2eddd-f2f5-41ee-8d2f-af5a4991f7c5"
+    }
+  } ]
+}

@@ -1,0 +1,42 @@
+{
+  "resourceType": "Condition",
+  "id": "4b70a96a-82ba-43a7-8819-6dddb3070b88",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "195042002",
+      "display": "Second degree atrioventricular block (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/5914457a-816c-43fe-86da-07fcc42ebe61"
+  },
+  "onsetPeriod": {
+    "start": "2026-01-20T14:32:00.000+00:00"
+  }
+}

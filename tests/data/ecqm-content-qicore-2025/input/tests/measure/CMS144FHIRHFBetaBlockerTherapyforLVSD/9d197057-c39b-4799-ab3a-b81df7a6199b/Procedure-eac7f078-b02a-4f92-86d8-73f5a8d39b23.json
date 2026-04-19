@@ -1,0 +1,27 @@
+{
+  "resourceType": "Procedure",
+  "id": "eac7f078-b02a-4f92-86d8-73f5a8d39b23",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-06-05T12:20:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "32413006",
+      "display": "Transplantation of heart (procedure)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/9d197057-c39b-4799-ab3a-b81df7a6199b"
+  },
+  "performedPeriod": {
+    "start": "2025-06-05T12:20:00.000+00:00",
+    "end": "2025-06-05T14:50:00.000+00:00"
+  }
+}

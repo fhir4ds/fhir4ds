@@ -1,0 +1,24 @@
+{
+  "resourceType": "Procedure",
+  "id": "6d53cad7-c2eb-4a7f-a778-3d8221378d1e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-06-21T08:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "108313002",
+      "display": "Family psychotherapy procedure (regime/therapy)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/82134291-214a-4e6e-9969-9ccb6df412f0"
+  },
+  "performedDateTime": "2026-06-21T08:00:00.000+00:00"
+}

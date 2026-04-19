@@ -1,0 +1,29 @@
+{
+  "resourceType": "Observation",
+  "id": "47360b4e-1d47-4bce-8a2f-fc112ad050c5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "71969-0",
+      "display": "PROMIS-10 Global Mental Health (GMH) score T-score"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/faeabeab-c8ca-4e6f-91c8-83edc69a464a"
+  },
+  "effectivePeriod": {
+    "start": "2024-11-01T00:00:00.000Z",
+    "end": "2024-11-01T01:00:00.000Z"
+  },
+  "valueInteger": 60
+}

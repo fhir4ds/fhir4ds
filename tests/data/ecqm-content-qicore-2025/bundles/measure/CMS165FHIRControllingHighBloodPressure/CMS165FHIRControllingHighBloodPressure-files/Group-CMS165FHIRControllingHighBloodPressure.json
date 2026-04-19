@@ -1,0 +1,112 @@
+{
+  "resourceType": "Group",
+  "id": "CMS165FHIRControllingHighBloodPressure",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS165FHIRControllingHighBloodPressure"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/0e867903-400d-4d71-a7fd-dc9b96d94a17",
+      "display": "HospiceProcedureStartsDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0e867903-400d-4d71-a7fd-dc9b96d94a17",
+      "display": "HospiceProcedureStartsDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b378c30b-ebc2-4378-9a75-8a97711cac81",
+      "display": "LastHousingStatusNotNursingHome DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b378c30b-ebc2-4378-9a75-8a97711cac81",
+      "display": "LastHousingStatusNotNursingHome DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4d50f3eb-f56f-4f13-8fcf-4d26e05b9a6a",
+      "display": "HypertensionDuringFirst6Months IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4d50f3eb-f56f-4f13-8fcf-4d26e05b9a6a",
+      "display": "HypertensionDuringFirst6Months IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1905549a-1783-4195-95b9-b0879cb81d96",
+      "display": "DementiaStartsDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1905549a-1783-4195-95b9-b0879cb81d96",
+      "display": "DementiaStartsDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/45e01fed-56bb-483d-a860-af3d566bda11",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/45e01fed-56bb-483d-a860-af3d566bda11",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0b9cb569-149a-4b47-a535-66b59a77bceb",
+      "display": "ChronicKidneyDiseaseStage5DuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0b9cb569-149a-4b47-a535-66b59a77bceb",
+      "display": "ChronicKidneyDiseaseStage5DuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7de4b027-eb4c-4a2e-958f-e6b7a3eb6309",
+      "display": "KidneyTransplantProcedureDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7de4b027-eb4c-4a2e-958f-e6b7a3eb6309",
+      "display": "KidneyTransplantProcedureDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/546de5d8-f614-41c7-938f-671d14e4f540",
+      "display": "HomeHealthcareService IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/546de5d8-f614-41c7-938f-671d14e4f540",
+      "display": "HomeHealthcareService IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/78fc0433-a72a-45a3-b2c4-995e614674cb",
+      "display": "ESRDEncDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/78fc0433-a72a-45a3-b2c4-995e614674cb",
+      "display": "ESRDEncDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4b31dc2b-7867-4766-8a8c-e1971d1e570a",
+      "display": "PalliativeCareEncounterDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4b31dc2b-7867-4766-8a8c-e1971d1e570a",
+      "display": "PalliativeCareEncounterDuringMP DENEXPass"
+    }
+  } ]
+}

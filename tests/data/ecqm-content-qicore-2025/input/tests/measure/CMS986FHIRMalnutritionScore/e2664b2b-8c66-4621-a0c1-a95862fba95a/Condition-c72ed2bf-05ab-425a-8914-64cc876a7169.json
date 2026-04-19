@@ -1,0 +1,46 @@
+{
+  "resourceType": "Condition",
+  "id": "c72ed2bf-05ab-425a-8914-64cc876a7169",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "O25.13",
+      "display": "Malnutrition in pregnancy, third trimester",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/e2664b2b-8c66-4621-a0c1-a95862fba95a"
+  },
+  "onsetPeriod": {
+    "start": "2026-02-01T08:00:00.000+00:00"
+  },
+  "recordedDate": "2026-02-01T11:00:00.000+00:00"
+}

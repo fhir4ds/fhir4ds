@@ -1,0 +1,29 @@
+{
+  "resourceType": "Encounter",
+  "id": "08c25cac-a7ae-41c1-9331-4b67f0a930ec",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient encounter"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "10197000",
+      "display": "Psychiatric interview and evaluation (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/d1f4cbfc-1f86-408b-a65d-50250a4dd148"
+  },
+  "period": {
+    "start": "2026-08-04T08:00:00.000+00:00",
+    "end": "2026-08-04T09:15:00.000+00:00"
+  }
+}

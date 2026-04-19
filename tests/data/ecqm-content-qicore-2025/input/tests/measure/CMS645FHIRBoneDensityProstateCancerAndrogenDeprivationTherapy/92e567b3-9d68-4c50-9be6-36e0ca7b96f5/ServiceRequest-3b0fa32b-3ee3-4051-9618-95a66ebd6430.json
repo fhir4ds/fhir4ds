@@ -1,0 +1,22 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "3b0fa32b-3ee3-4051-9618-95a66ebd6430",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.71",
+      "code": "38265-5",
+      "display": "DXA Radius and Ulna [T-score] Bone density",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/92e567b3-9d68-4c50-9be6-36e0ca7b96f5"
+  },
+  "authoredOn": "2026-03-03T08:00:00.000+00:00"
+}

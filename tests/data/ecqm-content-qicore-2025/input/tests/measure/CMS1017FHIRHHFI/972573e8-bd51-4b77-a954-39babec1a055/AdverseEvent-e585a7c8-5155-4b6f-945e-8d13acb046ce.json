@@ -1,0 +1,21 @@
+{
+  "resourceType": "AdverseEvent",
+  "id": "e585a7c8-5155-4b6f-945e-8d13acb046ce",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-adverseevent" ]
+  },
+  "actuality": "actual",
+  "event": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "W01.0XXA"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/972573e8-bd51-4b77-a954-39babec1a055"
+  },
+  "encounter": {
+    "reference": "Encounter/96b10ab0-6c2c-4d47-a2dd-42723228835c"
+  },
+  "date": "2026-11-10T08:00:00.000+00:00"
+}

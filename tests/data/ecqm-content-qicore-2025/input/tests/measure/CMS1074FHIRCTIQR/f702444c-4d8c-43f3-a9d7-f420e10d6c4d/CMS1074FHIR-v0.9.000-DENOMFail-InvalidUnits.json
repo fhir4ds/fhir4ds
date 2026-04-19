@@ -1,0 +1,259 @@
+{
+  "resourceType": "Bundle",
+  "id": "denomfail-invalidunits",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/f702444c-4d8c-43f3-a9d7-f420e10d6c4d",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "f702444c-4d8c-43f3-a9d7-f420e10d6c4d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient", "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "asked-declined"
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "InvalidUnits",
+        "given": [ "DENOMFail" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1985-06-12"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/f702444c-4d8c-43f3-a9d7-f420e10d6c4d"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/8041124b-2e73-4cc0-96a5-df40cc203668",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "8041124b-2e73-4cc0-96a5-df40cc203668",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183452005",
+          "display": "Emergency hospital admission"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/f702444c-4d8c-43f3-a9d7-f420e10d6c4d"
+      },
+      "period": {
+        "start": "2026-05-01T00:00:00Z",
+        "end": "2026-05-03T01:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/8041124b-2e73-4cc0-96a5-df40cc203668"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/94f47548-6889-4a82-b613-911bd18a2074",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "94f47548-6889-4a82-b613-911bd18a2074",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "imaging",
+          "display": "Imaging"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "96914-7",
+          "display": "CT dose and image quality category"
+        } ],
+        "text": "CT dose and image quality category"
+      },
+      "subject": {
+        "reference": "Patient/f702444c-4d8c-43f3-a9d7-f420e10d6c4d"
+      },
+      "encounter": {
+        "reference": "Encounter/8041124b-2e73-4cc0-96a5-df40cc203668"
+      },
+      "effectiveDateTime": "2026-05-02T00:00:00Z",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "LA31752-1",
+          "display": "Abdomen and Pelvis Low Dose"
+        } ]
+      },
+      "component": [ {
+        "code": {
+          "coding": [ {
+            "system": "http://loinc.org",
+            "code": "96912-1",
+            "display": "Calculated CT global noise"
+          } ]
+        },
+        "valueQuantity": {
+          "value": 63,
+          "unit": "cm",
+          "system": "http://unitsofmeasure.org",
+          "code": "cm"
+        }
+      }, {
+        "code": {
+          "coding": [ {
+            "system": "http://loinc.org",
+            "code": "96913-9",
+            "display": "Calculated CT size-adjusted dose"
+          } ]
+        },
+        "valueQuantity": {
+          "value": 597,
+          "unit": "cm",
+          "system": "http://unitsofmeasure.org",
+          "code": "cm"
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/94f47548-6889-4a82-b613-911bd18a2074"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/3c8c4e3c-98cd-4f55-9a70-b24029853674",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "3c8c4e3c-98cd-4f55-9a70-b24029853674",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "ac3ebc5d-3dcd-4bf9-a77b-7ba4b7d02b58-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "f702444c-4d8c-43f3-a9d7-f420e10d6c4d"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#ac3ebc5d-3dcd-4bf9-a77b-7ba4b7d02b58-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient has valid CT scan but with invalid units"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS1074FHIRCTIQR",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/f702444c-4d8c-43f3-a9d7-f420e10d6c4d"
+      }, {
+        "reference": "Encounter/8041124b-2e73-4cc0-96a5-df40cc203668"
+      }, {
+        "reference": "Observation/94f47548-6889-4a82-b613-911bd18a2074"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/3c8c4e3c-98cd-4f55-9a70-b24029853674"
+    }
+  } ]
+}

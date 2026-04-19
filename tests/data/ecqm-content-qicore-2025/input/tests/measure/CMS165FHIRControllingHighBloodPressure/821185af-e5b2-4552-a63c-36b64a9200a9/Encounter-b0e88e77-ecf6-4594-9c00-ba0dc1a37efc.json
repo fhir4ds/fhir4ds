@@ -1,0 +1,32 @@
+{
+  "resourceType": "Encounter",
+  "id": "b0e88e77-ecf6-4594-9c00-ba0dc1a37efc",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "4525004",
+      "display": "Emergency department patient visit (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/821185af-e5b2-4552-a63c-36b64a9200a9"
+  },
+  "period": {
+    "start": "2025-12-31T00:00:00.000+00:00",
+    "end": "2026-01-01T01:00:00.000+00:00"
+  },
+  "diagnosis": [ {
+    "condition": {
+      "reference": "Condition/4afdb100-1622-4319-9fe2-c1ebca69f5b1"
+    }
+  } ]
+}

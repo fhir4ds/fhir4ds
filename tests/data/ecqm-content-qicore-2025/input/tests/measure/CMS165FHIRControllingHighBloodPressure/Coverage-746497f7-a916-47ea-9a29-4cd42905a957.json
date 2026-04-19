@@ -1,0 +1,28 @@
+{
+  "resourceType": "Coverage",
+  "id": "746497f7-a916-47ea-9a29-4cd42905a957",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+  },
+  "status": "active",
+  "type": {
+    "coding": [ {
+      "system": "https://nahdo.org/sopt",
+      "code": "99",
+      "display": "No Typology Code available for payment source"
+    } ]
+  },
+  "subscriberId": "12191",
+  "beneficiary": {
+    "reference": "Patient/4d50f3eb-f56f-4f13-8fcf-4d26e05b9a6a"
+  },
+  "relationship": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+      "code": "self"
+    } ]
+  },
+  "payor": [ {
+    "reference": "Organization/example"
+  } ]
+}

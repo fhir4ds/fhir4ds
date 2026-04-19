@@ -1,0 +1,40 @@
+{
+  "resourceType": "Encounter",
+  "id": "71cdc28e-461d-4def-967a-d83ae1d91bb2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "EMER",
+    "display": "emergency",
+    "userSelected": true
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "4525004"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/de4005d0-549c-40bb-93b9-26650c194d04"
+  },
+  "period": {
+    "start": "2026-11-18T07:00:00Z",
+    "end": "2026-11-18T08:01:00.000+00:00"
+  },
+  "diagnosis": [ {
+    "condition": {
+      "reference": "Condition/c7c9d608-f2c0-4475-8125-84a0ca254be3"
+    },
+    "use": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/diagnosis-role",
+        "code": "billing",
+        "display": "Billing"
+      } ]
+    },
+    "rank": 1
+  } ]
+}

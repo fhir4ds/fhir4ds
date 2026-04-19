@@ -1,0 +1,22 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "55eaf71d-f9e0-446c-a217-f2afd3b3b8ee",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1731315",
+      "display": "3 ML insulin, regular, human 500 UNT/ML Pen Injector"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f58dcdc6-cce9-4b49-b657-7e1e2593e428"
+  },
+  "effectivePeriod": {
+    "start": "2026-12-20T09:00:00Z",
+    "end": "2026-12-20T09:15:00Z"
+  }
+}

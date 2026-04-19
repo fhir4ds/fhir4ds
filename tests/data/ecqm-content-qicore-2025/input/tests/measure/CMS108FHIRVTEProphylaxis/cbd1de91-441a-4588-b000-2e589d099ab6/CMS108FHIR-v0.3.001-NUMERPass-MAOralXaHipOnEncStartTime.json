@@ -1,0 +1,344 @@
+{
+  "resourceType": "Bundle",
+  "id": "612e6af902c62a011f2ebf85",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/cbd1de91-441a-4588-b000-2e589d099ab6",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "cbd1de91-441a-4588-b000-2e589d099ab6",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "text": {
+        "status": "generated",
+        "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">MA_OralXaHipOnEncStartTime <b>NUMERPASS </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Date of birth</td><td><span>02 January 1974</span></td></tr></tbody></table></div>"
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "612e6af902c62a011f2ebf85"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "NUMERPass",
+        "given": [ "MAOralXaHipOnEncStartTime" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1975-01-02"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/cbd1de91-441a-4588-b000-2e589d099ab6"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/617818b6-1af3-4634-af22-05f2d5156968",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "617818b6-1af3-4634-af22-05f2d5156968",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183452005"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/cbd1de91-441a-4588-b000-2e589d099ab6"
+      },
+      "period": {
+        "start": "2026-11-01T08:00:00.000+00:00",
+        "end": "2026-11-26T08:15:00.000+00:00"
+      },
+      "length": {
+        "value": 25,
+        "unit": "day"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/617818b6-1af3-4634-af22-05f2d5156968"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/24c06702-910f-4a34-a819-ab70f26ce01d",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "24c06702-910f-4a34-a819-ab70f26ce01d",
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/cbd1de91-441a-4588-b000-2e589d099ab6"
+      },
+      "period": {
+        "start": "1975-01-02T08:00:00.000+00:00"
+      },
+      "payor": [ {
+        "reference": "Organization/87245425-9b68-415c-b985-edce5501fe3f"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/24c06702-910f-4a34-a819-ab70f26ce01d"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationAdministration/e1c6df48-7e53-459f-921b-f719741f49ae",
+    "resource": {
+      "resourceType": "MedicationAdministration",
+      "id": "e1c6df48-7e53-459f-921b-f719741f49ae",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+      },
+      "status": "completed",
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "1599543"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/cbd1de91-441a-4588-b000-2e589d099ab6"
+      },
+      "effectivePeriod": {
+        "start": "2026-11-01T08:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationAdministration/e1c6df48-7e53-459f-921b-f719741f49ae"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/887d8287-18ee-465d-a00a-991a4e2cb091",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "887d8287-18ee-465d-a00a-991a4e2cb091",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2013-11-01T13:35:00.000+00:00"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "68491008"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/cbd1de91-441a-4588-b000-2e589d099ab6"
+      },
+      "performedPeriod": {
+        "start": "2026-11-01T08:00:00.000+00:00",
+        "end": "2026-11-01T10:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/887d8287-18ee-465d-a00a-991a4e2cb091"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/87245425-9b68-415c-b985-edce5501fe3f",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "87245425-9b68-415c-b985-edce5501fe3f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/87245425-9b68-415c-b985-edce5501fe3f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/f9be2657-1a79-4f06-8429-9e80b24fe78c",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "f9be2657-1a79-4f06-8429-9e80b24fe78c",
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "123456"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/f9be2657-1a79-4f06-8429-9e80b24fe78c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/b2af707c-c478-432d-b208-8cd4e9d5b7ba",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "b2af707c-c478-432d-b208-8cd4e9d5b7ba",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "17f57965-9dfb-4b4c-aaa9-605eebce45a8-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "cbd1de91-441a-4588-b000-2e589d099ab6"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#17f57965-9dfb-4b4c-aaa9-605eebce45a8-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "oral factor Xa administered concurrent with start of IP encounter, Hip replacement concurrent with Start of IP encounter\n"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS108FHIRVTEProphylaxis",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/cbd1de91-441a-4588-b000-2e589d099ab6"
+      }, {
+        "reference": "Encounter/617818b6-1af3-4634-af22-05f2d5156968"
+      }, {
+        "reference": "Coverage/24c06702-910f-4a34-a819-ab70f26ce01d"
+      }, {
+        "reference": "MedicationAdministration/e1c6df48-7e53-459f-921b-f719741f49ae"
+      }, {
+        "reference": "Procedure/887d8287-18ee-465d-a00a-991a4e2cb091"
+      }, {
+        "reference": "Organization/87245425-9b68-415c-b985-edce5501fe3f"
+      }, {
+        "reference": "Practitioner/f9be2657-1a79-4f06-8429-9e80b24fe78c"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/b2af707c-c478-432d-b208-8cd4e9d5b7ba"
+    }
+  } ]
+}

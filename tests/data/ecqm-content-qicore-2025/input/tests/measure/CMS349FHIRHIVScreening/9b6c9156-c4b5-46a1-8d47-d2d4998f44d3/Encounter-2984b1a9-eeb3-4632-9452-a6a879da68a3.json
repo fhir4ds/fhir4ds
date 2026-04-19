@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "2984b1a9-eeb3-4632-9452-a6a879da68a3",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory",
+    "userSelected": true
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "99393"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/9b6c9156-c4b5-46a1-8d47-d2d4998f44d3"
+  },
+  "period": {
+    "start": "2026-04-15T09:00:00.000+00:00",
+    "end": "2026-04-15T10:15:00.000+00:00"
+  }
+}

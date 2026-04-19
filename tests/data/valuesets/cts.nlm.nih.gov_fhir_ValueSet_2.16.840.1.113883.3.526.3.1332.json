@@ -1,0 +1,51 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.3.1332",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:10.125-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1332",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "2.16.840.1.113883.3.526.3.1332"
+    }
+  ],
+  "version": "20170504",
+  "name": "CognitiveAssessment",
+  "title": "Cognitive Assessment",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:67e6e3c1-cf77-4ce1-9cd6-539e551b71cd",
+    "timestamp": "2025-06-20T17:03:43-04:00",
+    "total": 2,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "113024001",
+        "display": "Assessment and interpretation of higher cerebral function, cognitive testing (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "4719001",
+        "display": "Psychologic cognitive testing and assessment (procedure)"
+      }
+    ]
+  }
+}

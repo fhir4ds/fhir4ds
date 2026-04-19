@@ -1,0 +1,52 @@
+{
+  "resourceType": "Patient",
+  "id": "dda79f3f-4c4f-454a-bae2-9751a0114e91",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "1002-5",
+        "display": "American Indian or Alaska Native",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "American Indian or Alaska Native"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2186-5",
+        "display": "Not Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Not Hispanic or Latino"
+    } ]
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://bonnie-fhir.healthit.gov/",
+    "value": "62fbec5dbf5132f90ee35d3f"
+  } ],
+  "name": [ {
+    "family": "IPPFail",
+    "given": [ "Patient17DayOfEncounter" ]
+  } ],
+  "gender": "male",
+  "birthDate": "2009-01-01"
+}

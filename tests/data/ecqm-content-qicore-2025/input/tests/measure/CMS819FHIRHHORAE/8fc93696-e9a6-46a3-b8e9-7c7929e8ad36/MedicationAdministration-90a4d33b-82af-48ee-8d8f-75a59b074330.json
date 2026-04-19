@@ -1,0 +1,35 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "90a4d33b-82af-48ee-8d8f-75a59b074330",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1191222",
+      "display": "Opioid Antagonist"
+    }, {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "2592953",
+      "display": "Naloxone"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/8fc93696-e9a6-46a3-b8e9-7c7929e8ad36"
+  },
+  "context": {
+    "reference": "Encounter/b002103e-9a20-482f-9848-aff387aba3fa"
+  },
+  "effectiveDateTime": "2026-08-11T20:14:00.000+00:00",
+  "note": [ {
+    "text": "Administered opioid antagonist as prescribed."
+  } ],
+  "dosage": {
+    "rateQuantity": {
+      "value": 1,
+      "unit": "mg"
+    }
+  }
+}

@@ -1,0 +1,572 @@
+{
+  "resourceType": "Group",
+  "id": "CMS122FHIRDiabetesAssessGreaterThan9Percent",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS122FHIRDiabetesAssessGreaterThan9Percent"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/85b60f52-7b08-46f3-946b-cb317b28acf5",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/85b60f52-7b08-46f3-946b-cb317b28acf5",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/511548fc-b5c3-4f90-83c6-e04f8e1c98cc",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/511548fc-b5c3-4f90-83c6-e04f8e1c98cc",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/090ad2fc-274b-4fef-bc5a-2077dbdc28f5",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/090ad2fc-274b-4fef-bc5a-2077dbdc28f5",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/64ba4a87-8cf6-4cfb-b0e7-506dd08c8bbe",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/64ba4a87-8cf6-4cfb-b0e7-506dd08c8bbe",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/98735c81-5c91-4709-9392-558ac6d40b6c",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/98735c81-5c91-4709-9392-558ac6d40b6c",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5ed37c9e-85a3-4819-8051-3d960159cae0",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5ed37c9e-85a3-4819-8051-3d960159cae0",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/da05305e-9c4c-4b1d-ac55-cab089a11d2b",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/da05305e-9c4c-4b1d-ac55-cab089a11d2b",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6d9426d1-5554-4d6b-9ed0-e3736dd17482",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6d9426d1-5554-4d6b-9ed0-e3736dd17482",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/86a25ad7-3801-4297-a9a4-b36b5308c9e2",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/86a25ad7-3801-4297-a9a4-b36b5308c9e2",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7706188a-f37c-483d-96c2-4d7eab833605",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7706188a-f37c-483d-96c2-4d7eab833605",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e2b82999-6313-40af-bc8b-9ddf5f97795f",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e2b82999-6313-40af-bc8b-9ddf5f97795f",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/abe87c54-c0b1-4f86-94ca-360a228e9aa3",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/abe87c54-c0b1-4f86-94ca-360a228e9aa3",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ad9a8d0c-7d40-49ee-9088-6676f5916c1f",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ad9a8d0c-7d40-49ee-9088-6676f5916c1f",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8b1155b0-ff08-4f28-90e7-ac0e622f840c",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8b1155b0-ff08-4f28-90e7-ac0e622f840c",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ab29ab81-b4fc-4817-bd9c-98d8d4b4a3a3",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ab29ab81-b4fc-4817-bd9c-98d8d4b4a3a3",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f4eeba51-a6fc-4ffd-bd62-49fd1c375f01",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f4eeba51-a6fc-4ffd-bd62-49fd1c375f01",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b6a4b9f8-21c1-44f2-a834-72f0906b4f88",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b6a4b9f8-21c1-44f2-a834-72f0906b4f88",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/12ccd41a-83aa-405a-83b3-c756564c4de5",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/12ccd41a-83aa-405a-83b3-c756564c4de5",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5433549b-9ad5-4a8f-acc4-ce0f1b411712",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5433549b-9ad5-4a8f-acc4-ce0f1b411712",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7312a078-5757-4fab-82a4-1f70c8f107bc",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7312a078-5757-4fab-82a4-1f70c8f107bc",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f64a63d1-cdc9-4486-a4d5-1d140a4f07e1",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f64a63d1-cdc9-4486-a4d5-1d140a4f07e1",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ede0ee7a-18ab-4ba7-934c-23618f1270ea",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ede0ee7a-18ab-4ba7-934c-23618f1270ea",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/61793aba-9080-4521-9083-a23f242b8d0a",
+      "display": "SDECoverage SDE"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/61793aba-9080-4521-9083-a23f242b8d0a",
+      "display": "SDECoverage SDE"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/91986c00-e45b-4e7c-afa7-734d6fe43d16",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/91986c00-e45b-4e7c-afa7-734d6fe43d16",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7e69124d-ff34-4daf-b626-08d1283f71ba",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7e69124d-ff34-4daf-b626-08d1283f71ba",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/514a74ba-baea-4102-b2e7-050f84c79ef8",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/514a74ba-baea-4102-b2e7-050f84c79ef8",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d3ac0220-8947-489d-b7fe-a199d5365a6f",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d3ac0220-8947-489d-b7fe-a199d5365a6f",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7d01a597-c0da-4bff-9bdd-f3516021db34",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7d01a597-c0da-4bff-9bdd-f3516021db34",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e61be907-af68-493f-a6bc-3d93ef8b6c6e",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e61be907-af68-493f-a6bc-3d93ef8b6c6e",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1e954801-6437-4abc-8fb8-d36b5b5b97d8",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1e954801-6437-4abc-8fb8-d36b5b5b97d8",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/24fa66c5-52ba-4386-a5e7-7b78002be77a",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/24fa66c5-52ba-4386-a5e7-7b78002be77a",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/981dbc54-03ac-4f2e-a008-dbedfcbd2a7a",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/981dbc54-03ac-4f2e-a008-dbedfcbd2a7a",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/21695544-0997-4b9a-989c-a535da22d033",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/21695544-0997-4b9a-989c-a535da22d033",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/63ae0b9f-2636-4bf3-85ef-4ff20bdb09de",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/63ae0b9f-2636-4bf3-85ef-4ff20bdb09de",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a6b08556-8019-43ad-8ab0-0c213f3789ca",
+      "display": "SDECoverage SDE"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a6b08556-8019-43ad-8ab0-0c213f3789ca",
+      "display": "SDECoverage SDE"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/eacbadee-87f7-4ed0-bfc3-b5533128dcbc",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/eacbadee-87f7-4ed0-bfc3-b5533128dcbc",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cade5021-b1bf-43e9-a0a4-659c05b386d0",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cade5021-b1bf-43e9-a0a4-659c05b386d0",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/96cfe7f0-b4e1-4e2e-a48d-ef64fb64343d",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/96cfe7f0-b4e1-4e2e-a48d-ef64fb64343d",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9da62d36-585d-455e-8cb5-8e5da1f3e476",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9da62d36-585d-455e-8cb5-8e5da1f3e476",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8b8ded15-0118-4d0c-ac0f-6797528cefb9",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8b8ded15-0118-4d0c-ac0f-6797528cefb9",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6b6a5f96-c2a8-43f1-a353-7b5700ecb031",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6b6a5f96-c2a8-43f1-a353-7b5700ecb031",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5d692a54-a1d5-4a9c-80ba-fb6b20112484",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5d692a54-a1d5-4a9c-80ba-fb6b20112484",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6d3523ab-25c4-4e98-9ed4-342d7e7f5091",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6d3523ab-25c4-4e98-9ed4-342d7e7f5091",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3b62b0a8-44f2-4365-bcb9-7cadef5bab2e",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3b62b0a8-44f2-4365-bcb9-7cadef5bab2e",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1fa14a28-3be6-4299-ac4f-68772805748a",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1fa14a28-3be6-4299-ac4f-68772805748a",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9cba6cfa-9671-4850-803d-e286c7d59ee7",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9cba6cfa-9671-4850-803d-e286c7d59ee7",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8956ebb5-d3c0-4112-a34a-200961713efd",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8956ebb5-d3c0-4112-a34a-200961713efd",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6f0553ac-e12a-4af5-ad27-05339f4b4ec0",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6f0553ac-e12a-4af5-ad27-05339f4b4ec0",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6630d394-c81d-42f5-a218-40b73a2a4949",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6630d394-c81d-42f5-a218-40b73a2a4949",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ac4d7076-d1cb-44c6-a94f-c2c86266d53b",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ac4d7076-d1cb-44c6-a94f-c2c86266d53b",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8fa86a00-fa67-4dd6-b2d8-6fe23edde9c7",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8fa86a00-fa67-4dd6-b2d8-6fe23edde9c7",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a7332447-3a23-42b1-bfc2-d93cc5b775af",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a7332447-3a23-42b1-bfc2-d93cc5b775af",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c66e4e0a-5479-461c-9a39-0298a08f682f",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c66e4e0a-5479-461c-9a39-0298a08f682f",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fccb9758-ea26-4a1e-98cf-3942102295b8",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fccb9758-ea26-4a1e-98cf-3942102295b8",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f5771b74-a7de-439a-a51f-49a3863e086b",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f5771b74-a7de-439a-a51f-49a3863e086b",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/88b67805-bfef-411c-a191-12382d2c3104",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/88b67805-bfef-411c-a191-12382d2c3104",
+      "display": "Betty Bertha"
+    }
+  } ]
+}

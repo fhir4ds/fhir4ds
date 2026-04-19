@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "0b8c72a6-1087-41a1-a743-358ce78fd5bf",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "OBSENC",
+    "display": "observation encounter",
+    "userSelected": true
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "448951000124107"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/2bdb83c0-fcd9-4f06-b908-e373a7dcf91e"
+  },
+  "period": {
+    "start": "2026-10-10T06:59:00Z",
+    "end": "2026-10-10T08:00:00.000+00:00"
+  }
+}

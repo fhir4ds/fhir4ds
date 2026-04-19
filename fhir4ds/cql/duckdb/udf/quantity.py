@@ -62,14 +62,33 @@ UCUM_TO_PINT = {
     "h": "hour",
     "min": "minute",
     "s": "second",
+    "ms": "millisecond",
     # Length
+    "[in_i]": "inch",
     "in": "inch",
     "ft": "foot",
+    "[ft_i]": "foot",
+    "cm": "centimeter",
+    "mm": "millimeter",
+    "m": "meter",
+    "km": "kilometer",
+    # Mass
+    "mg": "milligram",
+    "g": "gram",
+    "kg": "kilogram",
+    "ug": "microgram",
+    # Volume
+    "mL": "milliliter",
+    "L": "liter",
+    "dL": "deciliter",
     # Concentration - compound units
     "mg/dL": "milligram / deciliter",
     "g/dL": "gram / deciliter",
     "mmol/L": "millimole / liter",
     "ug/mL": "microgram / milliliter",
+    "g/cm3": "gram / centimeter ** 3",
+    # Dimensionless
+    "1": "dimensionless",
 }
 
 # Reverse mapping from Pint to UCUM
@@ -87,12 +106,21 @@ PINT_TO_UCUM = {
     "hour": "h",
     "minute": "min",
     "second": "s",
-    "inch": "in",
-    "foot": "ft",
+    "millisecond": "ms",
+    "inch": "[in_i]",
+    "foot": "[ft_i]",
+    "millimeter": "mm",
+    "centimeter": "cm",
+    "meter": "m",
+    "kilometer": "km",
     "milligram": "mg",
     "gram": "g",
     "kilogram": "kg",
     "microgram": "ug",
+    "milliliter": "mL",
+    "liter": "L",
+    "deciliter": "dL",
+    "dimensionless": "1",
 }
 
 
@@ -143,6 +171,18 @@ def _ucum_to_pint_unit(ucum_code: str) -> str:
     if ucum_code in UCUM_TO_PINT:
         return UCUM_TO_PINT[ucum_code]
 
+    # Handle compound UCUM codes with / (e.g., "mg/dL" not in map)
+    if "/" in ucum_code:
+        parts = ucum_code.split("/", 1)
+        return _ucum_to_pint_unit(parts[0]) + " / " + _ucum_to_pint_unit(parts[1])
+
+    # Handle power notation like "cm2" → "centimeter ** 2"
+    import re
+    m = re.match(r'^([a-zA-Z\[\]]+)(\d+)$', ucum_code)
+    if m:
+        base = _ucum_to_pint_unit(m.group(1))
+        return f"{base} ** {m.group(2)}"
+
     # Default: assume the code is already a valid Pint unit
     return ucum_code
 
@@ -158,6 +198,12 @@ def _pint_to_ucum_unit(pint_unit_str: str) -> str:
         parts = pint_unit_str.split(" / ")
         converted_parts = [_pint_to_ucum_unit(p.strip()) for p in parts]
         return "/".join(converted_parts)
+
+    # Handle power units like "centimeter ** 2" → "cm2"
+    if " ** " in pint_unit_str:
+        base, exp = pint_unit_str.split(" ** ", 1)
+        base_ucum = _pint_to_ucum_unit(base.strip())
+        return f"{base_ucum}{exp.strip()}"
 
     # Default: return as-is
     return pint_unit_str
@@ -427,6 +473,179 @@ def quantityConvert(q_json: str | None, target_unit: str) -> str | None:
         return None
 
 
+def quantityNegate(q_json: str | None) -> str | None:
+    """Negate a quantity (CQL unary minus on Quantity).
+
+    CQL Spec §16.8: Negation.
+    """
+    q_dict = _parse_quantity(q_json)
+    if not q_dict:
+        return None
+    pint_q = _quantity_to_pint(q_dict)
+    if pint_q is None:
+        return None
+    try:
+        result = -pint_q
+        return _format_quantity(result)
+    except Exception as e:
+        _logger.warning("UDF quantityNegate failed: %s", e)
+        return None
+
+
+def quantityAbs(q_json: str | None) -> str | None:
+    """Absolute value of a quantity (CQL Abs on Quantity).
+
+    CQL Spec §16.1: Abs.
+    """
+    q_dict = _parse_quantity(q_json)
+    if not q_dict:
+        return None
+    pint_q = _quantity_to_pint(q_dict)
+    if pint_q is None:
+        return None
+    try:
+        result = abs(pint_q)
+        return _format_quantity(result)
+    except Exception as e:
+        _logger.warning("UDF quantityAbs failed: %s", e)
+        return None
+
+
+def quantityMultiply(q1_json: str | None, q2_json: str | None) -> str | None:
+    """Multiply two quantities (CQL §16.7).
+
+    Result unit is the product of units (e.g., cm * cm = cm^2).
+    """
+    q1_dict = _parse_quantity(q1_json)
+    q2_dict = _parse_quantity(q2_json)
+    if not q1_dict or not q2_dict:
+        return None
+    pint_q1 = _quantity_to_pint(q1_dict)
+    pint_q2 = _quantity_to_pint(q2_dict)
+    if pint_q1 is None or pint_q2 is None:
+        return None
+    try:
+        result = pint_q1 * pint_q2
+        return _format_quantity(result)
+    except Exception as e:
+        _logger.warning("UDF quantityMultiply failed: %s", e)
+        return None
+
+
+def quantityDivide(q1_json: str | None, q2_json: str | None) -> str | None:
+    """Divide two quantities (CQL §16.4).
+
+    Division by zero returns null per CQL spec.
+    """
+    q1_dict = _parse_quantity(q1_json)
+    q2_dict = _parse_quantity(q2_json)
+    if not q1_dict or not q2_dict:
+        return None
+    pint_q1 = _quantity_to_pint(q1_dict)
+    pint_q2 = _quantity_to_pint(q2_dict)
+    if pint_q1 is None or pint_q2 is None:
+        return None
+    try:
+        if pint_q2.magnitude == 0:
+            return None  # CQL §16.4: division by zero → null
+        result = pint_q1 / pint_q2
+        return _format_quantity(result)
+    except Exception as e:
+        _logger.warning("UDF quantityDivide failed: %s", e)
+        return None
+
+
+def quantityTruncatedDivide(q1_json: str | None, q2_json: str | None) -> str | None:
+    """Truncated division of two quantities (CQL §16.13).
+
+    Returns integer division result (truncated toward zero).
+    When both operands have the same unit, result keeps that unit.
+    Division by zero returns null per CQL spec.
+    """
+    q1_dict = _parse_quantity(q1_json)
+    q2_dict = _parse_quantity(q2_json)
+    if not q1_dict or not q2_dict:
+        return None
+    pint_q1 = _quantity_to_pint(q1_dict)
+    pint_q2 = _quantity_to_pint(q2_dict)
+    if pint_q1 is None or pint_q2 is None:
+        return None
+    try:
+        if pint_q2.magnitude == 0:
+            return None  # CQL §16.13: division by zero → null
+        # Convert q2 to q1's units for same-dimension comparison
+        pint_q2_converted = pint_q2.to(pint_q1.units)
+        import math
+        truncated_mag = float(math.trunc(pint_q1.magnitude / pint_q2_converted.magnitude))
+        # Preserve the left operand's unit
+        ureg = _get_ureg()
+        truncated = truncated_mag * pint_q1.units
+        return _format_quantity(truncated)
+    except (DimensionalityError, Exception) as e:
+        _logger.warning("UDF quantityTruncatedDivide failed: %s", e)
+        return None
+
+
+def quantityModulo(q1_json: str | None, q2_json: str | None) -> str | None:
+    """Modulo of two quantities (CQL §16.6).
+
+    x mod y = x - y * (x div y). Division by zero returns null.
+    """
+    q1_dict = _parse_quantity(q1_json)
+    q2_dict = _parse_quantity(q2_json)
+    if not q1_dict or not q2_dict:
+        return None
+    pint_q1 = _quantity_to_pint(q1_dict)
+    pint_q2 = _quantity_to_pint(q2_dict)
+    if pint_q1 is None or pint_q2 is None:
+        return None
+    try:
+        if pint_q2.magnitude == 0:
+            return None  # CQL §16.6: modulo by zero → null
+        # CQL modulo: x - y * trunc(x/y)
+        import math
+        quotient = pint_q1 / pint_q2
+        trunc_q = math.trunc(quotient.magnitude)
+        pint_q2_converted = pint_q2.to(pint_q1.units)
+        result = pint_q1 - pint_q2_converted * trunc_q
+        return _format_quantity(result)
+    except Exception as e:
+        _logger.warning("UDF quantityModulo failed: %s", e)
+        return None
+
+
+def toQuantity(s: str | None) -> str | None:
+    """CQL §22.31: ToQuantity — parse string like ``5.5 'cm'`` to Quantity JSON."""
+    if s is None:
+        return None
+    import re
+    # Match: number optionally followed by unit in single quotes
+    m = re.match(r"^\s*(-?[\d.]+)\s*'([^']+)'\s*$", s)
+    if not m:
+        # Try plain number without unit
+        m = re.match(r"^\s*(-?[\d.]+)\s*$", s)
+        if m:
+            return orjson.dumps({"value": float(m.group(1)), "unit": "1", "code": "1",
+                                 "system": "http://unitsofmeasure.org"}).decode("utf-8")
+        return None
+    value = float(m.group(1))
+    unit = m.group(2)
+    return orjson.dumps({"value": value, "unit": unit, "code": unit,
+                         "system": "http://unitsofmeasure.org"}).decode("utf-8")
+
+
+def toConcept(code_json: str | None) -> str | None:
+    """CQL §22.30: ToConcept — wrap a Code in a Concept."""
+    if code_json is None:
+        return None
+    try:
+        code = orjson.loads(code_json)
+        concept = {"codes": [code] if isinstance(code, dict) else code}
+        return orjson.dumps(concept).decode("utf-8")
+    except Exception:
+        return None
+
+
 # ========================================
 # Registration
 # ========================================
@@ -449,6 +668,14 @@ def registerQuantityUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("quantity_subtract", quantitySubtract, null_handling="special")  # Alias with snake_case
     con.create_function("quantityConvert", quantityConvert, null_handling="special")
     con.create_function("quantity_convert", quantityConvert, null_handling="special")  # Alias with snake_case
+    con.create_function("quantityNegate", quantityNegate, null_handling="special")
+    con.create_function("quantityAbs", quantityAbs, null_handling="special")
+    con.create_function("quantityMultiply", quantityMultiply, null_handling="special")
+    con.create_function("quantityDivide", quantityDivide, null_handling="special")
+    con.create_function("quantityTruncatedDivide", quantityTruncatedDivide, null_handling="special")
+    con.create_function("quantityModulo", quantityModulo, null_handling="special")
+    con.create_function("ToQuantity", toQuantity, null_handling="special")
+    con.create_function("ToConcept", toConcept, null_handling="special")
 
 
 __all__ = [
@@ -460,4 +687,10 @@ __all__ = [
     "quantityAdd",
     "quantitySubtract",
     "quantityConvert",
+    "quantityNegate",
+    "quantityAbs",
+    "quantityMultiply",
+    "quantityDivide",
+    "quantityTruncatedDivide",
+    "quantityModulo",
 ]

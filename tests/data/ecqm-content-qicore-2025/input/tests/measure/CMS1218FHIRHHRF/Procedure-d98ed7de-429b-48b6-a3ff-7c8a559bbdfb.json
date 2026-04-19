@@ -1,0 +1,24 @@
+{
+  "resourceType": "Procedure",
+  "id": "d98ed7de-429b-48b6-a3ff-7c8a559bbdfb",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-04-20T08:10:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+      "code": "0BH13EZ",
+      "display": "Insertion of Endotracheal Airway into Trachea, Percutaneous Approach"
+    } ],
+    "text": "Insertion of Endotracheal Airway into Trachea, Percutaneous Approach"
+  },
+  "subject": {
+    "reference": "Patient/fe79603f-2876-45eb-a9d0-0be56d3d29a1"
+  },
+  "performedDateTime": "2026-04-20T08:00:00.000+00:00"
+}

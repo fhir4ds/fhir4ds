@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "3bb6a35e-07ea-48b2-ac05-8b2178b316ec",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "vital-signs",
+      "display": "Vital Signs"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.73",
+      "code": "32451-7"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/3835c33d-b335-44d7-a7b6-c8a0d5420290"
+  },
+  "effectiveDateTime": "2026-08-28T16:10:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.73",
+      "code": "32451-7",
+      "display": "Physical findings of Macula",
+      "userSelected": true
+    } ]
+  }
+}

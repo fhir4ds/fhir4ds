@@ -1,0 +1,32 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "1b84067c-69ca-4310-92a9-5a27e851a203",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-mednotrequested" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "medicationCodeableConcept": {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneValueSet",
+      "valueCanonical": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1184"
+    } ],
+    "text": "Not Done Value Set: Beta Blocker Therapy for LVSD"
+  },
+  "subject": {
+    "reference": "Patient/4a3086cd-63f3-41c3-8ce9-f75b4b18b85c"
+  },
+  "authoredOn": "2026-10-15T12:15:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/dac9381d-4451-4b7d-ad7f-e1ecdf17cb58"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "406149000",
+      "display": "Medication declined (situation)"
+    } ]
+  } ]
+}

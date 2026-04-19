@@ -1,0 +1,61 @@
+{
+  "resourceType": "Patient",
+  "id": "240aca16-2f20-4213-b02a-232cec686fe4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2028-9",
+        "display": "Asian",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Asian"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2186-5",
+        "display": "Not Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Not Hispanic or Latino"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248152002"
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://madie.cms.gov/",
+    "value": "ScreNotatriNorefAsseModNodxCp3"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "text": "ScreNotatriNorefAsseModNodxCp3",
+    "family": "MSROBSPass1",
+    "given": [ "ScreNotatriNorefAsseModNodxCp3" ]
+  } ],
+  "gender": "female",
+  "birthDate": "1957-12-31",
+  "address": [ {
+    "text": "ScreNotatriNorefAsseModNodxCp3, Screened Not at risk Assessed Severely Malnourished Diagnosed Care Plan, ID=ScreNotatriNorefAsseModNodxCp3, DOB: 31 Dec 1957"
+  } ]
+}

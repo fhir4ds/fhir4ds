@@ -1,0 +1,332 @@
+{
+  "resourceType": "Bundle",
+  "id": "DENEXPass-AdvIllnessDxWithin2Yrs",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/481692c7-2cf7-48fc-8269-967f5d7753bc",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "481692c7-2cf7-48fc-8269-967f5d7753bc",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "DENEXPass",
+        "given": [ "AdvIllnessDxWithin2Yrs" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1959-12-31"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/481692c7-2cf7-48fc-8269-967f5d7753bc"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/4132cc7f-7c12-4eb4-a810-b251e013ad17",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "4132cc7f-7c12-4eb4-a810-b251e013ad17",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "3391000175108",
+          "display": "Office visit for pediatric care and assessment (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/481692c7-2cf7-48fc-8269-967f5d7753bc"
+      },
+      "period": {
+        "start": "2026-01-01T00:00:00.000+00:00",
+        "end": "2026-01-01T01:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/4132cc7f-7c12-4eb4-a810-b251e013ad17"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/47a1521f-dfda-4717-813a-4b7d8d453455",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "47a1521f-dfda-4717-813a-4b7d8d453455",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "371125006",
+          "display": "Labile essential hypertension (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/481692c7-2cf7-48fc-8269-967f5d7753bc"
+      },
+      "onsetDateTime": "2026-06-30T23:59:59.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/47a1521f-dfda-4717-813a-4b7d8d453455"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/2984da0d-52f8-4dee-abdd-d5f756d7ed22",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "2984da0d-52f8-4dee-abdd-d5f756d7ed22",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "101421000119107",
+          "display": "Dementia due to Parkinson's disease (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/481692c7-2cf7-48fc-8269-967f5d7753bc"
+      },
+      "onsetDateTime": "2025-01-01T00:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/2984da0d-52f8-4dee-abdd-d5f756d7ed22"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/10840996-f8ea-4ec8-974d-40b8821a07c3",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "10840996-f8ea-4ec8-974d-40b8821a07c3",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183450002",
+          "display": "Admission to burn unit (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/481692c7-2cf7-48fc-8269-967f5d7753bc"
+      },
+      "period": {
+        "start": "2026-05-01T00:00:00.000+00:00",
+        "end": "2026-05-01T01:00:00.000+00:00"
+      },
+      "diagnosis": [ {
+        "condition": {
+          "reference": "Condition/2984da0d-52f8-4dee-abdd-d5f756d7ed22"
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/10840996-f8ea-4ec8-974d-40b8821a07c3"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/DeviceRequest/e9ba2bb8-fcc0-40a0-8083-8a1adcea3516",
+    "resource": {
+      "resourceType": "DeviceRequest",
+      "id": "e9ba2bb8-fcc0-40a0-8083-8a1adcea3516",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-devicerequest" ]
+      },
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-DeviceRequest.doNotPerform",
+        "valueBoolean": false
+      } ],
+      "status": "completed",
+      "intent": "order",
+      "codeCodeableConcept": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183240000",
+          "display": "Self-propelled wheelchair (physical object)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/481692c7-2cf7-48fc-8269-967f5d7753bc"
+      },
+      "authoredOn": "2026-11-01T23:59:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "DeviceRequest/e9ba2bb8-fcc0-40a0-8083-8a1adcea3516"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/92a59a74-00d6-4d55-bfec-790cacdbac2a",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "92a59a74-00d6-4d55-bfec-790cacdbac2a",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "f58f14ed-af96-470c-9ad5-9dc9b7a2e76a-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "481692c7-2cf7-48fc-8269-967f5d7753bc"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#f58f14ed-af96-470c-9ad5-9dc9b7a2e76a-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Advanced illness diagnosis within 2 years"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS165FHIRControllingHighBloodPressure",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/481692c7-2cf7-48fc-8269-967f5d7753bc"
+      }, {
+        "reference": "Encounter/4132cc7f-7c12-4eb4-a810-b251e013ad17"
+      }, {
+        "reference": "Condition/47a1521f-dfda-4717-813a-4b7d8d453455"
+      }, {
+        "reference": "Condition/2984da0d-52f8-4dee-abdd-d5f756d7ed22"
+      }, {
+        "reference": "Encounter/10840996-f8ea-4ec8-974d-40b8821a07c3"
+      }, {
+        "reference": "DeviceRequest/e9ba2bb8-fcc0-40a0-8083-8a1adcea3516"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/92a59a74-00d6-4d55-bfec-790cacdbac2a"
+    }
+  } ]
+}

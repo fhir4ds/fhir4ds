@@ -1,0 +1,42 @@
+{
+  "resourceType": "Condition",
+  "id": "c7390fe1-cde1-4b93-99c6-7f4374045289",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "422593004",
+      "display": "Acute renal failure caused by angiotensin-converting-enzyme inhibitor (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/5b7e720f-e2fc-4779-9b1c-3f34a0241482"
+  },
+  "onsetPeriod": {
+    "start": "2024-01-02T08:00:00.000+00:00"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "resourceType": "Task",
+  "id": "f594b501-438a-4ff1-99db-74caf6c88b89",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-task" ]
+  },
+  "identifier": [ {
+    "use": "official",
+    "system": "http:/goodhealth.org/identifiers",
+    "value": "20170201-002"
+  } ],
+  "status": "accepted",
+  "intent": "proposal",
+  "priority": "routine",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "428191000124101",
+      "display": "Documentation of current medications (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "for": {
+    "reference": "Patient/d1f4cbfc-1f86-408b-a65d-50250a4dd148"
+  },
+  "executionPeriod": {
+    "start": "2026-08-04T07:45:00+10:00"
+  },
+  "authoredOn": "2026-08-04T07:45:00.000+00:00"
+}

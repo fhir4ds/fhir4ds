@@ -1,0 +1,268 @@
+{
+  "resourceType": "Bundle",
+  "id": "DENEXPass-HospiceDischargeToHomeDuringMP",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/3574f4b8-cbdc-410b-8b6a-7f0737546e56",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "3574f4b8-cbdc-410b-8b6a-7f0737546e56",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "Bertha",
+        "given": [ "Betty" ]
+      } ],
+      "gender": "female",
+      "birthDate": "2007-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/3574f4b8-cbdc-410b-8b6a-7f0737546e56"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/6a8dab97-4576-40fd-9a57-826b7efead50",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "6a8dab97-4576-40fd-9a57-826b7efead50",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-01-15T00:00:00.000Z"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+          "code": "0SR9019",
+          "display": "Replacement of Right Hip Joint with Metal Synthetic Substitute, Cemented, Open Approach"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/3574f4b8-cbdc-410b-8b6a-7f0737546e56"
+      },
+      "performedPeriod": {
+        "start": "2024-11-01T00:00:00.000Z",
+        "end": "2024-11-01T01:00:00.000Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/6a8dab97-4576-40fd-9a57-826b7efead50"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/5eaa744c-cc88-40cd-8460-2b38e8137ebc",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "5eaa744c-cc88-40cd-8460-2b38e8137ebc",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "281036007",
+          "display": "Follow-up consultation (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/3574f4b8-cbdc-410b-8b6a-7f0737546e56"
+      },
+      "period": {
+        "start": "2025-11-01T00:00:00.000Z",
+        "end": "2025-11-01T01:15:00.000Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/5eaa744c-cc88-40cd-8460-2b38e8137ebc"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/5eaa744c-cc88-40cd-8460-2b38e8137ebc.1",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "5eaa744c-cc88-40cd-8460-2b38e8137ebc.1",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183452005",
+          "display": "Emergency hospital admission (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/3574f4b8-cbdc-410b-8b6a-7f0737546e56"
+      },
+      "period": {
+        "start": "2025-11-01T00:00:00.000Z",
+        "end": "2026-01-01T01:00:00.000Z"
+      },
+      "hospitalization": {
+        "dischargeDisposition": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "code": "428361000124107",
+            "display": "Discharge to home for hospice care (procedure)"
+          } ]
+        }
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/5eaa744c-cc88-40cd-8460-2b38e8137ebc.1"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/04b25c18-8fef-4b3e-b985-da5da8da5186",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "04b25c18-8fef-4b3e-b985-da5da8da5186",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "61558ec3-9028-4079-b785-4847180df22c-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "3574f4b8-cbdc-410b-8b6a-7f0737546e56"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#61558ec3-9028-4079-b785-4847180df22c-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Hospice discharge to home during MP"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS56FHIRFunctionalStatusAssessmentforTotalHipReplacement",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/3574f4b8-cbdc-410b-8b6a-7f0737546e56"
+      }, {
+        "reference": "Procedure/6a8dab97-4576-40fd-9a57-826b7efead50"
+      }, {
+        "reference": "Encounter/5eaa744c-cc88-40cd-8460-2b38e8137ebc"
+      }, {
+        "reference": "Encounter/5eaa744c-cc88-40cd-8460-2b38e8137ebc.1"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/04b25c18-8fef-4b3e-b985-da5da8da5186"
+    }
+  } ]
+}

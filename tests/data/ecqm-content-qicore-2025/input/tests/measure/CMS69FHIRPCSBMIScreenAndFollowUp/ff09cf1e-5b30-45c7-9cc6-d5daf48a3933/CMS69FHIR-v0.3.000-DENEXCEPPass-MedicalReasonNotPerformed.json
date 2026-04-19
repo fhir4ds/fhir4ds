@@ -1,0 +1,368 @@
+{
+  "resourceType": "Bundle",
+  "id": "62ab5d9131fa0a130d9331db",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/ff09cf1e-5b30-45c7-9cc6-d5daf48a3933",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "ff09cf1e-5b30-45c7-9cc6-d5daf48a3933",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2106-3",
+            "display": "White",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "White"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "62ab5d9131fa0a130d9331db"
+      } ],
+      "name": [ {
+        "family": "DENEXCEPPass",
+        "given": [ "MedicalReasonNotPerformed" ]
+      } ],
+      "gender": "unknown",
+      "birthDate": "1957-11-07"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/ff09cf1e-5b30-45c7-9cc6-d5daf48a3933"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/ea87f009-b5d7-45ff-ad19-cc0cb4edcd83",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "ea87f009-b5d7-45ff-ad19-cc0cb4edcd83",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "10197000",
+          "display": "Psychiatric interview and evaluation (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/ff09cf1e-5b30-45c7-9cc6-d5daf48a3933"
+      },
+      "period": {
+        "start": "2026-01-02T00:00:00.000+00:00",
+        "end": "2026-01-02T00:30:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/ea87f009-b5d7-45ff-ad19-cc0cb4edcd83"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/179ccd6b-2ef7-432e-9643-59cb633faa45",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "179ccd6b-2ef7-432e-9643-59cb633faa45",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observationcancelled" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneReason",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "code": "183932001",
+            "display": "Procedure contraindicated (situation)",
+            "userSelected": true
+          } ]
+        }
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDone",
+        "valueBoolean": true
+      } ],
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "procedure",
+          "display": "Procedure"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "39156-5",
+          "display": "Body mass index (BMI) [Ratio]",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/ff09cf1e-5b30-45c7-9cc6-d5daf48a3933"
+      },
+      "effectiveDateTime": "2026-01-02T00:29:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/179ccd6b-2ef7-432e-9643-59cb633faa45"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/ServiceRequest/0d37b7b1-f2d1-4594-994d-fef7c0c6d48e",
+    "resource": {
+      "resourceType": "ServiceRequest",
+      "id": "0d37b7b1-f2d1-4594-994d-fef7c0c6d48e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "code": "183932001",
+            "display": "Procedure contraindicated (situation)",
+            "userSelected": true
+          } ]
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-reasonRefused",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "code": "183932001",
+            "display": "Procedure contraindicated (situation)",
+            "userSelected": true
+          } ]
+        }
+      } ],
+      "status": "completed",
+      "intent": "order",
+      "doNotPerform": true,
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "182922004",
+          "display": "Dietary regime (regime/therapy)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/ff09cf1e-5b30-45c7-9cc6-d5daf48a3933"
+      },
+      "authoredOn": "2026-01-02T00:29:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "ServiceRequest/0d37b7b1-f2d1-4594-994d-fef7c0c6d48e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/8bbf769f-df3e-4f51-8da1-7b8cd19b50ce",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "8bbf769f-df3e-4f51-8da1-7b8cd19b50ce",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/ff09cf1e-5b30-45c7-9cc6-d5daf48a3933"
+      },
+      "payor": [ {
+        "reference": "Organization/8d9b794e-df31-4ac0-a7bf-6b8152f39a3c"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/8bbf769f-df3e-4f51-8da1-7b8cd19b50ce"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/8d9b794e-df31-4ac0-a7bf-6b8152f39a3c",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "8d9b794e-df31-4ac0-a7bf-6b8152f39a3c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/8d9b794e-df31-4ac0-a7bf-6b8152f39a3c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/3eaeac89-97da-48dc-8929-cc59393d96f6",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "3eaeac89-97da-48dc-8929-cc59393d96f6",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "54b47d12-f418-4761-9a95-614605f6679e-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "ff09cf1e-5b30-45c7-9cc6-d5daf48a3933"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#54b47d12-f418-4761-9a95-614605f6679e-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Enc 01/02/2023, pt refused BMI , dietary and had a medical reason for not providing a referral"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS69FHIRPCSBMIScreenAndFollowUp",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/ff09cf1e-5b30-45c7-9cc6-d5daf48a3933"
+      }, {
+        "reference": "Encounter/ea87f009-b5d7-45ff-ad19-cc0cb4edcd83"
+      }, {
+        "reference": "Observation/179ccd6b-2ef7-432e-9643-59cb633faa45"
+      }, {
+        "reference": "ServiceRequest/0d37b7b1-f2d1-4594-994d-fef7c0c6d48e"
+      }, {
+        "reference": "Coverage/8bbf769f-df3e-4f51-8da1-7b8cd19b50ce"
+      }, {
+        "reference": "Organization/8d9b794e-df31-4ac0-a7bf-6b8152f39a3c"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/3eaeac89-97da-48dc-8929-cc59393d96f6"
+    }
+  } ]
+}

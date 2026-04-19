@@ -1,0 +1,58 @@
+{
+  "resourceType": "Patient",
+  "id": "93798745-af1c-4eb6-8dc4-446a531c05a4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "text": {
+    "status": "generated",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">MedAntithromboticStart_eq1dayDuringEncIPwEd <b>NUMERFAIL - 3061 </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>efb6046ae135027a64d1fa1873b580614d445125bf8cff274eca2380ad404ec9</td></tr><tr><td>Date of birth</td><td><span>26 September 1975</span></td></tr></tbody></table></div>"
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2054-5",
+        "display": "Black or African American",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Black or African American"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2186-5",
+        "display": "Not Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Not Hispanic or Latino"
+    } ]
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://bonnie-fhir.healthit.gov/",
+    "value": "60f82c2e98086b570510e298"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "family": "NUMERPass - 3061",
+    "given": [ "MedAntithromboticStarteq1dayDuringEncIPwEd" ]
+  } ],
+  "gender": "female",
+  "birthDate": "1976-09-26"
+}

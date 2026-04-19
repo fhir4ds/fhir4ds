@@ -1,0 +1,30 @@
+{
+  "resourceType": "Procedure",
+  "id": "85154ad6-66d2-4647-9a63-04128447238f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-12-31T11:30:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "1279742004",
+      "display": "Development of nutrition care plan (procedure)"
+    } ],
+    "text": "Development of nutrition care plan (procedure)"
+  },
+  "subject": {
+    "reference": "Patient/7645d28b-089e-4126-b8e4-b02a73d6493f"
+  },
+  "encounter": {
+    "reference": "Encounter/YearOverlapIPPFAIL"
+  },
+  "performedPeriod": {
+    "start": "2026-12-31T11:30:00.000+00:00",
+    "end": "2027-01-04T08:15:00.000+00:00"
+  }
+}

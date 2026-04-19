@@ -1,0 +1,43 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.3.1333",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:03.149-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1333",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "2.16.840.1.113883.3.526.3.1333"
+  } ],
+  "version": "20210209",
+  "name": "CuptoDiscRatio",
+  "title": "Cup to Disc Ratio",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:c98b9d8b-ba9b-4351-9a01-1ee5e8acc09e",
+    "timestamp": "2025-06-20T17:00:46-04:00",
+    "total": 2,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "71484-0",
+      "display": "Left optic nerve Cup-disc ratio by Ophthalmoscopy"
+    }, {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "71485-7",
+      "display": "Right optic nerve Cup-disc ratio by Ophthalmoscopy"
+    } ]
+  }
+}

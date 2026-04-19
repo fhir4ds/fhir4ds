@@ -1,0 +1,36 @@
+{
+  "resourceType": "Condition",
+  "id": "34b8faab-049c-42ed-8598-2ca87a29af54",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "active",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "confirmed",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "193349004",
+      "display": "Preproliferative retinopathy due to diabetes mellitus (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c90e9816-b69c-423c-827c-475f63f1ef7d"
+  },
+  "onsetDateTime": "2025-12-31T08:00:00.000+00:00"
+}

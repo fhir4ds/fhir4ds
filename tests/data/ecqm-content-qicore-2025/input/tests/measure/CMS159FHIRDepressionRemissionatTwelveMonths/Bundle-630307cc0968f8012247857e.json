@@ -1,0 +1,308 @@
+{
+  "resourceType": "Bundle",
+  "id": "630307cc0968f8012247857e",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/f737aa8d-fc32-41cd-82be-f0da91e7313c",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "f737aa8d-fc32-41cd-82be-f0da91e7313c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2106-3",
+            "display": "White"
+          }
+        }, {
+          "url": "text",
+          "valueString": "White"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "630307cc0968f8012247857e"
+      } ],
+      "name": [ {
+        "family": "NUMERPopStrat1Pass",
+        "given": [ "AssessmentWithin7DaysofEncounter" ]
+      } ],
+      "gender": "female",
+      "birthDate": "2013-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/f737aa8d-fc32-41cd-82be-f0da91e7313c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/65698a5c-1c5c-40e7-abf3-a9e9eeefb038",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "65698a5c-1c5c-40e7-abf3-a9e9eeefb038",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "version": "2024",
+          "code": "90791"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/f737aa8d-fc32-41cd-82be-f0da91e7313c"
+      },
+      "period": {
+        "start": "2025-02-25T14:30:00+00:00",
+        "end": "2025-02-25T14:50:00+00:00"
+      },
+      "length": {
+        "value": 0,
+        "unit": "days"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/65698a5c-1c5c-40e7-abf3-a9e9eeefb038"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/c93cd9d7-63b8-4c85-9d5e-3079a748057a",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "c93cd9d7-63b8-4c85-9d5e-3079a748057a",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey",
+          "display": "Survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "44261-6"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/f737aa8d-fc32-41cd-82be-f0da91e7313c"
+      },
+      "effectiveDateTime": "2025-02-20T14:35:00+00:00",
+      "valueInteger": 10
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/c93cd9d7-63b8-4c85-9d5e-3079a748057a"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/0116e70c-12cf-44f8-a325-8f3c902f830e",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "0116e70c-12cf-44f8-a325-8f3c902f830e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey",
+          "display": "Survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "44261-6"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/f737aa8d-fc32-41cd-82be-f0da91e7313c"
+      },
+      "effectiveDateTime": "2026-02-19T14:30:00+00:00",
+      "valueInteger": 3
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/0116e70c-12cf-44f8-a325-8f3c902f830e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/29fb2ae0-3207-4c88-90df-af05c6566435",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "29fb2ae0-3207-4c88-90df-af05c6566435",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active"
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "version": "2024",
+          "code": "F32.9"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/f737aa8d-fc32-41cd-82be-f0da91e7313c"
+      },
+      "onsetDateTime": "2025-02-25T14:35:00+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/29fb2ae0-3207-4c88-90df-af05c6566435"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/d428541a-0f60-4a48-b642-98decc2981d9",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "d428541a-0f60-4a48-b642-98decc2981d9",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "58f0f44b-06b2-4449-8e5f-6cda3439e70b-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "f737aa8d-fc32-41cd-82be-f0da91e7313c"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#58f0f44b-06b2-4449-8e5f-6cda3439e70b-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patients is 12 years old and has a PHQ-9>9 and a Major Depression diagnosis during the denom ID period. Assessment occurs within 7 day window of encounter. Patient has PHQ-9<5 during MAP. Patient should be in numerator for strat 1. "
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS159FHIRDepressionRemissionatTwelveMonths",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/f737aa8d-fc32-41cd-82be-f0da91e7313c"
+      }, {
+        "reference": "Encounter/65698a5c-1c5c-40e7-abf3-a9e9eeefb038"
+      }, {
+        "reference": "Observation/c93cd9d7-63b8-4c85-9d5e-3079a748057a"
+      }, {
+        "reference": "Observation/0116e70c-12cf-44f8-a325-8f3c902f830e"
+      }, {
+        "reference": "Condition/29fb2ae0-3207-4c88-90df-af05c6566435"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/d428541a-0f60-4a48-b642-98decc2981d9"
+    }
+  } ]
+}

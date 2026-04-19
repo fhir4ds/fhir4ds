@@ -1,0 +1,25 @@
+{
+  "resourceType": "Procedure",
+  "id": "935833af-af72-44bf-9274-c5ab9c6d25d5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-01-01T00:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2021",
+      "code": "96112",
+      "display": "Developmental test administration (including assessment of fine and/or gross motor, language, cognitive level, social, memory and/or executive functions by standardized developmental instruments when performed), by physician or other qualified health care professional, with interpretation and report; first hour",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/37605377-59e5-4f97-b12f-797753056b96"
+  },
+  "performedDateTime": "2026-01-01T00:00:00.000+00:00"
+}

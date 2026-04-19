@@ -1,0 +1,32 @@
+{
+  "resourceType": "Procedure",
+  "id": "8f9e7929-9ab6-459d-884e-37be44aea19b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-10-01T13:15:00.000+00:00"
+  } ],
+  "status": "completed",
+  "category": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "387713003",
+      "display": "Surgical procedure",
+      "userSelected": true
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+      "code": "0B110F4",
+      "display": "Bypass Trachea to Cutaneous with Tracheostomy Device, Open Approach",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/baa3f56c-d4df-4922-96a1-603c234b6db4"
+  },
+  "performedDateTime": "2026-10-01T13:15:00.000+00:00"
+}

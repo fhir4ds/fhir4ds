@@ -1,0 +1,31 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "f15b73a6-cad0-41aa-82cd-6841a01baa89",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "doNotPerform": false,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "312836",
+      "display": "rivastigmine 6 MG Oral Capsule"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/9943e220-d0f1-4718-8377-0d407a529f52"
+  },
+  "authoredOn": "2026-12-30T00:00:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/example"
+  },
+  "dispenseRequest": {
+    "expectedSupplyDuration": {
+      "value": 90,
+      "system": "http://unitsofmeasure.org",
+      "code": "days"
+    }
+  }
+}

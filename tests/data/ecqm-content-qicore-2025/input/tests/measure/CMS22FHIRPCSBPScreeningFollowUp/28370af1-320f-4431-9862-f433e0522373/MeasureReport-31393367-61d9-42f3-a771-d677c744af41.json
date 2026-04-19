@@ -1,0 +1,115 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "31393367-61d9-42f3-a771-d677c744af41",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "d3860132-2847-45eb-b7d9-a26a4a1df786-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "28370af1-320f-4431-9862-f433e0522373"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#d3860132-2847-45eb-b7d9-a26a4a1df786-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Age 18+, 1st enc 1/01 0800 - 0830,  BP 120/79, order for  f/u 2-3 mo, f/u 4-6 mo.  lifestyle.\n2nd Enc. 12/31 1000-1045, 129/79, urgent referral order, "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS22FHIRPCSBPScreeningFollowUp",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 2
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 2
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 2
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/28370af1-320f-4431-9862-f433e0522373"
+  }, {
+    "reference": "Encounter/a313f8e0-95ba-4976-ae2d-f1bf6fdc244e"
+  }, {
+    "reference": "Observation/84300a2a-e840-4e78-af7b-c4a02a8e193f"
+  }, {
+    "reference": "ServiceRequest/d332c4ec-c616-48a2-bee7-90933ab13e50"
+  }, {
+    "reference": "ServiceRequest/b17dda44-5549-40fe-a96c-6dafb6dd2c90"
+  }, {
+    "reference": "ServiceRequest/85e69517-cde2-430f-a637-143d82121594"
+  }, {
+    "reference": "Encounter/d56f0843-5c2d-4116-a53b-0e6b9e90da33"
+  }, {
+    "reference": "Observation/8f25ca14-f627-43cc-943e-b26af35efe06"
+  }, {
+    "reference": "ServiceRequest/3c41f401-3c44-4f43-beb5-7ad178e7dade"
+  }, {
+    "reference": "Coverage/e9a81e30-c19d-4419-9cf8-71ccc1901948"
+  }, {
+    "reference": "Organization/da675b73-148d-4764-883d-92f1ece9bd0b"
+  } ]
+}

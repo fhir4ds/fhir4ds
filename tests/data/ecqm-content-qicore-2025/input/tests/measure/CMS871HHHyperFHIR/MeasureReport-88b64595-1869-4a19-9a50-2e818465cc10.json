@@ -1,0 +1,105 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "88b64595-1869-4a19-9a50-2e818465cc10",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "4306d210-0c64-4d44-a143-f87a1a29ebe8-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "98533ccd-24ee-41b3-aab2-ef6cbf89e00d"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#4306d210-0c64-4d44-a143-f87a1a29ebe8-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Enc with diabetes dx, encounter starts in Obs 3pm. Meets exclusion - initial test > 600 within 1 hour prior to start of encounter (Obs visit start of 3pm) to 6 hours after start of the enc. "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS871HHHyperFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "NumeratorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator-exclusion",
+          "display": "Numerator Exclusion"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Condition/aa3ced1e-ac0d-4c2a-8b20-58278aff2958"
+  }, {
+    "reference": "Encounter/72180243-cb18-4430-b1eb-6196c89f7e92"
+  }, {
+    "reference": "Encounter/b386e918-f142-4e13-b49c-dbeff6b48733"
+  }, {
+    "reference": "Patient/98533ccd-24ee-41b3-aab2-ef6cbf89e00d"
+  }, {
+    "reference": "Observation/244a42bf-32de-4ca3-91b2-344d45321cd2"
+  }, {
+    "reference": "Observation/1f48f513-2e27-4252-a3cb-203e90a7d93d"
+  } ]
+}

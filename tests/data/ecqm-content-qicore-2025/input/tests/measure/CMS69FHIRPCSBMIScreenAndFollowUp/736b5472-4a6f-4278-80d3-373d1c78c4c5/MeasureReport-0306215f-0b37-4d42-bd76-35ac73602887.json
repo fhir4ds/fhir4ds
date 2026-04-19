@@ -1,0 +1,107 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "0306215f-0b37-4d42-bd76-35ac73602887",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "fa88a015-1e83-4c21-b5be-8ded028f8a37-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "736b5472-4a6f-4278-80d3-373d1c78c4c5"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#fa88a015-1e83-4c21-b5be-8ded028f8a37-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Encounter during MP,  1/1  at  0000 to 0030, has hospice, edge test should pass the exclusion criteria,  "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS69FHIRPCSBMIScreenAndFollowUp",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/736b5472-4a6f-4278-80d3-373d1c78c4c5"
+  }, {
+    "reference": "Encounter/69167725-2017-4224-849c-97c78497bae4"
+  }, {
+    "reference": "Observation/bcdf61c5-6156-4cc3-b70d-aa27732f13bd"
+  }, {
+    "reference": "Procedure/87628af3-0fa5-4f21-9c6d-010c01f05611"
+  }, {
+    "reference": "Observation/82909650-76bb-4d9d-9ebe-fb9780b6a28f"
+  }, {
+    "reference": "Coverage/c3a85867-6074-4eda-b590-f5a5fb3464a4"
+  }, {
+    "reference": "Organization/fb4ca263-d148-4c1e-bcdc-77b363435cbc"
+  } ]
+}

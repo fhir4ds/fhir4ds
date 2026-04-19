@@ -1,0 +1,76 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1029.370",
+  "meta": {
+    "versionId": "10",
+    "lastUpdated": "2023-12-21T17:43:03.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2022-01-27"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2022-01-27"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1029.370",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1029.370"
+    }
+  ],
+  "version": "20220127",
+  "name": "PresentOnAdmissionIsNoOrUnableToDetermine",
+  "title": "Present on Admission is No or Unable To Determine",
+  "status": "active",
+  "experimental": false,
+  "date": "2022-01-27T01:02:26-05:00",
+  "publisher": "Joint Commission",
+  "expansion": {
+    "identifier": "urn:uuid:6a6597f9-dac5-41d8-af34-12c844209f44",
+    "timestamp": "2026-03-13T13:02:05-04:00",
+    "total": 3,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "https://www.cms.gov/Medicare/Medicare-Fee-for-Service-Payment/HospitalAcqCond/Coding",
+        "version": "07/14/2020",
+        "code": "N",
+        "display": "Diagnosis was not present at time of inpatient admission"
+      },
+      {
+        "system": "https://www.cms.gov/Medicare/Medicare-Fee-for-Service-Payment/HospitalAcqCond/Coding",
+        "version": "07/14/2020",
+        "code": "U",
+        "display": "Documentation insufficient to determine if the condition was present at the time of inpatient admission"
+      },
+      {
+        "system": "https://www.cms.gov/Medicare/Medicare-Fee-for-Service-Payment/HospitalAcqCond/Coding",
+        "version": "07/14/2020",
+        "code": "W",
+        "display": "Clinically undetermined"
+      }
+    ]
+  }
+}

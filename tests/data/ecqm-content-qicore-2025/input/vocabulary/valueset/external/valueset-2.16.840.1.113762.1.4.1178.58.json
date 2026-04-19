@@ -1,0 +1,48 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1178.58",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:04.238-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1178.58",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "2.16.840.1.113762.1.4.1178.58"
+  } ],
+  "version": "20220218",
+  "name": "LeftVentricularAssistDeviceComplications",
+  "title": "Left Ventricular Assist Device Complications",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:a4492528-6007-4fbd-8776-a25caffb1b4f",
+    "timestamp": "2025-06-20T17:02:43-04:00",
+    "total": 3,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "764680009",
+      "display": "Infection of left ventricular assist device driveline (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "765181003",
+      "display": "Thrombosis caused by left ventricular assist device (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "765465004",
+      "display": "Thrombosis associated with left ventricular assist device (disorder)"
+    } ]
+  }
+}

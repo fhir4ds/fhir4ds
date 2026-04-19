@@ -1,0 +1,34 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "dfb4c2be-d7fe-40b2-88af-df7cc9719bcc",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "04012024",
+      "code": "1303125",
+      "display": "prednisone 1 MG Delayed Release Oral Tablet"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/38ed8b42-1631-4673-aa53-6d2a4db163f3"
+  },
+  "authoredOn": "2026-03-03T14:00:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/1351644115135131"
+  },
+  "dosageInstruction": [ {
+    "timing": {
+      "repeat": {
+        "boundsPeriod": {
+          "start": "2026-03-03T14:00:00.000+00:00",
+          "end": "2026-12-03T14:00:00.000+00:00"
+        }
+      }
+    }
+  } ]
+}

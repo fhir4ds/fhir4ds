@@ -1,0 +1,24 @@
+{
+  "resourceType": "MedicationDispense",
+  "id": "e5ca8271-f053-4922-b2ad-f4f49accdf6a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationdispense" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1099316",
+      "display": "desipramine hydrochloride 75 MG Oral Tablet"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/40ed567d-9ecf-4bf8-b552-be9b87a6834d"
+  },
+  "daysSupply": {
+    "value": 10,
+    "system": "http://unitsofmeasure.org",
+    "code": "days"
+  },
+  "whenHandedOver": "2026-01-01T01:00:00.000Z"
+}

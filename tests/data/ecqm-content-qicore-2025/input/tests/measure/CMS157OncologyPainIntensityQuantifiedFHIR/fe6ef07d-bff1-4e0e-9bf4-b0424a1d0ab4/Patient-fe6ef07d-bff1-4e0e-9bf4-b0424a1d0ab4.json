@@ -1,0 +1,58 @@
+{
+  "resourceType": "Patient",
+  "id": "fe6ef07d-bff1-4e0e-9bf4-b0424a1d0ab4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "text": {
+    "status": "generated",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">ChemoSameDayofEncAnd30DaysB4Enc<b>IPPPassPop1</b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>60e349100edd633ca8f54b90369c7513</td></tr><tr><td>Date of birth</td><td><span>13 May 1937</span></td></tr></tbody></table></div>"
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "1002-5",
+        "display": "American Indian or Alaska Native",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "American Indian or Alaska Native"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Hispanic or Latino"
+    } ]
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://bonnie-fhir.healthit.gov/",
+    "value": "62c880ec0111a60120dc21fb"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "family": "IPPPassPop1",
+    "given": [ "ChemoSameDayofEncAnd30DaysB4Enc" ]
+  } ],
+  "gender": "female",
+  "birthDate": "1937-05-13"
+}

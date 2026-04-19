@@ -1,0 +1,31 @@
+{
+  "resourceType": "Coverage",
+  "id": "33729c21-5cfc-4ad3-9079-0accfa267548",
+  "status": "active",
+  "type": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/sop",
+      "version": "9.2",
+      "code": "1",
+      "display": "MEDICARE",
+      "userSelected": true
+    } ]
+  },
+  "subscriberId": "523435",
+  "beneficiary": {
+    "reference": "Patient/655df7e2-45d9-4dab-b218-863126c06ec7"
+  },
+  "relationship": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+      "code": "self"
+    } ]
+  },
+  "period": {
+    "start": "2026-11-28T08:00:00.000+00:00",
+    "end": "2026-11-30T08:15:00.000+00:00"
+  },
+  "payor": [ {
+    "reference": "Organization/5f451720-f9c8-4f97-976d-cf47e65c2cfc"
+  } ]
+}

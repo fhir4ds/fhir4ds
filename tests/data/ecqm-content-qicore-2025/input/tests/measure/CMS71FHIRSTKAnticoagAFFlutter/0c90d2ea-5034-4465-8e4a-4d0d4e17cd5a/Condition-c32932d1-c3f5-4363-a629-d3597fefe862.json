@@ -1,0 +1,43 @@
+{
+  "resourceType": "Condition",
+  "id": "c32932d1-c3f5-4363-a629-d3597fefe862",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "inactive"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-9-cm",
+      "code": "427.31"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "I48.0"
+    }, {
+      "system": "http://snomed.info/sct",
+      "code": "5370000"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/0c90d2ea-5034-4465-8e4a-4d0d4e17cd5a"
+  },
+  "onsetDateTime": "2026-10-01T09:00:00Z",
+  "abatementDateTime": "2026-10-12T00:15:00.000+00:00"
+}

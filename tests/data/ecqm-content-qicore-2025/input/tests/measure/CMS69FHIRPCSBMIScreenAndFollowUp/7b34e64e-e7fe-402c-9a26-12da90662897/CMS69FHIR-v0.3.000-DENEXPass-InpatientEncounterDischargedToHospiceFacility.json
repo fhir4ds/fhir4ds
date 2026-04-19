@@ -1,0 +1,395 @@
+{
+  "resourceType": "Bundle",
+  "id": "62fbe41abf5132f90ee35d36",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/7b34e64e-e7fe-402c-9a26-12da90662897",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "7b34e64e-e7fe-402c-9a26-12da90662897",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2054-5",
+            "display": "Black or African American",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Black or African American"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "62fbe41abf5132f90ee35d36"
+      } ],
+      "name": [ {
+        "family": "DENEXPass",
+        "given": [ "DischargeToHospiceFacilityDuringMP" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1946-10-15"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/7b34e64e-e7fe-402c-9a26-12da90662897"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/43a03fde-7b78-4c37-b28b-3187edf42e7f",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "43a03fde-7b78-4c37-b28b-3187edf42e7f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "10197000",
+          "display": "Psychiatric interview and evaluation (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/7b34e64e-e7fe-402c-9a26-12da90662897"
+      },
+      "period": {
+        "start": "2026-12-31T23:30:00.000+00:00",
+        "end": "2026-12-31T23:59:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/43a03fde-7b78-4c37-b28b-3187edf42e7f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/79772518-56f7-43c2-957b-a4d81a848f74",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "79772518-56f7-43c2-957b-a4d81a848f74",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "procedure",
+          "display": "Procedure"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "39156-5",
+          "display": "Body mass index (BMI) [Ratio]",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/7b34e64e-e7fe-402c-9a26-12da90662897"
+      },
+      "effectiveDateTime": "2026-12-31T23:59:00.000+00:00",
+      "valueQuantity": {
+        "value": 40.0,
+        "unit": "kg/m2",
+        "system": "https://ucum.org",
+        "code": "kg/m2"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/79772518-56f7-43c2-957b-a4d81a848f74"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/309c1ebe-c9b3-43ce-9a3e-9dfcb3e9abbe",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "309c1ebe-c9b3-43ce-9a3e-9dfcb3e9abbe",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-12-31T23:59:00.000+00:00"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "182922004",
+          "display": "Dietary regime (regime/therapy)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/7b34e64e-e7fe-402c-9a26-12da90662897"
+      },
+      "performedDateTime": "2026-12-31T23:59:00.000+00:00",
+      "reasonCode": [ {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "code": "E66.01",
+          "display": "Morbid (severe) obesity due to excess calories",
+          "userSelected": true
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/309c1ebe-c9b3-43ce-9a3e-9dfcb3e9abbe"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/84d79696-61b1-4543-8e31-0af1976bc4ab",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "84d79696-61b1-4543-8e31-0af1976bc4ab",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "183452005",
+          "display": "Emergency hospital admission (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/7b34e64e-e7fe-402c-9a26-12da90662897"
+      },
+      "period": {
+        "start": "2026-02-28T23:30:00.000+00:00",
+        "end": "2026-02-28T23:59:00.000+00:00"
+      },
+      "hospitalization": {
+        "dischargeDisposition": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "code": "428371000124100",
+            "display": "Discharge to healthcare facility for hospice care (procedure)",
+            "userSelected": true
+          } ]
+        }
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/84d79696-61b1-4543-8e31-0af1976bc4ab"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/89f0bcbf-5ee5-466d-8d26-2fe27b1aabff",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "89f0bcbf-5ee5-466d-8d26-2fe27b1aabff",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/7b34e64e-e7fe-402c-9a26-12da90662897"
+      },
+      "payor": [ {
+        "reference": "Organization/10f18a70-70a0-4f80-90ea-60ad92411406"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/89f0bcbf-5ee5-466d-8d26-2fe27b1aabff"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/10f18a70-70a0-4f80-90ea-60ad92411406",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "10f18a70-70a0-4f80-90ea-60ad92411406",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/10f18a70-70a0-4f80-90ea-60ad92411406"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/7bdf3288-b61f-43c3-b8a7-432c26190656",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "7bdf3288-b61f-43c3-b8a7-432c26190656",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "d0b9054b-faeb-4b60-9bf9-28d23b6d7207-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "7b34e64e-e7fe-402c-9a26-12da90662897"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#d0b9054b-faeb-4b60-9bf9-28d23b6d7207-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient age 79 and has 2 encs. during the MP.  February inpatient encounter discharge to healthcare facility for hospice care. December enc. BMI 40 kg/m2, and dietary recommend made due to dx  of \"Morbid (severe) obesity due to excess calories\" "
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS69FHIRPCSBMIScreenAndFollowUp",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/7b34e64e-e7fe-402c-9a26-12da90662897"
+      }, {
+        "reference": "Encounter/43a03fde-7b78-4c37-b28b-3187edf42e7f"
+      }, {
+        "reference": "Observation/79772518-56f7-43c2-957b-a4d81a848f74"
+      }, {
+        "reference": "Procedure/309c1ebe-c9b3-43ce-9a3e-9dfcb3e9abbe"
+      }, {
+        "reference": "Encounter/84d79696-61b1-4543-8e31-0af1976bc4ab"
+      }, {
+        "reference": "Coverage/89f0bcbf-5ee5-466d-8d26-2fe27b1aabff"
+      }, {
+        "reference": "Organization/10f18a70-70a0-4f80-90ea-60ad92411406"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/7bdf3288-b61f-43c3-b8a7-432c26190656"
+    }
+  } ]
+}

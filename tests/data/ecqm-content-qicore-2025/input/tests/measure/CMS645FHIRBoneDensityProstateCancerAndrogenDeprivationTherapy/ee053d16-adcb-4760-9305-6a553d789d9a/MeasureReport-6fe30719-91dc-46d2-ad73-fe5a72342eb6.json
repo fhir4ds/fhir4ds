@@ -1,0 +1,97 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "6fe30719-91dc-46d2-ad73-fe5a72342eb6",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "3444fb20-6099-4bb5-a511-09e77469d992-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "ee053d16-adcb-4760-9305-6a553d789d9a"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#3444fb20-6099-4bb5-a511-09e77469d992-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient has ADT for another reason, then develops prostate cancer. Passes with prior ADT, then PCa dx and intent for 12 months of therapy with ADT restarted. Pt should be included in IPP and DENOM."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS645FHIRBoneDensityProstateCancerAndrogenDeprivationTherapy",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/ee053d16-adcb-4760-9305-6a553d789d9a"
+  }, {
+    "reference": "Encounter/c79eb912-f878-4da5-88fd-be9683f96f9d"
+  }, {
+    "reference": "MedicationRequest/37d36fe0-54d9-4eff-a496-f793d13613cf"
+  }, {
+    "reference": "Condition/ddec7743-ee70-4a62-bd0e-47bb4c640096"
+  }, {
+    "reference": "MedicationRequest/2d9f8a87-a0cf-49ed-b30d-7eb86551f2db"
+  }, {
+    "reference": "Practitioner/ff83cc78-5993-44bd-a2d8-1b4140c17f03"
+  }, {
+    "reference": "ServiceRequest/c556a0c1-27bb-4f11-abb4-ffb4972a9f3d"
+  } ]
+}

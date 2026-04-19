@@ -1,0 +1,28 @@
+{
+  "resourceType": "Encounter",
+  "id": "e58b8174-03eb-4167-a5dd-942e24c19830",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "185316007",
+      "display": "Indirect encounter (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/5b7e720f-e2fc-4779-9b1c-3f34a0241482"
+  },
+  "period": {
+    "start": "2026-12-30T08:00:00.000+00:00",
+    "end": "2026-12-30T08:15:00.000+00:00"
+  }
+}

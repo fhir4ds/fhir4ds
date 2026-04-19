@@ -1,0 +1,314 @@
+{
+  "resourceType": "Bundle",
+  "id": "62a89f7131a203bdc723752b",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/8a541116-96f0-4e25-a059-5bea9d244fa9",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "8a541116-96f0-4e25-a059-5bea9d244fa9",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2106-3",
+            "display": "White"
+          }
+        }, {
+          "url": "text",
+          "valueString": "White"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Non Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Non Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248152002"
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://GoodHealthcare.com/",
+        "value": "41654161684974312"
+      } ],
+      "name": [ {
+        "family": "IPFail",
+        "given": [ "isFemale" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1976-12-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/8a541116-96f0-4e25-a059-5bea9d244fa9"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/1af588f0-0b9a-46dc-86f1-a60f7292dd66",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "1af588f0-0b9a-46dc-86f1-a60f7292dd66",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "185463005",
+          "display": "Visit out of hours (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/8a541116-96f0-4e25-a059-5bea9d244fa9"
+      },
+      "period": {
+        "start": "2026-07-01T08:00:00.000+00:00",
+        "end": "2026-07-01T09:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/1af588f0-0b9a-46dc-86f1-a60f7292dd66"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/8954f276-62c7-4f99-b56b-9cac6e30ebe3",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "8954f276-62c7-4f99-b56b-9cac6e30ebe3",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active"
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "Confirmed"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "version": "2024",
+          "code": "N40.1",
+          "display": "Benign prostatic hyperplasia with lower urinary tract symptoms"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/8a541116-96f0-4e25-a059-5bea9d244fa9"
+      },
+      "onsetPeriod": {
+        "start": "2025-07-01T08:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/8954f276-62c7-4f99-b56b-9cac6e30ebe3"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/868a3386-ace2-4b46-b8e1-7ac55b58fb8f",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "868a3386-ace2-4b46-b8e1-7ac55b58fb8f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey",
+          "display": "Survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "80976-4",
+          "display": "International Prostate Symptom Score [IPSS]"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/8a541116-96f0-4e25-a059-5bea9d244fa9"
+      },
+      "effectiveDateTime": "2025-08-01T08:00:00.000+00:00",
+      "valueInteger": 2
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/868a3386-ace2-4b46-b8e1-7ac55b58fb8f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/10750d95-f149-4887-87c5-0b3b30a5d7ea",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "10750d95-f149-4887-87c5-0b3b30a5d7ea",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey",
+          "display": "Survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "80976-4",
+          "display": "International Prostate Symptom Score [IPSS]"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/8a541116-96f0-4e25-a059-5bea9d244fa9"
+      },
+      "effectiveDateTime": "2026-07-01T08:00:00.000+00:00",
+      "valueInteger": 2
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/10750d95-f149-4887-87c5-0b3b30a5d7ea"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/139d9c35-c4e6-40d2-9b28-891d10727acb",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "139d9c35-c4e6-40d2-9b28-891d10727acb",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "93b97f4a-6092-4f92-9eef-664c96273f44-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "8a541116-96f0-4e25-a059-5bea9d244fa9"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#93b97f4a-6092-4f92-9eef-664c96273f44-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient failing Initial population which includes only male patients"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS771FHIRUrinarySymptomScoreChangeBenignProstaticHyperplasia",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/8a541116-96f0-4e25-a059-5bea9d244fa9"
+      }, {
+        "reference": "Encounter/1af588f0-0b9a-46dc-86f1-a60f7292dd66"
+      }, {
+        "reference": "Condition/8954f276-62c7-4f99-b56b-9cac6e30ebe3"
+      }, {
+        "reference": "Observation/868a3386-ace2-4b46-b8e1-7ac55b58fb8f"
+      }, {
+        "reference": "Observation/10750d95-f149-4887-87c5-0b3b30a5d7ea"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/139d9c35-c4e6-40d2-9b28-891d10727acb"
+    }
+  } ]
+}

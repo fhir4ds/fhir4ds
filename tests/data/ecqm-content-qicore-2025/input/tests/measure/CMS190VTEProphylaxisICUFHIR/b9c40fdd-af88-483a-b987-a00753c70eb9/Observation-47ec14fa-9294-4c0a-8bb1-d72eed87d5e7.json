@@ -1,0 +1,32 @@
+{
+  "resourceType": "Observation",
+  "id": "47ec14fa-9294-4c0a-8bb1-d72eed87d5e7",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "exam",
+      "display": "exam"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "72136-5"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b9c40fdd-af88-483a-b987-a00753c70eb9"
+  },
+  "effectiveDateTime": "2026-12-06T06:30:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "260362008",
+      "display": "Low Risk"
+    } ]
+  }
+}

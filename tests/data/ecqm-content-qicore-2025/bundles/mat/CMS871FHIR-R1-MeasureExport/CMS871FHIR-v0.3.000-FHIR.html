@@ -1,0 +1,5838 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            background-color: #ffffff;;
+            margin: 0px;
+            padding: 10px;
+            height: 100%;
+            font-size: 1em;
+        }
+
+        p, li {
+            font-size: 12px;
+            line-height: 1.4em;
+            font-family: verdana;
+            margin: 0 0 20px 0;
+            font-weight: normal;
+        }
+
+        td {
+            font-size: 12px;
+            line-height: 1.4em;
+            font-family: verdana;
+            font-weight: normal;
+            padding: 3px;
+            vertical-align: top;
+        }
+
+        tr {
+            font-size: 12px;
+            line-height: 1.4em;
+            font-family: verdana;
+            font-weight: normal;
+            padding: 3px;
+            vertical-align: top;
+            text-align: left;
+        }
+
+        table.colstu td {
+            border: 1px grey solid;
+            border-spacing: 0;
+            padding: 5px;
+            border-collapse: collapse;
+            background-color: #fff5e6;
+        }
+
+        table.colsd td {
+            border: 1px grey solid;
+            border-spacing: 0;
+            padding: 5px;
+            border-collapse: collapse;
+            background-color: #efefef;
+        }
+
+        table.colsn td {
+            border: 1px grey solid;
+            border-spacing: 0;
+            padding: 5px;
+            border-collapse: collapse;
+            background-color: #e6ffe6;
+        }
+
+        table.colse td {
+            border: 1px grey solid;
+            border-spacing: 0;
+            padding: 5px;
+            border-collapse: collapse;
+            background-color: #e6e6e6;
+        }
+
+        table.colsi td {
+            border: 1px grey solid;
+            border-spacing: 0;
+            padding: 5px;
+            border-collapse: collapse;
+            background-color: #ffffe6;
+        }
+
+        table.list td {
+            border-top: 1px silver solid;
+            border-spacing: 0;
+        }
+
+        table.bare td {
+            border-spacing: 0;
+        }
+
+        ul.dict li {
+            font-size: 11px;
+            line-height: 1.2em;
+            font-family: verdana;
+            font-weight: normal;
+            padding: 3px;
+        }
+
+        table.dict td {
+            padding: 3px 7px 2px 7px;
+            font-size: 11px;
+            line-height: 1.2em;
+            font-family: verdana;
+            font-weight: normal;
+            padding: 3px;
+            vertical-align: top;
+        }
+
+        table.dict p {
+            font-size: 11px;
+        }
+
+        table {
+            margin-bottom: 10px;
+            border-collapse: collapse;
+        }
+
+        table.codes td {
+            border: 1px solid silver;
+            padding: 3px 7px 2px 7px;
+            font-size: 12px;
+            line-height: 1.4em;
+            font-family: verdana;
+            font-weight: normal;
+            padding: 3px;
+            vertical-align: top;
+        }
+
+        table.grid {
+            margin-bottom: 10px;
+            border: 1px black solid;
+            margin-right: auto;
+
+        }
+
+        table.grid th {
+            border: 1px solid silver;
+            padding: 3px 7px 2px 7px;
+            font-size: 12px;
+            line-height: 1.4em;
+            font-family: verdana;
+            font-weight: bold;
+            padding: 3px;
+            vertical-align: top;
+        }
+
+        table.grid td {
+            border: 1px solid silver;
+            padding: 3px 7px 2px 7px;
+            font-size: 12px;
+            line-height: 1.4em;
+            font-family: verdana;
+            font-weight: normal;
+            padding: 3px;
+            vertical-align: top;
+        }
+
+        ul {
+            margin: 10px 0;
+            padding: 0 0 0 25px;
+        }
+
+        .dense li {
+            margin: 0 0 0 0;
+        }
+
+        li {
+            margin: 0 0 5px 0;
+        }
+
+        h1 {
+            font-size: 16px;
+            margin: 0 0 4px 0;
+            font-family: verdana;
+            border-bottom: 1px solid #7e7e7e;
+            padding-bottom: 2px;
+        }
+
+        h2 {
+            font-family: verdana;
+            line-height: 1.2em;
+            font-size: 14px;
+            margin: 0 0 3px 0;
+            margin-top: 15px;
+            border-bottom: 1px solid #dcdcdc;
+            padding-bottom: 2px;
+        }
+
+        h3 {
+            font-family: verdana;
+            line-height: 1.2em;
+            font-size: 12px;
+            margin: 0 0 3px 0;
+            margin-top: 10px;
+        }
+
+        h4 {
+            font-family: verdana;
+            line-height: 1.2em;
+            font-size: 11px;
+            margin: 0 0 3px 0;
+            margin-top: 10px;
+        }
+
+        div.sidebar h2 {
+            border-bottom: 1px solid #dcdcdc;
+            padding-bottom: 2px;
+            padding-top: 0px;
+            margin-top: 0px;
+            font-weight: normal;
+            margin-left: 8px;
+            margin-bottom: 0px;
+            font-size: 12px;
+        }
+
+        div.sidebar p {
+            padding-bottom: 0px;
+            padding-top: 10px;
+            font-weight: normal;
+            margin-left: 8px;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        div.sidebar ul {
+            list-style: none;
+            padding: 0px;
+            margin-left: 6px;
+            font-size: 11px;
+            line-height: 2.125em;
+        }
+
+        div.sidebar li {
+            margin: 0px 0px 0px 6px;
+            padding: 0px;
+            font-size: 11px;
+            line-height: 2.125em;
+        }
+
+        a {
+            color: #428bca;
+            text-decoration: none;
+        }
+
+        a.xmltag :visited {
+            color: Navy;
+        }
+
+        a.xmltag :hover {
+            color: Blue;
+        }
+
+        pre {
+            display: block;
+            border: 1px solid #cccccc;
+            border-radius: 4px;
+        }
+
+        pre a {
+            color: darkgreen;
+            text-decoration: none;
+            border: 0;
+
+        }
+
+        /* PrismJS 1.21.0
+        https://prismjs.com/download.html#themes=prism&languages=markup+css+clike+javascript+abap+abnf+actionscript+ada+agda+al+antlr4+apacheconf+apl+applescript+aql+arduino+arff+asciidoc+aspnet+asm6502+autohotkey+autoit+bash+basic+batch+bbcode+birb+bison+bnf+brainfuck+brightscript+bro+bsl+c+csharp+cpp+cil+clojure+cmake+coffeescript+concurnas+csp+crystal+css-extras+cypher+d+dart+dax+dhall+diff+django+dns-zone-file+docker+ebnf+editorconfig+eiffel+ejs+elixir+elm+etlua+erb+erlang+excel-formula+fsharp+factor+firestore-security-rules+flow+fortran+ftl+gml+gcode+gdscript+gedcom+gherkin+git+glsl+go+graphql+groovy+haml+handlebars+haskell+haxe+hcl+hlsl+http+hpkp+hsts+ichigojam+icon+ignore+inform7+ini+io+j+java+javadoc+javadoclike+javastacktrace+jolie+jq+jsdoc+js-extras+json+json5+jsonp+jsstacktrace+js-templates+julia+keyman+kotlin+latex+latte+less+lilypond+liquid+lisp+livescript+llvm+lolcode+lua+makefile+markdown+markup-templating+matlab+mel+mizar+mongodb+monkey+moonscript+n1ql+n4js+nand2tetris-hdl+naniscript+nasm+neon+nginx+nim+nix+nsis+objectivec+ocaml+opencl+oz+parigp+parser+pascal+pascaligo+pcaxis+peoplecode+perl+php+phpdoc+php-extras+plsql+powerquery+powershell+processing+prolog+properties+protobuf+pug+puppet+pure+purebasic+purescript+python+q+qml+qore+r+racket+jsx+tsx+reason+regex+renpy+rest+rip+roboconf+robotframework+ruby+rust+sas+sass+scss+scala+scheme+shell-session+smali+smalltalk+smarty+sml+solidity+solution-file+soy+sparql+splunk-spl+sqf+sql+stan+iecst+stylus+swift+t4-templating+t4-cs+t4-vb+tap+tcl+tt2+textile+toml+turtle+twig+typescript+typoscript+unrealscript+vala+vbnet+velocity+verilog+vhdl+vim+visual-basic+warpscript+wasm+wiki+xeora+xml-doc+xojo+xquery+yaml+yang+zig&plugins=keep-markup */
+        /**
+         * prism.js default theme for JavaScript, CSS and HTML
+         * Based on dabblet (http://dabblet.com)
+         * @author Lea Verou
+         */
+
+        code[class*="language-"],
+        pre[class*="language-"] {
+            color: black;
+            background: none;
+            text-shadow: 0 1px white;
+            font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+            font-size: 0.95em;
+            text-align: left;
+            white-space: pre;
+            word-spacing: normal;
+            word-break: normal;
+            word-wrap: normal;
+            line-height: 1.5;
+
+            -moz-tab-size: 4;
+            -o-tab-size: 4;
+            tab-size: 4;
+
+            -webkit-hyphens: none;
+            -moz-hyphens: none;
+            -ms-hyphens: none;
+            hyphens: none;
+        }
+
+        pre[class*="language-"]::-moz-selection, pre[class*="language-"] ::-moz-selection,
+        code[class*="language-"]::-moz-selection, code[class*="language-"] ::-moz-selection {
+            text-shadow: none;
+            background: #b3d4fc;
+        }
+
+        pre[class*="language-"]::selection, pre[class*="language-"] ::selection,
+        code[class*="language-"]::selection, code[class*="language-"] ::selection {
+            text-shadow: none;
+            background: #b3d4fc;
+        }
+
+        @media print {
+            code[class*="language-"],
+            pre[class*="language-"] {
+                text-shadow: none;
+            }
+        }
+
+        /* Code blocks */
+        pre[class*="language-"] {
+            padding: 1em;
+            margin: .5em 0;
+            overflow: auto;
+        }
+
+        :not(pre) > code[class*="language-"],
+        pre[class*="language-"] {
+            background: #f5f2f0;
+        }
+
+        /* Inline code */
+        :not(pre) > code[class*="language-"] {
+            padding: .1em;
+            border-radius: .3em;
+            white-space: normal;
+        }
+        /*
+  ===============================
+  Liquid Narrative Styling Start
+  ===============================
+  */
+
+        .narrative-table {
+            border: 1pt inset rgb(0, 0, 0);
+            line-height: 10pt;
+            border-collapse: separate;
+            -webkit-border-horizontal-spacing: 2px;
+            -webkit-border-vertical-spacing: 2px;
+        }
+
+        .narrative-table>tbody {
+            display: table-row-group;
+            vertical-align: middle;
+        }
+
+        .narrative-table>tbody>tr {
+            display: table-row;
+            background-color: lightgray;
+            vertical-align: inherit;
+        }
+
+        .narrative-table>tbody>tr>th {
+            padding: 5px;
+        }
+
+        .section-header {
+            background-color: #656565;
+            color: whitesmoke;
+            vertical-align: inherit;
+        }
+
+        .row-header {
+            background-color: #656565;
+            color: whitesmoke;
+            vertical-align: inherit;
+        }
+
+        .tab-one {
+            padding-left: 5px;
+        }
+
+        @media (min-width: 768px) {
+            .row-header {
+                min-width: 138px;
+                max-width: 138px;
+            }
+
+            .content-container {
+                max-width: 576px;
+            }
+        }
+
+        @media (min-width: 992px) {
+            .row-header {
+                min-width: 181px;
+                max-width: 181px;
+            }
+
+            .content-container {
+                max-width: 745px;
+            }
+        }
+
+        @media (min-width: 1100px) {
+            .row-header {
+                min-width: 213px;
+                max-width: 213px;
+            }
+
+            .content-container {
+                max-width: 873px;
+            }
+        }
+
+        /*
+        ===============================
+        Liquid Narrative Styling End
+        ===============================
+        */
+    </style>
+</head>
+<body>
+<div xmlns="http://www.w3.org/1999/xhtml" class="col-12">
+  <table class="narrative-table">
+    <tbody>
+<tr>
+
+<th colspan="2" scope="row" class="row-header">Knowledge Artifact Metadata</th>
+
+</tr>
+
+<tr>
+
+<th scope="row" class="row-header">Name (machine-readable)</th>
+
+<td class="content-container">CMS871HHHyperFHIR</td>
+</tr>
+
+
+<tr>
+
+<th scope="row" class="row-header">Title (human-readable)</th>
+
+<td class="content-container">Hospital Harm - Severe HyperglycemiaFHIR</td>
+</tr>
+
+
+
+<tr>
+
+<th scope="row" class="row-header">Status</th>
+
+<td class="content-container">active</td>
+</tr>
+
+
+<tr>
+
+<th scope="row" class="row-header">Experimental</th>
+
+<td class="content-container">false</td>
+</tr>
+
+
+<tr>
+
+<th scope="row" class="row-header">Description</th>
+
+<td class="content-container">This measure assesses the number of inpatient hospital days for patients age 18 and older with a hyperglycemic event (harm) per the total qualifying inpatient hospital days for that encounter</td>
+</tr>
+
+
+
+<tr>
+
+<th scope="row" class="row-header">Clinical Usage</th>
+
+<td class="content-container">The measure is using mg/dL as the unit of measurement for glucose results. Millimoles per liter (mmol/L) should be converted to milligrams per deciliter (mg/dL) for reporting this measure. 
+
+When evaluating for days with a glucose level &gt;300 mg/dL, the first 24-hour period after admission to the hospital is not evaluated to account for potentially poor glucose control outside of the hospital setting or that preceded the start of hospital care. The admission starts in the ED or observation when the transition between the ED encounter, observation encounter, and the inpatient encounter are within an hour or less of each other.
+
+This measure evaluates the first 10 days of an eligible inpatient hospitalization in determining eligible days for the denominator and numerator (i.e., the length of stay is truncated to &lt;=10 days when the length exceeds 10 days). Patients admitted for longer length of stays are more likely to have more complex medical conditions.  
+
+In determining eligible days for the denominator and numerator, this measure does not evaluate the last day if it was less than a 24-hour period.  
+
+The “Days in Hospitalization” logic within Measure Observation 1 (associated with the denominator), in conjunction with other logic, returns the day number (e.g., day 1 to day 10) for each day within the hospitalization period to determine the eligible hospital days (e.g., from day 2 to day 10). 
+
+The “Days in Hospitalization” logic within Measure Observation 2 (associated with the numerator), in conjunction with other logic, returns the day number (e.g., day 1 to day 10) for each day within the hospitalization period to determine the eligible hyperglycemic event days (e.g., from day 2 to day 10).
+
+Since the measure does not count any hyperglycemic events that occur in the first 24 hours, day 1 is not considered an eligible hospital day for the Measure Observations. Eligible days range from day 2 up to day 10. However, the measure does allow day 1 to be counted for the Numerator as one of the preceding days for a day where no glucose result is found. In this instance, the measure could evaluate day 1 as one of the two days preceding the day with no glucose result to see if there was a glucose value &gt;=200 mg/dL on day 1. 
+
+Multiple hyperglycemic events can occur during a ‘day,’ but this is still considered one hyperglycemic event day.
+
+The numerator returns the first eligible encounter that meets the qualifying criteria: an inpatient hospitalization with a hyperglycemic event. Only one numerator is counted per encounter. Note that the Numerator returns the encounters, not days, that meet the criteria. 
+
+This measure includes two measure observations used to calculate the ratio of the number of inpatient hospital days with a hyperglycemic (high blood glucose) event over the total number of eligible inpatient hospital days (&lt;= 10 days) for that encounter.  
+
+In ratio measures, both the denominator and numerator populations flow separately from the same initial population. Therefore, the same exclusion criteria must be applied to both the denominator and numerator to prevent excluded cases from being considered. 
+
+The specimen source for the glucose test is blood, serum, plasma, or interstitial fluid, and can be obtained by a laboratory test, a POC test, or a continuous glucose monitor (CGM). Glucose test results from urine specimens are not considered. 
+
+This eCQM is an episode-based measure. An episode is defined as each inpatient hospitalization or encounter that ends during the measurement period.
+
+This FHIR-based measure has been derived from the QDM-based measure: CMS871v5. Please refer to the HL7 QI-Core Implementation Guide https://hl7.org/fhir/us/qicore/STU6/) for more information on QI-Core and mapping recommendations from QDM to QI-Core STU 6 (https://hl7.org/fhir/us/qicore/STU6/qdm-to-qicore.html).</td>
+</tr>
+
+
+
+
+
+<tr>
+
+<th scope="row" class="row-header">Effective Period</th>
+
+<td class="content-container">2026-01-01..2026-12-31</td>
+</tr>
+
+
+
+
+    <!-- Removed until resolution of https://github.com/cqframework/sample-content-ig/issues/121 -->
+    <!-- <tr>
+
+<th scope="row" class="row-header">Measure Developer</th>
+
+<td class="content-container">org.hl7.fhir.r5.model.ContactDetail@7c171840</td>
+</tr> -->
+
+
+
+
+<tr>
+
+<th scope="row" class="row-header">Measure Steward</th>
+
+<td class="content-container">Centers for Medicare &amp; Medicaid Services (CMS)</td>
+</tr>
+
+    <!-- Removed until resolution of https://github.com/cqframework/sample-content-ig/issues/121 -->
+    <!-- <tr>
+
+<th scope="row" class="row-header">Steward Contact Details</th>
+
+<td class="content-container">org.hl7.fhir.r5.model.ContactDetail@27167523</td>
+</tr> -->
+
+<tr>
+
+<th scope="row" class="row-header">Copyright</th>
+
+<td class="content-container">Limited proprietary coding is contained in the Measure specifications for user convenience. Users of proprietary code sets should obtain all necessary licenses from the owners of the code sets. American Institutes for Research(R), formerly IMPAQ International, disclaims all liability for use or accuracy of any third party codes contained in the specifications.
+
+LOINC(R) copyright 2004-2024 Regenstrief Institute, Inc. This material contains SNOMED Clinical Terms(R) (SNOMED CT[R]) copyright 2004-2024 International Health Terminology Standards Development Organisation. ICD-10 copyright 2024 World Health Organization. All Rights Reserved.</td>
+</tr>
+
+
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - American Diabetes Association Professional Practice Committee; 16. (2022). Diabetes Care in the Hospital: Standards of Medical Care in Diabetes—2022. Diabetes Care 1 January 2022; 45 (Supplement_1): S244–S253.  https://doi.org/10.2337/dc22-S016
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Bersoux, S., Cook, C.B., Kongable, G.L., Shu, J. (2013). Trends in glycemic control over a 2-year period in 126 US hospitals. J Hosp Med. 2013;8(3):121-125. doi:10.1002/jhm.1997
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Donihi, A.C., Gibson, J.M., Noschese, M.L., et al. (2011). Effect of targeted glycemic management program on provider response to inpatient hyperglycemia. Endocr Pract. 2011; (4)552-557
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Gosmanov, A.R., Gosmanova, E.O., Kitabchi, A.E. (2021). Hyperglycemic Crises: Diabetic Ketoacidosis and Hyperglycemic Hyperosmolar State. [Updated 2021 May 9]. In: Feingold KR, Anawalt B, Boyce A, et al., editors. Endotext [Internet]. South Dartmouth (MA): MDText.com, Inc.; 2000-. Available from: https://www.ncbi.nlm.nih.gov/books/NBK279052/
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Jamesen, E., Nevalainen, P.L., Eskelinen, A., et al. (2015). Risk factors for perioperative hyperglycemia in primary hip and knee replacements. Acta Orthop. 2015; 86(2):175-182
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Korytkowski, M.T., Muniyappa, R., Antinori-Lent, K., Donihi, A.C., Drincic, A.T, Hirsch, I.B., Luger, A., McDonnell, M.E., Murad, M.H., Nielsen, C., Pegg, C., Rushakoff, R.J., Santesso, N., Umpierrez, G.E. (2022). Management of Hyperglycemia in Hospitalized Adult Patients in Non-Critical Care Settings: An Endocrine Society Clinical Practice Guideline, The Journal of Clinical Endocrinology &amp; Metabolism, Volume 107, Issue 8, August 2022, Pages 2101–2128,  https://doi.org/10.1210/clinem/dgac278
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Krinsley, J.S., Jones, R.L. (2016). Cost analysis of intensive glycemic control in critically ill adult patients. Chest. 2016;129(3)644-650
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - LeRoy, L.,  Richard, S. (2020). Harms Due to Diabetic Agents (Chapter 8), Making Healthcare Safer III: A Critical Analysis of Existing and Emerging Patient Safety Practices. Retrieved from: https://www.ahrq.gov/sites/default/files/wysiwyg/research/findings/making-healthcare-safer/mhs3/diabetes-1.pdf
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Maynard, G., Kulasa, K., Ramos, P., et al. (2015). Impact of a hypoglycemic reduction bundle and a systems approach to inpatient glycemic management. Endocr Pract. 2015;21(4):355-367
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Mendez, C.E., Ata, A., Rourke, J.M., et al. (2015). Daily inpatient glycemic survey (DINGS): A process to remotely identify and assist in the management of hospitalized patients with diabetes and hyperglycemia. Endocr Pract. 2015;21(8):927-935
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Pasquel, F.J., Lansang, M.C., Dhatariya, K., Umpierrez, G.E. (2021). Management of diabetes and hyperglycaemia in the hospital. The Lancet Diabetes &amp; Endocrinology. 2021; 9: 174–88
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Sathya, B., Davis, R., Taveira, T., et al. (2013). Intensity of peri-operative glycemic control and postoperative outcomes in patients with diabetes: a meta-analysis. Diabetes Res Clin Pract. 2013;102(1):815.10.1016/j.diabres.2013.05.003
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Umpierrez, G., Cardona, S., Pasquel, F., et al. (2015). Randomized controlled trial of intensive versus conservative glucose control in patients undergoing coronary artery bypass graft surgery: gluco-CABG trial. Diabetes Care. 2015;38(9):1665-1672
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+<th scope="row" class="row-header">Citation</th>
+
+  
+  
+  <td class="content-container">
+    
+    
+    <em>Citation</em>: CITATION - Umpierrez, G.E., Hellman, R., Korytkowski, M.T., et al. (2012). Management of Hyperglycemia in Hospitalized Patients in Non-critical Care Setting: An Endocrine Society Clinical Practice Guideline. J Clin Endocrinol Metab. 2012;97, 16-38
+
+    
+    
+    
+    
+  </td>
+</tr>
+
+
+
+
+
+
+
+
+
+
+<tr>
+
+<th colspan="2" scope="row" class="row-header">Measure Metadata</th>
+
+</tr>
+
+  
+<tr>
+
+<th scope="row" class="row-header">Short Name Identifier</th>
+
+<td class="content-container">CMS871FHIR</td>
+</tr>
+
+
+
+  
+<tr>
+
+<th scope="row" class="row-header">Version Independent Identifier</th>
+
+<td class="content-container">urn:uuid:c44ca609-d795-4715-a8fc-1b0b30e46048</td>
+</tr>
+
+
+
+  
+<tr>
+
+<th scope="row" class="row-header">Version Specific Identifier</th>
+
+<td class="content-container">urn:uuid:b85cda48-6920-482f-aa2f-16efa09efe3f</td>
+</tr>
+
+
+
+  
+    
+    
+<tr>
+
+<th scope="row" class="row-header">Publisher (CMS) Identifier</th>
+
+<td class="content-container">871FHIR</td>
+</tr>
+
+  
+
+
+  
+<tr>
+
+<th scope="row" class="row-header">Identifier</th>
+
+<td class="content-container">org.hl7.fhir.r5.model.Identifier@2af5adb6</td>
+</tr>
+
+
+
+<tr>
+
+<th scope="row" class="row-header">Version Number</th>
+
+<td class="content-container">0.3.000</td>
+</tr>
+
+
+
+
+
+
+
+<tr>
+
+<th scope="row" class="row-header">Rationale</th>
+
+<td class="content-container">Hyperglycemia, i.e., elevated glucose level, is common among hospitalized patients, especially those with preexisting diabetes (Umpierrez et al., 2012) and accounts for over 30% of noncritically ill hospitalized patients (Korytkowski, 2022). Hyperglycemia can also affect individuals with no prior history of diabetes and may be induced by medications such as steroids or by parenteral (intravenous) or enteral (tube) feeding.
+
+Severe hyperglycemia, i.e., an extremely elevated glucose level, is significantly associated with a range of harms, including increased in-hospital mortality, infection rates, and hospital length of stay (Pasquel, et al., 2021; Umpierrez et al., 2012, 2015). Lower rates of inpatient severe hyperglycemia may not only improve care for patients but also may reduce costs for healthcare payers (Krinsley et al., 2016). The rate of hyperglycemia varies across hospitals, suggesting opportunities for improvement in inpatient glycemic management (Bersoux et al., 2013; Seisa et al., 2022). The rate of inpatient hyperglycemia can be considered a marker for quality of hospital care, since inpatient hyperglycemia is largely avoidable with proper glycemic management. The use of evidence-based standardized protocols and insulin management protocols have been shown to improve glycemic control and safety (Leroy et al., 2020; Maynard et al., 2015).
+
+It should be noted that this measure does not aim to measure overall glucose control in hospitalized patients; rather, its goal is to assess the occurrence and extent of severe hyperglycemia. This measure is also intended to be used in combination with its companion measure of hypoglycemia (Hospital Harm – Hypoglycemia) to reduce unintended consequences of measurement.</td>
+</tr>
+
+
+<tr>
+
+<th scope="row" class="row-header">Clinical Recommendation Statement</th>
+
+<td class="content-container">Multiple guidelines address recommended levels of glycemic control, though these do not define severe hyperglycemia: 
+
+From Section 16, Diabetes Care in the Hospital, in the Standards of Care in Diabetes by the American Diabetes Association (American Diabetes Association Professional Practice Committee, 2024): 
+
+16.4 Insulin and/or other therapies should be initiated or intensified for treatment of persistent hyperglycemia starting at a threshold of ≥180 mg/dL (10.0 mmol/L) (confirmed on two occasions within 24 hours) for noncritically ill (non-ICU) individuals. 
+
+16.5a Once therapy is initiated, a glycemic goal of 140–180 mg/dL (7.8–10.0 mmol/L) is recommended for most critically ill (ICU) individuals with hyperglycemia.
+
+16.5 More stringent glycemic goals, such as 110–140 mg/dL (6.1–7.8 mmol/L), may be appropriate for selected critically ill individuals and are acceptable if they can be achieved without significant hypoglycemia.
+
+From Management of Hyperglycemia in Hospitalized Adult Patients in Non-Critical Care Settings: An Endocrine Society Clinical Practice Guideline (Korytkowski et al., 2022): 
+
+Recommendation 1.1
+In adults with insulin-treated diabetes hospitalized for noncritical illness who are at high risk of hypoglycemia, we suggest the use of real-time continuous glucose monitoring (CGM) with confirmatory bedside point-of-care blood glucose (POC-BG) monitoring for adjustments in insulin dosing rather than point-of-care blood glucose (POC-BG) testing alone in hospital settings where resources and training are available.
+
+Recommendation 10.1
+In adults with no prior history of diabetes hospitalized for noncritical illness with hyperglycemia [defined as blood glucose (BG) &gt; 140 mg/dL (7.8 mmol/L)] during hospitalization, we suggest initial therapy with correctional insulin over scheduled insulin therapy (defined as basal or basal/bolus insulin) to maintain glucose targets in the range of 100 to 180 mg/dL (5.6 to 10.0 mmol/L). For patients with persistent hyperglycemia [≥2 point-of-care blood glucose (POC-BG) measurements ≥ 180 mg/dL (≥10.0 mmol/L) in a 24-hour period on correctional insulin alone], we suggest the addition of scheduled insulin therapy. 
+
+Recommendation 10.2
+In adults with diabetes treated with diet or noninsulin diabetes medications prior to admission, we suggest initial therapy with correctional insulin or scheduled insulin therapy to maintain glucose targets in the range of 100 to 180 mg/dL (5.6 to 10.0 mmol/L). For hospitalized adults started on correctional insulin alone and with persistent hyperglycemia [≥2 point-of-care blood glucose (POC-BG) measurements ≥ 180 mg/dL in a 24-hour period (≥10.0 mmol/L)], we suggest addition of scheduled insulin therapy. We suggest initiation of scheduled insulin therapy for patients with confirmed admission blood glucose (BG) ≥ 180 mg/dL (≥10.0 mmol/L). 
+
+Recommendation 10.3
+In adults with insulin-treated diabetes prior to admission who are hospitalized for noncritical illness, we recommend continuation of the scheduled insulin regimen modified for nutritional status and severity of illness to maintain glucose targets in the range of 100 to 180 mg/dL (5.6 to 10.0 mmol/L).
+
+Remarks
+Reductions in the dose of basal insulin (by 10% to 20%) at time of hospitalization may be required for patients on basal heavy insulin regimens (defined as doses of basal insulin ≥ 0.6 to 1.0 units/kg/day), in which basal insulin is being used inappropriately to cover meal-related excursions in BG.
+
+There is no clinically accepted cutoff for severe hyperglycemia. Studies have used thresholds of &gt;140, &gt;180, &gt;300, &gt;350 and &gt;400 mg/dL, among other values (American Diabetes Association Professional Practice Committee, 2024; Umpierrez et al, 2012, 2015; Jamesen et al., 2015; Donihi et al., 2011; Mendez et al, 2015; Seisa et al., 2022). Blood glucose level &lt;180 mg/dL is associated with lower rates of mortality and stroke compared with a target glucose &lt;200 mg/dL (Sathya et al., 2013). Glycemic goals may also differ among hospitalized patients. For inpatient management of hyperglycemia in noncritical care, the expert consensus recommends a target range of 100–180 mg/dL (5.6–10.0 mmol/L) for noncritically ill patients with “new” hyperglycemia as well as people with known diabetes prior to admission. Glycemic levels up to 250 mg/dL (13.9 mmol/L) may be acceptable in terminally ill patients with short life expectancy, patients with advanced kidney failure and/or on dialysis, patients at high risk for hypoglycemia, and/or patients with labile glycemic excursions. In these individuals, less aggressive treatment goals that would help avoid symptomatic hypoglycemia and/or hyperglycemia are often more appropriate (American Diabetes Association Professional Practice Committee, 2024). In an older patient with a prior history of severe hypoglycemia, some degree of hyperglycemia may be tolerated to maximize safety. Intensive insulin therapy to target glucose of 100 and 140mg/dL in the ICU did not significantly reduce perioperative complications compared with target glucose of 141 and 180mg/dL after coronary artery bypass surgery (Umpierrez et al., 2015). The current recommendation is to maintain a blood glucose level between 140-180 mg/dL (7.8-10.0 mmol/L) in both cardiac and non-cardiac ICU patients (Sreedharan et al., 2022). 
+
+For patients who present with hyperglycemic crises, neurologic status must be monitored closely, with frequent re-examination. Care should be taken to prevent over-correction of hyperglycemia and hyperosmolarity following initial ﬂuid resuscitation of these patients to prevent cerebral edema, which carries a high mortality rate (Gosmanov et al., 2021).</td>
+</tr>
+
+
+
+
+
+  
+    
+<tr>
+
+<th scope="row" class="row-header">Supplemental Data Guidance</th>
+
+<td class="content-container">For every patient evaluated by this measure also identify payer, race, ethnicity and sex; SDE Ethnicity 
+ SDE Payer 
+ SDE Race 
+ SDE Sex 
+ </td>
+</tr>
+
+  
+
+
+
+
+
+  
+    
+    <tr>
+
+<th colspan="2" scope="row" class="row-header">Measure Population Criteria (ID: Group_1)</th>
+
+</tr>
+  
+  
+  
+  
+    <tr>
+      
+        
+<th scope="row" class="row-header">Initial Population</th>
+
+      
+      <td class="content-container">
+        
+        <em>ID</em>: InitialPopulation_1
+        <br/>
+        
+        
+          <em>Description</em>:
+          <p style="white-space: pre-line" class="tab-one">Inpatient hospitalizations for patients age 18 and older that end during the measurement period, as well as either: 
+
+ - A diagnosis of diabetes that starts before or during the encounter; or 
+ - Administration of at least one dose of insulin or any hypoglycemic medication during the encounter; or 
+ - Presence of at least one glucose value &gt;=200 mg/dL at any time during the encounter</p>
+        
+        
+          
+            
+            <em>Logic Definition</em>: <a href="#cms871hhhyperfhir-initial-population">Initial Population</a> 
+          
+        
+      </td>
+    </tr>
+  
+
+  
+    <tr>
+      
+        
+<th scope="row" class="row-header">Denominator</th>
+
+      
+      <td class="content-container">
+        
+        <em>ID</em>: Denominator_1
+        <br/>
+        
+        
+          <em>Description</em>:
+          <p style="white-space: pre-line" class="tab-one">Equals Initial Population</p>
+        
+        
+          
+            
+            <em>Logic Definition</em>: <a href="#cms871hhhyperfhir-denominator">Denominator</a> 
+          
+        
+      </td>
+    </tr>
+  
+
+  
+    <tr>
+      
+        
+<th scope="row" class="row-header">Denominator Exclusion</th>
+
+      
+      <td class="content-container">
+        
+        <em>ID</em>: DenominatorExclusion_1
+        <br/>
+        
+        
+          <em>Description</em>:
+          <p style="white-space: pre-line" class="tab-one">Inpatient hospitalizations for patients with a glucose result of &gt;600 mg/dL anytime between 1 hour prior to the start of the encounter to 6 hours after the start of the encounter.
+
+-Inpatient hospitalizations for patients who have comfort care measures ordered or provided during the encounter.
+
+-Inpatient hospitalizations for patients who have a discharge disposition to hospice care at home or in a health care facility. 
+</p>
+        
+        
+          
+            
+            <em>Logic Definition</em>: <a href="#cms871hhhyperfhir-denominator-exclusions">Denominator Exclusions</a> 
+          
+        
+      </td>
+    </tr>
+  
+
+  
+    <tr>
+      
+        
+<th scope="row" class="row-header">Numerator</th>
+
+      
+      <td class="content-container">
+        
+        <em>ID</em>: Numerator_1
+        <br/>
+        
+        
+          <em>Description</em>:
+          <p style="white-space: pre-line" class="tab-one">Inpatient hospitalizations with a hyperglycemic event within the first 10 days of the encounter minus the first 24 hours, and minus the last period before discharge from the hospital if less than 24 hours
+
+A hyperglycemic event is defined as: 
+
+ - A day with at least one glucose value &gt;300 mg/dL; 
+OR
+ - A day where a glucose test and result was not found, and it was preceded by two consecutive days where at least one glucose value during each of the two days was &gt;=200 mg/dL</p>
+        
+        
+          
+            
+            <em>Logic Definition</em>: <a href="#cms871hhhyperfhir-numerator">Numerator</a> 
+          
+        
+      </td>
+    </tr>
+  
+
+  
+    <tr>
+      
+        
+<th scope="row" class="row-header">Numerator Exclusion</th>
+
+      
+      <td class="content-container">
+        
+        <em>ID</em>: NumeratorExclusion_1
+        <br/>
+        
+        
+          <em>Description</em>:
+          <p style="white-space: pre-line" class="tab-one">Inpatient hospitalizations for patients with a glucose result of &gt;600 mg/dL anytime between 1 hour prior to the start of the encounter to 6 hours after the start of the encounter.
+
+-Inpatient hospitalizations for patients who have comfort care measures ordered or provided during the encounter.
+
+-Inpatient hospitalizations for patients who have a discharge disposition to hospice care at home or in a health care facility. </p>
+        
+        
+          
+            
+            <em>Logic Definition</em>: <a href="#cms871hhhyperfhir-numerator-exclusions">Numerator Exclusions</a> 
+          
+        
+      </td>
+    </tr>
+  
+
+  
+    <tr>
+      
+        
+<th scope="row" class="row-header">Measure Observation</th>
+
+      
+      <td class="content-container">
+        
+        <em>ID</em>: MeasureObservation_1_1
+        <br/>
+        
+        
+          <em>Description</em>:
+          <p style="white-space: pre-line" class="tab-one">Measure Observation 1, associated with the denominator of the ratio: The total number of eligible days of the inpatient hospitalization which match the initial population/denominator criteria and did not meet the denominator exclusion criteria.</p>
+        
+        
+          
+            
+            <em>Logic Definition</em>: <a href="#cms871hhhyperfhir-denominator-observations">Denominator Observations</a> 
+          
+        
+      </td>
+    </tr>
+  
+
+  
+    <tr>
+      
+        
+<th scope="row" class="row-header">Measure Observation</th>
+
+      
+      <td class="content-container">
+        
+        <em>ID</em>: MeasureObservation_1_2
+        <br/>
+        
+        
+          <em>Description</em>:
+          <p style="white-space: pre-line" class="tab-one">Measure Observation 2, associated with the numerator of the ratio: The total number of hyperglycemic days during the inpatient hospitalization that meet the numerator criteria and did not meet the numerator exclusion criteria. Days with a hyperglycemic event are defined as: 
+
+- All days with a glucose level &gt;300 mg/dL (except those occurring in the first 24-hour period after admission to the hospital (including the emergency department and observation))
+OR
+- All days where a glucose was not measured, and it was immediately preceded by two contiguous, consecutive days where at least one glucose value during each of the two days was &gt;=200 mg/dL.</p>
+        
+        
+          
+            
+            <em>Logic Definition</em>: <a href="#cms871hhhyperfhir-numerator-observations">Numerator Observations</a> 
+          
+        
+      </td>
+    </tr>
+  
+
+  
+  
+  
+<tr>
+
+<th scope="row" class="row-header">Population Basis</th>
+
+<td class="content-container">Encounter</td>
+</tr>
+
+
+
+  
+<tr>
+
+<th scope="row" class="row-header">Scoring</th>
+
+<td class="content-container">[http://terminology.hl7.org/CodeSystem/measure-scoring#ratio: 'Ratio']</td>
+</tr>
+
+
+
+
+
+
+
+  
+<tr>
+
+<th scope="row" class="row-header">Type</th>
+
+<td class="content-container">[http://terminology.hl7.org/CodeSystem/measure-type#outcome: 'Outcome']</td>
+</tr>
+
+
+
+
+  
+<tr>
+
+<th scope="row" class="row-header">Rate Aggregation</th>
+
+<td class="content-container">None</td>
+</tr>
+
+
+
+  
+<tr>
+
+<th scope="row" class="row-header">Improvement Notation</th>
+
+<td class="content-container">[http://terminology.hl7.org/CodeSystem/measure-improvement-notation#decrease: 'decrease']</td>
+</tr>
+
+
+
+
+  <tr>
+
+<th colspan="2" scope="row" class="row-header">Supplemental Data Elements</th>
+
+</tr>
+
+
+<tr>
+  
+<th scope="row" class="row-header">Supplemental Data Element</th>
+
+  <td class="content-container">
+    
+      <em>ID</em>: sde-ethnicity
+      
+      <br/>
+      
+    
+    
+      
+        
+          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]
+        
+        <br/>
+      
+    
+    
+      <em>Description</em>: SDE Ethnicity
+    
+    
+      
+        <br/>
+        
+        <em>Logic Definition</em>: <a href="#cms871hhhyperfhir-sde-ethnicity">SDE Ethnicity</a> 
+      
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Supplemental Data Element</th>
+
+  <td class="content-container">
+    
+      <em>ID</em>: sde-payer
+      
+      <br/>
+      
+    
+    
+      
+        
+          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]
+        
+        <br/>
+      
+    
+    
+      <em>Description</em>: SDE Payer
+    
+    
+      
+        <br/>
+        
+        <em>Logic Definition</em>: <a href="#cms871hhhyperfhir-sde-payer">SDE Payer</a> 
+      
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Supplemental Data Element</th>
+
+  <td class="content-container">
+    
+      <em>ID</em>: sde-race
+      
+      <br/>
+      
+    
+    
+      
+        
+          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]
+        
+        <br/>
+      
+    
+    
+      <em>Description</em>: SDE Race
+    
+    
+      
+        <br/>
+        
+        <em>Logic Definition</em>: <a href="#cms871hhhyperfhir-sde-race">SDE Race</a> 
+      
+    
+  </td>
+</tr>
+
+<tr>
+  
+<th scope="row" class="row-header">Supplemental Data Element</th>
+
+  <td class="content-container">
+    
+      <em>ID</em>: sde-sex
+      
+      <br/>
+      
+    
+    
+      
+        
+          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]
+        
+        <br/>
+      
+    
+    
+      <em>Description</em>: SDE Sex
+    
+    
+      
+        <br/>
+        
+        <em>Logic Definition</em>: <a href="#cms871hhhyperfhir-sde-sex">SDE Sex</a> 
+      
+    
+  </td>
+</tr>
+
+
+<tr>
+
+<th colspan="2" scope="row" class="row-header">Measure Logic</th>
+
+</tr>
+
+<tr>
+
+<th scope="row" class="row-header">Primary Library</th>
+
+<td class="content-container">https://madie.cms.gov/Library/CMS871HHHyperFHIR</td>
+</tr>
+
+
+
+
+  
+  
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Library SDE
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: https://madie.cms.gov/Library/SupplementalDataElements|5.1.000
+    <br/>
+    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/SupplementalDataElements|5.1.000</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Library FHIRHelpers
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: https://madie.cms.gov/Library/FHIRHelpers|4.4.000
+    <br/>
+    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/FHIRHelpers|4.4.000</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Library CQMCommon
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: https://madie.cms.gov/Library/CQMCommon|4.1.000
+    <br/>
+    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/CQMCommon|4.1.000</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Library QICoreCommon
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: https://madie.cms.gov/Library/QICoreCommon|4.0.000
+    <br/>
+    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/QICoreCommon|4.0.000</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Code system SNOMEDCT
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://snomed.info/sct
+    <br/>
+    <em>Canonical URL</em>: <tt>http://snomed.info/sct</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Encounter Inpatient
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Observation Services
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Emergency Department Visit
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Diabetes
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.103.12.1001
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.103.12.1001</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Hypoglycemics Treatment Medications
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1196.394
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1196.394</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Glucose Lab Test Mass Per Volume
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.34
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.34</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Comfort Measures
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Discharged to Home for Hospice Care
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.209
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.209</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Discharged to Health Care Facility for Hospice Care
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.207
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.207</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Payer Type
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591</tt>
+    
+  </td>
+</tr>
+
+
+  
+  <tr>
+    <th scope="row" class="row-header">Direct Reference Code</th>
+    <td class="content-container">
+      
+        <em>Display</em>: Male (finding)
+        <br/>
+      
+      <em>Code</em>: 248153007
+      <br/>
+      <em>System</em>: <tt>http://snomed.info/sct</tt>
+    </td>
+  </tr>
+
+  <tr>
+    <th scope="row" class="row-header">Direct Reference Code</th>
+    <td class="content-container">
+      
+        <em>Display</em>: Female (finding)
+        <br/>
+      
+      <em>Code</em>: 248152002
+      <br/>
+      <em>System</em>: <tt>http://snomed.info/sct</tt>
+    </td>
+  </tr>
+
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: Measurement Period
+    <br/>
+    <em>Use</em>: in
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: 1
+    <br/>
+    <em>Type</em>: Period
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: SDE Sex
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: 1
+    <br/>
+    <em>Type</em>: Coding
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: Numerator
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: *
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: Denominator
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: *
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: Numerator Exclusions
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: *
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: SDE Payer
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: *
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: Initial Population
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: *
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: SDE Ethnicity
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: 1
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: Denominator Exclusions
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: *
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: SDE Race
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: 1
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  
+  <tr>
+    <th colspan="2" scope="row" class="section-header"><a name="effective-data-requirements"> </a>Measure Logic Data Requirements</th>
+  </tr>
+  
+  
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Patient
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: extension, birthDate, birthDate.value, url
+    <br/>
+   
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Encounter
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: type, status, status.value, period, hospitalization, hospitalization.dischargeDisposition
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: type</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Encounter
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: type, status, status.value, period, hospitalization, hospitalization.dischargeDisposition
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: type</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Encounter
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: type, period, status, status.value, hospitalization, hospitalization.dischargeDisposition, hospitalizationPeriod, encounter
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: type</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Condition
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: code
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: code</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.103.12.1001
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: MedicationAdministration
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: medication, status, status.value, effective
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: medication</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1196.394
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: MedicationAdministration
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: medication.reference.value, status, status.value, effective
+    <br/>
+   
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Medication
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medication
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: id.value, code
+    <br/>
+   
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Observation
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: code, effective, status, status.value, value, id, id.value
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: code</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.34
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: ServiceRequest
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: code
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: code</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Procedure
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: code
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: code</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Coverage
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: type, period
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: type</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+  
+  <tr>
+
+<th colspan="2" scope="row" class="row-header">Measure Logic Definitions</th>
+
+</tr>
+  
+          
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="supplementaldataelements-sde-sex"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> SupplementalDataElements</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Sex&quot;:
+  case
+    when Patient.sex = '248153007' then &quot;Male (finding)&quot;
+    when Patient.sex = '248152002' then &quot;Female (finding)&quot;
+    else null
+  end</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-sde-sex"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Sex&quot;:
+  SDE.&quot;SDE Sex&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-qualifying-encounter"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Qualifying Encounter&quot;:
+  [&quot;Encounter&quot;: &quot;Encounter Inpatient&quot;] InpatientEncounter
+    where AgeInYearsAt(date from start of InpatientEncounter.period) &gt;= 18
+      and InpatientEncounter.period ends during day of &quot;Measurement Period&quot;
+      and InpatientEncounter.status = 'finished'</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-hospitalization-period"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Create paring of encounters to hospitalization period so this calculation can be inspected and the result 
+ * can be reused, making the logic faster.*/
+
+
+define &quot;Encounter with Hospitalization Period&quot;:
+  &quot;Qualifying Encounter&quot; QualifyingHospitalization
+    return Tuple {
+      encounter: QualifyingHospitalization,
+      hospitalizationPeriod: CQMCommon.&quot;HospitalizationWithObservation&quot; ( QualifyingHospitalization )
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-existing-diabetes-diagnosis"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Using the already calculated pairing of hospitalization periods with encounters, filter on ones with 
+ * diabetes and return the encounter.*/
+
+
+define &quot;Encounter with Existing Diabetes Diagnosis&quot;:
+  &quot;Encounter with Hospitalization Period&quot; Hospitalization
+    with [&quot;ConditionEncounterDiagnosis&quot;: &quot;Diabetes&quot;] Diabetes
+      such that ( QICoreCommon.&quot;ToPrevalenceInterval&quot; ( Diabetes ) starts before end of Hospitalization.hospitalizationPeriod )
+    return Hospitalization.encounter</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-hypoglycemic-medication"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Using the already calculated pairing of hospitalization periods with encounters, filter on ones with 
+ * hypoglycemic medicatons and return the encounter.*/
+
+
+define &quot;Encounter with Hypoglycemic Medication&quot;:
+  from
+    &quot;Encounter with Hospitalization Period&quot; Hospitalization,
+    [&quot;MedicationAdministration&quot;: &quot;Hypoglycemics Treatment Medications&quot;] HypoglycemicMed
+    where HypoglycemicMed.status in { 'completed', 'in-progress' }
+          //and HypoglycemicMed.status != 'not-done'
+      
+      and QICoreCommon.&quot;ToInterval&quot; ( HypoglycemicMed.effective ) during Hospitalization.hospitalizationPeriod
+    return Hospitalization.encounter</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-elevated-glucose-greater-than-or-equal-to-200"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Using the already calculated pairing of hospitalization periods with encounters, filter on ones with 
+ * any elevated (&gt;= 200) blood glucose reading during the hospitalization*/
+
+
+define &quot;Encounter with Elevated Glucose Greater Than or Equal to 200&quot;:
+  &quot;Encounter with Hospitalization Period&quot; Hospitalization
+    with [&quot;LaboratoryResultObservation&quot;: &quot;Glucose Lab Test Mass Per Volume&quot;] GlucoseTest
+      such that QICoreCommon.&quot;Earliest&quot; ( GlucoseTest.effective ) during Hospitalization.hospitalizationPeriod
+        and GlucoseTest.status in { 'final', 'amended', 'corrected' }
+            //and GlucoseTest.status != 'cancelled'
+        
+        and GlucoseTest.value &gt;= 200 'mg/dL'
+    return Hospitalization.encounter</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-initial-population"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Initial Population&quot;:
+  &quot;Encounter with Existing Diabetes Diagnosis&quot;
+    union &quot;Encounter with Hypoglycemic Medication&quot;
+    union &quot;Encounter with Elevated Glucose Greater Than or Equal to 200&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-denominator"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Denominator&quot;:
+  &quot;Initial Population&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-measurement-population"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Measurement Population&quot;:
+  &quot;Denominator&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-days-in-hospitalization"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Days in Hospitalization&quot;:
+  &quot;Measurement Population&quot; EligibleInpatientHospitalization
+    let period: CQMCommon.&quot;HospitalizationWithObservation&quot; ( EligibleInpatientHospitalization ),
+    relevantPeriod: &quot;Hospital Days Max 10&quot;(period)
+    return Tuple {
+      encounter: EligibleInpatientHospitalization,
+      hospitalizationPeriod: period,
+      relevantPeriod: relevantPeriod,
+      relevantDays: &quot;Days In Period&quot;(relevantPeriod)
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-days-with-glucose-results"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Days with Glucose Results&quot;:
+  &quot;Days in Hospitalization&quot; InpatientHospitalDays
+    return Tuple {
+      encounter: InpatientHospitalDays.encounter,
+      relevantPeriod: InpatientHospitalDays.relevantPeriod,
+      relevantDays: ( InpatientHospitalDays.relevantDays EncounterDay
+          return Tuple {
+            dayNumber: EncounterDay.dayNumber,
+            dayPeriod: EncounterDay.dayPeriod,
+            hasSevereResult: exists ( [&quot;LaboratoryResultObservation&quot;: &quot;Glucose Lab Test Mass Per Volume&quot;] GlucoseTest
+                where GlucoseTest.status in { 'final', 'amended', 'corrected' }
+                  and GlucoseTest.value &gt; 300 'mg/dL'
+                  and QICoreCommon.&quot;Earliest&quot; ( GlucoseTest.effective ) during EncounterDay.dayPeriod
+            ),
+            hasElevatedResult: exists ( [&quot;LaboratoryResultObservation&quot;: &quot;Glucose Lab Test Mass Per Volume&quot;] GlucoseTest
+                where GlucoseTest.status in { 'final', 'amended', 'corrected' }
+                  and GlucoseTest.value &gt;= 200 'mg/dL'
+                  and QICoreCommon.&quot;Earliest&quot; ( GlucoseTest.effective ) during EncounterDay.dayPeriod
+            ),
+            hasNoGlucoseTest: not exists ( [&quot;LaboratoryResultObservation&quot;: &quot;Glucose Lab Test Mass Per Volume&quot;] GlucoseTest
+                where GlucoseTest.status in { 'final', 'amended', 'corrected' }
+                  and QICoreCommon.&quot;Earliest&quot; ( GlucoseTest.effective ) during EncounterDay.dayPeriod
+            )
+          }
+      )
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-days-with-hyperglycemic-events"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*# hyper days uses &quot;Relevant Encounters With Glucose Result Days&quot; to find if hyper event on each day. Skips 1st day in 'RelevantDays`. Returns boolean based on: Today high result OR Today no result AND Yesterday high result AND 2 days ago high result*/
+
+
+define &quot;Days with Hyperglycemic Events&quot;:
+  &quot;Days with Glucose Results&quot; EncounterWithResultDays
+    let eligibleEventDays: EncounterWithResultDays.relevantDays EncounterDay
+      where EncounterDay.dayNumber &gt; 1
+      return Tuple {
+        dayIndex: EncounterDay.dayNumber,
+        dayPeriod: EncounterDay.dayPeriod,
+        hasHyperglycemicEvent: ( EncounterDay.hasSevereResult
+            or ( EncounterDay.hasNoGlucoseTest
+                and EncounterWithResultDays.relevantDays[EncounterDay.dayNumber - 2].hasElevatedResult
+                and EncounterWithResultDays.relevantDays[EncounterDay.dayNumber - 3].hasElevatedResult
+            )
+        )
+      }
+    return Tuple {
+      encounter: EncounterWithResultDays.encounter,
+      relevantPeriod: EncounterWithResultDays.relevantPeriod,
+      eligibleEventDays: eligibleEventDays
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-hyperglycemic-events"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/***/
+
+
+define &quot;Encounter with Hyperglycemic Events&quot;:
+  &quot;Days with Hyperglycemic Events&quot; HyperglycemicEventDays
+    where exists ( HyperglycemicEventDays.eligibleEventDays EligibleEventDay
+        where EligibleEventDay.hasHyperglycemicEvent
+    )
+    return HyperglycemicEventDays.encounter</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-numerator"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Numerator&quot;:
+  &quot;Encounter with Hyperglycemic Events&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-glucose-greater-than-600-within-1-hour-prior-to-and-6-hours-after-encounter-start"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot;:
+  from
+    &quot;Initial Population&quot; InpatientHospitalization,
+    [&quot;LaboratoryResultObservation&quot;: &quot;Glucose Lab Test Mass Per Volume&quot;] GlucoseTest
+    let HospitalizationInterval: CQMCommon.&quot;HospitalizationWithObservation&quot; ( InpatientHospitalization ),
+    GlucoseTestTime: QICoreCommon.&quot;Earliest&quot; ( GlucoseTest.effective )
+    where GlucoseTest.value as Quantity &gt; 600 'mg/dL'
+      and GlucoseTest.status in { 'final', 'amended', 'corrected' }
+      and GlucoseTestTime during Interval[( start of HospitalizationInterval - 1 hour ), ( start of HospitalizationInterval + 6 hours )]
+    return GlucoseTest</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-glucose-tests-earlier-than-glucose-greater-than-600-within-1-hour-prior-to-and-6-hours-after-encounter-start"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Glucose Tests Earlier Than Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot;:
+  from
+    &quot;Initial Population&quot; InpatientHospitalization,
+    &quot;Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot; GlucoseResult600,
+    [&quot;LaboratoryResultObservation&quot;: &quot;Glucose Lab Test Mass Per Volume&quot;] EarlierGlucoseTest
+    let HospitalizationInterval: CQMCommon.&quot;HospitalizationWithObservation&quot; ( InpatientHospitalization ),
+    GlucoseTest600Time: QICoreCommon.&quot;Earliest&quot; ( GlucoseResult600.effective ),
+    EarlierGlucoseTestTime: QICoreCommon.&quot;Earliest&quot; ( EarlierGlucoseTest.effective )
+    where GlucoseTest600Time during Interval[( start of HospitalizationInterval - 1 hour ), ( start of HospitalizationInterval + 6 hour )]
+      and EarlierGlucoseTestTime during Interval[( start of HospitalizationInterval - 1 hour ), GlucoseTest600Time )
+      and EarlierGlucoseTest.id !~ GlucoseResult600.id
+    return GlucoseResult600</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-initial-glucose-greater-than-600-within-1-hour-prior-to-and-6-hours-after-encounter-start"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Initial Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot;:
+  &quot;Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot; GlucoseResult600
+    where not ( GlucoseResult600.id in &quot;Glucose Tests Earlier Than Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot;.id )</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-glucose-greater-than-600-within-1-hour-prior-to-and-6-hours-after-encounter-start"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Encounter with Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot;:
+  from
+    &quot;Initial Population&quot; InpatientHospitalization,
+    &quot;Initial Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot; EarlyGlucoseResult
+    where EarlyGlucoseResult.value as Quantity &gt; 600 'mg/dL'
+      and EarlyGlucoseResult.status in { 'final', 'amended', 'corrected' }
+      and QICoreCommon.&quot;Earliest&quot; ( EarlyGlucoseResult.effective ) during Interval[( start of CQMCommon.&quot;HospitalizationWithObservation&quot; ( InpatientHospitalization ) - 1 hour ), ( start of CQMCommon.&quot;HospitalizationWithObservation&quot; ( InpatientHospitalization ) + 6 hours )]
+    return InpatientHospitalization</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-comfort-measures-care"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/***/
+
+
+define &quot;Comfort Measures Care&quot;:
+  [&quot;ServiceRequest&quot;: &quot;Comfort Measures&quot;]
+    union [&quot;Procedure&quot;: &quot;Comfort Measures&quot;]</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-comfort-measures-during-hospitalization"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Encounter with Comfort Measures during Hospitalization&quot;:
+  &quot;Initial Population&quot; InpatientHospitalization
+    with &quot;Comfort Measures Care&quot; ComfortCare
+      such that Coalesce(ComfortCare.performed.toInterval(), ComfortCare.authoredOn.toInterval()) during CQMCommon.&quot;HospitalizationWithObservation&quot; ( InpatientHospitalization )</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-discharge-for-hospice-care"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Encounter with Discharge for Hospice Care&quot;:
+  &quot;Initial Population&quot; InpatientHospitalization
+    where InpatientHospitalization.hospitalization.dischargeDisposition in &quot;Discharged to Home for Hospice Care&quot;
+      or InpatientHospitalization.hospitalization.dischargeDisposition in &quot;Discharged to Health Care Facility for Hospice Care&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-early-glucose-greater-than-600-or-with-comfort-or-hospice-care"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Encounter with Early Glucose Greater Than 600 or with Comfort or Hospice Care&quot;:
+  &quot;Encounter with Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot;
+    union &quot;Encounter with Comfort Measures during Hospitalization&quot;
+    union &quot;Encounter with Discharge for Hospice Care&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-numerator-exclusions"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Numerator Exclusions&quot;:
+  &quot;Encounter with Early Glucose Greater Than 600 or with Comfort or Hospice Care&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="supplementaldataelements-sde-payer"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> SupplementalDataElements</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Payer&quot;:
+  [Coverage: type in &quot;Payer Type&quot;] Payer
+    return {
+      code: Payer.type,
+      period: Payer.period
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-sde-payer"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Payer&quot;:
+  SDE.&quot;SDE Payer&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="supplementaldataelements-sde-ethnicity"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> SupplementalDataElements</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Ethnicity&quot;:
+  Patient.ethnicity E
+    return Tuple {
+      codes: { E.ombCategory } union E.detailed,
+      display: E.text
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-sde-ethnicity"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Ethnicity&quot;:
+  SDE.&quot;SDE Ethnicity&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-denominator-exclusions"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Denominator Exclusions&quot;:
+  &quot;Encounter with Early Glucose Greater Than 600 or with Comfort or Hospice Care&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="supplementaldataelements-sde-race"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> SupplementalDataElements</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Race&quot;:
+  Patient.race R
+    return Tuple {
+      codes: R.ombCategory union R.detailed,
+      display: R.text
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-sde-race"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Race&quot;:
+  SDE.&quot;SDE Race&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="fhirhelpers-tostring"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> FHIRHelpers</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define function ToString(value uri): value.value</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="fhirhelpers-tointerval"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> FHIRHelpers</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Converts the given [Period](https://hl7.org/fhir/datatypes.html#Period)
+value to a CQL DateTime Interval
+@comment: If the start value of the given period is unspecified, the starting
+boundary of the resulting interval will be open (meaning the start of the interval
+is unknown, as opposed to interpreted as the beginning of time).
+*/
+define function ToInterval(period FHIR.Period):
+    if period is null then
+        null
+    else
+        if period.&quot;start&quot; is null then
+            Interval(period.&quot;start&quot;.value, period.&quot;end&quot;.value]
+        else
+            Interval[period.&quot;start&quot;.value, period.&quot;end&quot;.value]</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cqmcommon-hospitalizationwithobservation"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CQMCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Hospitalization with Observation returns the total interval from the start of any immediately prior emergency department visit through the observation visit to the discharge of the given encounter
+@deprecated: This function is deprecated. Use the fluent function `hospitalizationWithObservation()` instead.
+*/
+define function &quot;HospitalizationWithObservation&quot;(TheEncounter Encounter ):
+  TheEncounter Visit
+  		let ObsVisit: Last([Encounter: &quot;Observation Services&quot;] LastObs
+  				where LastObs.status = 'finished'
+            and LastObs.period ends 1 hour or less on or before start of Visit.period
+  				sort by end of period
+  			),
+  			VisitStart: Coalesce(start of ObsVisit.period, start of Visit.period),
+  			EDVisit: Last([Encounter: &quot;Emergency Department Visit&quot;] LastED
+  				where LastED.status = 'finished'
+            and LastED.period ends 1 hour or less on or before VisitStart
+  				sort by end of period
+  			)
+  		return Interval[Coalesce(start of EDVisit.period, VisitStart), end of Visit.period]</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="qicorecommon-toprevalenceinterval"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> QICoreCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Returns an interval representing the normalized prevalence period of a given Condition.
+@comment: Uses the ToInterval and ToAbatementInterval functions to determine the widest potential interval from
+onset to abatement as specified in the given Condition. If the condition is active, or has an abatement date the resulting 
+interval will have a closed ending boundary. Otherwise, the resulting interval will have an open ending boundary.
+@deprecated: This function is deprecated. Use the `prevalenceInterval()` fluent function instead
+*/
+define function ToPrevalenceInterval(condition Choice&lt;&quot;ConditionEncounterDiagnosis&quot;, &quot;ConditionProblemsHealthConcerns&quot;&gt;):
+if condition.clinicalStatus ~ &quot;active&quot;
+  or condition.clinicalStatus ~ &quot;recurrence&quot;
+  or condition.clinicalStatus ~ &quot;relapse&quot; then
+  Interval[start of ToInterval(condition.onset), end of ToAbatementInterval(condition)]
+else
+   (end of ToAbatementInterval(condition)) abatementDate
+    return if abatementDate is null then
+      Interval[start of ToInterval(condition.onset), abatementDate)
+    else
+      Interval[start of ToInterval(condition.onset), abatementDate]</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="qicorecommon-earliest"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> QICoreCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Given an interval, return the starting point if the interval has a starting boundary specified,
+otherwise, return the ending point
+@deprecated: This function is deprecated. Use the fluent function `earliest()` instead
+*/
+define function &quot;Earliest&quot;(choice Choice&lt;DateTime, Quantity, Interval&lt;DateTime&gt;, Interval&lt;Quantity&gt;&gt; ):
+  (choice.toInterval()) period
+    return
+      if (HasStart(period)) then start of period
+      else end of period</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-hospital-days-max-10"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Crops an interval to a maximum length of 10 days.*/
+
+
+define function &quot;Hospital Days Max 10&quot;(Period Interval&lt;DateTime&gt;):
+  Interval[start of Period, Min({ 
+    end of Period, start of Period + 10 days }
+  )]</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-days-in-period"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Creates a list of 24 hour long intervals in an interval paired with the index (1 indexed) to which 24 hour interval it is.*/
+
+
+define function &quot;Days In Period&quot;(Period Interval&lt;DateTime&gt;):
+  ( &quot;Interval To Day Numbers&quot;(Period) ) DayNumber
+    let startPeriod: start of Period + ( 24 hours * ( DayNumber - 1 ) ),
+    endPeriod: if ( hours between startPeriod and end of Period &lt; 24 ) then startPeriod 
+      else start of Period + ( 24 hours * DayNumber )
+    return Tuple {
+      dayNumber: DayNumber,
+      dayPeriod: Interval[startPeriod, endPeriod )
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-interval-to-day-numbers"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Creates a list of integers from 1 to how many days are in the interval. Note, this wont create an index for
+ * the final day if it is less than 24 hours. This also includes the first 24 hour period.*/
+
+
+define function &quot;Interval To Day Numbers&quot;(Period Interval&lt;DateTime&gt;):
+  ( expand { Interval[1, duration in days between start of Period and end of Period]} ) DayExpand
+    return end of DayExpand</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="qicorecommon-tointerval"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> QICoreCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Normalizes a value that is a choice of timing-valued types to an equivalent interval
+@comment: Normalizes a choice type of DateTime, Quanitty, Interval&lt;DateTime&gt;, or Interval&lt;Quantity&gt; types
+to an equivalent interval. This selection of choice types is a superset of the majority of choice types that are used as possible
+representations for timing-valued elements in QICore, allowing this function to be used across any resource.
+The input can be provided as a DateTime, Quantity, Interval&lt;DateTime&gt; or Interval&lt;Quantity&gt;.
+The intent of this function is to provide a clear and concise mechanism to treat single
+elements that have multiple possible representations as intervals so that logic doesn't have to account
+for the variability. More complex calculations (such as medication request period or dispense period
+calculation) need specific guidance and consideration. That guidance may make use of this function, but
+the focus of this function is on single element calculations where the semantics are unambiguous.
+If the input is a DateTime, the result a DateTime Interval beginning and ending on that DateTime.
+If the input is a Quantity, the quantity is expected to be a calendar-duration interpreted as an Age,
+and the result is a DateTime Interval beginning on the Date the patient turned that age and ending immediately before one year later.
+If the input is a DateTime Interval, the result is the input.
+If the input is a Quantity Interval, the quantities are expected to be calendar-durations interpreted as an Age, and the result
+is a DateTime Interval beginning on the date the patient turned the age given as the start of the quantity interval, and ending
+immediately before one year later than the date the patient turned the age given as the end of the quantity interval.
+If the input is a Timing, an error will be thrown indicating that Timing calculations are not implemented. Any other input will reslt in a null DateTime Interval
+*/
+define fluent function toInterval(choice Choice&lt;DateTime, Quantity, Interval&lt;DateTime&gt;, Interval&lt;Quantity&gt;, Timing&gt;):
+  case
+	  when choice is DateTime then
+    	Interval[choice as DateTime, choice as DateTime]
+		when choice is Interval&lt;DateTime&gt; then
+  		choice as Interval&lt;DateTime&gt;
+		when choice is Quantity then
+		  Interval[Patient.birthDate + (choice as Quantity),
+			  Patient.birthDate + (choice as Quantity) + 1 year)
+		when choice is Interval&lt;Quantity&gt; then
+		  Interval[Patient.birthDate + (choice.low as Quantity),
+			  Patient.birthDate + (choice.high as Quantity) + 1 year)
+		when choice is Timing then
+      Message(null, true, 'NOT_IMPLEMENTED', 'Error', 'Calculation of an interval from a Timing value is not supported') as Interval&lt;DateTime&gt;
+		else
+			null as Interval&lt;DateTime&gt;
+	end</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-denominator-observations"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Counts the number of eligible days in an encounter. This simply filters and counts the data built in
+ * &quot;Relevant Encounters With Hyperglycemic Event Days&quot;.*/
+
+
+define function &quot;Denominator Observations&quot;(QualifyingEncounter Encounter):
+  if QualifyingEncounter.id in &quot;Denominator Exclusions&quot;.id then singleton from ( &quot;Days with Hyperglycemic Events&quot; EncounterWithEventDays
+      where EncounterWithEventDays.encounter = QualifyingEncounter
+      return 0
+  ) 
+    else singleton from ( &quot;Days with Hyperglycemic Events&quot; EncounterWithEventDays
+      where EncounterWithEventDays.encounter = QualifyingEncounter
+      return Count(EncounterWithEventDays.eligibleEventDays)
+  )</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="fhirhelpers-tocode"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> FHIRHelpers</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Converts the given FHIR [Coding](https://hl7.org/fhir/datatypes.html#Coding) value to a CQL Code.
+*/
+define function ToCode(coding FHIR.Coding):
+    if coding is null then
+        null
+    else
+        System.Code {
+          code: coding.code.value,
+          system: coding.system.value,
+          version: coding.version.value,
+          display: coding.display.value
+        }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-numerator-observations"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Counts the number of eligible days with a hyperglycemic event in an encounter. This simply filters and counts the data built in
+ * &quot;Relevant Encounters With Hyperglycemic Event Days&quot;.*/
+
+
+define function &quot;Numerator Observations&quot;(QualifyingEncounter Encounter):
+  if QualifyingEncounter.id in &quot;Denominator Exclusions&quot;.id then singleton from ( &quot;Days with Hyperglycemic Events&quot; EncounterWithEventDays
+      where EncounterWithEventDays.encounter = QualifyingEncounter
+      return 0
+  ) 
+    else singleton from ( &quot;Days with Hyperglycemic Events&quot; EncounterWithEventDays
+      where EncounterWithEventDays.encounter = QualifyingEncounter
+      return Count(EncounterWithEventDays.eligibleEventDays EligibleEventDay
+          where EligibleEventDay.hasHyperglycemicEvent
+      )
+  )</code></pre>
+  </td>
+
+</tr>
+
+  
+  
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Library SDE
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: https://madie.cms.gov/Library/SupplementalDataElements|5.1.000
+    <br/>
+    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/SupplementalDataElements|5.1.000</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Library FHIRHelpers
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: https://madie.cms.gov/Library/FHIRHelpers|4.4.000
+    <br/>
+    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/FHIRHelpers|4.4.000</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Library CQMCommon
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: https://madie.cms.gov/Library/CQMCommon|4.1.000
+    <br/>
+    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/CQMCommon|4.1.000</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Library QICoreCommon
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: https://madie.cms.gov/Library/QICoreCommon|4.0.000
+    <br/>
+    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/QICoreCommon|4.0.000</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Code system SNOMEDCT
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://snomed.info/sct
+    <br/>
+    <em>Canonical URL</em>: <tt>http://snomed.info/sct</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Encounter Inpatient
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Observation Services
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Emergency Department Visit
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Diabetes
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.103.12.1001
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.103.12.1001</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Hypoglycemics Treatment Medications
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1196.394
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1196.394</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Glucose Lab Test Mass Per Volume
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.34
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.34</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Comfort Measures
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Discharged to Home for Hospice Care
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.209
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.209</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Discharged to Health Care Facility for Hospice Care
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.207
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.207</tt>
+    
+  </td>
+</tr>
+
+<tr>
+  
+  
+  
+  
+  
+<th scope="row" class="row-header">Dependency</th>
+
+  
+  <td class="content-container">
+    
+    <em>Description</em>: Value set Payer Type
+    
+    <br/>
+    
+    
+    
+    
+    
+    
+    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591
+    <br/>
+    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591</tt>
+    
+  </td>
+</tr>
+
+
+  
+  <tr>
+    <th scope="row" class="row-header">Direct Reference Code</th>
+    <td class="content-container">
+      
+        <em>Display</em>: Male (finding)
+        <br/>
+      
+      <em>Code</em>: 248153007
+      <br/>
+      <em>System</em>: <tt>http://snomed.info/sct</tt>
+    </td>
+  </tr>
+
+  <tr>
+    <th scope="row" class="row-header">Direct Reference Code</th>
+    <td class="content-container">
+      
+        <em>Display</em>: Female (finding)
+        <br/>
+      
+      <em>Code</em>: 248152002
+      <br/>
+      <em>System</em>: <tt>http://snomed.info/sct</tt>
+    </td>
+  </tr>
+
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: Measurement Period
+    <br/>
+    <em>Use</em>: in
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: 1
+    <br/>
+    <em>Type</em>: Period
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: Numerator
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: *
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: Denominator
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: *
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: Numerator Exclusions
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: *
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: Initial Population
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: *
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: Denominator Exclusions
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: *
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: SDE Sex
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: 1
+    <br/>
+    <em>Type</em>: Coding
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: SDE Payer
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: *
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: SDE Ethnicity
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: 1
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  <tr>
+  
+<th scope="row" class="row-header">Parameter</th>
+
+  <td class="content-container">
+    <em>Name</em>: SDE Race
+    <br/>
+    <em>Use</em>: out
+    <br/>
+    <em>Min Cardinality</em>: 0
+    <br/>
+    <em>Max Cardinality</em>: 1
+    <br/>
+    <em>Type</em>: Resource
+  </td>
+</tr>
+  
+  
+  <tr>
+    <th colspan="2" scope="row" class="section-header"><a name="effective-data-requirements"> </a>Measure Logic Data Requirements</th>
+  </tr>
+  
+  
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Patient
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: extension, birthDate, birthDate.value, url
+    <br/>
+   
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Encounter
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: type, status, status.value, period, hospitalization, hospitalization.dischargeDisposition
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: type</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Encounter
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: type, status, status.value, period, hospitalization, hospitalization.dischargeDisposition
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: type</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Encounter
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: type, period, status, status.value, hospitalization, hospitalization.dischargeDisposition, hospitalizationPeriod, encounter
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: type</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Condition
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: code
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: code</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.103.12.1001
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: MedicationAdministration
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: medication, status, status.value, effective
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: medication</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1196.394
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: MedicationAdministration
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: medication.reference.value, status, status.value, effective
+    <br/>
+   
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Medication
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medication
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: id.value, code
+    <br/>
+   
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Observation
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: code, effective, status, status.value, value, id, id.value
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: code</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.34
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: ServiceRequest
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: code
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: code</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Procedure
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: code
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: code</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+<tr>
+  <th scope="row" class="row-header">Data Requirement</th>
+  <td class="content-container">
+    <em>Type</em>: Coverage
+    <br/>
+  
+    <em>Profile(s)</em>: 
+  
+    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage
+    <br/>        
+  
+   
+   
+    <em>Must Support Elements</em>: type, period
+    <br/>
+   
+  
+    <em>Code Filter(s)</em>: 
+    <br/>
+  
+  
+    <span class="tab-one"><em>Path</em>: type</span>
+    <br/>
+  
+  
+  
+    <span class="tab-one"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591
+    <br/> 
+  
+  
+  
+   
+  </td>
+</tr>
+
+  
+  <tr>
+
+<th colspan="2" scope="row" class="row-header">Measure Logic Definitions</th>
+
+</tr>
+  
+          
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="supplementaldataelements-sde-sex"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> SupplementalDataElements</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Sex&quot;:
+  case
+    when Patient.sex = '248153007' then &quot;Male (finding)&quot;
+    when Patient.sex = '248152002' then &quot;Female (finding)&quot;
+    else null
+  end</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-sde-sex"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Sex&quot;:
+  SDE.&quot;SDE Sex&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-qualifying-encounter"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Qualifying Encounter&quot;:
+  [&quot;Encounter&quot;: &quot;Encounter Inpatient&quot;] InpatientEncounter
+    where AgeInYearsAt(date from start of InpatientEncounter.period) &gt;= 18
+      and InpatientEncounter.period ends during day of &quot;Measurement Period&quot;
+      and InpatientEncounter.status = 'finished'</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-hospitalization-period"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Create paring of encounters to hospitalization period so this calculation can be inspected and the result 
+ * can be reused, making the logic faster.*/
+
+
+define &quot;Encounter with Hospitalization Period&quot;:
+  &quot;Qualifying Encounter&quot; QualifyingHospitalization
+    return Tuple {
+      encounter: QualifyingHospitalization,
+      hospitalizationPeriod: CQMCommon.&quot;HospitalizationWithObservation&quot; ( QualifyingHospitalization )
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-existing-diabetes-diagnosis"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Using the already calculated pairing of hospitalization periods with encounters, filter on ones with 
+ * diabetes and return the encounter.*/
+
+
+define &quot;Encounter with Existing Diabetes Diagnosis&quot;:
+  &quot;Encounter with Hospitalization Period&quot; Hospitalization
+    with [&quot;ConditionEncounterDiagnosis&quot;: &quot;Diabetes&quot;] Diabetes
+      such that ( QICoreCommon.&quot;ToPrevalenceInterval&quot; ( Diabetes ) starts before end of Hospitalization.hospitalizationPeriod )
+    return Hospitalization.encounter</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-hypoglycemic-medication"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Using the already calculated pairing of hospitalization periods with encounters, filter on ones with 
+ * hypoglycemic medicatons and return the encounter.*/
+
+
+define &quot;Encounter with Hypoglycemic Medication&quot;:
+  from
+    &quot;Encounter with Hospitalization Period&quot; Hospitalization,
+    [&quot;MedicationAdministration&quot;: &quot;Hypoglycemics Treatment Medications&quot;] HypoglycemicMed
+    where HypoglycemicMed.status in { 'completed', 'in-progress' }
+          //and HypoglycemicMed.status != 'not-done'
+      
+      and QICoreCommon.&quot;ToInterval&quot; ( HypoglycemicMed.effective ) during Hospitalization.hospitalizationPeriod
+    return Hospitalization.encounter</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-elevated-glucose-greater-than-or-equal-to-200"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Using the already calculated pairing of hospitalization periods with encounters, filter on ones with 
+ * any elevated (&gt;= 200) blood glucose reading during the hospitalization*/
+
+
+define &quot;Encounter with Elevated Glucose Greater Than or Equal to 200&quot;:
+  &quot;Encounter with Hospitalization Period&quot; Hospitalization
+    with [&quot;LaboratoryResultObservation&quot;: &quot;Glucose Lab Test Mass Per Volume&quot;] GlucoseTest
+      such that QICoreCommon.&quot;Earliest&quot; ( GlucoseTest.effective ) during Hospitalization.hospitalizationPeriod
+        and GlucoseTest.status in { 'final', 'amended', 'corrected' }
+            //and GlucoseTest.status != 'cancelled'
+        
+        and GlucoseTest.value &gt;= 200 'mg/dL'
+    return Hospitalization.encounter</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-initial-population"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Initial Population&quot;:
+  &quot;Encounter with Existing Diabetes Diagnosis&quot;
+    union &quot;Encounter with Hypoglycemic Medication&quot;
+    union &quot;Encounter with Elevated Glucose Greater Than or Equal to 200&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-denominator"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Denominator&quot;:
+  &quot;Initial Population&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-measurement-population"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Measurement Population&quot;:
+  &quot;Denominator&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-days-in-hospitalization"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Days in Hospitalization&quot;:
+  &quot;Measurement Population&quot; EligibleInpatientHospitalization
+    let period: CQMCommon.&quot;HospitalizationWithObservation&quot; ( EligibleInpatientHospitalization ),
+    relevantPeriod: &quot;Hospital Days Max 10&quot;(period)
+    return Tuple {
+      encounter: EligibleInpatientHospitalization,
+      hospitalizationPeriod: period,
+      relevantPeriod: relevantPeriod,
+      relevantDays: &quot;Days In Period&quot;(relevantPeriod)
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-days-with-glucose-results"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Days with Glucose Results&quot;:
+  &quot;Days in Hospitalization&quot; InpatientHospitalDays
+    return Tuple {
+      encounter: InpatientHospitalDays.encounter,
+      relevantPeriod: InpatientHospitalDays.relevantPeriod,
+      relevantDays: ( InpatientHospitalDays.relevantDays EncounterDay
+          return Tuple {
+            dayNumber: EncounterDay.dayNumber,
+            dayPeriod: EncounterDay.dayPeriod,
+            hasSevereResult: exists ( [&quot;LaboratoryResultObservation&quot;: &quot;Glucose Lab Test Mass Per Volume&quot;] GlucoseTest
+                where GlucoseTest.status in { 'final', 'amended', 'corrected' }
+                  and GlucoseTest.value &gt; 300 'mg/dL'
+                  and QICoreCommon.&quot;Earliest&quot; ( GlucoseTest.effective ) during EncounterDay.dayPeriod
+            ),
+            hasElevatedResult: exists ( [&quot;LaboratoryResultObservation&quot;: &quot;Glucose Lab Test Mass Per Volume&quot;] GlucoseTest
+                where GlucoseTest.status in { 'final', 'amended', 'corrected' }
+                  and GlucoseTest.value &gt;= 200 'mg/dL'
+                  and QICoreCommon.&quot;Earliest&quot; ( GlucoseTest.effective ) during EncounterDay.dayPeriod
+            ),
+            hasNoGlucoseTest: not exists ( [&quot;LaboratoryResultObservation&quot;: &quot;Glucose Lab Test Mass Per Volume&quot;] GlucoseTest
+                where GlucoseTest.status in { 'final', 'amended', 'corrected' }
+                  and QICoreCommon.&quot;Earliest&quot; ( GlucoseTest.effective ) during EncounterDay.dayPeriod
+            )
+          }
+      )
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-days-with-hyperglycemic-events"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*# hyper days uses &quot;Relevant Encounters With Glucose Result Days&quot; to find if hyper event on each day. Skips 1st day in 'RelevantDays`. Returns boolean based on: Today high result OR Today no result AND Yesterday high result AND 2 days ago high result*/
+
+
+define &quot;Days with Hyperglycemic Events&quot;:
+  &quot;Days with Glucose Results&quot; EncounterWithResultDays
+    let eligibleEventDays: EncounterWithResultDays.relevantDays EncounterDay
+      where EncounterDay.dayNumber &gt; 1
+      return Tuple {
+        dayIndex: EncounterDay.dayNumber,
+        dayPeriod: EncounterDay.dayPeriod,
+        hasHyperglycemicEvent: ( EncounterDay.hasSevereResult
+            or ( EncounterDay.hasNoGlucoseTest
+                and EncounterWithResultDays.relevantDays[EncounterDay.dayNumber - 2].hasElevatedResult
+                and EncounterWithResultDays.relevantDays[EncounterDay.dayNumber - 3].hasElevatedResult
+            )
+        )
+      }
+    return Tuple {
+      encounter: EncounterWithResultDays.encounter,
+      relevantPeriod: EncounterWithResultDays.relevantPeriod,
+      eligibleEventDays: eligibleEventDays
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-hyperglycemic-events"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/***/
+
+
+define &quot;Encounter with Hyperglycemic Events&quot;:
+  &quot;Days with Hyperglycemic Events&quot; HyperglycemicEventDays
+    where exists ( HyperglycemicEventDays.eligibleEventDays EligibleEventDay
+        where EligibleEventDay.hasHyperglycemicEvent
+    )
+    return HyperglycemicEventDays.encounter</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-numerator"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Numerator&quot;:
+  &quot;Encounter with Hyperglycemic Events&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-glucose-greater-than-600-within-1-hour-prior-to-and-6-hours-after-encounter-start"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot;:
+  from
+    &quot;Initial Population&quot; InpatientHospitalization,
+    [&quot;LaboratoryResultObservation&quot;: &quot;Glucose Lab Test Mass Per Volume&quot;] GlucoseTest
+    let HospitalizationInterval: CQMCommon.&quot;HospitalizationWithObservation&quot; ( InpatientHospitalization ),
+    GlucoseTestTime: QICoreCommon.&quot;Earliest&quot; ( GlucoseTest.effective )
+    where GlucoseTest.value as Quantity &gt; 600 'mg/dL'
+      and GlucoseTest.status in { 'final', 'amended', 'corrected' }
+      and GlucoseTestTime during Interval[( start of HospitalizationInterval - 1 hour ), ( start of HospitalizationInterval + 6 hours )]
+    return GlucoseTest</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-glucose-tests-earlier-than-glucose-greater-than-600-within-1-hour-prior-to-and-6-hours-after-encounter-start"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Glucose Tests Earlier Than Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot;:
+  from
+    &quot;Initial Population&quot; InpatientHospitalization,
+    &quot;Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot; GlucoseResult600,
+    [&quot;LaboratoryResultObservation&quot;: &quot;Glucose Lab Test Mass Per Volume&quot;] EarlierGlucoseTest
+    let HospitalizationInterval: CQMCommon.&quot;HospitalizationWithObservation&quot; ( InpatientHospitalization ),
+    GlucoseTest600Time: QICoreCommon.&quot;Earliest&quot; ( GlucoseResult600.effective ),
+    EarlierGlucoseTestTime: QICoreCommon.&quot;Earliest&quot; ( EarlierGlucoseTest.effective )
+    where GlucoseTest600Time during Interval[( start of HospitalizationInterval - 1 hour ), ( start of HospitalizationInterval + 6 hour )]
+      and EarlierGlucoseTestTime during Interval[( start of HospitalizationInterval - 1 hour ), GlucoseTest600Time )
+      and EarlierGlucoseTest.id !~ GlucoseResult600.id
+    return GlucoseResult600</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-initial-glucose-greater-than-600-within-1-hour-prior-to-and-6-hours-after-encounter-start"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Initial Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot;:
+  &quot;Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot; GlucoseResult600
+    where not ( GlucoseResult600.id in &quot;Glucose Tests Earlier Than Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot;.id )</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-glucose-greater-than-600-within-1-hour-prior-to-and-6-hours-after-encounter-start"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Encounter with Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot;:
+  from
+    &quot;Initial Population&quot; InpatientHospitalization,
+    &quot;Initial Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot; EarlyGlucoseResult
+    where EarlyGlucoseResult.value as Quantity &gt; 600 'mg/dL'
+      and EarlyGlucoseResult.status in { 'final', 'amended', 'corrected' }
+      and QICoreCommon.&quot;Earliest&quot; ( EarlyGlucoseResult.effective ) during Interval[( start of CQMCommon.&quot;HospitalizationWithObservation&quot; ( InpatientHospitalization ) - 1 hour ), ( start of CQMCommon.&quot;HospitalizationWithObservation&quot; ( InpatientHospitalization ) + 6 hours )]
+    return InpatientHospitalization</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-comfort-measures-care"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/***/
+
+
+define &quot;Comfort Measures Care&quot;:
+  [&quot;ServiceRequest&quot;: &quot;Comfort Measures&quot;]
+    union [&quot;Procedure&quot;: &quot;Comfort Measures&quot;]</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-comfort-measures-during-hospitalization"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Encounter with Comfort Measures during Hospitalization&quot;:
+  &quot;Initial Population&quot; InpatientHospitalization
+    with &quot;Comfort Measures Care&quot; ComfortCare
+      such that Coalesce(ComfortCare.performed.toInterval(), ComfortCare.authoredOn.toInterval()) during CQMCommon.&quot;HospitalizationWithObservation&quot; ( InpatientHospitalization )</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-discharge-for-hospice-care"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Encounter with Discharge for Hospice Care&quot;:
+  &quot;Initial Population&quot; InpatientHospitalization
+    where InpatientHospitalization.hospitalization.dischargeDisposition in &quot;Discharged to Home for Hospice Care&quot;
+      or InpatientHospitalization.hospitalization.dischargeDisposition in &quot;Discharged to Health Care Facility for Hospice Care&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-encounter-with-early-glucose-greater-than-600-or-with-comfort-or-hospice-care"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Encounter with Early Glucose Greater Than 600 or with Comfort or Hospice Care&quot;:
+  &quot;Encounter with Glucose Greater Than 600 within 1 Hour Prior To and 6 Hours After Encounter Start&quot;
+    union &quot;Encounter with Comfort Measures during Hospitalization&quot;
+    union &quot;Encounter with Discharge for Hospice Care&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-numerator-exclusions"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Numerator Exclusions&quot;:
+  &quot;Encounter with Early Glucose Greater Than 600 or with Comfort or Hospice Care&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="supplementaldataelements-sde-payer"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> SupplementalDataElements</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Payer&quot;:
+  [Coverage: type in &quot;Payer Type&quot;] Payer
+    return {
+      code: Payer.type,
+      period: Payer.period
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-sde-payer"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Payer&quot;:
+  SDE.&quot;SDE Payer&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="supplementaldataelements-sde-ethnicity"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> SupplementalDataElements</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Ethnicity&quot;:
+  Patient.ethnicity E
+    return Tuple {
+      codes: { E.ombCategory } union E.detailed,
+      display: E.text
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-sde-ethnicity"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Ethnicity&quot;:
+  SDE.&quot;SDE Ethnicity&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-denominator-exclusions"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;Denominator Exclusions&quot;:
+  &quot;Encounter with Early Glucose Greater Than 600 or with Comfort or Hospice Care&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="supplementaldataelements-sde-race"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> SupplementalDataElements</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Race&quot;:
+  Patient.race R
+    return Tuple {
+      codes: R.ombCategory union R.detailed,
+      display: R.text
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-sde-race"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define &quot;SDE Race&quot;:
+  SDE.&quot;SDE Race&quot;</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="fhirhelpers-tostring"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> FHIRHelpers</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define function ToString(value uri): value.value</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="fhirhelpers-tointerval"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> FHIRHelpers</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Converts the given [Period](https://hl7.org/fhir/datatypes.html#Period)
+value to a CQL DateTime Interval
+@comment: If the start value of the given period is unspecified, the starting
+boundary of the resulting interval will be open (meaning the start of the interval
+is unknown, as opposed to interpreted as the beginning of time).
+*/
+define function ToInterval(period FHIR.Period):
+    if period is null then
+        null
+    else
+        if period.&quot;start&quot; is null then
+            Interval(period.&quot;start&quot;.value, period.&quot;end&quot;.value]
+        else
+            Interval[period.&quot;start&quot;.value, period.&quot;end&quot;.value]</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cqmcommon-hospitalizationwithobservation"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CQMCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Hospitalization with Observation returns the total interval from the start of any immediately prior emergency department visit through the observation visit to the discharge of the given encounter
+@deprecated: This function is deprecated. Use the fluent function `hospitalizationWithObservation()` instead.
+*/
+define function &quot;HospitalizationWithObservation&quot;(TheEncounter Encounter ):
+  TheEncounter Visit
+  		let ObsVisit: Last([Encounter: &quot;Observation Services&quot;] LastObs
+  				where LastObs.status = 'finished'
+            and LastObs.period ends 1 hour or less on or before start of Visit.period
+  				sort by end of period
+  			),
+  			VisitStart: Coalesce(start of ObsVisit.period, start of Visit.period),
+  			EDVisit: Last([Encounter: &quot;Emergency Department Visit&quot;] LastED
+  				where LastED.status = 'finished'
+            and LastED.period ends 1 hour or less on or before VisitStart
+  				sort by end of period
+  			)
+  		return Interval[Coalesce(start of EDVisit.period, VisitStart), end of Visit.period]</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="qicorecommon-toprevalenceinterval"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> QICoreCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Returns an interval representing the normalized prevalence period of a given Condition.
+@comment: Uses the ToInterval and ToAbatementInterval functions to determine the widest potential interval from
+onset to abatement as specified in the given Condition. If the condition is active, or has an abatement date the resulting 
+interval will have a closed ending boundary. Otherwise, the resulting interval will have an open ending boundary.
+@deprecated: This function is deprecated. Use the `prevalenceInterval()` fluent function instead
+*/
+define function ToPrevalenceInterval(condition Choice&lt;&quot;ConditionEncounterDiagnosis&quot;, &quot;ConditionProblemsHealthConcerns&quot;&gt;):
+if condition.clinicalStatus ~ &quot;active&quot;
+  or condition.clinicalStatus ~ &quot;recurrence&quot;
+  or condition.clinicalStatus ~ &quot;relapse&quot; then
+  Interval[start of ToInterval(condition.onset), end of ToAbatementInterval(condition)]
+else
+   (end of ToAbatementInterval(condition)) abatementDate
+    return if abatementDate is null then
+      Interval[start of ToInterval(condition.onset), abatementDate)
+    else
+      Interval[start of ToInterval(condition.onset), abatementDate]</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="qicorecommon-earliest"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> QICoreCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Given an interval, return the starting point if the interval has a starting boundary specified,
+otherwise, return the ending point
+@deprecated: This function is deprecated. Use the fluent function `earliest()` instead
+*/
+define function &quot;Earliest&quot;(choice Choice&lt;DateTime, Quantity, Interval&lt;DateTime&gt;, Interval&lt;Quantity&gt;&gt; ):
+  (choice.toInterval()) period
+    return
+      if (HasStart(period)) then start of period
+      else end of period</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-hospital-days-max-10"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Crops an interval to a maximum length of 10 days.*/
+
+
+define function &quot;Hospital Days Max 10&quot;(Period Interval&lt;DateTime&gt;):
+  Interval[start of Period, Min({ 
+    end of Period, start of Period + 10 days }
+  )]</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-days-in-period"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Creates a list of 24 hour long intervals in an interval paired with the index (1 indexed) to which 24 hour interval it is.*/
+
+
+define function &quot;Days In Period&quot;(Period Interval&lt;DateTime&gt;):
+  ( &quot;Interval To Day Numbers&quot;(Period) ) DayNumber
+    let startPeriod: start of Period + ( 24 hours * ( DayNumber - 1 ) ),
+    endPeriod: if ( hours between startPeriod and end of Period &lt; 24 ) then startPeriod 
+      else start of Period + ( 24 hours * DayNumber )
+    return Tuple {
+      dayNumber: DayNumber,
+      dayPeriod: Interval[startPeriod, endPeriod )
+    }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-interval-to-day-numbers"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Creates a list of integers from 1 to how many days are in the interval. Note, this wont create an index for
+ * the final day if it is less than 24 hours. This also includes the first 24 hour period.*/
+
+
+define function &quot;Interval To Day Numbers&quot;(Period Interval&lt;DateTime&gt;):
+  ( expand { Interval[1, duration in days between start of Period and end of Period]} ) DayExpand
+    return end of DayExpand</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="qicorecommon-tointerval"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> QICoreCommon</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Normalizes a value that is a choice of timing-valued types to an equivalent interval
+@comment: Normalizes a choice type of DateTime, Quanitty, Interval&lt;DateTime&gt;, or Interval&lt;Quantity&gt; types
+to an equivalent interval. This selection of choice types is a superset of the majority of choice types that are used as possible
+representations for timing-valued elements in QICore, allowing this function to be used across any resource.
+The input can be provided as a DateTime, Quantity, Interval&lt;DateTime&gt; or Interval&lt;Quantity&gt;.
+The intent of this function is to provide a clear and concise mechanism to treat single
+elements that have multiple possible representations as intervals so that logic doesn't have to account
+for the variability. More complex calculations (such as medication request period or dispense period
+calculation) need specific guidance and consideration. That guidance may make use of this function, but
+the focus of this function is on single element calculations where the semantics are unambiguous.
+If the input is a DateTime, the result a DateTime Interval beginning and ending on that DateTime.
+If the input is a Quantity, the quantity is expected to be a calendar-duration interpreted as an Age,
+and the result is a DateTime Interval beginning on the Date the patient turned that age and ending immediately before one year later.
+If the input is a DateTime Interval, the result is the input.
+If the input is a Quantity Interval, the quantities are expected to be calendar-durations interpreted as an Age, and the result
+is a DateTime Interval beginning on the date the patient turned the age given as the start of the quantity interval, and ending
+immediately before one year later than the date the patient turned the age given as the end of the quantity interval.
+If the input is a Timing, an error will be thrown indicating that Timing calculations are not implemented. Any other input will reslt in a null DateTime Interval
+*/
+define fluent function toInterval(choice Choice&lt;DateTime, Quantity, Interval&lt;DateTime&gt;, Interval&lt;Quantity&gt;, Timing&gt;):
+  case
+	  when choice is DateTime then
+    	Interval[choice as DateTime, choice as DateTime]
+		when choice is Interval&lt;DateTime&gt; then
+  		choice as Interval&lt;DateTime&gt;
+		when choice is Quantity then
+		  Interval[Patient.birthDate + (choice as Quantity),
+			  Patient.birthDate + (choice as Quantity) + 1 year)
+		when choice is Interval&lt;Quantity&gt; then
+		  Interval[Patient.birthDate + (choice.low as Quantity),
+			  Patient.birthDate + (choice.high as Quantity) + 1 year)
+		when choice is Timing then
+      Message(null, true, 'NOT_IMPLEMENTED', 'Error', 'Calculation of an interval from a Timing value is not supported') as Interval&lt;DateTime&gt;
+		else
+			null as Interval&lt;DateTime&gt;
+	end</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-denominator-observations"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Counts the number of eligible days in an encounter. This simply filters and counts the data built in
+ * &quot;Relevant Encounters With Hyperglycemic Event Days&quot;.*/
+
+
+define function &quot;Denominator Observations&quot;(QualifyingEncounter Encounter):
+  if QualifyingEncounter.id in &quot;Denominator Exclusions&quot;.id then singleton from ( &quot;Days with Hyperglycemic Events&quot; EncounterWithEventDays
+      where EncounterWithEventDays.encounter = QualifyingEncounter
+      return 0
+  ) 
+    else singleton from ( &quot;Days with Hyperglycemic Events&quot; EncounterWithEventDays
+      where EncounterWithEventDays.encounter = QualifyingEncounter
+      return Count(EncounterWithEventDays.eligibleEventDays)
+  )</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="fhirhelpers-tocode"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> FHIRHelpers</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Converts the given FHIR [Coding](https://hl7.org/fhir/datatypes.html#Coding) value to a CQL Code.
+*/
+define function ToCode(coding FHIR.Coding):
+    if coding is null then
+        null
+    else
+        System.Code {
+          code: coding.code.value,
+          system: coding.system.value,
+          version: coding.version.value,
+          display: coding.display.value
+        }</code></pre>
+  </td>
+
+</tr>
+        
+<tr>
+  <th scope="row" rowspan="2" class="row-header">
+    
+      
+      <a name="cms871hhhyperfhir-numerator-observations"> </a>
+    
+    Logic Definition
+  </th>
+
+  <td class="content-container"><em>Library Name:</em> CMS871HHHyperFHIR</td>
+
+</tr>
+<tr>
+
+  <td>
+    <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/**
+ * Counts the number of eligible days with a hyperglycemic event in an encounter. This simply filters and counts the data built in
+ * &quot;Relevant Encounters With Hyperglycemic Event Days&quot;.*/
+
+
+define function &quot;Numerator Observations&quot;(QualifyingEncounter Encounter):
+  if QualifyingEncounter.id in &quot;Denominator Exclusions&quot;.id then singleton from ( &quot;Days with Hyperglycemic Events&quot; EncounterWithEventDays
+      where EncounterWithEventDays.encounter = QualifyingEncounter
+      return 0
+  ) 
+    else singleton from ( &quot;Days with Hyperglycemic Events&quot; EncounterWithEventDays
+      where EncounterWithEventDays.encounter = QualifyingEncounter
+      return Count(EncounterWithEventDays.eligibleEventDays EligibleEventDay
+          where EligibleEventDay.hasHyperglycemicEvent
+      )
+  )</code></pre>
+  </td>
+
+</tr>
+
+  
+
+<tr>
+  <th colspan="2" scope="row" class="row-header">Generated using version 0.4.6 of the sample-content-ig Liquid templates</th>
+</tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

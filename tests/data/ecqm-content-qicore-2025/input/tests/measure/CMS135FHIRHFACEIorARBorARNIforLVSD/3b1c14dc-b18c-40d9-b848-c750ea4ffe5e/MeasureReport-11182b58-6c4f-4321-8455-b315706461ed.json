@@ -1,0 +1,105 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "11182b58-6c4f-4321-8455-b315706461ed",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "134c6bae-b9e4-435f-87d9-593a82ab8155-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "3b1c14dc-b18c-40d9-b848-c750ea4ffe5e"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#134c6bae-b9e4-435f-87d9-593a82ab8155-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient with HF dx and 2 encounters and LVSD does not fall into denominator exclusion because LV assisted device procedure is outside encounter window"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS135FHIRHFACEIorARBorARNIforLVSD",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/3b1c14dc-b18c-40d9-b848-c750ea4ffe5e"
+  }, {
+    "reference": "Encounter/530d51a0-aa6a-4739-8e98-da5d9f16cd28"
+  }, {
+    "reference": "Encounter/cbfe1641-318f-4061-95e7-774f6e45aa8a"
+  }, {
+    "reference": "Condition/8877e309-65a0-416d-9633-3bdf50860255"
+  }, {
+    "reference": "Condition/4d6145cf-8b6d-42e8-823b-603d864546c0"
+  }, {
+    "reference": "Procedure/20db911b-3d5a-4a0a-b64b-174c4607f942"
+  } ]
+}

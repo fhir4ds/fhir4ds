@@ -1,0 +1,94 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1029.227",
+  "meta": {
+    "versionId": "15",
+    "lastUpdated": "2023-12-21T17:43:03.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2022-01-27"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2022-01-27"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1029.227",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1029.227"
+    }
+  ],
+  "version": "20220127",
+  "name": "HeartFailureCardiacArrestRelatedToProcedureOrSurgery",
+  "title": "Heart Failure Cardiac Arrest Related to Procedure or Surgery",
+  "status": "active",
+  "experimental": false,
+  "date": "2022-01-27T01:02:26-05:00",
+  "publisher": "Joint Commission",
+  "expansion": {
+    "identifier": "urn:uuid:f5d7e187-0395-448e-b3f6-a23aa15c8df7",
+    "timestamp": "2026-03-13T13:00:51-04:00",
+    "total": 6,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I97.120",
+        "display": "Postprocedural cardiac arrest following cardiac surgery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I97.121",
+        "display": "Postprocedural cardiac arrest following other surgery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I97.130",
+        "display": "Postprocedural heart failure following cardiac surgery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I97.131",
+        "display": "Postprocedural heart failure following other surgery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I97.710",
+        "display": "Intraoperative cardiac arrest during cardiac surgery"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "I97.711",
+        "display": "Intraoperative cardiac arrest during other surgery"
+      }
+    ]
+  }
+}

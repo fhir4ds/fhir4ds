@@ -1,0 +1,27 @@
+{
+  "resourceType": "AllergyIntolerance",
+  "id": "cb97bc3c-7f49-4764-9bc7-f0e5ef36f1a7",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-allergyintolerance" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "04012024",
+      "code": "10600"
+    } ]
+  },
+  "patient": {
+    "reference": "Patient/b7c0a554-4fab-41c9-9bd6-c9c67230da52"
+  },
+  "onsetPeriod": {
+    "start": "2026-07-02T11:50:00.000+00:00"
+  }
+}

@@ -1,0 +1,819 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1647-20250125",
+  "meta": {
+    "versionId": "42",
+    "lastUpdated": "2025-01-25T01:09:35.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-01-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1647",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1647"
+  } ],
+  "version": "20250125",
+  "name": "DiabeticMacularEdema",
+  "title": "Diabetic Macular Edema",
+  "status": "active",
+  "date": "2025-01-25T01:09:35-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of a diagnosis of diabetic macular edema.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of diabetic macular edema or diabetic retinopathy with macular edema.),(Exclusion Criteria: Excludes concepts that represent a diagnosis for 'unspecified eye.')",
+  "compose": {
+    "include": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "concept": [ {
+        "code": "E08.311",
+        "display": "Diabetes mellitus due to underlying condition with unspecified diabetic retinopathy with macular edema"
+      }, {
+        "code": "E08.3211",
+        "display": "Diabetes mellitus due to underlying condition with mild nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E08.3212",
+        "display": "Diabetes mellitus due to underlying condition with mild nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E08.3213",
+        "display": "Diabetes mellitus due to underlying condition with mild nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E08.3311",
+        "display": "Diabetes mellitus due to underlying condition with moderate nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E08.3312",
+        "display": "Diabetes mellitus due to underlying condition with moderate nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E08.3313",
+        "display": "Diabetes mellitus due to underlying condition with moderate nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E08.3411",
+        "display": "Diabetes mellitus due to underlying condition with severe nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E08.3412",
+        "display": "Diabetes mellitus due to underlying condition with severe nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E08.3413",
+        "display": "Diabetes mellitus due to underlying condition with severe nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E08.3511",
+        "display": "Diabetes mellitus due to underlying condition with proliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E08.3512",
+        "display": "Diabetes mellitus due to underlying condition with proliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E08.3513",
+        "display": "Diabetes mellitus due to underlying condition with proliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E08.3521",
+        "display": "Diabetes mellitus due to underlying condition with proliferative diabetic retinopathy with traction retinal detachment involving the macula, right eye"
+      }, {
+        "code": "E08.3522",
+        "display": "Diabetes mellitus due to underlying condition with proliferative diabetic retinopathy with traction retinal detachment involving the macula, left eye"
+      }, {
+        "code": "E08.3523",
+        "display": "Diabetes mellitus due to underlying condition with proliferative diabetic retinopathy with traction retinal detachment involving the macula, bilateral"
+      }, {
+        "code": "E08.37X1",
+        "display": "Diabetes mellitus due to underlying condition with diabetic macular edema, resolved following treatment, right eye"
+      }, {
+        "code": "E08.37X2",
+        "display": "Diabetes mellitus due to underlying condition with diabetic macular edema, resolved following treatment, left eye"
+      }, {
+        "code": "E08.37X3",
+        "display": "Diabetes mellitus due to underlying condition with diabetic macular edema, resolved following treatment, bilateral"
+      }, {
+        "code": "E09.311",
+        "display": "Drug or chemical induced diabetes mellitus with unspecified diabetic retinopathy with macular edema"
+      }, {
+        "code": "E09.3211",
+        "display": "Drug or chemical induced diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E09.3212",
+        "display": "Drug or chemical induced diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E09.3213",
+        "display": "Drug or chemical induced diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E09.3311",
+        "display": "Drug or chemical induced diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E09.3312",
+        "display": "Drug or chemical induced diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E09.3313",
+        "display": "Drug or chemical induced diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E09.3411",
+        "display": "Drug or chemical induced diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E09.3412",
+        "display": "Drug or chemical induced diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E09.3413",
+        "display": "Drug or chemical induced diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E09.3511",
+        "display": "Drug or chemical induced diabetes mellitus with proliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E09.3512",
+        "display": "Drug or chemical induced diabetes mellitus with proliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E09.3513",
+        "display": "Drug or chemical induced diabetes mellitus with proliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E09.3521",
+        "display": "Drug or chemical induced diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, right eye"
+      }, {
+        "code": "E09.3522",
+        "display": "Drug or chemical induced diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, left eye"
+      }, {
+        "code": "E09.3523",
+        "display": "Drug or chemical induced diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, bilateral"
+      }, {
+        "code": "E09.37X1",
+        "display": "Drug or chemical induced diabetes mellitus with diabetic macular edema, resolved following treatment, right eye"
+      }, {
+        "code": "E09.37X2",
+        "display": "Drug or chemical induced diabetes mellitus with diabetic macular edema, resolved following treatment, left eye"
+      }, {
+        "code": "E09.37X3",
+        "display": "Drug or chemical induced diabetes mellitus with diabetic macular edema, resolved following treatment, bilateral"
+      }, {
+        "code": "E10.311",
+        "display": "Type 1 diabetes mellitus with unspecified diabetic retinopathy with macular edema"
+      }, {
+        "code": "E10.3211",
+        "display": "Type 1 diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E10.3212",
+        "display": "Type 1 diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E10.3213",
+        "display": "Type 1 diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E10.3311",
+        "display": "Type 1 diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E10.3312",
+        "display": "Type 1 diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E10.3313",
+        "display": "Type 1 diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E10.3411",
+        "display": "Type 1 diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E10.3412",
+        "display": "Type 1 diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E10.3413",
+        "display": "Type 1 diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E10.3511",
+        "display": "Type 1 diabetes mellitus with proliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E10.3512",
+        "display": "Type 1 diabetes mellitus with proliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E10.3513",
+        "display": "Type 1 diabetes mellitus with proliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E10.3521",
+        "display": "Type 1 diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, right eye"
+      }, {
+        "code": "E10.3522",
+        "display": "Type 1 diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, left eye"
+      }, {
+        "code": "E10.3523",
+        "display": "Type 1 diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, bilateral"
+      }, {
+        "code": "E10.37X1",
+        "display": "Type 1 diabetes mellitus with diabetic macular edema, resolved following treatment, right eye"
+      }, {
+        "code": "E10.37X2",
+        "display": "Type 1 diabetes mellitus with diabetic macular edema, resolved following treatment, left eye"
+      }, {
+        "code": "E10.37X3",
+        "display": "Type 1 diabetes mellitus with diabetic macular edema, resolved following treatment, bilateral"
+      }, {
+        "code": "E11.311",
+        "display": "Type 2 diabetes mellitus with unspecified diabetic retinopathy with macular edema"
+      }, {
+        "code": "E11.3211",
+        "display": "Type 2 diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E11.3212",
+        "display": "Type 2 diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E11.3213",
+        "display": "Type 2 diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E11.3311",
+        "display": "Type 2 diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E11.3312",
+        "display": "Type 2 diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E11.3313",
+        "display": "Type 2 diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E11.3411",
+        "display": "Type 2 diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E11.3412",
+        "display": "Type 2 diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E11.3413",
+        "display": "Type 2 diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E11.3511",
+        "display": "Type 2 diabetes mellitus with proliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E11.3512",
+        "display": "Type 2 diabetes mellitus with proliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E11.3513",
+        "display": "Type 2 diabetes mellitus with proliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E11.3521",
+        "display": "Type 2 diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, right eye"
+      }, {
+        "code": "E11.3522",
+        "display": "Type 2 diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, left eye"
+      }, {
+        "code": "E11.3523",
+        "display": "Type 2 diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, bilateral"
+      }, {
+        "code": "E11.37X1",
+        "display": "Type 2 diabetes mellitus with diabetic macular edema, resolved following treatment, right eye"
+      }, {
+        "code": "E11.37X2",
+        "display": "Type 2 diabetes mellitus with diabetic macular edema, resolved following treatment, left eye"
+      }, {
+        "code": "E11.37X3",
+        "display": "Type 2 diabetes mellitus with diabetic macular edema, resolved following treatment, bilateral"
+      }, {
+        "code": "E13.311",
+        "display": "Other specified diabetes mellitus with unspecified diabetic retinopathy with macular edema"
+      }, {
+        "code": "E13.3211",
+        "display": "Other specified diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E13.3212",
+        "display": "Other specified diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E13.3213",
+        "display": "Other specified diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E13.3311",
+        "display": "Other specified diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E13.3312",
+        "display": "Other specified diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E13.3313",
+        "display": "Other specified diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E13.3411",
+        "display": "Other specified diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E13.3412",
+        "display": "Other specified diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E13.3413",
+        "display": "Other specified diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E13.3511",
+        "display": "Other specified diabetes mellitus with proliferative diabetic retinopathy with macular edema, right eye"
+      }, {
+        "code": "E13.3512",
+        "display": "Other specified diabetes mellitus with proliferative diabetic retinopathy with macular edema, left eye"
+      }, {
+        "code": "E13.3513",
+        "display": "Other specified diabetes mellitus with proliferative diabetic retinopathy with macular edema, bilateral"
+      }, {
+        "code": "E13.3521",
+        "display": "Other specified diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, right eye"
+      }, {
+        "code": "E13.3522",
+        "display": "Other specified diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, left eye"
+      }, {
+        "code": "E13.3523",
+        "display": "Other specified diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, bilateral"
+      }, {
+        "code": "E13.37X1",
+        "display": "Other specified diabetes mellitus with diabetic macular edema, resolved following treatment, right eye"
+      }, {
+        "code": "E13.37X2",
+        "display": "Other specified diabetes mellitus with diabetic macular edema, resolved following treatment, left eye"
+      }, {
+        "code": "E13.37X3",
+        "display": "Other specified diabetes mellitus with diabetic macular edema, resolved following treatment, bilateral"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:ae71be79-5ff9-43db-b524-bc149233fe5e",
+    "timestamp": "2025-06-20T16:57:45-04:00",
+    "total": 95,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.311",
+      "display": "Diabetes mellitus due to underlying condition with unspecified diabetic retinopathy with macular edema"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3211",
+      "display": "Diabetes mellitus due to underlying condition with mild nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3212",
+      "display": "Diabetes mellitus due to underlying condition with mild nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3213",
+      "display": "Diabetes mellitus due to underlying condition with mild nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3311",
+      "display": "Diabetes mellitus due to underlying condition with moderate nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3312",
+      "display": "Diabetes mellitus due to underlying condition with moderate nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3313",
+      "display": "Diabetes mellitus due to underlying condition with moderate nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3411",
+      "display": "Diabetes mellitus due to underlying condition with severe nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3412",
+      "display": "Diabetes mellitus due to underlying condition with severe nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3413",
+      "display": "Diabetes mellitus due to underlying condition with severe nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3511",
+      "display": "Diabetes mellitus due to underlying condition with proliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3512",
+      "display": "Diabetes mellitus due to underlying condition with proliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3513",
+      "display": "Diabetes mellitus due to underlying condition with proliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3521",
+      "display": "Diabetes mellitus due to underlying condition with proliferative diabetic retinopathy with traction retinal detachment involving the macula, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3522",
+      "display": "Diabetes mellitus due to underlying condition with proliferative diabetic retinopathy with traction retinal detachment involving the macula, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.3523",
+      "display": "Diabetes mellitus due to underlying condition with proliferative diabetic retinopathy with traction retinal detachment involving the macula, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.37X1",
+      "display": "Diabetes mellitus due to underlying condition with diabetic macular edema, resolved following treatment, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.37X2",
+      "display": "Diabetes mellitus due to underlying condition with diabetic macular edema, resolved following treatment, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E08.37X3",
+      "display": "Diabetes mellitus due to underlying condition with diabetic macular edema, resolved following treatment, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.311",
+      "display": "Drug or chemical induced diabetes mellitus with unspecified diabetic retinopathy with macular edema"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3211",
+      "display": "Drug or chemical induced diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3212",
+      "display": "Drug or chemical induced diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3213",
+      "display": "Drug or chemical induced diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3311",
+      "display": "Drug or chemical induced diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3312",
+      "display": "Drug or chemical induced diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3313",
+      "display": "Drug or chemical induced diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3411",
+      "display": "Drug or chemical induced diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3412",
+      "display": "Drug or chemical induced diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3413",
+      "display": "Drug or chemical induced diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3511",
+      "display": "Drug or chemical induced diabetes mellitus with proliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3512",
+      "display": "Drug or chemical induced diabetes mellitus with proliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3513",
+      "display": "Drug or chemical induced diabetes mellitus with proliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3521",
+      "display": "Drug or chemical induced diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3522",
+      "display": "Drug or chemical induced diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.3523",
+      "display": "Drug or chemical induced diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.37X1",
+      "display": "Drug or chemical induced diabetes mellitus with diabetic macular edema, resolved following treatment, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.37X2",
+      "display": "Drug or chemical induced diabetes mellitus with diabetic macular edema, resolved following treatment, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E09.37X3",
+      "display": "Drug or chemical induced diabetes mellitus with diabetic macular edema, resolved following treatment, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.311",
+      "display": "Type 1 diabetes mellitus with unspecified diabetic retinopathy with macular edema"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3211",
+      "display": "Type 1 diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3212",
+      "display": "Type 1 diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3213",
+      "display": "Type 1 diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3311",
+      "display": "Type 1 diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3312",
+      "display": "Type 1 diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3313",
+      "display": "Type 1 diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3411",
+      "display": "Type 1 diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3412",
+      "display": "Type 1 diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3413",
+      "display": "Type 1 diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3511",
+      "display": "Type 1 diabetes mellitus with proliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3512",
+      "display": "Type 1 diabetes mellitus with proliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3513",
+      "display": "Type 1 diabetes mellitus with proliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3521",
+      "display": "Type 1 diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3522",
+      "display": "Type 1 diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.3523",
+      "display": "Type 1 diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.37X1",
+      "display": "Type 1 diabetes mellitus with diabetic macular edema, resolved following treatment, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.37X2",
+      "display": "Type 1 diabetes mellitus with diabetic macular edema, resolved following treatment, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E10.37X3",
+      "display": "Type 1 diabetes mellitus with diabetic macular edema, resolved following treatment, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.311",
+      "display": "Type 2 diabetes mellitus with unspecified diabetic retinopathy with macular edema"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3211",
+      "display": "Type 2 diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3212",
+      "display": "Type 2 diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3213",
+      "display": "Type 2 diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3311",
+      "display": "Type 2 diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3312",
+      "display": "Type 2 diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3313",
+      "display": "Type 2 diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3411",
+      "display": "Type 2 diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3412",
+      "display": "Type 2 diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3413",
+      "display": "Type 2 diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3511",
+      "display": "Type 2 diabetes mellitus with proliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3512",
+      "display": "Type 2 diabetes mellitus with proliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3513",
+      "display": "Type 2 diabetes mellitus with proliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3521",
+      "display": "Type 2 diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3522",
+      "display": "Type 2 diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.3523",
+      "display": "Type 2 diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.37X1",
+      "display": "Type 2 diabetes mellitus with diabetic macular edema, resolved following treatment, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.37X2",
+      "display": "Type 2 diabetes mellitus with diabetic macular edema, resolved following treatment, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E11.37X3",
+      "display": "Type 2 diabetes mellitus with diabetic macular edema, resolved following treatment, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.311",
+      "display": "Other specified diabetes mellitus with unspecified diabetic retinopathy with macular edema"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3211",
+      "display": "Other specified diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3212",
+      "display": "Other specified diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3213",
+      "display": "Other specified diabetes mellitus with mild nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3311",
+      "display": "Other specified diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3312",
+      "display": "Other specified diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3313",
+      "display": "Other specified diabetes mellitus with moderate nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3411",
+      "display": "Other specified diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3412",
+      "display": "Other specified diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3413",
+      "display": "Other specified diabetes mellitus with severe nonproliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3511",
+      "display": "Other specified diabetes mellitus with proliferative diabetic retinopathy with macular edema, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3512",
+      "display": "Other specified diabetes mellitus with proliferative diabetic retinopathy with macular edema, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3513",
+      "display": "Other specified diabetes mellitus with proliferative diabetic retinopathy with macular edema, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3521",
+      "display": "Other specified diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3522",
+      "display": "Other specified diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.3523",
+      "display": "Other specified diabetes mellitus with proliferative diabetic retinopathy with traction retinal detachment involving the macula, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.37X1",
+      "display": "Other specified diabetes mellitus with diabetic macular edema, resolved following treatment, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.37X2",
+      "display": "Other specified diabetes mellitus with diabetic macular edema, resolved following treatment, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "E13.37X3",
+      "display": "Other specified diabetes mellitus with diabetic macular edema, resolved following treatment, bilateral"
+    } ]
+  }
+}

@@ -12,10 +12,12 @@ from ...parser.ast_nodes import (
     UnaryExpression,
 )
 from ...translator.types import (
+    SQLBinaryOp,
     SQLCase,
     SQLCast,
     SQLExpression,
     SQLFunctionCall,
+    SQLIdentifier,
     SQLLiteral,
     SQLNull,
     SQLRaw,
@@ -161,6 +163,64 @@ class TemporalUtilsMixin:
         """
         return "TIMESTAMP"
 
+    @staticmethod
+    def _infer_cast_type_for_comparison(left: SQLExpression, right: SQLExpression) -> str:
+        """Infer the appropriate SQL cast type for comparing two CQL operands.
+
+        CQL before/after/on-or-before/on-or-after apply to any ordered type,
+        not only temporal types.  When an operand is a numeric literal we must
+        cast the peer (typically an ``intervalStart``/``intervalEnd`` VARCHAR
+        result) to a numeric type instead of TIMESTAMP.
+
+        Returns one of ``"BIGINT"``, ``"DOUBLE"``, ``"VARCHAR"``, or ``"TIMESTAMP"``.
+        """
+        for expr in (left, right):
+            if isinstance(expr, SQLLiteral):
+                if isinstance(expr.value, int):
+                    return "BIGINT"
+                if isinstance(expr.value, float):
+                    return "DOUBLE"
+                # Decimal-like string literals (e.g., '2.5' from CQL decimal)
+                if isinstance(expr.value, str):
+                    try:
+                        float(expr.value)
+                        return "DOUBLE" if '.' in expr.value else "BIGINT"
+                    except (ValueError, TypeError):
+                        pass
+            if isinstance(expr, SQLCast):
+                if expr.target_type in ("INTEGER", "BIGINT", "DOUBLE", "DECIMAL"):
+                    return expr.target_type if expr.target_type != "DECIMAL" else "DOUBLE"
+            # Detect Quantity JSON patterns — should NOT be cast to TIMESTAMP
+            if isinstance(expr, SQLFunctionCall):
+                fn = expr.name.lower() if isinstance(expr.name, str) else ""
+                if fn in ("intervalstart", "intervalend"):
+                    # Check if the interval is constructed from numeric/quantity bounds
+                    if expr.args:
+                        inner = expr.args[0]
+                        if isinstance(inner, SQLFunctionCall) and inner.name.lower() == "intervalfrombounds":
+                            if inner.args:
+                                bound = inner.args[0]
+                                if isinstance(bound, SQLCast) and bound.target_type == "VARCHAR":
+                                    inner_expr = bound.expression
+                                    if isinstance(inner_expr, SQLLiteral):
+                                        if isinstance(inner_expr.value, (int, float)):
+                                            return "DOUBLE" if isinstance(inner_expr.value, float) or '.' in str(inner_expr.value) else "BIGINT"
+                                        if isinstance(inner_expr.value, str):
+                                            try:
+                                                float(inner_expr.value)
+                                                return "DOUBLE" if '.' in inner_expr.value else "BIGINT"
+                                            except (ValueError, TypeError):
+                                                pass
+            # Raw SQL with numeric literal pattern
+            if isinstance(expr, SQLRaw):
+                raw = expr.raw_sql.strip()
+                try:
+                    float(raw)
+                    return "DOUBLE" if '.' in raw else "BIGINT"
+                except (ValueError, TypeError):
+                    pass
+        return "TIMESTAMP"
+
     def _ensure_date_cast(self, expr: SQLExpression, target_type: str = "DATE") -> SQLExpression:
         """Wrap a VARCHAR-returning expression in CAST(... AS <target_type>).
 
@@ -284,10 +344,25 @@ class TemporalUtilsMixin:
         # extract the start point before truncating to a date/time precision.
         expr = self._unwrap_interval_case(expr)
 
+        # Interval-returning functions (intervalFromBounds etc.) produce JSON
+        # VARCHAR, not temporal values — truncation is meaningless for them.
+        # Return them as-is; callers using interval UDFs handle precision
+        # internally.
+        if isinstance(expr, SQLFunctionCall):
+            fn_lower = (expr.name or "").lower()
+            if fn_lower in (
+                "intervalfrombounds", "intervalintersect",
+                "collapse_intervals",
+            ):
+                return expr
+
         if precision_lower == "day":
             # DuckDB doesn't support DATE(expr) for casting - use CAST(expr AS DATE)
             return SQLCast(expression=expr, target_type="DATE")
         elif precision_lower in ("year", "month", "week", "hour", "minute", "second", "millisecond"):
+            # date_trunc requires a typed temporal argument; cast string
+            # literals so DuckDB can resolve the correct overload.
+            expr = self._cast_for_date_trunc(expr, precision_lower)
             return SQLFunctionCall(
                 name="DATE_TRUNC",
                 args=[SQLLiteral(value=precision_lower), expr],
@@ -295,6 +370,86 @@ class TemporalUtilsMixin:
         else:
             # Unknown precision - return as-is
             return expr
+
+    @staticmethod
+    def _cast_for_date_trunc(expr: SQLExpression, precision: str) -> SQLExpression:
+        """Ensure *expr* is typed before passing to ``date_trunc``.
+
+        DuckDB's ``date_trunc`` only supports DATE, TIMESTAMP, TIMESTAMPTZ,
+        and INTERVAL — **not** TIME.  This helper adds explicit casts and,
+        for time-only values, anchors them to ``1970-01-01`` so they become
+        a valid TIMESTAMP that ``date_trunc`` can handle.
+
+        For bare integer year literals (e.g. ``2003``), the value is turned
+        into a ``make_timestamp(year, 1, 1, 0, 0, 0)`` call.
+        """
+        if isinstance(expr, SQLCast):
+            # If already cast to TIME, re-anchor as TIMESTAMP
+            if expr.target_type and expr.target_type.upper() == "TIME":
+                # '1970-01-01 ' || CAST(x AS VARCHAR) → TIMESTAMP
+                return SQLCast(
+                    expression=SQLBinaryOp(
+                        operator="||",
+                        left=SQLLiteral(value="1970-01-01 "),
+                        right=SQLCast(expression=expr, target_type="VARCHAR"),
+                    ),
+                    target_type="TIMESTAMP",
+                )
+            return expr  # already has an explicit non-TIME type
+        if isinstance(expr, SQLLiteral):
+            if isinstance(expr.value, (int, float)):
+                # Bare year literal like 2003 → make_timestamp(2003,1,1,0,0,0)
+                return SQLFunctionCall(
+                    name="make_timestamp",
+                    args=[
+                        SQLLiteral(value=int(expr.value)),
+                        SQLLiteral(value=1), SQLLiteral(value=1),
+                        SQLLiteral(value=0), SQLLiteral(value=0), SQLLiteral(value=0),
+                    ],
+                )
+            if isinstance(expr.value, str):
+                val = expr.value.strip()
+                # CQL Time values: ' 14:30:00' or 'T14:30:00' — no date part
+                if len(val) <= 15 and ':' in val and '-' not in val:
+                    # Anchor to 1970-01-01 so date_trunc works
+                    anchored = "1970-01-01 " + val.lstrip("T").strip()
+                    return SQLCast(
+                        expression=SQLLiteral(value=anchored),
+                        target_type="TIMESTAMP",
+                    )
+                # Everything else — datetime / date string → TIMESTAMP
+                return SQLCast(expression=expr, target_type="TIMESTAMP")
+        # Function calls returning VARCHAR or TIME
+        if isinstance(expr, SQLFunctionCall):
+            fn_lower = (expr.name or "").lower()
+            # make_time returns TIME — anchor to 1970-01-01 for date_trunc
+            if fn_lower == "make_time":
+                return SQLCast(
+                    expression=SQLBinaryOp(
+                        operator="||",
+                        left=SQLLiteral(value="1970-01-01 "),
+                        right=SQLCast(expression=expr, target_type="VARCHAR"),
+                    ),
+                    target_type="TIMESTAMP",
+                )
+            # intervalStart/intervalEnd return VARCHAR which may be a time
+            # string, quantity JSON, or numeric — use TRY_CAST to avoid
+            # errors on non-temporal values
+            if fn_lower in ("intervalstart", "intervalend"):
+                return SQLRaw(f"TRY_CAST(({expr.to_sql()}) AS TIMESTAMP)")
+            # Interval-returning functions should not be date_trunc'd —
+            # they return JSON VARCHAR, not temporal values.
+            if fn_lower in (
+                "intervalfrombounds", "intervalintersect",
+                "collapse_intervals", "intervalmeets", "intervalmeetsbefore",
+                "intervalmeetsafter", "intervaloverlaps",
+            ):
+                return expr
+            return SQLCast(expression=expr, target_type="TIMESTAMP")
+        # Raw SQL or identifiers — try TIMESTAMP cast
+        if isinstance(expr, (SQLRaw, SQLIdentifier)):
+            return SQLCast(expression=expr, target_type="TIMESTAMP")
+        return expr
 
     @staticmethod
     def _is_interval_case(expr: SQLExpression) -> bool:

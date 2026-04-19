@@ -1,0 +1,40 @@
+{
+  "resourceType": "Condition",
+  "id": "9da054e6-eb07-402b-a339-917653c7d2c6",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "15193003",
+      "display": "Severe recurrent major depression with psychotic features, mood-incongruent (disorder)"
+    } ],
+    "text": "Severe recurrent major depression with psychotic features, mood-incongruent (disorder)"
+  },
+  "subject": {
+    "reference": "Patient/3900270d-e047-4ecf-9b26-7bac7625b328"
+  },
+  "onsetDateTime": "2024-05-24T00:00:00+00:00",
+  "recordedDate": "2024-05-24T00:00:00+00:00"
+}

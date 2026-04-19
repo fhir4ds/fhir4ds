@@ -1,0 +1,25 @@
+{
+  "resourceType": "Procedure",
+  "id": "520ba238-81a0-4846-bbb6-2ced2343fc91",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-02-05T09:35:00-04:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "395669003",
+      "display": "Specialist palliative care treatment (regime/therapy)"
+    } ],
+    "text": "Specialist palliative care treatment (regime/therapy)"
+  },
+  "subject": {
+    "reference": "Patient/aedc0360-4636-4a4e-9617-4bf60c03f767"
+  },
+  "performedDateTime": "2026-02-05T09:35:00-04:00"
+}

@@ -1,0 +1,323 @@
+{
+  "resourceType": "Bundle",
+  "id": "6109658e98086b538055b9db",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/20d535da-db77-47c2-bc50-d36ed8a29270",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "20d535da-db77-47c2-bc50-d36ed8a29270",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2106-3",
+            "display": "White",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "White"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "6109658e98086b538055b9db"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "IPPFail",
+        "given": [ "PatientLT18atMPEdge" ]
+      } ],
+      "gender": "male",
+      "birthDate": "2008-01-02"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/20d535da-db77-47c2-bc50-d36ed8a29270"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/d195928d-6793-46e5-86f8-a2003ec31012",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "d195928d-6793-46e5-86f8-a2003ec31012",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "code": "H40.10X0"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/20d535da-db77-47c2-bc50-d36ed8a29270"
+      },
+      "onsetDateTime": "2014-08-27T13:00:00+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/d195928d-6793-46e5-86f8-a2003ec31012"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/cc035cda-abbc-4b08-9753-f3910c54fa48",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "cc035cda-abbc-4b08-9753-f3910c54fa48",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "laboratory",
+          "display": "Laboratory",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "71487-3"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/20d535da-db77-47c2-bc50-d36ed8a29270"
+      },
+      "effectivePeriod": {
+        "start": "2026-08-27T13:00:00.000+00:00",
+        "end": "2026-08-27T13:15:00.000+00:00"
+      },
+      "valueString": "Documented, progressive thinning of the neuroretinal rim with an associated increase in cupping of the optic disc"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/cc035cda-abbc-4b08-9753-f3910c54fa48"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/cae806de-e5d3-4dcf-ab11-7cdcd6118932",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "cae806de-e5d3-4dcf-ab11-7cdcd6118932",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observationcancelled" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneReason",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "version": "http://snomed.info/sct/731000124108/version/202303",
+            "code": "410536001",
+            "display": "Contraindicated (qualifier value)"
+          } ]
+        }
+      } ],
+      "status": "cancelled",
+      "category": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/202303",
+          "code": "428119001",
+          "display": "Procedure not indicated (situation)",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.73",
+          "code": "71487-3"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/20d535da-db77-47c2-bc50-d36ed8a29270"
+      },
+      "effectiveDateTime": "2026-08-27T13:00:00.000+00:00",
+      "issued": "2026-08-27T13:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/cae806de-e5d3-4dcf-ab11-7cdcd6118932"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/1dc5de40-b7ae-4140-88e4-d950121f3a32",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "1dc5de40-b7ae-4140-88e4-d950121f3a32",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "code": "92002"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/20d535da-db77-47c2-bc50-d36ed8a29270"
+      },
+      "period": {
+        "start": "2026-08-27T12:40:00.000+00:00",
+        "end": "2026-08-27T13:40:00.000+00:00"
+      },
+      "length": {
+        "value": 0.0,
+        "unit": "days"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/1dc5de40-b7ae-4140-88e4-d950121f3a32"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/fdeb23a2-b54c-4a57-8883-eb9dc62ae069",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "fdeb23a2-b54c-4a57-8883-eb9dc62ae069",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "ce5e0370-1745-4524-8be6-606d0ecacb51-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "20d535da-db77-47c2-bc50-d36ed8a29270"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#ce5e0370-1745-4524-8be6-606d0ecacb51-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient fails IPP/Denom due to age being 17 years 11 months and 30 days old  at start of MP"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS143FHIRPOAGOpticNerveEvaluation",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/20d535da-db77-47c2-bc50-d36ed8a29270"
+      }, {
+        "reference": "Condition/d195928d-6793-46e5-86f8-a2003ec31012"
+      }, {
+        "reference": "Observation/cc035cda-abbc-4b08-9753-f3910c54fa48"
+      }, {
+        "reference": "Observation/cae806de-e5d3-4dcf-ab11-7cdcd6118932"
+      }, {
+        "reference": "Encounter/1dc5de40-b7ae-4140-88e4-d950121f3a32"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/fdeb23a2-b54c-4a57-8883-eb9dc62ae069"
+    }
+  } ]
+}

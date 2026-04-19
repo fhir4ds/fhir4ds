@@ -1,0 +1,33 @@
+{
+  "resourceType": "Encounter",
+  "id": "7d7d7e89-26b3-4b2a-b94f-d25928407749",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient encounter"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "32485007"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/47b12717-f90f-406a-a114-16fddfbaf8c2"
+  },
+  "period": {
+    "start": "2026-02-08T08:00:00Z",
+    "end": "2026-02-10T08:15:00.000+00:00"
+  },
+  "length": {
+    "value": 2,
+    "unit": "days"
+  },
+  "reasonReference": [ {
+    "reference": "Condition/atrial-fibrillation-flutter-f80a"
+  } ]
+}

@@ -1,0 +1,12 @@
+{% for group in include.measure.group %}
+  {% if group.id.exists() %}
+    {%assign groupid = 'Measure Group (Rate)' + ' (ID: ' + group.id + ')' %}
+    {%include section-header.html header=groupid %}
+  {% else %}
+    {%include section-header.html header='Measure Group (Rate)' %}
+  {% endif %}
+  {% for contained in include.measure.contained.where(id.contains('effective-data-requirements')) %}
+  {%include measure-group-population-definitions.html group=group contained=contained %}
+  {%include measure-group-stratifier-definitions.html group=group contained=contained %}
+  {% endfor %}
+{% endfor %}

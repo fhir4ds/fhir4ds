@@ -1,0 +1,382 @@
+{
+  "resourceType": "Group",
+  "id": "CMS646FHIRIntravesicalBacillusCalmetteGuerinForBladderCancer",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS646FHIRIntravesicalBacillusCalmetteGuerinForBladderCancer"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/84f231b5-15be-4527-a9db-4209e99954db",
+      "display": "Cystectomy1DayBeforeStagingEdge DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/84f231b5-15be-4527-a9db-4209e99954db",
+      "display": "Cystectomy1DayBeforeStagingEdge DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a918259c-530d-4645-9339-e71db94323a8",
+      "display": "InitialDxStaging2023 NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a918259c-530d-4645-9339-e71db94323a8",
+      "display": "InitialDxStaging2023 NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/12bc129c-71df-4fa1-8192-31aaff72d229",
+      "display": "BCGAt6MoEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/12bc129c-71df-4fa1-8192-31aaff72d229",
+      "display": "BCGAt6MoEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/778f4fff-72ca-4cfd-b667-8def5cd3411f",
+      "display": "OVWithWrongCode IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/778f4fff-72ca-4cfd-b667-8def5cd3411f",
+      "display": "OVWithWrongCode IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/02d9a61a-6315-45e9-b45b-c08d4b55d39e",
+      "display": "RadiationAfterStaging DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/02d9a61a-6315-45e9-b45b-c08d4b55d39e",
+      "display": "RadiationAfterStaging DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/da823bdf-248b-4b9b-8fec-363d673036c8",
+      "display": "CystectomyBeforeStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/da823bdf-248b-4b9b-8fec-363d673036c8",
+      "display": "CystectomyBeforeStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/790f8993-7a03-4ed7-94d7-c0e95587afa0",
+      "display": "BCGTwiceCheckForFirst NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/790f8993-7a03-4ed7-94d7-c0e95587afa0",
+      "display": "BCGTwiceCheckForFirst NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f0c276f8-af7b-4c0b-b413-6b9730bcabbb",
+      "display": "MixedHistology2MonthsAfterStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f0c276f8-af7b-4c0b-b413-6b9730bcabbb",
+      "display": "MixedHistology2MonthsAfterStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a800d0dd-2ded-404b-9489-43ecafbe8529",
+      "display": "AcuteTBEndsBeforeStaging DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a800d0dd-2ded-404b-9489-43ecafbe8529",
+      "display": "AcuteTBEndsBeforeStaging DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/af5c9227-1845-4023-8b4f-ec4eb2fce33a",
+      "display": "Cystectomy6MonthsPriorEdge DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/af5c9227-1845-4023-8b4f-ec4eb2fce33a",
+      "display": "Cystectomy6MonthsPriorEdge DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f40eb08c-b994-45b9-b907-d25e2fff2618",
+      "display": "BCGMoreThan6MonthsAfterStagingEdge NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f40eb08c-b994-45b9-b907-d25e2fff2618",
+      "display": "BCGMoreThan6MonthsAfterStagingEdge NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ab48e0c0-6543-4537-8f00-bfcdcba7a81b",
+      "display": "BCGBeforeStagingBackNotClinicallyRelevant NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ab48e0c0-6543-4537-8f00-bfcdcba7a81b",
+      "display": "BCGBeforeStagingBackNotClinicallyRelevant NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/362e32e9-4f68-4917-811d-7a39eedb4b66",
+      "display": "ImmunocompromisedDxOnDayofStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/362e32e9-4f68-4917-811d-7a39eedb4b66",
+      "display": "ImmunocompromisedDxOnDayofStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c4278d81-69da-4cd3-9ed1-7cd3ee0b09f0",
+      "display": "Radiation6MonthsBeforeStagingEdge DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c4278d81-69da-4cd3-9ed1-7cd3ee0b09f0",
+      "display": "Radiation6MonthsBeforeStagingEdge DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a860bf3e-dbc6-400f-b921-aa364db4dec4",
+      "display": "ImmunosuppressiveDxAfterStaging DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a860bf3e-dbc6-400f-b921-aa364db4dec4",
+      "display": "ImmunosuppressiveDxAfterStaging DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/40ac7a7f-5aa0-48d5-9dbf-289ad5ecf863",
+      "display": "BCGNotGivenLastDay6Mo DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/40ac7a7f-5aa0-48d5-9dbf-289ad5ecf863",
+      "display": "BCGNotGivenLastDay6Mo DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5ee5544a-1846-4312-9048-82e030bb93cd",
+      "display": "StagingLastDayOfYearBCG4MonthsLaterEdgeTest NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5ee5544a-1846-4312-9048-82e030bb93cd",
+      "display": "StagingLastDayOfYearBCG4MonthsLaterEdgeTest NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7488d3a7-f4e1-445f-8375-d3fff29f080d",
+      "display": "HIVDxBeforeStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7488d3a7-f4e1-445f-8375-d3fff29f080d",
+      "display": "HIVDxBeforeStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/68a791aa-734a-442b-b82a-e85ee3105a66",
+      "display": "OVinMPBladderCaAndStaging DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/68a791aa-734a-442b-b82a-e85ee3105a66",
+      "display": "OVinMPBladderCaAndStaging DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5e66e158-8c05-4016-824e-272bd37df61c",
+      "display": "FirstStagingJuneAfterStartofMPEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5e66e158-8c05-4016-824e-272bd37df61c",
+      "display": "FirstStagingJuneAfterStartofMPEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5762f5c0-fe63-42fc-84ea-afadee165895",
+      "display": "ChemoAgents6MonthsBeforeStagingEdge DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5762f5c0-fe63-42fc-84ea-afadee165895",
+      "display": "ChemoAgents6MonthsBeforeStagingEdge DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aaf16c93-5fa4-451f-aecf-38112e202353",
+      "display": "OV1stDayOfYearEdge DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aaf16c93-5fa4-451f-aecf-38112e202353",
+      "display": "OV1stDayOfYearEdge DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8b5ba7de-6762-4bf2-a2b3-fba46594f026",
+      "display": "DiagnosisUnconfirmed IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8b5ba7de-6762-4bf2-a2b3-fba46594f026",
+      "display": "DiagnosisUnconfirmed IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/132a7880-8f4a-4b0c-a7d6-3f5a8d6df0b3",
+      "display": "MixedHistology2MonthsBeforeStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/132a7880-8f4a-4b0c-a7d6-3f5a8d6df0b3",
+      "display": "MixedHistology2MonthsBeforeStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e648fa70-0532-49b0-92f6-dfb5a6d28d94",
+      "display": "BCGNotAvailable DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e648fa70-0532-49b0-92f6-dfb5a6d28d94",
+      "display": "BCGNotAvailable DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/767d95ff-7723-4059-aed9-410c57143fa9",
+      "display": "OV1DayPriorToMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/767d95ff-7723-4059-aed9-410c57143fa9",
+      "display": "OV1DayPriorToMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b786e9d7-b4ae-4cd1-b7eb-a6d4f789424e",
+      "display": "AcuteTBWithStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b786e9d7-b4ae-4cd1-b7eb-a6d4f789424e",
+      "display": "AcuteTBWithStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e2117038-2163-4031-a25d-18ed7d8e277b",
+      "display": "BCGNotGiven1dayAfter6Mo DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e2117038-2163-4031-a25d-18ed7d8e277b",
+      "display": "BCGNotGiven1dayAfter6Mo DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6e9a1974-7334-4c41-b8dd-8413ae0caa29",
+      "display": "BCGB4StagingBackNotClinicallyRelevant NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6e9a1974-7334-4c41-b8dd-8413ae0caa29",
+      "display": "BCGB4StagingBackNotClinicallyRelevant NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c7e0560f-ae7b-44c7-af10-e2f1b2f3ec3d",
+      "display": "Radiation2MonthsBeforeStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c7e0560f-ae7b-44c7-af10-e2f1b2f3ec3d",
+      "display": "Radiation2MonthsBeforeStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/342d2bec-0acc-43e5-aaf7-3c9a65b09f91",
+      "display": "ImmunosuppresiveMedEventB4BCS DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/342d2bec-0acc-43e5-aaf7-3c9a65b09f91",
+      "display": "ImmunosuppresiveMedEventB4BCS DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/06c71e6e-18fd-4cef-a68d-960ef84a56f7",
+      "display": "HIVDxAfterStaging DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/06c71e6e-18fd-4cef-a68d-960ef84a56f7",
+      "display": "HIVDxAfterStaging DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/10cec7db-41ae-49ad-b883-022f19d92a8b",
+      "display": "CystectomyOnDayOfStagingEdge DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/10cec7db-41ae-49ad-b883-022f19d92a8b",
+      "display": "CystectomyOnDayOfStagingEdge DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b487e8da-c244-4cb8-9575-48eab7d7c28d",
+      "display": "OV1stDayOfYearEdge DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b487e8da-c244-4cb8-9575-48eab7d7c28d",
+      "display": "OV1stDayOfYearEdge DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/38ed8b42-1631-4673-aa53-6d2a4db163f3",
+      "display": "ImmunosuppresiveMedicationsB4BCS DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/38ed8b42-1631-4673-aa53-6d2a4db163f3",
+      "display": "ImmunosuppresiveMedicationsB4BCS DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/25bd7c4f-0cd4-4634-a84e-53377e5701f1",
+      "display": "ImmunocompromisedDxBeforeStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/25bd7c4f-0cd4-4634-a84e-53377e5701f1",
+      "display": "ImmunocompromisedDxBeforeStaging DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9bb98b0b-b99e-4d58-b17a-74dc43dc062a",
+      "display": "FirstStagingJuly1BeforeMPEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9bb98b0b-b99e-4d58-b17a-74dc43dc062a",
+      "display": "FirstStagingJuly1BeforeMPEdge NUMERPass"
+    }
+  } ]
+}

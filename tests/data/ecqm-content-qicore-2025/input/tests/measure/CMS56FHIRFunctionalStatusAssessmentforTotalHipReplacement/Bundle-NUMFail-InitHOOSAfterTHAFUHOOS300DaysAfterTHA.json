@@ -1,0 +1,586 @@
+{
+  "resourceType": "Bundle",
+  "id": "NUMFail-InitHOOSAfterTHAFUHOOS300DaysAfterTHA",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/a950ed29-6107-44eb-aaaf-cb814560108f",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "a950ed29-6107-44eb-aaaf-cb814560108f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "Bertha",
+        "given": [ "Betty" ]
+      } ],
+      "gender": "female",
+      "birthDate": "2007-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/f261da54-bb9a-41d0-a857-486a77372218",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "f261da54-bb9a-41d0-a857-486a77372218",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2024-11-01T00:00:00.000Z"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+          "code": "0SR9019",
+          "display": "Replacement of Right Hip Joint with Metal Synthetic Substitute, Cemented, Open Approach"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+      },
+      "performedPeriod": {
+        "start": "2024-11-01T00:00:00.000Z",
+        "end": "2024-11-01T01:00:00.000Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/f261da54-bb9a-41d0-a857-486a77372218"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/968398e3-7869-4f6e-84ad-41d6a7a2bf45",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "968398e3-7869-4f6e-84ad-41d6a7a2bf45",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "281036007",
+          "display": "Follow-up consultation (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+      },
+      "period": {
+        "start": "2025-11-01T00:00:00.000Z",
+        "end": "2025-11-01T01:15:00.000Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/968398e3-7869-4f6e-84ad-41d6a7a2bf45"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/2e93fac5-435a-4ac4-ab59-a03f8b257790",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "2e93fac5-435a-4ac4-ab59-a03f8b257790",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "72093-8",
+          "display": "Quality of life score [HOOS]"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+      },
+      "effectivePeriod": {
+        "start": "2024-11-02T00:00:00.000Z",
+        "end": "2024-11-02T01:00:00.000Z"
+      },
+      "valueInteger": 60
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/2e93fac5-435a-4ac4-ab59-a03f8b257790"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/f00f1f3d-ee9b-4609-bc62-dda681e8a3bb",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "f00f1f3d-ee9b-4609-bc62-dda681e8a3bb",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "72094-6",
+          "display": "Sport-recreation score [HOOS]"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+      },
+      "effectivePeriod": {
+        "start": "2024-11-02T00:00:00.000Z",
+        "end": "2024-11-02T01:00:00.000Z"
+      },
+      "valueInteger": 60
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/f00f1f3d-ee9b-4609-bc62-dda681e8a3bb"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/c831eeba-3fb5-4f07-a268-8194d22f2ff7",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "c831eeba-3fb5-4f07-a268-8194d22f2ff7",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "72095-3",
+          "display": "Activities of daily living score [HOOS]"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+      },
+      "effectivePeriod": {
+        "start": "2024-11-02T00:00:00.000Z",
+        "end": "2024-11-02T01:00:00.000Z"
+      },
+      "valueInteger": 60
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/c831eeba-3fb5-4f07-a268-8194d22f2ff7"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/8d690696-7ee2-45a6-8e44-7a4b287a1764",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "8d690696-7ee2-45a6-8e44-7a4b287a1764",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "72096-1",
+          "display": "Symptoms score [HOOS]"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+      },
+      "effectivePeriod": {
+        "start": "2024-11-02T00:00:00.000Z",
+        "end": "2024-11-02T01:00:00.000Z"
+      },
+      "valueInteger": 60
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/8d690696-7ee2-45a6-8e44-7a4b287a1764"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/d64c30f4-5e4a-4c1b-85ef-5ca7598cfe2e",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "d64c30f4-5e4a-4c1b-85ef-5ca7598cfe2e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "72097-9",
+          "display": "Pain score [HOOS]"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+      },
+      "effectivePeriod": {
+        "start": "2024-11-02T00:00:00.000Z",
+        "end": "2024-11-02T01:00:00.000Z"
+      },
+      "valueInteger": 60
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/d64c30f4-5e4a-4c1b-85ef-5ca7598cfe2e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/870a4422-83fa-47d7-8268-5678943922ae",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "870a4422-83fa-47d7-8268-5678943922ae",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "72093-8",
+          "display": "Quality of life score [HOOS]"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+      },
+      "effectivePeriod": {
+        "start": "2024-11-02T00:00:00.000Z",
+        "end": "2024-11-02T01:00:00.000Z"
+      },
+      "valueInteger": 60
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/870a4422-83fa-47d7-8268-5678943922ae"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/c0735d5a-187d-4427-943d-5a553c0b6d6e",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "c0735d5a-187d-4427-943d-5a553c0b6d6e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "72094-6",
+          "display": "Sport-recreation score [HOOS]"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+      },
+      "effectivePeriod": {
+        "start": "2024-11-02T00:00:00.000Z",
+        "end": "2024-11-02T01:00:00.000Z"
+      },
+      "valueInteger": 60
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/c0735d5a-187d-4427-943d-5a553c0b6d6e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/ac93778c-a51d-4ec8-bd6d-0194a3f3d20e",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "ac93778c-a51d-4ec8-bd6d-0194a3f3d20e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "72095-3",
+          "display": "Activities of daily living score [HOOS]"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+      },
+      "effectivePeriod": {
+        "start": "2024-11-02T00:00:00.000Z",
+        "end": "2024-11-02T01:00:00.000Z"
+      },
+      "valueInteger": 60
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/ac93778c-a51d-4ec8-bd6d-0194a3f3d20e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/c8bc6e44-d8ab-49e5-9345-d1df47553ace",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "c8bc6e44-d8ab-49e5-9345-d1df47553ace",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "72096-1",
+          "display": "Symptoms score [HOOS]"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+      },
+      "effectivePeriod": {
+        "start": "2024-11-02T00:00:00.000Z",
+        "end": "2024-11-02T01:00:00.000Z"
+      },
+      "valueInteger": 60
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/c8bc6e44-d8ab-49e5-9345-d1df47553ace"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/8b232c23-a10d-44e9-93c0-2631fe6fd2e9",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "8b232c23-a10d-44e9-93c0-2631fe6fd2e9",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "72097-9",
+          "display": "Pain score [HOOS]"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+      },
+      "effectivePeriod": {
+        "start": "2024-11-02T00:00:00.000Z",
+        "end": "2024-11-02T01:00:00.000Z"
+      },
+      "valueInteger": 60
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/8b232c23-a10d-44e9-93c0-2631fe6fd2e9"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/311c391a-5a0d-41c7-8772-4f1590fa2c7e",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "311c391a-5a0d-41c7-8772-4f1590fa2c7e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "8f847423-942a-4953-9c12-ba0b07024f4a-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "a950ed29-6107-44eb-aaaf-cb814560108f"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#8f847423-942a-4953-9c12-ba0b07024f4a-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient w/ a THA Procedure 11/1, Initial Hip Assessment HOOS day after THA Procedure(11/2), and FollowUp Hip Assessment HOOS 300 days after THA Procedure (8/27)"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS56FHIRFunctionalStatusAssessmentforTotalHipReplacement",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+      }, {
+        "reference": "Procedure/f261da54-bb9a-41d0-a857-486a77372218"
+      }, {
+        "reference": "Encounter/968398e3-7869-4f6e-84ad-41d6a7a2bf45"
+      }, {
+        "reference": "Observation/2e93fac5-435a-4ac4-ab59-a03f8b257790"
+      }, {
+        "reference": "Observation/f00f1f3d-ee9b-4609-bc62-dda681e8a3bb"
+      }, {
+        "reference": "Observation/c831eeba-3fb5-4f07-a268-8194d22f2ff7"
+      }, {
+        "reference": "Observation/8d690696-7ee2-45a6-8e44-7a4b287a1764"
+      }, {
+        "reference": "Observation/d64c30f4-5e4a-4c1b-85ef-5ca7598cfe2e"
+      }, {
+        "reference": "Observation/870a4422-83fa-47d7-8268-5678943922ae"
+      }, {
+        "reference": "Observation/c0735d5a-187d-4427-943d-5a553c0b6d6e"
+      }, {
+        "reference": "Observation/ac93778c-a51d-4ec8-bd6d-0194a3f3d20e"
+      }, {
+        "reference": "Observation/c8bc6e44-d8ab-49e5-9345-d1df47553ace"
+      }, {
+        "reference": "Observation/8b232c23-a10d-44e9-93c0-2631fe6fd2e9"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/311c391a-5a0d-41c7-8772-4f1590fa2c7e"
+    }
+  } ]
+}

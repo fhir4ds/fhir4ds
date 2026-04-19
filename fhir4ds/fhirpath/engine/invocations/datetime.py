@@ -175,10 +175,10 @@ def _time_boundary(data, precision, fill):
                 result += tz
         return ["@" + result]
 
-    result = f"T{hour}:{minute}:{second}.{ms}"
+    result = f"{hour}:{minute}:{second}.{ms}"
     if tz:
         result += tz
-    return [FP_Time(result)]
+    return [result]
 
 
 def _date_boundary(data, precision, fill, is_high):
@@ -253,7 +253,10 @@ def _datetime_boundary(data, precision, fill, is_high):
             return [FP_Date(f"{year}-{month}-{last_day:02d}")]
         return [FP_Date(f"{year}-{month}-01")]
     elif dp == 3:
-        return [FP_Date(f"{year}-{month}-{day}")]
+        # Date-only precision dateTime: expand to full dateTime with tz
+        result = f"{year}-{month}-{day}T{fill['hour']}:{fill['minute']}:{fill['second']}.{fill['ms']}"
+        result += fill.get("tz_default", "")
+        return [result]
     else:
         result = f"{year}-{month}-{day}T{hour}:{minute}:{second}.{ms}"
         if tz:
@@ -277,9 +280,40 @@ def _boundary(ctx, coll, precision, fill, is_high):
         result = fill["decimal_fn"](Decimal(str(data.value)), precision)
         return [] if result == [] else [FP_Quantity(result, data.unit)]
 
+    # Coerce plain strings (from FHIR resources) to FP date/time types.
+    # Use ResourceNode type info when available to distinguish date vs dateTime.
+    if isinstance(data, str):
+        import re
+        from ...engine.nodes import ResourceNode, TypeInfo
+        is_datetime_typed = False
+        if isinstance(value, ResourceNode):
+            ti = TypeInfo.from_value(value)
+            is_datetime_typed = ti.name in ('dateTime', 'DateTime', 'instant')
+
+        if re.match(r'^\d{2}:\d{2}', data):
+            data = FP_Time(data)
+        elif 'T' in data and re.match(r'^\d{4}', data):
+            data = FP_DateTime(data)
+        elif re.match(r'^\d{4}(-\d{2}(-\d{2})?)?$', data):
+            if is_datetime_typed:
+                # dateTime with date-only precision — use FP_Date but dispatch
+                # to datetime boundary logic below
+                data = FP_Date(data)
+            else:
+                data = FP_Date(data)
+
     if isinstance(data, FP_Time):
         return _time_boundary(data, precision, fill)
     elif isinstance(data, FP_Date):
+        # Check if the original value was typed as dateTime — if so, use
+        # datetime boundary semantics (which include time+tz expansion)
+        from ...engine.nodes import ResourceNode, TypeInfo
+        is_datetime_typed = False
+        if isinstance(value, ResourceNode):
+            ti = TypeInfo.from_value(value)
+            is_datetime_typed = ti.name in ('dateTime', 'DateTime', 'instant')
+        if is_datetime_typed:
+            return _datetime_boundary(data, precision, fill, is_high)
         return _date_boundary(data, precision, fill, is_high)
     elif isinstance(data, FP_DateTime):
         return _datetime_boundary(data, precision, fill, is_high)

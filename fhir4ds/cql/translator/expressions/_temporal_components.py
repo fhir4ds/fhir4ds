@@ -9,11 +9,13 @@ from typing import List
 
 from ...parser.ast_nodes import DateComponent
 from ...translator.types import (
+    SQLBinaryOp,
     SQLCast,
     SQLExpression,
     SQLFunctionCall,
     SQLLiteral,
     SQLNull,
+    SQLRaw,
 )
 
 
@@ -26,46 +28,96 @@ class DateComponentMixin:
     """
 
     def _translate_datetime_constructor(self, args: List[SQLExpression]) -> SQLExpression:
-        """Translate a DateTime constructor."""
+        """Translate a DateTime constructor.
+
+        CQL §22.5: DateTime(year, month?, day?, hour?, minute?, second?, millisecond?, timezoneOffset?)
+        All components are Integer.  When a single non-literal arg is supplied it
+        is typically a date/datetime expression routed here via ToDateTime — cast
+        to TIMESTAMP instead of wrapping in make_timestamp which expects integers.
+        """
         if not args:
             return SQLNull()
 
-        # Build a timestamp from components
-        # DateTime(year, month, day, hour, minute, second, millisecond)
-        if len(args) >= 3:
+        if len(args) == 1:
             year = args[0]
-            month = args[1] if len(args) > 1 else SQLLiteral(value=1)
-            day = args[2] if len(args) > 2 else SQLLiteral(value=1)
-            hour = args[3] if len(args) > 3 else SQLLiteral(value=0)
-            minute = args[4] if len(args) > 4 else SQLLiteral(value=0)
-            second = args[5] if len(args) > 5 else SQLLiteral(value=0)
+            if isinstance(year, SQLLiteral) and isinstance(year.value, int):
+                return SQLFunctionCall(
+                    name="make_timestamp",
+                    args=[year, SQLLiteral(value=1), SQLLiteral(value=1),
+                          SQLLiteral(value=0), SQLLiteral(value=0), SQLLiteral(value=0)],
+                )
+            # Non-integer single arg: pass through as-is (already a date/datetime/string)
+            return year
 
-            # Use make_timestamp function
-            return SQLFunctionCall(
-                name="make_timestamp",
-                args=[year, month, day, hour, minute, second],
+        # Pad missing components with defaults
+        year = args[0]
+        month = args[1] if len(args) > 1 else SQLLiteral(value=1)
+        day = args[2] if len(args) > 2 else SQLLiteral(value=1)
+        hour = args[3] if len(args) > 3 else SQLLiteral(value=0)
+        minute = args[4] if len(args) > 4 else SQLLiteral(value=0)
+        second = args[5] if len(args) > 5 else SQLLiteral(value=0)
+
+        # CQL §22.5: Handle optional millisecond component (7th arg).
+        # DuckDB make_timestamp accepts fractional seconds, so combine
+        # second + millisecond/1000.0 into the seconds parameter.
+        if len(args) > 6:
+            millisecond = args[6]
+            second = SQLBinaryOp(
+                operator="+",
+                left=SQLCast(expression=second, target_type="DOUBLE"),
+                right=SQLBinaryOp(
+                    operator="/",
+                    left=SQLCast(expression=millisecond, target_type="DOUBLE"),
+                    right=SQLLiteral(value=1000.0),
+                ),
             )
 
-        return args[0] if args else SQLNull()
+        # CQL §22.5: Handle optional 8th arg — timezoneOffset (decimal hours).
+        # Append the offset string so downstream UDFs can parse it timezone-aware.
+        ts_expr = SQLFunctionCall(
+            name="make_timestamp",
+            args=[year, month, day, hour, minute, second],
+        )
+        if len(args) > 7:
+            tz_offset = args[7]
+            # Build: CAST(make_timestamp(...) AS VARCHAR) || printf('%+03.0f:00', CAST(offset AS DOUBLE))
+            return SQLRaw(
+                f"(CAST({ts_expr.to_sql()} AS VARCHAR) || printf('%+03.0f:00', CAST({tz_offset.to_sql()} AS DOUBLE)))"
+            )
+
+        return ts_expr
 
     def _translate_date_constructor(self, args: List[SQLExpression]) -> SQLExpression:
-        """Translate a Date constructor."""
+        """Translate a Date constructor.
+
+        CQL §22.26: Date(year, month?, day?) — all Integer components.
+        When a single non-literal arg is supplied it is typically a
+        date/datetime expression routed here via ToDate — cast to DATE
+        instead of wrapping in make_date which expects integers.
+        """
         if not args:
             return SQLNull()
 
-        if len(args) >= 3:
+        if len(args) == 1:
             year = args[0]
-            month = args[1]
-            day = args[2]
+            if isinstance(year, SQLLiteral) and isinstance(year.value, int):
+                return SQLFunctionCall(
+                    name="make_date",
+                    args=[year, SQLLiteral(value=1), SQLLiteral(value=1)],
+                )
+            # Non-integer single arg: pass through as-is (already a date/datetime/string)
+            return year
 
-            return SQLFunctionCall(
-                name="make_date",
-                args=[year, month, day],
-            )
+        year = args[0]
+        month = args[1] if len(args) > 1 else SQLLiteral(value=1)
+        day = args[2] if len(args) > 2 else SQLLiteral(value=1)
 
-        # Single argument: either Date(year_only) or an edge case.
-        # Return as-is; "date from X" is handled by _translate_date_component.
-        return args[0] if args else SQLNull()
+        return SQLFunctionCall(
+            name="make_date",
+            args=[year, month, day],
+        )
+
+    def _translate_time_constructor(self, args: List[SQLExpression]) -> SQLExpression:
         """Translate a Time constructor."""
         if not args:
             return SQLNull()

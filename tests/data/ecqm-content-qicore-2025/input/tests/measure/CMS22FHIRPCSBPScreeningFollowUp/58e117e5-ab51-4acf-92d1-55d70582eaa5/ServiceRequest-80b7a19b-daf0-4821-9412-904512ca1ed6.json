@@ -1,0 +1,22 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "80b7a19b-daf0-4821-9412-904512ca1ed6",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "1181000175107",
+      "display": "Recommendation to lose weight (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/58e117e5-ab51-4acf-92d1-55d70582eaa5"
+  },
+  "authoredOn": "2026-01-01T08:25:00.000+00:00"
+}

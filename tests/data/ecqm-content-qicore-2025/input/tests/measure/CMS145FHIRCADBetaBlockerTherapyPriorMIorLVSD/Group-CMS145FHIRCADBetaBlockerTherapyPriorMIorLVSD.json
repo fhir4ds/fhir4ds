@@ -1,0 +1,522 @@
+{
+  "resourceType": "Group",
+  "id": "CMS145FHIRCADBetaBlockerTherapyPriorMIorLVSD",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS145FHIRCADBetaBlockerTherapyPriorMIorLVSD"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/8fc3dac2-816b-4ef2-b14c-85264bb3f2c4",
+      "display": "BetaBlockerInactive NUMERPop2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8fc3dac2-816b-4ef2-b14c-85264bb3f2c4",
+      "display": "BetaBlockerInactive NUMERPop2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6919fd23-aa69-4a1a-a07e-4752cdc53f46",
+      "display": "Bradycardia  DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6919fd23-aa69-4a1a-a07e-4752cdc53f46",
+      "display": "Bradycardia  DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1bbf669f-a5f6-4dde-a8b2-1be100394e18",
+      "display": "Arrhythmia DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1bbf669f-a5f6-4dde-a8b2-1be100394e18",
+      "display": "Arrhythmia DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d280cb74-871e-4191-b06a-4b700959a974",
+      "display": "Carvedilol25MGOralTabletAfterEnc DENEXCEPPop1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d280cb74-871e-4191-b06a-4b700959a974",
+      "display": "Carvedilol25MGOralTabletAfterEnc DENEXCEPPop1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9377a6c4-cb7a-4e87-a8b2-c598a5b0e2df",
+      "display": "BetaBlockerAllergy DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9377a6c4-cb7a-4e87-a8b2-c598a5b0e2df",
+      "display": "BetaBlockerAllergy DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4f4a65f4-a4c6-47e7-b37e-3ad9a9c9342e",
+      "display": "BetaBlockerIntolerance DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4f4a65f4-a4c6-47e7-b37e-3ad9a9c9342e",
+      "display": "BetaBlockerIntolerance DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/75fc7993-6b07-49f8-a8aa-747dfcbb3d8f",
+      "display": "BradycardiaNoQualifyingEncounter DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/75fc7993-6b07-49f8-a8aa-747dfcbb3d8f",
+      "display": "BradycardiaNoQualifyingEncounter DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/69f6fe89-2983-4d35-a12a-b1ae92cc9c2f",
+      "display": "MeetsCriteria IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/69f6fe89-2983-4d35-a12a-b1ae92cc9c2f",
+      "display": "MeetsCriteria IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9cc50dc3-f081-4ab6-bf6d-cbfabb5a2e89",
+      "display": "EncounterAfterMP IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9cc50dc3-f081-4ab6-bf6d-cbfabb5a2e89",
+      "display": "EncounterAfterMP IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d1b682be-c26e-44cc-8ac4-18c81760a4a3",
+      "display": "AtrioBlockCardiacPacerSitu  DENEXCEPPop1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d1b682be-c26e-44cc-8ac4-18c81760a4a3",
+      "display": "AtrioBlockCardiacPacerSitu  DENEXCEPPop1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b472b9b5-419f-4e40-81c7-2086b4b3962d",
+      "display": "AtrioBlockCardiacPacerPx DENEXCEPPop1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b472b9b5-419f-4e40-81c7-2086b4b3962d",
+      "display": "AtrioBlockCardiacPacerPx DENEXCEPPop1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/12fda733-0b5d-4f3d-93b2-59c35ba85898",
+      "display": "ActiveBetaBlockerforLVSDStartsB4Enc NUMERPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/12fda733-0b5d-4f3d-93b2-59c35ba85898",
+      "display": "ActiveBetaBlockerforLVSDStartsB4Enc NUMERPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1f70822b-c513-4c3a-8162-49f0bb9c914b",
+      "display": "Carvedilol25MGOralTabletPatRsn DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1f70822b-c513-4c3a-8162-49f0bb9c914b",
+      "display": "Carvedilol25MGOralTabletPatRsn DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3a8ee66b-5016-4a12-8f1c-df6201cbd6e3",
+      "display": "EncounterBeforeMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3a8ee66b-5016-4a12-8f1c-df6201cbd6e3",
+      "display": "EncounterBeforeMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/40500bf1-592a-4afd-8b0d-cc1fe3947190",
+      "display": "NoQualifyingLVSD DENOMPop1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/40500bf1-592a-4afd-8b0d-cc1fe3947190",
+      "display": "NoQualifyingLVSD DENOMPop1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1f58a561-bf40-43dd-89a3-8d590013ee1c",
+      "display": "Asthma DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1f58a561-bf40-43dd-89a3-8d590013ee1c",
+      "display": "Asthma DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fdbc9919-4ab0-446a-8c0b-29ac687d8d3b",
+      "display": "ConsecHeartRatesLT50 DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fdbc9919-4ab0-446a-8c0b-29ac687d8d3b",
+      "display": "ConsecHeartRatesLT50 DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/69030a7d-2238-4f08-beb2-cd96e5152a4b",
+      "display": "PtLessThan18 IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/69030a7d-2238-4f08-beb2-cd96e5152a4b",
+      "display": "PtLessThan18 IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f929563b-a5a0-4d55-9613-d75d383d3c6a",
+      "display": "AtrioBlock DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f929563b-a5a0-4d55-9613-d75d383d3c6a",
+      "display": "AtrioBlock DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4a3086cd-63f3-41c3-8ce9-f75b4b18b85c",
+      "display": "MedNotOrderedPatRsn DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4a3086cd-63f3-41c3-8ce9-f75b4b18b85c",
+      "display": "MedNotOrderedPatRsn DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4e2ad83d-ea31-45e7-92cb-07fe319aaf38",
+      "display": "MI3YearsAgo DENOMPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4e2ad83d-ea31-45e7-92cb-07fe319aaf38",
+      "display": "MI3YearsAgo DENOMPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/10a6f006-eabc-4a40-80bd-2a135e45e597",
+      "display": "AtrioBlockEC DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/10a6f006-eabc-4a40-80bd-2a135e45e597",
+      "display": "AtrioBlockEC DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6cf089cd-0c1a-4e4f-b8d9-11c0db757c4b",
+      "display": "ConsecHeartRatesLT50 DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6cf089cd-0c1a-4e4f-b8d9-11c0db757c4b",
+      "display": "ConsecHeartRatesLT50 DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e64fd85a-d643-423d-9e3f-d4838e181aa9",
+      "display": "BetaBlockerOrderEachEnc NUMERPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e64fd85a-d643-423d-9e3f-d4838e181aa9",
+      "display": "BetaBlockerOrderEachEnc NUMERPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b05ea6cd-9b35-4798-b15d-edc8593c2d33",
+      "display": "Hypotension DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b05ea6cd-9b35-4798-b15d-edc8593c2d33",
+      "display": "Hypotension DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/641aaa7a-d227-475a-a648-9c048522b62f",
+      "display": "BradycardiaAfterEncounter DENEXCEPPop2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/641aaa7a-d227-475a-a648-9c048522b62f",
+      "display": "BradycardiaAfterEncounter DENEXCEPPop2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a579d7e2-37c4-47ea-937d-524bba26ba2f",
+      "display": "BetaAdrenergicAllergy DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a579d7e2-37c4-47ea-937d-524bba26ba2f",
+      "display": "BetaAdrenergicAllergy DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a27c9543-534c-40cd-b5d5-a14c192ac087",
+      "display": "OnlyOneEncounter IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a27c9543-534c-40cd-b5d5-a14c192ac087",
+      "display": "OnlyOneEncounter IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5a85d133-acfb-40fa-a3ab-0c557d21e67c",
+      "display": "BetaBlockerAllergy DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5a85d133-acfb-40fa-a3ab-0c557d21e67c",
+      "display": "BetaBlockerAllergy DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f9a24bdb-a835-4851-8e50-eb11a5c9fb50",
+      "display": "BetaBlockerAllergy DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f9a24bdb-a835-4851-8e50-eb11a5c9fb50",
+      "display": "BetaBlockerAllergy DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dad1f2c7-c45e-4287-9abf-e7e6ff90f2ff",
+      "display": "BetaBlockerRxDuringEnc NUMERPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dad1f2c7-c45e-4287-9abf-e7e6ff90f2ff",
+      "display": "BetaBlockerRxDuringEnc NUMERPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/79e4e453-f52d-41a1-a86b-4229a89733c4",
+      "display": "LVSD DENOMPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/79e4e453-f52d-41a1-a86b-4229a89733c4",
+      "display": "LVSD DENOMPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/68c4dacc-cb3c-423b-9fde-899dfd05b5f6",
+      "display": "AtrioBlockWithCardiacPacerSitu DENEXCEPPop2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/68c4dacc-cb3c-423b-9fde-899dfd05b5f6",
+      "display": "AtrioBlockWithCardiacPacerSitu DENEXCEPPop2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5fd0d626-e9c5-4e6c-a10d-1a1183fa7702",
+      "display": "BetaBlockerAllergyDiagnosis DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5fd0d626-e9c5-4e6c-a10d-1a1183fa7702",
+      "display": "BetaBlockerAllergyDiagnosis DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7111ea79-9b4a-4452-86cf-22b8852bc5eb",
+      "display": "Arrhythmia DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7111ea79-9b4a-4452-86cf-22b8852bc5eb",
+      "display": "Arrhythmia DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/61306767-0e74-44b8-ac06-1339c3783355",
+      "display": "BetaBlockerIntolerance DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/61306767-0e74-44b8-ac06-1339c3783355",
+      "display": "BetaBlockerIntolerance DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7fb4cb03-569b-4c0a-8898-abe49d609c0e",
+      "display": "AsthmaEBSofLastEnc DENEXCEPPop2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7fb4cb03-569b-4c0a-8898-abe49d609c0e",
+      "display": "AsthmaEBSofLastEnc DENEXCEPPop2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/72845b60-dc5c-4a93-8b86-2caca155cd9c",
+      "display": "MIAfterMP DENOMPop2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/72845b60-dc5c-4a93-8b86-2caca155cd9c",
+      "display": "MIAfterMP DENOMPop2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b65680a0-9768-4ce4-b08d-972fcd84e28e",
+      "display": "BetaBlockerAllergyDiagnosis  DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b65680a0-9768-4ce4-b08d-972fcd84e28e",
+      "display": "BetaBlockerAllergyDiagnosis  DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bfacfb96-e784-4346-bf29-a20359dc0ba5",
+      "display": "BetaAdrenergicAllergy DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bfacfb96-e784-4346-bf29-a20359dc0ba5",
+      "display": "BetaAdrenergicAllergy DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dbb4d4b0-06a5-4354-9dbc-072c01709a3a",
+      "display": "BetaBlockerAllergy DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dbb4d4b0-06a5-4354-9dbc-072c01709a3a",
+      "display": "BetaBlockerAllergy DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2dbbdad5-c2dd-42a4-9f6d-f8815bc89a0a",
+      "display": "Hypotension DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2dbbdad5-c2dd-42a4-9f6d-f8815bc89a0a",
+      "display": "Hypotension DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a994dd9f-d7b0-441d-8358-1287d75836de",
+      "display": "Bradycardia DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a994dd9f-d7b0-441d-8358-1287d75836de",
+      "display": "Bradycardia DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4e9c7cf3-c1ae-4110-9ead-86fadfbbf3e4",
+      "display": "AtrioBlockCardiacPacerPx DENEXCEPPop2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4e9c7cf3-c1ae-4110-9ead-86fadfbbf3e4",
+      "display": "AtrioBlockCardiacPacerPx DENEXCEPPop2Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dd4e465a-3796-4d5d-af53-3e2ab1e4041b",
+      "display": "Carvedilol25MGOralTabletPatRsn DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dd4e465a-3796-4d5d-af53-3e2ab1e4041b",
+      "display": "Carvedilol25MGOralTabletPatRsn DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fd5fb311-a466-4c59-966d-48fa7aa88931",
+      "display": "BetaBlockerAllergyDiagnosis DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fd5fb311-a466-4c59-966d-48fa7aa88931",
+      "display": "BetaBlockerAllergyDiagnosis DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b19af44d-fb1c-4e78-a0dd-170c6b61718f",
+      "display": "BetaBlockerAllergy DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b19af44d-fb1c-4e78-a0dd-170c6b61718f",
+      "display": "BetaBlockerAllergy DENEXCEPPop2Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/314e78ef-a347-41bb-bce3-4b4ed18999ad",
+      "display": "Bradycardia  DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/314e78ef-a347-41bb-bce3-4b4ed18999ad",
+      "display": "Bradycardia  DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/40b4796d-dba8-4232-8cb4-8daf5d13a554",
+      "display": "OverlapsAfterSameDay NUMERPop1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/40b4796d-dba8-4232-8cb4-8daf5d13a554",
+      "display": "OverlapsAfterSameDay NUMERPop1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/13ce1b7d-3af6-4ef3-a4ae-6cd7c3075be8",
+      "display": "HypotensionAfterEncounter DENEXCEPPop1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/13ce1b7d-3af6-4ef3-a4ae-6cd7c3075be8",
+      "display": "HypotensionAfterEncounter DENEXCEPPop1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aafbe467-9603-443a-8397-d5c337ebbdc6",
+      "display": "Asthma DENEXCEPPop1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aafbe467-9603-443a-8397-d5c337ebbdc6",
+      "display": "Asthma DENEXCEPPop1Pass"
+    }
+  } ]
+}

@@ -1,0 +1,33 @@
+{
+  "resourceType": "Procedure",
+  "id": "38f81726-ccba-4758-8c8a-bedd01580891",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-05-15T10:20:00.000+00:00"
+  } ],
+  "status": "completed",
+  "category": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "18286008",
+      "display": "General or neuraxial anesthesia"
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "112943005",
+      "display": "Epidural injection of anesthetic substance, diagnostic, caudal, continuous"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f29f69fc-dcbd-4296-8b56-e6e081758ed9"
+  },
+  "performedPeriod": {
+    "start": "2026-05-05T09:00:00.000+00:00",
+    "end": "2026-05-05T10:15:00.000+00:00"
+  }
+}

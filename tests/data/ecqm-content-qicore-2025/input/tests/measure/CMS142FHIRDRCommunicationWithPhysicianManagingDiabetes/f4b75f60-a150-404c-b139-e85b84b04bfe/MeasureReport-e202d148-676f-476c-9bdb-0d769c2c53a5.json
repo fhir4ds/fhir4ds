@@ -1,0 +1,93 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "e202d148-676f-476c-9bdb-0d769c2c53a5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "e971c90e-547b-459f-8ddf-eb1fa11d6c92-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "f4b75f60-a150-404c-b139-e85b84b04bfe"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#e971c90e-547b-459f-8ddf-eb1fa11d6c92-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient with Qualifying Encounter and Retinopathy Diagnosis does not meet IPP because of the verification status of the diagnosis."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS142FHIRDRCommunicationWithPhysicianManagingDiabetes",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/f4b75f60-a150-404c-b139-e85b84b04bfe"
+  }, {
+    "reference": "Condition/08f3b87e-5e7c-41b5-a7b4-7ce826fcc05b"
+  }, {
+    "reference": "Encounter/93c8484b-c95a-4103-9fd6-7bdb516eec3f"
+  }, {
+    "reference": "Coverage/7cc04933-f9f3-4c8d-ba14-f04257cd6062"
+  }, {
+    "reference": "Organization/86d07626-9757-4556-a56c-c13e8a2f2dc7"
+  } ]
+}

@@ -1,0 +1,58 @@
+{
+  "resourceType": "Patient",
+  "id": "e98529d7-5196-4523-bbc9-cbf48b5525d1",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "text": {
+    "status": "generated",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">NoHIVDiag <b>DENEXFAIL </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>8de0ab14b056fcd32f87b213d0f959e9c5ee73f04fd5302ce5e21711fa269223</td></tr><tr><td>Date of birth</td><td><span>31 July 1992</span></td></tr></tbody></table></div>"
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2076-8",
+        "display": "Native Hawaiian or Other Pacific Islander",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Native Hawaiian or Other Pacific Islander"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Hispanic or Latino"
+    } ]
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://bonnie-fhir.healthit.gov/",
+    "value": "610965b898086b538055c14b"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "family": "DENEXFail",
+    "given": [ "NoHIVDiag" ]
+  } ],
+  "gender": "male",
+  "birthDate": "1994-07-31"
+}

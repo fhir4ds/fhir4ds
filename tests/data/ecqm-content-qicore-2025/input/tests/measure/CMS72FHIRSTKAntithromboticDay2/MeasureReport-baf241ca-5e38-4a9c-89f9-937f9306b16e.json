@@ -1,0 +1,111 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "baf241ca-5e38-4a9c-89f9-937f9306b16e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "01c8555a-70e0-45f7-af56-9397ee09ae14-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "79a2dd53-a342-41d9-a5c9-1b565bd06fe7"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#01c8555a-70e0-45f7-af56-9397ee09ae14-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Testing Interval function to determine if the timing of the TPA has an affect of passing the denominator exclusion. Based on 2020 AU issue ticket 2161. Any time before hospitalization starts does not meet the exclusion. \n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS72FHIRSTKAntithromboticDay2",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/79a2dd53-a342-41d9-a5c9-1b565bd06fe7"
+  }, {
+    "reference": "Encounter/23687d74-2f40-4a3e-9cca-692f7a692193"
+  }, {
+    "reference": "Encounter/fb2a1f90-49b8-418e-953e-45176f5180ff"
+  }, {
+    "reference": "MedicationAdministration/abb2176f-23ad-4ac5-a8fb-d5b6927a077e"
+  }, {
+    "reference": "MedicationRequest/36e13b75-995d-4f40-9ca4-15581213dc36"
+  }, {
+    "reference": "Condition/c54ba758-04be-422a-b787-e347dfcb9069"
+  }, {
+    "reference": "Claim/5ca62962b8484628b8de1ec5"
+  }, {
+    "reference": "Coverage/81eb431d-509b-41df-a683-b99dcc5f808a"
+  }, {
+    "reference": "Organization/bb2bb523-f606-4678-b685-d46c05b94208"
+  } ]
+}

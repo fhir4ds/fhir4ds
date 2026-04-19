@@ -1,0 +1,41 @@
+{
+  "resourceType": "Condition",
+  "id": "0c92afdb-389e-4b0f-bb91-47a484452de4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "10365005",
+      "display": "Right main coronary artery thrombosis (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1bbf669f-a5f6-4dde-a8b2-1be100394e18"
+  },
+  "onsetPeriod": {
+    "start": "2026-01-21T07:00:00.000+00:00"
+  }
+}

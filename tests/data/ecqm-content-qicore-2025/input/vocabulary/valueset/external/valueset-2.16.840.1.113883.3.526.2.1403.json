@@ -1,0 +1,76 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1403-20210209",
+  "meta": {
+    "versionId": "25",
+    "lastUpdated": "2023-12-21T17:43:03.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2024-12-23"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2021-02-09"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1403",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1403"
+  } ],
+  "version": "20210209",
+  "name": "OpticDiscExamForStructuralAbnormalities",
+  "title": "Optic Disc Exam for Structural Abnormalities",
+  "status": "active",
+  "experimental": false,
+  "date": "2021-02-09T01:00:25-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of diagnostic studies specific to assessing for structural abnormalities of the optic disc by ophthalmoscopy.),(Data Element Scope: This value set may use a model element related to Diagnostic Study.),(Inclusion Criteria: Includes concepts that represent a diagnostic study using ophthalmoscopy.),(Exclusion Criteria: No exclusions.)",
+  "compose": {
+    "include": [ {
+      "system": "http://loinc.org",
+      "concept": [ {
+        "code": "71486-5",
+        "display": "Left eye Optic disc or retinal nerve fiber layer structural abnormalities by Ophthalmoscopy"
+      }, {
+        "code": "71487-3",
+        "display": "Right eye Optic disc or retinal nerve fiber layer structural abnormalities by Ophthalmoscopy"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:fd361935-983c-4399-995d-6b555bfc7768",
+    "timestamp": "2025-06-20T16:55:15-04:00",
+    "total": 2,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "71486-5",
+      "display": "Left eye Optic disc or retinal nerve fiber layer structural abnormalities by Ophthalmoscopy"
+    }, {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "71487-3",
+      "display": "Right eye Optic disc or retinal nerve fiber layer structural abnormalities by Ophthalmoscopy"
+    } ]
+  }
+}

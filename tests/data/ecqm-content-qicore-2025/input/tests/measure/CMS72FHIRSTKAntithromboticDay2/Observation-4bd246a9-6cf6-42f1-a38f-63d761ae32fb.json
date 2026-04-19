@@ -1,0 +1,31 @@
+{
+  "resourceType": "Observation",
+  "id": "4bd246a9-6cf6-42f1-a38f-63d761ae32fb",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "laboratory",
+      "display": "Laboratory"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "34714-6"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/79f6bb60-1bdb-4dff-857d-65311e9ccea5"
+  },
+  "effectivePeriod": {
+    "start": "2026-10-10T06:15:00Z"
+  },
+  "issued": "2026-10-10T06:30:00.000+00:00",
+  "valueQuantity": {
+    "value": 3.6
+  }
+}

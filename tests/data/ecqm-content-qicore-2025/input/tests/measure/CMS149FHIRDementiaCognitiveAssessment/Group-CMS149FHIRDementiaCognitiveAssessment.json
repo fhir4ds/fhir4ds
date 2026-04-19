@@ -1,0 +1,332 @@
+{
+  "resourceType": "Group",
+  "id": "CMS149FHIRDementiaCognitiveAssessment",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS149FHIRDementiaCognitiveAssessment"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/8f570399-4bd9-4c38-aa3d-e526d987109b",
+      "display": "Encounter1DayAfterMPEdge IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8f570399-4bd9-4c38-aa3d-e526d987109b",
+      "display": "Encounter1DayAfterMPEdge IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6bd80fce-8086-46d6-a95f-bf70f0a016ca",
+      "display": "DementiaDxNullOnsetPeriodStart IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6bd80fce-8086-46d6-a95f-bf70f0a016ca",
+      "display": "DementiaDxNullOnsetPeriodStart IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2eb467fd-9453-4652-bb38-18d1ab636aca",
+      "display": "DementiaDxStartsFirstDayofMPEdge IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2eb467fd-9453-4652-bb38-18d1ab636aca",
+      "display": "DementiaDxStartsFirstDayofMPEdge IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a8c0ccf4-e672-4c1f-9f33-fbf4464a5fe5",
+      "display": "QualEncountersWithDementia IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a8c0ccf4-e672-4c1f-9f33-fbf4464a5fe5",
+      "display": "QualEncountersWithDementia IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/67e19058-917d-43f8-98d3-d16730fc7d32",
+      "display": "EncounterandDxinMP IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/67e19058-917d-43f8-98d3-d16730fc7d32",
+      "display": "EncounterandDxinMP IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e9a609ba-0f93-4d33-965e-4bca590af192",
+      "display": "2ndEncounterB4MPEdge IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e9a609ba-0f93-4d33-965e-4bca590af192",
+      "display": "2ndEncounterB4MPEdge IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1312a23d-9987-425c-b842-ce97792fa49c",
+      "display": "EncounterandDxinMPMissingSecondEnc 2IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1312a23d-9987-425c-b842-ce97792fa49c",
+      "display": "EncounterandDxinMPMissingSecondEnc 2IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bff8345c-0962-455c-afd7-a1b26bfc50e2",
+      "display": "DementiaDx1MinAfterEncEdge IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bff8345c-0962-455c-afd7-a1b26bfc50e2",
+      "display": "DementiaDx1MinAfterEncEdge IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/051c9480-438e-48d5-b91f-5f8f980b1f8b",
+      "display": "EncStarts1MinAfterMPEdge IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/051c9480-438e-48d5-b91f-5f8f980b1f8b",
+      "display": "EncStarts1MinAfterMPEdge IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/980e3550-6c75-4c4d-a64d-0657107e7cec",
+      "display": "DementiaDxOnset1MinB4EncEdge IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/980e3550-6c75-4c4d-a64d-0657107e7cec",
+      "display": "DementiaDxOnset1MinB4EncEdge IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/de56e9db-49b7-4f1a-a1ae-2649b1bb52b9",
+      "display": "EncClassInpatient IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/de56e9db-49b7-4f1a-a1ae-2649b1bb52b9",
+      "display": "EncClassInpatient IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/04c67cc9-bf23-4f31-988c-8bac7e96f938",
+      "display": "AssessmentAfterEnc NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/04c67cc9-bf23-4f31-988c-8bac7e96f938",
+      "display": "AssessmentAfterEnc NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a7318ea6-4b51-4c32-aeb5-60668c1b1114",
+      "display": "DementiaDxStartsFirstDayofMPEdge IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a7318ea6-4b51-4c32-aeb5-60668c1b1114",
+      "display": "DementiaDxStartsFirstDayofMPEdge IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f2613ad5-c498-4205-98b4-e9d8ae0b53ad",
+      "display": "DxDayAfterMPEdge IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f2613ad5-c498-4205-98b4-e9d8ae0b53ad",
+      "display": "DxDayAfterMPEdge IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/598ab62f-bb5f-4947-b299-97aa8c50aef2",
+      "display": "NoDementiaDX IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/598ab62f-bb5f-4947-b299-97aa8c50aef2",
+      "display": "NoDementiaDX IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a3867482-15a8-42fd-8d78-dff5db0d40f4",
+      "display": "AssessmentNotDonePatientReason1MinB4EncEdge DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a3867482-15a8-42fd-8d78-dff5db0d40f4",
+      "display": "AssessmentNotDonePatientReason1MinB4EncEdge DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8a93582d-baef-491c-a253-b43762a90ef6",
+      "display": "DementiaDxEnteredInError IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8a93582d-baef-491c-a253-b43762a90ef6",
+      "display": "DementiaDxEnteredInError IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c0e64f12-0d43-4bff-bd50-aae46844e6b6",
+      "display": "EncounterHasNoEndDate IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c0e64f12-0d43-4bff-bd50-aae46844e6b6",
+      "display": "EncounterHasNoEndDate IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7698942f-4fca-43dd-8457-6b80cd517566",
+      "display": "EncounterHasNoStartDate IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7698942f-4fca-43dd-8457-6b80cd517566",
+      "display": "EncounterHasNoStartDate IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e00c927a-f454-4611-97b2-e3e2bdfed182",
+      "display": "DementiaDxUnconfirmed IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e00c927a-f454-4611-97b2-e3e2bdfed182",
+      "display": "DementiaDxUnconfirmed IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/99f28510-d75f-48d3-9f36-69739bc27419",
+      "display": "AssessmentOneMonthBeforeEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/99f28510-d75f-48d3-9f36-69739bc27419",
+      "display": "AssessmentOneMonthBeforeEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/38fba18c-6026-4777-b99b-75996d5968e3",
+      "display": "AssessmentNotDonePatientReason1MinAfterEncEdge DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/38fba18c-6026-4777-b99b-75996d5968e3",
+      "display": "AssessmentNotDonePatientReason1MinAfterEncEdge DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/805ca8cb-ad65-4edb-88c1-19aeec7461f2",
+      "display": "DementiaDxRefuted IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/805ca8cb-ad65-4edb-88c1-19aeec7461f2",
+      "display": "DementiaDxRefuted IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9c546150-9e90-4743-989a-39fe2b0a5a5b",
+      "display": "MissingSecondEncounter IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9c546150-9e90-4743-989a-39fe2b0a5a5b",
+      "display": "MissingSecondEncounter IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fd115ded-69a6-4766-bdd9-d6364347401e",
+      "display": "Assessment1MinB4EncounterEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fd115ded-69a6-4766-bdd9-d6364347401e",
+      "display": "Assessment1MinB4EncounterEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9e1ffb55-7663-4cd5-a2bf-6f29fccbc70e",
+      "display": "AssessmentIssuedB4Encounter DenomEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9e1ffb55-7663-4cd5-a2bf-6f29fccbc70e",
+      "display": "AssessmentIssuedB4Encounter DenomEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/83ef16cb-ad8a-4ce0-a8c8-c0ff7346d83c",
+      "display": "EncEnds1MinAfterMPEnd IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/83ef16cb-ad8a-4ce0-a8c8-c0ff7346d83c",
+      "display": "EncEnds1MinAfterMPEnd IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e1e5ecba-2f9f-41c6-9bd2-2a1bc26a0273",
+      "display": "EncEnds1MinB4MPEdge IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e1e5ecba-2f9f-41c6-9bd2-2a1bc26a0273",
+      "display": "EncEnds1MinB4MPEdge IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a7935229-6eb1-45c1-ad08-4fcba8ebbde6",
+      "display": "AssessmentNotDonePatientReason DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a7935229-6eb1-45c1-ad08-4fcba8ebbde6",
+      "display": "AssessmentNotDonePatientReason DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0405033f-c6a4-4619-93da-14c9c5613d7b",
+      "display": "Assessment1MinB4EncounterEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0405033f-c6a4-4619-93da-14c9c5613d7b",
+      "display": "Assessment1MinB4EncounterEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/49997661-cfa3-4554-9d30-18dbb589d95c",
+      "display": "AssessmentNotDonePatientReason DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/49997661-cfa3-4554-9d30-18dbb589d95c",
+      "display": "AssessmentNotDonePatientReason DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9356623d-fe48-4da2-8def-54fb9e97177c",
+      "display": "DementiaDxAbated IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9356623d-fe48-4da2-8def-54fb9e97177c",
+      "display": "DementiaDxAbated IPFail"
+    }
+  } ]
+}

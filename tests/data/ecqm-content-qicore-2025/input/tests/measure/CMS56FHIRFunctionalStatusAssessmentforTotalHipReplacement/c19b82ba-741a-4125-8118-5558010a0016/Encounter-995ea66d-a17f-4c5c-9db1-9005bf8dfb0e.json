@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "995ea66d-a17f-4c5c-9db1-9005bf8dfb0e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "281036007",
+      "display": "Follow-up consultation (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/c19b82ba-741a-4125-8118-5558010a0016"
+  },
+  "period": {
+    "start": "2025-11-01T00:00:00.000Z",
+    "end": "2025-11-01T01:15:00.000Z"
+  }
+}

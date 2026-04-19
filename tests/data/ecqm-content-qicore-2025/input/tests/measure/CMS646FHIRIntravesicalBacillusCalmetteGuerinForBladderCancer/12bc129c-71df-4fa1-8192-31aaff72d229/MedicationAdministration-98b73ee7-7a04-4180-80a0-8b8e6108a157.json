@@ -1,0 +1,20 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "98b73ee7-7a04-4180-80a0-8b8e6108a157",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "in-progress",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "04012024",
+      "code": "1653579",
+      "display": "BCG, live, Tice strain 50 MG Injection"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/12bc129c-71df-4fa1-8192-31aaff72d229"
+  },
+  "effectiveDateTime": "2026-08-01T08:00:00.000+00:00"
+}

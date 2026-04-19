@@ -1,0 +1,147 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.117.1.7.1.205",
+  "meta": {
+    "versionId": "63",
+    "lastUpdated": "2026-02-03T15:42:02.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2024-02-03"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2024-02-03"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.205",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113883.3.117.1.7.1.205"
+    }
+  ],
+  "version": "20240203",
+  "name": "DirectThrombinInhibitor",
+  "title": "Direct Thrombin Inhibitor",
+  "status": "active",
+  "date": "2024-02-03T01:09:29-05:00",
+  "publisher": "Joint Commission",
+  "expansion": {
+    "identifier": "urn:uuid:d1a5c77f-c497-4113-8d4a-9fb6840b239e",
+    "timestamp": "2026-03-13T12:53:40-04:00",
+    "total": 15,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1037045",
+        "display": "dabigatran etexilate 150 MG Oral Capsule"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1037179",
+        "display": "dabigatran etexilate 75 MG Oral Capsule"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1723476",
+        "display": "dabigatran etexilate 110 MG Oral Capsule"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1804735",
+        "display": "50 ML argatroban 1 MG/ML Injection"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1804737",
+        "display": "125 ML argatroban 1 MG/ML Injection"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1997015",
+        "display": "50 ML bivalirudin 5 MG/ML Injection"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1997017",
+        "display": "100 ML bivalirudin 5 MG/ML Injection"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "2590616",
+        "display": "dabigatran etexilate 110 MG Oral Pellet"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "2590620",
+        "display": "dabigatran etexilate 150 MG Oral Pellet"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "2590623",
+        "display": "dabigatran etexilate 20 MG Oral Pellet"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "2590627",
+        "display": "dabigatran etexilate 30 MG Oral Pellet"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "2590631",
+        "display": "dabigatran etexilate 40 MG Oral Pellet"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "2590635",
+        "display": "dabigatran etexilate 50 MG Oral Pellet"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "308351",
+        "display": "2.5 ML argatroban 100 MG/ML Injection"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "308769",
+        "display": "bivalirudin 250 MG Injection"
+      }
+    ]
+  }
+}

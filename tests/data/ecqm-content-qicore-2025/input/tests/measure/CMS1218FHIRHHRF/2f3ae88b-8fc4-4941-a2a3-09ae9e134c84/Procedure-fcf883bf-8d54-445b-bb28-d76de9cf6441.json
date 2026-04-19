@@ -1,0 +1,25 @@
+{
+  "resourceType": "Procedure",
+  "id": "fcf883bf-8d54-445b-bb28-d76de9cf6441",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-05-06T08:15:30.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2023-09",
+      "code": "304577004",
+      "display": "Humidified oxygen therapy (procedure)"
+    } ],
+    "text": "Humidified oxygen therapy (procedure)"
+  },
+  "subject": {
+    "reference": "Patient/2f3ae88b-8fc4-4941-a2a3-09ae9e134c84"
+  },
+  "performedDateTime": "2026-05-06T08:10:00.000+00:00"
+}

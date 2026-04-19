@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "db104ae7-1d4b-41a0-aa58-5d92f3758e78",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "exam",
+      "display": "exam",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "11884-4"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a1e91653-1ffc-418b-b711-3d941af24c77"
+  },
+  "effectiveDateTime": "2026-06-08T09:15:00.000+00:00",
+  "performer": [ {
+    "reference": "Organization/example1",
+    "display": "Hendricks Country Hospital"
+  } ],
+  "valueQuantity": {
+    "value": 37,
+    "system": "http://unitsofmeasure.org",
+    "code": "wk"
+  }
+}

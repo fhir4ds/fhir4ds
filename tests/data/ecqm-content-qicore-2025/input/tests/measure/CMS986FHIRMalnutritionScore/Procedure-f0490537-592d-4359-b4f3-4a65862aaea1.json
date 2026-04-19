@@ -1,0 +1,30 @@
+{
+  "resourceType": "Procedure",
+  "id": "f0490537-592d-4359-b4f3-4a65862aaea1",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-02-02T11:30:00Z"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "445101000124100",
+      "display": "Collaborating in nutrition therapy (procedure)"
+    } ],
+    "text": "Collaborating in nutrition therapy (procedure)"
+  },
+  "subject": {
+    "reference": "Patient/e5582d8a-91d9-4234-910d-db7a6fa68785"
+  },
+  "encounter": {
+    "reference": "Encounter/ScreAtriNorefAsseModTHENNotMDxCpMSROBSPass2"
+  },
+  "performedPeriod": {
+    "start": "2026-07-15T08:00:00Z",
+    "end": "2026-07-15T08:00:00Z"
+  }
+}

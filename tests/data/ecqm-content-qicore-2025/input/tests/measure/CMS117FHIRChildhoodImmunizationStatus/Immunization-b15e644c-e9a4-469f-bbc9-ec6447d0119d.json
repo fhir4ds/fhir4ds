@@ -1,0 +1,21 @@
+{
+  "resourceType": "Immunization",
+  "id": "b15e644c-e9a4-469f-bbc9-ec6447d0119d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ]
+  },
+  "status": "completed",
+  "vaccineCode": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/cvx",
+      "code": "94",
+      "display": "measles, mumps, rubella, and varicella virus vaccine"
+    } ]
+  },
+  "patient": {
+    "reference": "Patient/1e7dc519-5d75-4c07-b23f-ae9421a12943"
+  },
+  "occurrenceDateTime": "2025-01-02T00:00:00.000Z",
+  "recorded": "2025-01-02T00:00:00.000Z",
+  "primarySource": true
+}

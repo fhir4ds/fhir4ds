@@ -1,0 +1,16 @@
+{
+  "measure_id": "CMS771",
+  "patient_count": 31,
+  "timings_ms": {
+    "cql_parse_ms": 14.507247018627822,
+    "sql_generation_ms": 1129.3408219935372,
+    "sql_execution_ms": 72.29224499315023,
+    "total_ms": 1216.1403140053153
+  },
+  "patients_per_second": 25.490479711097308,
+  "comparison": {
+    "total_patients": 31,
+    "matching_patients": 31,
+    "accuracy_pct": 100.0
+  }
+}

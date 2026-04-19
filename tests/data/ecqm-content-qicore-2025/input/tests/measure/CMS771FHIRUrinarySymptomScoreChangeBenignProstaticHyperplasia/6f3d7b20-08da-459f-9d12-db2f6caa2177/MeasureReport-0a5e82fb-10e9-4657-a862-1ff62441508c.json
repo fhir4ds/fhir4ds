@@ -1,0 +1,93 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "0a5e82fb-10e9-4657-a862-1ff62441508c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "3d81f84d-2550-411e-86f4-0687cab8bc51-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "6f3d7b20-08da-459f-9d12-db2f6caa2177"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#3d81f84d-2550-411e-86f4-0687cab8bc51-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Second USS Assessment required for Initial Population and Denominator is performed 1 Minute After end of 12 month period of initial BPH Dx."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS771FHIRUrinarySymptomScoreChangeBenignProstaticHyperplasia",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/6f3d7b20-08da-459f-9d12-db2f6caa2177"
+  }, {
+    "reference": "Encounter/4a5a904f-ee1b-4d89-a073-a55ec7eed152"
+  }, {
+    "reference": "Condition/3d6cce6a-dccf-4410-b59b-c5e617719cbd"
+  }, {
+    "reference": "Observation/15a158e3-6ddf-4aae-8acc-eda9de8307c7"
+  }, {
+    "reference": "Observation/e3835b56-4a51-43fe-9543-5e93c6637ca0"
+  } ]
+}

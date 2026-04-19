@@ -1,0 +1,32 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "36e13b75-995d-4f40-9ca4-15581213dc36",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1037045"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/79a2dd53-a342-41d9-a5c9-1b565bd06fe7"
+  },
+  "authoredOn": "2026-03-23T08:00:00Z",
+  "requester": {
+    "reference": "Practitioner/example"
+  },
+  "dosageInstruction": [ {
+    "timing": {
+      "repeat": {
+        "boundsPeriod": {
+          "start": "2026-03-23T08:00:00Z",
+          "end": "2026-03-24T07:15:00.000+00:00"
+        }
+      }
+    }
+  } ]
+}

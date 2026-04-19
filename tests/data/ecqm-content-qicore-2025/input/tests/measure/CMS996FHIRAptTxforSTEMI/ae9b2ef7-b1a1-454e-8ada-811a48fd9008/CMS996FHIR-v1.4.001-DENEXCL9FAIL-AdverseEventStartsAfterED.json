@@ -1,0 +1,242 @@
+{
+  "resourceType": "Bundle",
+  "id": "617bfa581289f5673c8ceff8",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/ae9b2ef7-b1a1-454e-8ada-811a48fd9008",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "ae9b2ef7-b1a1-454e-8ada-811a48fd9008",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2076-8",
+            "display": "Native Hawaiian or Other Pacific Islander",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Native Hawaiian or Other Pacific Islander"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248152002"
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "617bfa581289f5673c8ceff8"
+      } ],
+      "name": [ {
+        "family": "DenExcl9Fail",
+        "given": [ "AdverseEventStartsAfterED" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1985-12-02"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/ae9b2ef7-b1a1-454e-8ada-811a48fd9008"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/e22fc6c4-eaaf-4b1d-9be2-dc7a794b16a8",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "e22fc6c4-eaaf-4b1d-9be2-dc7a794b16a8",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMER",
+        "display": "emergency",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2020-09",
+          "code": "4525004",
+          "display": "Emergency department patient visit (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/ae9b2ef7-b1a1-454e-8ada-811a48fd9008"
+      },
+      "period": {
+        "start": "2026-10-09T08:05:00.000+00:00",
+        "end": "2026-10-10T07:15:00.000+00:00"
+      },
+      "reasonCode": [ {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "version": "2021",
+          "code": "I21.21",
+          "display": "ST elevation (STEMI) myocardial infarction involving left circumflex coronary artery",
+          "userSelected": true
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/e22fc6c4-eaaf-4b1d-9be2-dc7a794b16a8"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/AdverseEvent/0ac59e21-2460-46ba-9711-255ad65cf699",
+    "resource": {
+      "resourceType": "AdverseEvent",
+      "id": "0ac59e21-2460-46ba-9711-255ad65cf699",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-adverseevent" ]
+      },
+      "actuality": "actual",
+      "event": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "1300134005",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/ae9b2ef7-b1a1-454e-8ada-811a48fd9008"
+      },
+      "date": "2026-12-09T11:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "AdverseEvent/0ac59e21-2460-46ba-9711-255ad65cf699"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/f9a17155-2f97-4b85-a605-8a882fe2d9c5",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "f9a17155-2f97-4b85-a605-8a882fe2d9c5",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "79de4bc2-01f5-42c2-b1a7-464d28fa58b0-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "ae9b2ef7-b1a1-454e-8ada-811a48fd9008"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#79de4bc2-01f5-42c2-b1a7-464d28fa58b0-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient has adverse event starts after ED"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS996FHIRAptTxforSTEMI",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/ae9b2ef7-b1a1-454e-8ada-811a48fd9008"
+      }, {
+        "reference": "Encounter/e22fc6c4-eaaf-4b1d-9be2-dc7a794b16a8"
+      }, {
+        "reference": "AdverseEvent/0ac59e21-2460-46ba-9711-255ad65cf699"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/f9a17155-2f97-4b85-a605-8a882fe2d9c5"
+    }
+  } ]
+}

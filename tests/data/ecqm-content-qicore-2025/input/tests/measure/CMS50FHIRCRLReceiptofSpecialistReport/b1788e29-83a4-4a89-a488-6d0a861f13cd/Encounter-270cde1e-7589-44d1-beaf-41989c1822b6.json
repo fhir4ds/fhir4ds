@@ -1,0 +1,29 @@
+{
+  "resourceType": "Encounter",
+  "id": "270cde1e-7589-44d1-beaf-41989c1822b6",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "359960003",
+      "display": "Ophthalmologic examination and evaluation under general anesthesia, limited (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/b1788e29-83a4-4a89-a488-6d0a861f13cd"
+  },
+  "period": {
+    "start": "2026-05-27T08:00:00.000+00:00",
+    "end": "2026-05-27T09:15:00.000+00:00"
+  }
+}

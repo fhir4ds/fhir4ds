@@ -1,0 +1,22 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "8f2a6ce9-a4df-4a48-b92d-22f27097b748",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "103696004",
+      "display": "Patient referral to specialist (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/e2a4f358-87f1-4fe1-b4e1-27969993d361"
+  },
+  "authoredOn": "2026-10-27T08:00:00.000+00:00"
+}

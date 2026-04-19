@@ -1,0 +1,93 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "98953765-56c6-4da7-a52d-0badc86ed90a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "1ee1c8de-db61-434f-bb8c-e20950c09248-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "4d7a04b3-91ed-4035-85ef-0728bdf818ef"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#1ee1c8de-db61-434f-bb8c-e20950c09248-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Male Patient with OV in MP, Initial and Followup Assessment and BPH Diagnosis with inactive Clinical Status"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS771FHIRUrinarySymptomScoreChangeBenignProstaticHyperplasia",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/4d7a04b3-91ed-4035-85ef-0728bdf818ef"
+  }, {
+    "reference": "Encounter/d21ea650-3db8-4335-b5ec-a28cbb643637"
+  }, {
+    "reference": "Condition/8d6a7215-f226-47d6-b160-5cd60e55906b"
+  }, {
+    "reference": "Observation/b8e9753c-72b8-44a3-a83a-3b38d82f1d76"
+  }, {
+    "reference": "Observation/ca46264d-1fc3-4dd3-a584-dfc88468390d"
+  } ]
+}

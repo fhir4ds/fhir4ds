@@ -1,0 +1,230 @@
+{
+  "resourceType": "Bundle",
+  "id": "62ec2e7cea03a4ebacd6a084",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/d1f4cbfc-1f86-408b-a65d-50250a4dd148",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "d1f4cbfc-1f86-408b-a65d-50250a4dd148",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "62ec2e7cea03a4ebacd6a084"
+      } ],
+      "name": [ {
+        "family": "NumerFail",
+        "given": [ "MedsNoDocBeforeEncPeriod" ]
+      } ],
+      "gender": "unknown",
+      "birthDate": "1967-01-19"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/d1f4cbfc-1f86-408b-a65d-50250a4dd148"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/08c25cac-a7ae-41c1-9331-4b67f0a930ec",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "08c25cac-a7ae-41c1-9331-4b67f0a930ec",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "10197000",
+          "display": "Psychiatric interview and evaluation (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/d1f4cbfc-1f86-408b-a65d-50250a4dd148"
+      },
+      "period": {
+        "start": "2026-08-04T08:00:00.000+00:00",
+        "end": "2026-08-04T09:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/08c25cac-a7ae-41c1-9331-4b67f0a930ec"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Task/f594b501-438a-4ff1-99db-74caf6c88b89",
+    "resource": {
+      "resourceType": "Task",
+      "id": "f594b501-438a-4ff1-99db-74caf6c88b89",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-task" ]
+      },
+      "identifier": [ {
+        "use": "official",
+        "system": "http:/goodhealth.org/identifiers",
+        "value": "20170201-002"
+      } ],
+      "status": "accepted",
+      "intent": "proposal",
+      "priority": "routine",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "428191000124101",
+          "display": "Documentation of current medications (procedure)",
+          "userSelected": true
+        } ]
+      },
+      "for": {
+        "reference": "Patient/d1f4cbfc-1f86-408b-a65d-50250a4dd148"
+      },
+      "executionPeriod": {
+        "start": "2026-08-04T07:45:00+10:00"
+      },
+      "authoredOn": "2026-08-04T07:45:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Task/f594b501-438a-4ff1-99db-74caf6c88b89"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/8d8942a6-a089-437b-b967-a803233bc370",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "8d8942a6-a089-437b-b967-a803233bc370",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "4001c3c8-a93d-45da-b06b-0b43ed8df4a2-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "d1f4cbfc-1f86-408b-a65d-50250a4dd148"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#4001c3c8-a93d-45da-b06b-0b43ed8df4a2-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Qualifying encounter (status finished) during MP. Medications documented before encounter period (edge test) status = accepted"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS68FHIRDocumentationofCurrentMedications",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/d1f4cbfc-1f86-408b-a65d-50250a4dd148"
+      }, {
+        "reference": "Encounter/08c25cac-a7ae-41c1-9331-4b67f0a930ec"
+      }, {
+        "reference": "Task/f594b501-438a-4ff1-99db-74caf6c88b89"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/8d8942a6-a089-437b-b967-a803233bc370"
+    }
+  } ]
+}

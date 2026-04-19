@@ -1,0 +1,25 @@
+{
+  "resourceType": "Procedure",
+  "id": "e730cfb1-0fee-49ee-804f-11599368a5b0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2013-12-04T13:35:00+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+      "code": "0DCC0ZZ"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/d665c40d-2323-471f-9642-983472d2be7b"
+  },
+  "performedPeriod": {
+    "start": "2026-12-06T07:00:00+00:00",
+    "end": "2026-12-06T13:00:00.000+00:00"
+  }
+}

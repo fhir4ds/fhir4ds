@@ -1,0 +1,29 @@
+{
+  "resourceType": "Observation",
+  "id": "fc14c998-27ab-4ded-8b46-bdce923ba956",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "80883-2",
+      "display": "American Urological Association Symptom Index [AUASI]",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/3ab3ac1d-9b5e-4087-8862-dcb2562fb90f"
+  },
+  "effectiveDateTime": "2026-01-02T08:15:00.000+00:00",
+  "valueInteger": 5
+}

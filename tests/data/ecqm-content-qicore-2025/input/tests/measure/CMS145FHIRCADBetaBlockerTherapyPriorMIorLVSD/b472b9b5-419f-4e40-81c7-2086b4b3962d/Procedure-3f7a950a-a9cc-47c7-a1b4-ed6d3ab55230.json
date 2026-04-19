@@ -1,0 +1,27 @@
+{
+  "resourceType": "Procedure",
+  "id": "3f7a950a-a9cc-47c7-a1b4-ed6d3ab55230",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-01-22T08:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "1231779006",
+      "display": "Implantation of leadless cardiac pacemaker (procedure)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b472b9b5-419f-4e40-81c7-2086b4b3962d"
+  },
+  "performedPeriod": {
+    "start": "2026-01-22T08:00:00.000+00:00",
+    "end": "2026-01-22T08:30:00.000+00:00"
+  }
+}

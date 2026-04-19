@@ -1,0 +1,40 @@
+{
+  "resourceType": "Condition",
+  "id": "e1a90599-6936-4e9e-8def-47251275860a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "429257001",
+      "display": "Disorder of transplanted heart (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/2b0d7791-29b6-4f10-b72a-b6a50667770d"
+  },
+  "onsetDateTime": "2025-09-25T16:00:00.000+00:00"
+}

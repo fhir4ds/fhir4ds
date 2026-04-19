@@ -1,0 +1,3461 @@
+<Measure xmlns="http://hl7.org/fhir">
+   <id value="CMS124FHIRCervicalCancerScreening"></id>
+   <meta>
+      <profile value="http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-shareablemeasure"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/executable-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cql-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/elm-measure-cqfm"></profile>
+      <profile value="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/proportion-measure-cqfm"></profile>
+   </meta>
+   <text>
+      <status value="extensions"></status>
+      <div xmlns="http://www.w3.org/1999/xhtml" class="col-12"> 
+         <table class="narrative-table"> 
+            <tbody> 
+               <tr> 
+                  <th colspan="2" scope="row" class="row-header">Knowledge Artifact Metadata</th> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Name (machine-readable)</th> 
+                  <td class="content-container">CMS124FHIRCervicalCancerScreening</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Title (human-readable)</th> 
+                  <td class="content-container">Cervical Cancer ScreeningFHIR</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Status</th> 
+                  <td class="content-container">active</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Experimental</th> 
+                  <td class="content-container">false</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Description</th> 
+                  <td class="content-container">Percentage of women 21-64 years of age who were screened for cervical cancer using either of the following criteria:
+- Women age 21-64 who had cervical cytology performed within the last 3 years - Women age 30-64 who had cervical human papillomavirus (HPV) testing performed within the last 5 years</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Clinical Usage</th> 
+                  <td class="content-container">To ensure the measure is only looking for a cervical cytology test only after a woman turns 21 years of age, the youngest age in the initial population is 23.
+
+Please note the measure may include screenings performed outside the age range of patients referenced in the initial population. Screenings that occur prior to the measurement period are valid to meet measure criteria. Evidence of hrHPV testing within the last 5 years also captures patients who had cotesting; therefore additional methods to identify cotesting are not necessary.
+
+This eCQM is a patient-based measure. This FHIR-based measure has been derived from the QDM-based measure: CMS124v14.
+
+Please refer to the HL7 QI-Core Implementation Guide (https://hl7.org/fhir/us/qicore/STU6/) for more information on QI-Core and mapping recommendations from QDM to QI-Core STU 6. (https://hl7.org/fhir/us/qicore/STU6/qdm-to-qicore.html).</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Effective Period</th> 
+                  <td class="content-container">2026-01-01..2026-12-31</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Measure Developer</th> 
+                  <td class="content-container">National Committee for Quality Assurance</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Measure Steward</th> 
+                  <td class="content-container">National Committee for Quality Assurance</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Copyright</th> 
+                  <td class="content-container">This Physician Performance Measure (Measure) and related data specifications are owned and were developed by the National Committee for Quality Assurance (NCQA). NCQA is not responsible for any use of the Measure. NCQA makes no representations, warranties or endorsements about the quality of any product, test or protocol identified as numerator compliant or otherwise identified as meeting the requirements of the measure or specification. NCQA makes no representations, warranties, or endorsement about the quality of any organization or physician that uses or reports performance measures and NCQA has no liability to anyone who relies on such measures or specifications. NCQA holds a copyright in the Measure. The Measure may be used for internal, noncommercial purposes (e.g., use by healthcare providers in connection with their practices) without obtaining approval from NCQA. All other uses, including a commercial use (including but not limited to vendors using or embedding the measures and specifications into any product or service to calculate measure results for customers for any purpose), must be approved by NCQA and are subject to a license at the discretion of NCQA. (C) 2012-2025 National Committee for Quality Assurance. All Rights Reserved.
+
+Limited proprietary coding is contained in the Measure specifications for user convenience. Users of proprietary code sets should obtain all necessary licenses from the owners of the code sets. NCQA disclaims all liability for use or accuracy of any third-party codes contained in the specifications. CPT(R) codes, descriptions and other data are copyright 2025. American Medical Association. All rights reserved. CPT is a trademark of the American Medical Association. Fee schedules, relative value units, conversion factors and/or related components are not assigned by the AMA, are not part of CPT, and the AMA is not recommending their use. The AMA does not directly or indirectly practice medicine or dispense medical services. The AMA assumes no liability for data contained or not contained herein. Applicable FARS/DFARS restrictions apply to government use.
+
+Some measure specifications contain coding from LOINC(R) (https://loinc.org). The LOINC table, LOINC codes, LOINC panels and form file, LOINC linguistic variants file, LOINC/RSNA Radiology Playbook, and LOINC/IEEE Medical Device Code Mapping Table are copyright 2004-2025 Regenstrief Institute, Inc. and the Logical Observation Identifiers Names and Codes (LOINC) Committee, and are available at no cost under the license at https://loinc.org/kb/license/. This material contains SNOMED Clinical Terms(R) (SNOMED CT[R]) copyright 2004-2024 International Health Terminology Standards Development Organisation.  ICD-10 copyright 2025 World Health Organization. All Rights Reserved.
+
+Some measures use RxNorm, a standardized nomenclature and coding for clinical drugs and drug delivery devices, which is made publicly available courtesy of the U.S. National Library of Medicine (NLM), National Institutes of Health, Department of Health and Human Services. NLM is not responsible for the measures and does not endorse or recommend this or any other product. “HL7” is the registered trademark of Health Level Seven International.</td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Citation</th>  
+                  <td class="content-container">  
+                     <em>Citation</em>: CITATION - American Cancer Society. (2020). Cancer Facts &amp; Figures 2020. Atlanta: American Cancer Society.   
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Citation</th>  
+                  <td class="content-container">  
+                     <em>Citation</em>: CITATION - National Cancer Institute. (2020). Cancer of the Cervix Uteri - Cancer Stat Facts. https://seer.cancer.gov/statfacts/html/cervix.html   
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Citation</th>  
+                  <td class="content-container">  
+                     <em>Citation</em>: CITATION - US Preventive Services Task Force, Curry, S. J., Krist, A. H., Owens, D. K., Barry, M. J., Caughey, A. B., … Wong, J. B. (2018). Screening for Cervical Cancer: US Preventive Services Task Force Recommendation Statement. JAMA, 320(7), 674–686. https://doi.org/10.1001/jama.2018.10897   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th colspan="2" scope="row" class="row-header">Measure Metadata</th> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Short Name Identifier</th> 
+                  <td class="content-container">CMS124FHIR</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Version Independent Identifier</th> 
+                  <td class="content-container">urn:uuid:3be5df74-24e1-46ed-b899-6e98b9e3760b</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Version Specific Identifier</th> 
+                  <td class="content-container">urn:uuid:d5fb530b-1d57-424b-a8e2-3ef76f0f30c2</td> 
+               </tr>  
+               <tr> 
+                  <th scope="row" class="row-header">Publisher (CMS) Identifier</th> 
+                  <td class="content-container">124FHIR</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Version Number</th> 
+                  <td class="content-container">0.4.000</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Rationale</th> 
+                  <td class="content-container">All women are at risk for cervical cancer. In 2020, an estimated 13,800 women were diagnosed with cervical cancer in the U.S., resulting in an estimated 4,290 deaths (National Cancer Institute, 2020). Screening can identify precancerous lesions and can detect invasive cancer early, when treatment is more likely to be successful (American Cancer Society, 2020).</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Clinical Recommendation Statement</th> 
+                  <td class="content-container">The U.S Preventive Services Task Force (USPSTF) recommends screening for cervical cancer every 3 years with cervical cytology alone in women aged 21 to 29 years. For women aged 30 to 65 years, the USPSTF recommends screening every 3 years with cervical cytology alone, every 5 years with high-risk human papillomavirus (hrHPV) testing alone, or every 5 years with hrHPV testing in combination with cytology (cotesting) (A recommendation) (USPSTF, 2018).
+
+The USPSTF recommends against screening for cervical cancer in women older than 65 years who have had adequate prior screening and are not otherwise at high risk for cervical cancer (D recommendation) (USPSTF, 2018). The USPSTF recommends against screening for cervical cancer in women younger than 21 years. (D recommendation) (USPSTF, 2018).
+
+The USPSTF recommends against screening for cervical cancer in women who have had a hysterectomy with removal of the cervix and do not have a history of a high-grade precancerous lesion (i.e., cervical intraepithelial neoplasia [CIN] grade 2 or 3) or cervical cancer (D recommendation) (USPSTF, 2018).</td> 
+               </tr>  
+               <tr> 
+                  <th scope="row" class="row-header">Supplemental Data Guidance</th> 
+                  <td class="content-container">For every patient evaluated by this measure also identify payer, race, ethnicity and sex</td> 
+               </tr>  
+               <tr> 
+                  <th colspan="2" scope="row" class="row-header">Measure Population Criteria (ID: Group_1)</th> 
+               </tr>   
+               <tr>  
+                  <th scope="row" class="row-header">Initial Population</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: InitialPopulation_1 
+                     <br></br>  
+                     <em>Description</em>: 
+                     <p style="white-space: pre-line" class="tab-one">Women 24-64 years of age by the end of the measurement period with a visit during the measurement period</p>   
+                     <em>Logic Definition</em>: 
+                     <a href="#cms124fhircervicalcancerscreening-initial-population">Initial Population</a>  
+                  </td> 
+               </tr>  
+               <tr>  
+                  <th scope="row" class="row-header">Denominator</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: Denominator_1 
+                     <br></br>  
+                     <em>Description</em>: 
+                     <p style="white-space: pre-line" class="tab-one">Equals Initial Population</p>   
+                     <em>Logic Definition</em>: 
+                     <a href="#cms124fhircervicalcancerscreening-denominator">Denominator</a>  
+                  </td> 
+               </tr>  
+               <tr>  
+                  <th scope="row" class="row-header">Denominator Exclusion</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: DenominatorExclusion_1 
+                     <br></br>  
+                     <em>Description</em>: 
+                     <p style="white-space: pre-line" class="tab-one">Exclude patients who are in hospice care for any part of the measurement period.
+
+Women who had a hysterectomy with no residual cervix or a congenital absence of cervix. Exclude patients receiving palliative care for any part of the measurement period.</p>   
+                     <em>Logic Definition</em>: 
+                     <a href="#cms124fhircervicalcancerscreening-denominator-exclusions">Denominator Exclusions</a>  
+                  </td> 
+               </tr>  
+               <tr>  
+                  <th scope="row" class="row-header">Numerator</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: Numerator_1 
+                     <br></br>  
+                     <em>Description</em>: 
+                     <p style="white-space: pre-line" class="tab-one">Women with one or more screenings for cervical cancer. Appropriate screenings are defined by any one of the following criteria:
+- Cervical cytology performed during the measurement period or the two years prior to the measurement period for women 24-64 years of age by the end of the measurement period. - Cervical human papillomavirus (HPV) testing performed during the measurement period or the four years prior to the measurement period for women who are 30 years or older at the time of the test.</p>   
+                     <em>Logic Definition</em>: 
+                     <a href="#cms124fhircervicalcancerscreening-numerator">Numerator</a>  
+                  </td> 
+               </tr>   
+               <tr> 
+                  <th scope="row" class="row-header">Population Basis</th> 
+                  <td class="content-container">boolean</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Scoring</th> 
+                  <td class="content-container">[http://terminology.hl7.org/CodeSystem/measure-scoring#proportion: 'Proportion']</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Type</th> 
+                  <td class="content-container">[http://terminology.hl7.org/CodeSystem/measure-type#process: 'Process']</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Rate Aggregation</th> 
+                  <td class="content-container">None</td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Improvement Notation</th> 
+                  <td class="content-container">[http://terminology.hl7.org/CodeSystem/measure-improvement-notation#increase: 'Increased score indicates improvement']</td> 
+               </tr> 
+               <tr> 
+                  <th colspan="2" scope="row" class="row-header">Supplemental Data Elements</th> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Supplemental Data Element</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: sde-ethnicity  
+                     <br></br>   
+                     <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]  
+                     <br></br>  
+                     <em>Description</em>: SDE Ethnicity   
+                     <br></br> 
+                     <em>Logic Definition</em>: 
+                     <a href="#cms124fhircervicalcancerscreening-sde-ethnicity">SDE Ethnicity</a>  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Supplemental Data Element</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: sde-payer  
+                     <br></br>   
+                     <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]  
+                     <br></br>  
+                     <em>Description</em>: SDE Payer   
+                     <br></br> 
+                     <em>Logic Definition</em>: 
+                     <a href="#cms124fhircervicalcancerscreening-sde-payer">SDE Payer</a>  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Supplemental Data Element</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: sde-race  
+                     <br></br>   
+                     <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]  
+                     <br></br>  
+                     <em>Description</em>: SDE Race   
+                     <br></br> 
+                     <em>Logic Definition</em>: 
+                     <a href="#cms124fhircervicalcancerscreening-sde-race">SDE Race</a>  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Supplemental Data Element</th> 
+                  <td class="content-container"> 
+                     <em>ID</em>: sde-sex  
+                     <br></br>   
+                     <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]  
+                     <br></br>  
+                     <em>Description</em>: SDE Sex   
+                     <br></br> 
+                     <em>Logic Definition</em>: 
+                     <a href="#cms124fhircervicalcancerscreening-sde-sex">SDE Sex</a>  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th colspan="2" scope="row" class="row-header">Measure Logic</th> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Primary Library</th> 
+                  <td class="content-container">https://madie.cms.gov/Library/CMS124FHIRCervicalCancerScreening</td> 
+               </tr>  
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Library SDE  
+                     <br></br>    
+                     <em>Resource</em>: https://madie.cms.gov/Library/SupplementalDataElements|5.1.000 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>https://madie.cms.gov/Library/SupplementalDataElements|5.1.000</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Library FHIRHelpers  
+                     <br></br>    
+                     <em>Resource</em>: https://madie.cms.gov/Library/FHIRHelpers|4.4.000 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>https://madie.cms.gov/Library/FHIRHelpers|4.4.000</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Library Status  
+                     <br></br>    
+                     <em>Resource</em>: https://madie.cms.gov/Library/Status|1.15.000 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>https://madie.cms.gov/Library/Status|1.15.000</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Library QICoreCommon  
+                     <br></br>    
+                     <em>Resource</em>: https://madie.cms.gov/Library/QICoreCommon|4.0.000 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>https://madie.cms.gov/Library/QICoreCommon|4.0.000</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Library Hospice  
+                     <br></br>    
+                     <em>Resource</em>: https://madie.cms.gov/Library/Hospice|6.18.000 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>https://madie.cms.gov/Library/Hospice|6.18.000</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Library PalliativeCare  
+                     <br></br>    
+                     <em>Resource</em>: https://madie.cms.gov/Library/PalliativeCare|1.18.000 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>https://madie.cms.gov/Library/PalliativeCare|1.18.000</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Code system SNOMEDCT  
+                     <br></br>    
+                     <em>Resource</em>: http://snomed.info/sct 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://snomed.info/sct</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Code system LOINC  
+                     <br></br>    
+                     <em>Resource</em>: http://loinc.org 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://loinc.org</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Code system ConditionVerificationStatusCodes  
+                     <br></br>    
+                     <em>Resource</em>: http://terminology.hl7.org/CodeSystem/condition-ver-status 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://terminology.hl7.org/CodeSystem/condition-ver-status</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Pap Test  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.108.12.1017 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.108.12.1017</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set HPV Test  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1059 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1059</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Office Visit  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Preventive Care Services Established Office Visit, 18 and Up  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1025 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1025</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Preventive Care Services Initial Office Visit, 18 and Up  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1023 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1023</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Home Healthcare Services  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1016 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1016</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Telephone Visits  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1080 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1080</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Virtual Encounter  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1089 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1089</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Payer Type  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Encounter Inpatient  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Hospice Encounter  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1003 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1003</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Hospice Care Ambulatory  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Hospice Diagnosis  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Hysterectomy with No Residual Cervix  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1014 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1014</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Congenital or Acquired Absence of Cervix  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.111.12.1016 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.111.12.1016</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Palliative Care Diagnosis  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1167 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1167</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Palliative Care Encounter  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1090 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1090</tt> 
+                  </td> 
+               </tr> 
+               <tr>   
+                  <th scope="row" class="row-header">Dependency</th> 
+                  <td class="content-container"> 
+                     <em>Description</em>: Value set Palliative Care Intervention  
+                     <br></br>    
+                     <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1135 
+                     <br></br> 
+                     <em>Canonical URL</em>: 
+                     <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1135</tt> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Direct Reference Code</th> 
+                  <td class="content-container"> 
+                     <em>Display</em>: Male (finding) 
+                     <br></br> 
+                     <em>Code</em>: 248153007 
+                     <br></br> 
+                     <em>System</em>: 
+                     <tt>http://snomed.info/sct</tt> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Direct Reference Code</th> 
+                  <td class="content-container"> 
+                     <em>Display</em>: Female (finding) 
+                     <br></br> 
+                     <em>Code</em>: 248152002 
+                     <br></br> 
+                     <em>System</em>: 
+                     <tt>http://snomed.info/sct</tt> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Direct Reference Code</th> 
+                  <td class="content-container"> 
+                     <em>Display</em>: Discharge to home for hospice care (procedure) 
+                     <br></br> 
+                     <em>Code</em>: 428361000124107 
+                     <br></br> 
+                     <em>System</em>: 
+                     <tt>http://snomed.info/sct</tt> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Direct Reference Code</th> 
+                  <td class="content-container"> 
+                     <em>Display</em>: Discharge to healthcare facility for hospice care (procedure) 
+                     <br></br> 
+                     <em>Code</em>: 428371000124100 
+                     <br></br> 
+                     <em>System</em>: 
+                     <tt>http://snomed.info/sct</tt> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Direct Reference Code</th> 
+                  <td class="content-container"> 
+                     <em>Display</em>: Hospice care [Minimum Data Set] 
+                     <br></br> 
+                     <em>Code</em>: 45755-6 
+                     <br></br> 
+                     <em>System</em>: 
+                     <tt>http://loinc.org</tt> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Direct Reference Code</th> 
+                  <td class="content-container"> 
+                     <em>Display</em>: Yes (qualifier value) 
+                     <br></br> 
+                     <em>Code</em>: 373066001 
+                     <br></br> 
+                     <em>System</em>: 
+                     <tt>http://snomed.info/sct</tt> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Direct Reference Code</th> 
+                  <td class="content-container"> 
+                     <em>Display</em>: confirmed 
+                     <br></br> 
+                     <em>Code</em>: confirmed 
+                     <br></br> 
+                     <em>System</em>: 
+                     <tt>http://terminology.hl7.org/CodeSystem/condition-ver-status</tt> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Direct Reference Code</th> 
+                  <td class="content-container"> 
+                     <em>Display</em>: unconfirmed 
+                     <br></br> 
+                     <em>Code</em>: unconfirmed 
+                     <br></br> 
+                     <em>System</em>: 
+                     <tt>http://terminology.hl7.org/CodeSystem/condition-ver-status</tt> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Direct Reference Code</th> 
+                  <td class="content-container"> 
+                     <em>Display</em>: provisional 
+                     <br></br> 
+                     <em>Code</em>: provisional 
+                     <br></br> 
+                     <em>System</em>: 
+                     <tt>http://terminology.hl7.org/CodeSystem/condition-ver-status</tt> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Direct Reference Code</th> 
+                  <td class="content-container"> 
+                     <em>Display</em>: differential 
+                     <br></br> 
+                     <em>Code</em>: differential 
+                     <br></br> 
+                     <em>System</em>: 
+                     <tt>http://terminology.hl7.org/CodeSystem/condition-ver-status</tt> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Direct Reference Code</th> 
+                  <td class="content-container"> 
+                     <em>Display</em>: Functional Assessment of Chronic Illness Therapy - Palliative Care Questionnaire (FACIT-Pal) 
+                     <br></br> 
+                     <em>Code</em>: 71007-9 
+                     <br></br> 
+                     <em>System</em>: 
+                     <tt>http://loinc.org</tt> 
+                  </td> 
+               </tr>  
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: Measurement Period  
+                     <br></br>  
+                     <em>Use</em>: in  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: 1  
+                     <br></br>  
+                     <em>Type</em>: Period  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: Numerator  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: 1  
+                     <br></br>  
+                     <em>Type</em>: boolean  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: Denominator  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: 1  
+                     <br></br>  
+                     <em>Type</em>: boolean  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: Initial Population  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: 1  
+                     <br></br>  
+                     <em>Type</em>: boolean  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: Denominator Exclusions  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: 1  
+                     <br></br>  
+                     <em>Type</em>: boolean  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: SDE Sex  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: 1  
+                     <br></br>  
+                     <em>Type</em>: Coding  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: SDE Payer  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: *  
+                     <br></br>  
+                     <em>Type</em>: Resource  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: SDE Ethnicity  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: 1  
+                     <br></br>  
+                     <em>Type</em>: Resource  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Parameter</th> 
+                  <td class="content-container"> 
+                     <em>Name</em>: SDE Race  
+                     <br></br>  
+                     <em>Use</em>: out  
+                     <br></br>  
+                     <em>Min Cardinality</em>: 0  
+                     <br></br>  
+                     <em>Max Cardinality</em>: 1  
+                     <br></br>  
+                     <em>Type</em>: Resource  
+                  </td> 
+               </tr>  
+               <tr> 
+                  <th colspan="2" scope="row" class="section-header">
+                     <a name="effective-data-requirements"> </a>Measure Logic Data Requirements
+                  </th> 
+               </tr>  
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Patient 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient 
+                     <br></br>   
+                     <em>Must Support Elements</em>: extension, url, birthDate, birthDate.value 
+                     <br></br>  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Observation 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code, effective, value, status, status.value 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.108.12.1017 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Observation 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code, effective, value, status, status.value 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1059 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Encounter 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter 
+                     <br></br>   
+                     <em>Must Support Elements</em>: type, status, status.value, period 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: type
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Encounter 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter 
+                     <br></br>   
+                     <em>Must Support Elements</em>: type, status, status.value, period 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: type
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1025 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Encounter 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter 
+                     <br></br>   
+                     <em>Must Support Elements</em>: type, status, status.value, period 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: type
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1023 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Encounter 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter 
+                     <br></br>   
+                     <em>Must Support Elements</em>: type, status, status.value, period 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: type
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1016 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Encounter 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter 
+                     <br></br>   
+                     <em>Must Support Elements</em>: type, status, status.value, period 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: type
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1080 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Encounter 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter 
+                     <br></br>   
+                     <em>Must Support Elements</em>: type, status, status.value, period 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: type
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1089 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Encounter 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter 
+                     <br></br>   
+                     <em>Must Support Elements</em>: type, hospitalization, hospitalization.dischargeDisposition, period, status, status.value 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: type
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Encounter 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter 
+                     <br></br>   
+                     <em>Must Support Elements</em>: type, period, status, status.value 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: type
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1003 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Encounter 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter 
+                     <br></br>   
+                     <em>Must Support Elements</em>: type, period, status, status.value 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: type
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1090 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Coverage 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage 
+                     <br></br>   
+                     <em>Must Support Elements</em>: type, period 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: type
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Observation 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code, value, effective, status, status.value 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>   
+                     <span class="tab-one">
+                        <em>Code(s)</em>:  http://loinc.org#45755-6: 'Hospice care [Minimum Data Set]'  
+                     </span> 
+                     <br></br>  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Observation 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code, effective, status, status.value 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>   
+                     <span class="tab-one">
+                        <em>Code(s)</em>:  http://loinc.org#71007-9: 'Functional Assessment of Chronic Illness Therapy - Palliative Care Questionnaire (FACIT-Pal)'  
+                     </span> 
+                     <br></br>  
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: ServiceRequest 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code, authoredOn, authoredOn.value, status, status.value, intent, intent.value 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Procedure 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code, performed, status, status.value 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Procedure 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code, performed, status, status.value 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1014 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Procedure 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code, performed, status, status.value 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1135 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Condition 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Condition 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.111.12.1016 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Condition 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1167 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Condition 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Condition 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.111.12.1016 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" class="row-header">Data Requirement</th> 
+                  <td class="content-container"> 
+                     <em>Type</em>: Condition 
+                     <br></br> 
+                     <em>Profile(s)</em>:  http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis 
+                     <br></br>   
+                     <em>Must Support Elements</em>: code 
+                     <br></br>  
+                     <em>Code Filter(s)</em>: 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>Path</em>: code
+                     </span> 
+                     <br></br>  
+                     <span class="tab-one">
+                        <em>ValueSet</em>:
+                     </span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1167 
+                     <br></br>   
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th colspan="2" scope="row" class="row-header">Measure Logic Definitions</th> 
+               </tr>  
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="supplementaldataelements-sde-sex"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> SupplementalDataElements
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Sex":
+  case
+    when Patient.sex = '248153007' then "Male (finding)"
+    when Patient.sex = '248152002' then "Female (finding)"
+    else null
+  end</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms124fhircervicalcancerscreening-sde-sex"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS124FHIRCervicalCancerScreening
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Sex":
+  SDE."SDE Sex"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms124fhircervicalcancerscreening-cervical-cytology-within-3-years"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS124FHIRCervicalCancerScreening
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Cervical Cytology Within 3 Years":
+  ( ( [LaboratoryResultObservation: "Pap Test"] ).isLaboratoryTestPerformed ( ) ) CervicalCytology
+    where CervicalCytology.effective.latest ( ) during day of Interval[start of "Measurement Period" - 2 years, end of "Measurement Period"]
+      and CervicalCytology.value is not null</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms124fhircervicalcancerscreening-hpv-test-within-5-years-for-women-age-30-and-older"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS124FHIRCervicalCancerScreening
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "HPV Test Within 5 Years for Women Age 30 and Older":
+  ( ( [LaboratoryResultObservation: "HPV Test"] ).isLaboratoryTestPerformed ( ) ) HPVTest
+    where AgeInYearsAt(date from HPVTest.effective.latest()) &gt;= 30
+      and HPVTest.effective.latest ( ) during day of Interval[start of "Measurement Period" - 4 years, end of "Measurement Period"]
+      and HPVTest.value is not null</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms124fhircervicalcancerscreening-numerator"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS124FHIRCervicalCancerScreening
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Numerator":
+  exists "Cervical Cytology Within 3 Years"
+    or exists "HPV Test Within 5 Years for Women Age 30 and Older"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms124fhircervicalcancerscreening-qualifying-encounters"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS124FHIRCervicalCancerScreening
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Qualifying Encounters":
+  ( ( [Encounter: "Office Visit"]
+      union [Encounter: "Preventive Care Services Established Office Visit, 18 and Up"]
+      union [Encounter: "Preventive Care Services Initial Office Visit, 18 and Up"]
+      union [Encounter: "Home Healthcare Services"]
+      union [Encounter: "Telephone Visits"]
+      union [Encounter: "Virtual Encounter"]
+  ).isEncounterPerformed ( ) ) ValidEncounters
+    where ValidEncounters.period during day of "Measurement Period"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms124fhircervicalcancerscreening-initial-population"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS124FHIRCervicalCancerScreening
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Initial Population":
+  AgeInYearsAt(date from 
+    end of "Measurement Period"
+  ) in Interval[24, 64]
+    and Patient.sex = '248152002'
+    and exists "Qualifying Encounters"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms124fhircervicalcancerscreening-denominator"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS124FHIRCervicalCancerScreening
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Denominator":
+  "Initial Population"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="supplementaldataelements-sde-payer"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> SupplementalDataElements
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Payer":
+  [Coverage: type in "Payer Type"] Payer
+    return {
+      code: Payer.type,
+      period: Payer.period
+    }</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms124fhircervicalcancerscreening-sde-payer"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS124FHIRCervicalCancerScreening
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Payer":
+  SDE."SDE Payer"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="supplementaldataelements-sde-ethnicity"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> SupplementalDataElements
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Ethnicity":
+  Patient.ethnicity E
+    return Tuple {
+      codes: { E.ombCategory } union E.detailed,
+      display: E.text
+    }</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms124fhircervicalcancerscreening-sde-ethnicity"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS124FHIRCervicalCancerScreening
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Ethnicity":
+  SDE."SDE Ethnicity"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="hospice-has-hospice-services"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> Hospice
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Has Hospice Services":
+  exists ((([Encounter: "Encounter Inpatient"]).isEncounterPerformed()) InpatientEncounter
+      where (InpatientEncounter.hospitalization.dischargeDisposition ~ "Discharge to home for hospice care (procedure)"
+          or InpatientEncounter.hospitalization.dischargeDisposition ~ "Discharge to healthcare facility for hospice care (procedure)"
+      )
+        and InpatientEncounter.period ends during day of "Measurement Period"
+  )
+    or exists ((([Encounter: "Hospice Encounter"]).isEncounterPerformed()) HospiceEncounter
+        where HospiceEncounter.period overlaps day of "Measurement Period"
+    )
+    or exists ((([ObservationScreeningAssessment: "Hospice care [Minimum Data Set]"]).isAssessmentPerformed()) HospiceAssessment
+        where HospiceAssessment.value ~ "Yes (qualifier value)"
+          and HospiceAssessment.effective.toInterval() overlaps day of "Measurement Period"
+    )
+    or exists ((([ServiceRequest: "Hospice Care Ambulatory"]).isInterventionOrder()) HospiceOrder
+        where HospiceOrder.authoredOn during day of "Measurement Period"
+    )
+    or exists ((([Procedure: "Hospice Care Ambulatory"]).isInterventionPerformed()) HospicePerformed
+        where HospicePerformed.performed.toInterval() overlaps day of "Measurement Period"
+    )
+    or exists ((([ConditionProblemsHealthConcerns: "Hospice Diagnosis"]
+        union [ConditionEncounterDiagnosis: "Hospice Diagnosis"]).verified()) HospiceCareDiagnosis
+        where HospiceCareDiagnosis.prevalenceInterval() overlaps day of "Measurement Period"
+    )</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms124fhircervicalcancerscreening-absence-of-cervix"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS124FHIRCervicalCancerScreening
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Absence of Cervix":
+  ( ( ( [Procedure: "Hysterectomy with No Residual Cervix"] ).isProcedurePerformed ( ) ) NoCervixProcedure
+      where NoCervixProcedure.performed.toInterval ( ) ends on or before end of "Measurement Period"
+  )
+    union ( ( ( [ConditionProblemsHealthConcerns: "Congenital or Acquired Absence of Cervix"]
+          union [ConditionEncounterDiagnosis: "Congenital or Acquired Absence of Cervix"]
+      ).verified ( ) ) NoCervixDiagnosis
+        where NoCervixDiagnosis.prevalenceInterval ( ) starts on or before end of "Measurement Period"
+    )</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="palliativecare-has-palliative-care-in-the-measurement-period"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> PalliativeCare
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Has Palliative Care in the Measurement Period":
+  exists ((([ObservationScreeningAssessment: "Functional Assessment of Chronic Illness Therapy - Palliative Care Questionnaire (FACIT-Pal)"]).isAssessmentPerformed()) PalliativeAssessment
+      where PalliativeAssessment.effective.toInterval() overlaps day of "Measurement Period"
+  )
+    or exists ((([ConditionProblemsHealthConcerns: "Palliative Care Diagnosis"]
+    union [ConditionEncounterDiagnosis: "Palliative Care Diagnosis"]).verified()) PalliativeDiagnosis
+        where PalliativeDiagnosis.prevalenceInterval() overlaps day of "Measurement Period"
+    )
+    or exists ((([Encounter: "Palliative Care Encounter"]).isEncounterPerformed()) PalliativeEncounter
+        where PalliativeEncounter.period overlaps day of "Measurement Period"
+    )
+    or exists ((([Procedure: "Palliative Care Intervention"]).isInterventionPerformed()) PalliativeIntervention
+        where PalliativeIntervention.performed.toInterval() overlaps day of "Measurement Period"
+    )</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms124fhircervicalcancerscreening-denominator-exclusions"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS124FHIRCervicalCancerScreening
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "Denominator Exclusions":
+  Hospice."Has Hospice Services"
+    or exists "Absence of Cervix"
+    or PalliativeCare."Has Palliative Care in the Measurement Period"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="supplementaldataelements-sde-race"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> SupplementalDataElements
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Race":
+  Patient.race R
+    return Tuple {
+      codes: R.ombCategory union R.detailed,
+      display: R.text
+    }</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="cms124fhircervicalcancerscreening-sde-race"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> CMS124FHIRCervicalCancerScreening
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define "SDE Race":
+  SDE."SDE Race"</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="fhirhelpers-tostring"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> FHIRHelpers
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">define function ToString(value uri): value.value</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="status-islaboratorytestperformed"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> Status
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">//Laboratory Test, Performed
+define fluent function isLaboratoryTestPerformed(Obs List&lt;LaboratoryResultObservation&gt;):
+  Obs O
+    where O.status in { 'final', 'amended', 'corrected' }</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="qicorecommon-latest"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> QICoreCommon
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Given an interval, returns the ending point if the interval has an ending boundary specified,
+otherwise, returns the starting point
+*/
+define fluent function latest(choice Choice&lt;DateTime, Quantity, Interval&lt;DateTime&gt;, Interval&lt;Quantity&gt;&gt; ):
+  (choice.toInterval()) period
+    return
+      if (period."hasEnd"()) then end of period
+      else start of period</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="qicorecommon-hasend"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> QICoreCommon
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Given an interval, returns true if the interval has an ending boundary specified
+(i.e. the end of the interval is not null and not the maximum DateTime value)
+*/
+define fluent function hasEnd(period Interval&lt;DateTime&gt; ):
+  not (
+    end of period is null
+      or end of period = maximum DateTime
+  )</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="status-isencounterperformed"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> Status
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">//Encounter, Performed
+//General usage unless required otherwise by measure intent (e.g., follow-up encounters)
+define fluent function isEncounterPerformed(Enc List&lt;Encounter&gt;):
+  Enc E
+    where E.status = 'finished'</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="fhirhelpers-tointerval"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> FHIRHelpers
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Converts the given [Period](https://hl7.org/fhir/datatypes.html#Period)
+value to a CQL DateTime Interval
+@comment: If the start value of the given period is unspecified, the starting
+boundary of the resulting interval will be open (meaning the start of the interval
+is unknown, as opposed to interpreted as the beginning of time).
+*/
+define function ToInterval(period FHIR.Period):
+    if period is null then
+        null
+    else
+        if period."start" is null then
+            Interval(period."start".value, period."end".value]
+        else
+            Interval[period."start".value, period."end".value]</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="fhirhelpers-tocode"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> FHIRHelpers
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Converts the given FHIR [Coding](https://hl7.org/fhir/datatypes.html#Coding) value to a CQL Code.
+*/
+define function ToCode(coding FHIR.Coding):
+    if coding is null then
+        null
+    else
+        System.Code {
+          code: coding.code.value,
+          system: coding.system.value,
+          version: coding.version.value,
+          display: coding.display.value
+        }</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="status-isassessmentperformed"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> Status
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">//Assessment, Performed
+define fluent function isAssessmentPerformed(Obs List&lt;ObservationScreeningAssessment&gt;):
+  Obs O
+    where O.status in { 'final', 'amended', 'corrected' }</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="status-isinterventionorder"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> Status
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">//Intervention, Order
+define fluent function isInterventionOrder(ServiceRequest List&lt;ServiceRequest&gt;):
+  ServiceRequest S
+    where S.status in { 'active', 'completed' }
+      and S.intent in {'order', 'original-order', 'reflex-order', 'filler-order', 'instance-order'}</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="status-isinterventionperformed"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> Status
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">//Intervention, Performed
+define fluent function isInterventionPerformed(Proc List&lt;Procedure&gt;):
+  Proc P
+    where P.status ~ 'completed'</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="qicorecommon-tointerval"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> QICoreCommon
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">/*
+@description: Normalizes a value that is a choice of timing-valued types to an equivalent interval
+@comment: Normalizes a choice type of DateTime, Quanitty, Interval&lt;DateTime&gt;, or Interval&lt;Quantity&gt; types
+to an equivalent interval. This selection of choice types is a superset of the majority of choice types that are used as possible
+representations for timing-valued elements in QICore, allowing this function to be used across any resource.
+The input can be provided as a DateTime, Quantity, Interval&lt;DateTime&gt; or Interval&lt;Quantity&gt;.
+The intent of this function is to provide a clear and concise mechanism to treat single
+elements that have multiple possible representations as intervals so that logic doesn't have to account
+for the variability. More complex calculations (such as medication request period or dispense period
+calculation) need specific guidance and consideration. That guidance may make use of this function, but
+the focus of this function is on single element calculations where the semantics are unambiguous.
+If the input is a DateTime, the result a DateTime Interval beginning and ending on that DateTime.
+If the input is a Quantity, the quantity is expected to be a calendar-duration interpreted as an Age,
+and the result is a DateTime Interval beginning on the Date the patient turned that age and ending immediately before one year later.
+If the input is a DateTime Interval, the result is the input.
+If the input is a Quantity Interval, the quantities are expected to be calendar-durations interpreted as an Age, and the result
+is a DateTime Interval beginning on the date the patient turned the age given as the start of the quantity interval, and ending
+immediately before one year later than the date the patient turned the age given as the end of the quantity interval.
+If the input is a Timing, an error will be thrown indicating that Timing calculations are not implemented. Any other input will reslt in a null DateTime Interval
+*/
+define fluent function toInterval(choice Choice&lt;DateTime, Quantity, Interval&lt;DateTime&gt;, Interval&lt;Quantity&gt;, Timing&gt;):
+  case
+	  when choice is DateTime then
+    	Interval[choice as DateTime, choice as DateTime]
+		when choice is Interval&lt;DateTime&gt; then
+  		choice as Interval&lt;DateTime&gt;
+		when choice is Quantity then
+		  Interval[Patient.birthDate + (choice as Quantity),
+			  Patient.birthDate + (choice as Quantity) + 1 year)
+		when choice is Interval&lt;Quantity&gt; then
+		  Interval[Patient.birthDate + (choice.low as Quantity),
+			  Patient.birthDate + (choice.high as Quantity) + 1 year)
+		when choice is Timing then
+      Message(null, true, 'NOT_IMPLEMENTED', 'Error', 'Calculation of an interval from a Timing value is not supported') as Interval&lt;DateTime&gt;
+		else
+			null as Interval&lt;DateTime&gt;
+	end</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="status-verified"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> Status
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">//This library contains functions used to constrain FHIR resource elements for measures authored by NCQA, based on QICore 6.0.0 resources including IG and authoring patterns. The functions may appear similar to some QICoreCommon functions but differ in that they have constraints that are relevant for measures authored by NCQA.
+
+//Condition
+//Returns conditions in the given list that either have no verification status or have a verification status of confirmed, unconfirmed, provisional, or differential
+define fluent function verified(conditions List&lt;Choice&lt;ConditionProblemsHealthConcerns, ConditionEncounterDiagnosis&gt;&gt;):
+  conditions C
+    where C.verificationStatus is not null implies
+      (C.verificationStatus ~ "confirmed"
+        or C.verificationStatus ~ "unconfirmed"
+        or C.verificationStatus ~ "provisional"
+        or C.verificationStatus ~ "differential"
+      )</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th scope="row" rowspan="2" class="row-header">  
+                     <a name="status-isprocedureperformed"> </a> Logic Definition 
+                  </th> 
+                  <td class="content-container">
+                     <em>Library Name:</em> Status
+                  </td> 
+               </tr> 
+               <tr> 
+                  <td> 
+                     <pre style="border: none;" class="content-container highlight language-cql"><code class="language-cql">//Procedure, Performed
+define fluent function isProcedurePerformed(Proc List&lt;Procedure&gt;):
+  Proc P
+    where P.status ~ 'completed'</code></pre> 
+                  </td> 
+               </tr> 
+               <tr> 
+                  <th colspan="2" scope="row" class="row-header">Generated using version 0.4.7 of the sample-content-ig Liquid templates</th> 
+               </tr> 
+            </tbody> 
+         </table> 
+      </div>
+   </text>
+   <contained>
+      <Library xmlns="http://hl7.org/fhir">
+         <id value="effective-data-requirements"></id>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-directReferenceCode">
+            <valueCoding>
+               <system value="http://snomed.info/sct"></system>
+               <code value="248153007"></code>
+               <display value="Male (finding)"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-directReferenceCode">
+            <valueCoding>
+               <system value="http://snomed.info/sct"></system>
+               <code value="248152002"></code>
+               <display value="Female (finding)"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-directReferenceCode">
+            <valueCoding>
+               <system value="http://snomed.info/sct"></system>
+               <code value="428361000124107"></code>
+               <display value="Discharge to home for hospice care (procedure)"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-directReferenceCode">
+            <valueCoding>
+               <system value="http://snomed.info/sct"></system>
+               <code value="428371000124100"></code>
+               <display value="Discharge to healthcare facility for hospice care (procedure)"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-directReferenceCode">
+            <valueCoding>
+               <system value="http://loinc.org"></system>
+               <code value="45755-6"></code>
+               <display value="Hospice care [Minimum Data Set]"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-directReferenceCode">
+            <valueCoding>
+               <system value="http://snomed.info/sct"></system>
+               <code value="373066001"></code>
+               <display value="Yes (qualifier value)"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-directReferenceCode">
+            <valueCoding>
+               <system value="http://terminology.hl7.org/CodeSystem/condition-ver-status"></system>
+               <code value="confirmed"></code>
+               <display value="confirmed"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-directReferenceCode">
+            <valueCoding>
+               <system value="http://terminology.hl7.org/CodeSystem/condition-ver-status"></system>
+               <code value="unconfirmed"></code>
+               <display value="unconfirmed"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-directReferenceCode">
+            <valueCoding>
+               <system value="http://terminology.hl7.org/CodeSystem/condition-ver-status"></system>
+               <code value="provisional"></code>
+               <display value="provisional"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-directReferenceCode">
+            <valueCoding>
+               <system value="http://terminology.hl7.org/CodeSystem/condition-ver-status"></system>
+               <code value="differential"></code>
+               <display value="differential"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-directReferenceCode">
+            <valueCoding>
+               <system value="http://loinc.org"></system>
+               <code value="71007-9"></code>
+               <display value="Functional Assessment of Chronic Illness Therapy - Palliative Care Questionnaire (FACIT-Pal)"></display>
+            </valueCoding>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="SupplementalDataElements"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Sex"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Sex&quot;:
+  case
+    when Patient.sex = '248153007' then &quot;Male (finding)&quot;
+    when Patient.sex = '248152002' then &quot;Female (finding)&quot;
+    else null
+  end"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="0"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS124FHIRCervicalCancerScreening"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Sex"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Sex&quot;:
+  SDE.&quot;SDE Sex&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="1"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS124FHIRCervicalCancerScreening"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Cervical Cytology Within 3 Years"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Cervical Cytology Within 3 Years&quot;:
+  ( ( [LaboratoryResultObservation: &quot;Pap Test&quot;] ).isLaboratoryTestPerformed ( ) ) CervicalCytology
+    where CervicalCytology.effective.latest ( ) during day of Interval[start of &quot;Measurement Period&quot; - 2 years, end of &quot;Measurement Period&quot;]
+      and CervicalCytology.value is not null"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="2"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS124FHIRCervicalCancerScreening"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="HPV Test Within 5 Years for Women Age 30 and Older"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;HPV Test Within 5 Years for Women Age 30 and Older&quot;:
+  ( ( [LaboratoryResultObservation: &quot;HPV Test&quot;] ).isLaboratoryTestPerformed ( ) ) HPVTest
+    where AgeInYearsAt(date from HPVTest.effective.latest()) &gt;= 30
+      and HPVTest.effective.latest ( ) during day of Interval[start of &quot;Measurement Period&quot; - 4 years, end of &quot;Measurement Period&quot;]
+      and HPVTest.value is not null"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="3"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS124FHIRCervicalCancerScreening"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Numerator"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Numerator&quot;:
+  exists &quot;Cervical Cytology Within 3 Years&quot;
+    or exists &quot;HPV Test Within 5 Years for Women Age 30 and Older&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="4"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS124FHIRCervicalCancerScreening"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Qualifying Encounters"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Qualifying Encounters&quot;:
+  ( ( [Encounter: &quot;Office Visit&quot;]
+      union [Encounter: &quot;Preventive Care Services Established Office Visit, 18 and Up&quot;]
+      union [Encounter: &quot;Preventive Care Services Initial Office Visit, 18 and Up&quot;]
+      union [Encounter: &quot;Home Healthcare Services&quot;]
+      union [Encounter: &quot;Telephone Visits&quot;]
+      union [Encounter: &quot;Virtual Encounter&quot;]
+  ).isEncounterPerformed ( ) ) ValidEncounters
+    where ValidEncounters.period during day of &quot;Measurement Period&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="5"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS124FHIRCervicalCancerScreening"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Initial Population"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Initial Population&quot;:
+  AgeInYearsAt(date from 
+    end of &quot;Measurement Period&quot;
+  ) in Interval[24, 64]
+    and Patient.sex = '248152002'
+    and exists &quot;Qualifying Encounters&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="6"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS124FHIRCervicalCancerScreening"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Denominator"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Denominator&quot;:
+  &quot;Initial Population&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="7"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="SupplementalDataElements"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Payer"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Payer&quot;:
+  [Coverage: type in &quot;Payer Type&quot;] Payer
+    return {
+      code: Payer.type,
+      period: Payer.period
+    }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="8"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS124FHIRCervicalCancerScreening"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Payer"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Payer&quot;:
+  SDE.&quot;SDE Payer&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="9"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="SupplementalDataElements"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Ethnicity"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Ethnicity&quot;:
+  Patient.ethnicity E
+    return Tuple {
+      codes: { E.ombCategory } union E.detailed,
+      display: E.text
+    }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="10"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS124FHIRCervicalCancerScreening"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Ethnicity"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Ethnicity&quot;:
+  SDE.&quot;SDE Ethnicity&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="11"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="Hospice"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Has Hospice Services"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Has Hospice Services&quot;:
+  exists ((([Encounter: &quot;Encounter Inpatient&quot;]).isEncounterPerformed()) InpatientEncounter
+      where (InpatientEncounter.hospitalization.dischargeDisposition ~ &quot;Discharge to home for hospice care (procedure)&quot;
+          or InpatientEncounter.hospitalization.dischargeDisposition ~ &quot;Discharge to healthcare facility for hospice care (procedure)&quot;
+      )
+        and InpatientEncounter.period ends during day of &quot;Measurement Period&quot;
+  )
+    or exists ((([Encounter: &quot;Hospice Encounter&quot;]).isEncounterPerformed()) HospiceEncounter
+        where HospiceEncounter.period overlaps day of &quot;Measurement Period&quot;
+    )
+    or exists ((([ObservationScreeningAssessment: &quot;Hospice care [Minimum Data Set]&quot;]).isAssessmentPerformed()) HospiceAssessment
+        where HospiceAssessment.value ~ &quot;Yes (qualifier value)&quot;
+          and HospiceAssessment.effective.toInterval() overlaps day of &quot;Measurement Period&quot;
+    )
+    or exists ((([ServiceRequest: &quot;Hospice Care Ambulatory&quot;]).isInterventionOrder()) HospiceOrder
+        where HospiceOrder.authoredOn during day of &quot;Measurement Period&quot;
+    )
+    or exists ((([Procedure: &quot;Hospice Care Ambulatory&quot;]).isInterventionPerformed()) HospicePerformed
+        where HospicePerformed.performed.toInterval() overlaps day of &quot;Measurement Period&quot;
+    )
+    or exists ((([ConditionProblemsHealthConcerns: &quot;Hospice Diagnosis&quot;]
+        union [ConditionEncounterDiagnosis: &quot;Hospice Diagnosis&quot;]).verified()) HospiceCareDiagnosis
+        where HospiceCareDiagnosis.prevalenceInterval() overlaps day of &quot;Measurement Period&quot;
+    )"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="12"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS124FHIRCervicalCancerScreening"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Absence of Cervix"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Absence of Cervix&quot;:
+  ( ( ( [Procedure: &quot;Hysterectomy with No Residual Cervix&quot;] ).isProcedurePerformed ( ) ) NoCervixProcedure
+      where NoCervixProcedure.performed.toInterval ( ) ends on or before end of &quot;Measurement Period&quot;
+  )
+    union ( ( ( [ConditionProblemsHealthConcerns: &quot;Congenital or Acquired Absence of Cervix&quot;]
+          union [ConditionEncounterDiagnosis: &quot;Congenital or Acquired Absence of Cervix&quot;]
+      ).verified ( ) ) NoCervixDiagnosis
+        where NoCervixDiagnosis.prevalenceInterval ( ) starts on or before end of &quot;Measurement Period&quot;
+    )"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="13"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="PalliativeCare"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Has Palliative Care in the Measurement Period"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Has Palliative Care in the Measurement Period&quot;:
+  exists ((([ObservationScreeningAssessment: &quot;Functional Assessment of Chronic Illness Therapy - Palliative Care Questionnaire (FACIT-Pal)&quot;]).isAssessmentPerformed()) PalliativeAssessment
+      where PalliativeAssessment.effective.toInterval() overlaps day of &quot;Measurement Period&quot;
+  )
+    or exists ((([ConditionProblemsHealthConcerns: &quot;Palliative Care Diagnosis&quot;]
+    union [ConditionEncounterDiagnosis: &quot;Palliative Care Diagnosis&quot;]).verified()) PalliativeDiagnosis
+        where PalliativeDiagnosis.prevalenceInterval() overlaps day of &quot;Measurement Period&quot;
+    )
+    or exists ((([Encounter: &quot;Palliative Care Encounter&quot;]).isEncounterPerformed()) PalliativeEncounter
+        where PalliativeEncounter.period overlaps day of &quot;Measurement Period&quot;
+    )
+    or exists ((([Procedure: &quot;Palliative Care Intervention&quot;]).isInterventionPerformed()) PalliativeIntervention
+        where PalliativeIntervention.performed.toInterval() overlaps day of &quot;Measurement Period&quot;
+    )"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="14"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS124FHIRCervicalCancerScreening"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="Denominator Exclusions"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;Denominator Exclusions&quot;:
+  Hospice.&quot;Has Hospice Services&quot;
+    or exists &quot;Absence of Cervix&quot;
+    or PalliativeCare.&quot;Has Palliative Care in the Measurement Period&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="15"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="SupplementalDataElements"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Race"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Race&quot;:
+  Patient.race R
+    return Tuple {
+      codes: R.ombCategory union R.detailed,
+      display: R.text
+    }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="16"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="CMS124FHIRCervicalCancerScreening"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="SDE Race"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define &quot;SDE Race&quot;:
+  SDE.&quot;SDE Race&quot;"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="17"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="FHIRHelpers"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="ToString"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="define function ToString(value uri): value.value"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="18"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="Status"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="isLaboratoryTestPerformed"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="//Laboratory Test, Performed
+define fluent function isLaboratoryTestPerformed(Obs List&lt;LaboratoryResultObservation&gt;):
+  Obs O
+    where O.status in { 'final', 'amended', 'corrected' }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="19"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="QICoreCommon"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="latest"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/*
+@description: Given an interval, returns the ending point if the interval has an ending boundary specified,
+otherwise, returns the starting point
+*/
+define fluent function latest(choice Choice&lt;DateTime, Quantity, Interval&lt;DateTime&gt;, Interval&lt;Quantity&gt;&gt; ):
+  (choice.toInterval()) period
+    return
+      if (period.&quot;hasEnd&quot;()) then end of period
+      else start of period"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="20"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="QICoreCommon"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="hasEnd"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/*
+@description: Given an interval, returns true if the interval has an ending boundary specified
+(i.e. the end of the interval is not null and not the maximum DateTime value)
+*/
+define fluent function hasEnd(period Interval&lt;DateTime&gt; ):
+  not (
+    end of period is null
+      or end of period = maximum DateTime
+  )"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="21"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="Status"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="isEncounterPerformed"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="//Encounter, Performed
+//General usage unless required otherwise by measure intent (e.g., follow-up encounters)
+define fluent function isEncounterPerformed(Enc List&lt;Encounter&gt;):
+  Enc E
+    where E.status = 'finished'"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="22"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="FHIRHelpers"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="ToInterval"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/*
+@description: Converts the given [Period](https://hl7.org/fhir/datatypes.html#Period)
+value to a CQL DateTime Interval
+@comment: If the start value of the given period is unspecified, the starting
+boundary of the resulting interval will be open (meaning the start of the interval
+is unknown, as opposed to interpreted as the beginning of time).
+*/
+define function ToInterval(period FHIR.Period):
+    if period is null then
+        null
+    else
+        if period.&quot;start&quot; is null then
+            Interval(period.&quot;start&quot;.value, period.&quot;end&quot;.value]
+        else
+            Interval[period.&quot;start&quot;.value, period.&quot;end&quot;.value]"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="23"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="FHIRHelpers"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="ToCode"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/*
+@description: Converts the given FHIR [Coding](https://hl7.org/fhir/datatypes.html#Coding) value to a CQL Code.
+*/
+define function ToCode(coding FHIR.Coding):
+    if coding is null then
+        null
+    else
+        System.Code {
+          code: coding.code.value,
+          system: coding.system.value,
+          version: coding.version.value,
+          display: coding.display.value
+        }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="24"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="Status"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="isAssessmentPerformed"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="//Assessment, Performed
+define fluent function isAssessmentPerformed(Obs List&lt;ObservationScreeningAssessment&gt;):
+  Obs O
+    where O.status in { 'final', 'amended', 'corrected' }"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="25"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="Status"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="isInterventionOrder"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="//Intervention, Order
+define fluent function isInterventionOrder(ServiceRequest List&lt;ServiceRequest&gt;):
+  ServiceRequest S
+    where S.status in { 'active', 'completed' }
+      and S.intent in {'order', 'original-order', 'reflex-order', 'filler-order', 'instance-order'}"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="26"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="Status"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="isInterventionPerformed"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="//Intervention, Performed
+define fluent function isInterventionPerformed(Proc List&lt;Procedure&gt;):
+  Proc P
+    where P.status ~ 'completed'"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="27"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="QICoreCommon"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="toInterval"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="/*
+@description: Normalizes a value that is a choice of timing-valued types to an equivalent interval
+@comment: Normalizes a choice type of DateTime, Quanitty, Interval&lt;DateTime&gt;, or Interval&lt;Quantity&gt; types
+to an equivalent interval. This selection of choice types is a superset of the majority of choice types that are used as possible
+representations for timing-valued elements in QICore, allowing this function to be used across any resource.
+The input can be provided as a DateTime, Quantity, Interval&lt;DateTime&gt; or Interval&lt;Quantity&gt;.
+The intent of this function is to provide a clear and concise mechanism to treat single
+elements that have multiple possible representations as intervals so that logic doesn't have to account
+for the variability. More complex calculations (such as medication request period or dispense period
+calculation) need specific guidance and consideration. That guidance may make use of this function, but
+the focus of this function is on single element calculations where the semantics are unambiguous.
+If the input is a DateTime, the result a DateTime Interval beginning and ending on that DateTime.
+If the input is a Quantity, the quantity is expected to be a calendar-duration interpreted as an Age,
+and the result is a DateTime Interval beginning on the Date the patient turned that age and ending immediately before one year later.
+If the input is a DateTime Interval, the result is the input.
+If the input is a Quantity Interval, the quantities are expected to be calendar-durations interpreted as an Age, and the result
+is a DateTime Interval beginning on the date the patient turned the age given as the start of the quantity interval, and ending
+immediately before one year later than the date the patient turned the age given as the end of the quantity interval.
+If the input is a Timing, an error will be thrown indicating that Timing calculations are not implemented. Any other input will reslt in a null DateTime Interval
+*/
+define fluent function toInterval(choice Choice&lt;DateTime, Quantity, Interval&lt;DateTime&gt;, Interval&lt;Quantity&gt;, Timing&gt;):
+  case
+	  when choice is DateTime then
+    	Interval[choice as DateTime, choice as DateTime]
+		when choice is Interval&lt;DateTime&gt; then
+  		choice as Interval&lt;DateTime&gt;
+		when choice is Quantity then
+		  Interval[Patient.birthDate + (choice as Quantity),
+			  Patient.birthDate + (choice as Quantity) + 1 year)
+		when choice is Interval&lt;Quantity&gt; then
+		  Interval[Patient.birthDate + (choice.low as Quantity),
+			  Patient.birthDate + (choice.high as Quantity) + 1 year)
+		when choice is Timing then
+      Message(null, true, 'NOT_IMPLEMENTED', 'Error', 'Calculation of an interval from a Timing value is not supported') as Interval&lt;DateTime&gt;
+		else
+			null as Interval&lt;DateTime&gt;
+	end"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="28"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="Status"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="verified"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="//This library contains functions used to constrain FHIR resource elements for measures authored by NCQA, based on QICore 6.0.0 resources including IG and authoring patterns. The functions may appear similar to some QICoreCommon functions but differ in that they have constraints that are relevant for measures authored by NCQA.
+
+//Condition
+//Returns conditions in the given list that either have no verification status or have a verification status of confirmed, unconfirmed, provisional, or differential
+define fluent function verified(conditions List&lt;Choice&lt;ConditionProblemsHealthConcerns, ConditionEncounterDiagnosis&gt;&gt;):
+  conditions C
+    where C.verificationStatus is not null implies
+      (C.verificationStatus ~ &quot;confirmed&quot;
+        or C.verificationStatus ~ &quot;unconfirmed&quot;
+        or C.verificationStatus ~ &quot;provisional&quot;
+        or C.verificationStatus ~ &quot;differential&quot;
+      )"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="29"></valueInteger>
+            </extension>
+         </extension>
+         <extension url="http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition">
+            <extension url="libraryName">
+               <valueString value="Status"></valueString>
+            </extension>
+            <extension url="name">
+               <valueString value="isProcedurePerformed"></valueString>
+            </extension>
+            <extension url="statement">
+               <valueString value="//Procedure, Performed
+define fluent function isProcedurePerformed(Proc List&lt;Procedure&gt;):
+  Proc P
+    where P.status ~ 'completed'"></valueString>
+            </extension>
+            <extension url="displaySequence">
+               <valueInteger value="30"></valueInteger>
+            </extension>
+         </extension>
+         <name value="EffectiveDataRequirements"></name>
+         <status value="active"></status>
+         <type>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/library-type"></system>
+               <code value="module-definition"></code>
+            </coding>
+         </type>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Library SDE"></display>
+            <resource value="https://madie.cms.gov/Library/SupplementalDataElements|5.1.000"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Library FHIRHelpers"></display>
+            <resource value="https://madie.cms.gov/Library/FHIRHelpers|4.4.000"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Library Status"></display>
+            <resource value="https://madie.cms.gov/Library/Status|1.15.000"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Library QICoreCommon"></display>
+            <resource value="https://madie.cms.gov/Library/QICoreCommon|4.0.000"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Library Hospice"></display>
+            <resource value="https://madie.cms.gov/Library/Hospice|6.18.000"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Library PalliativeCare"></display>
+            <resource value="https://madie.cms.gov/Library/PalliativeCare|1.18.000"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Code system SNOMEDCT"></display>
+            <resource value="http://snomed.info/sct"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Code system LOINC"></display>
+            <resource value="http://loinc.org"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Code system ConditionVerificationStatusCodes"></display>
+            <resource value="http://terminology.hl7.org/CodeSystem/condition-ver-status"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Pap Test"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.108.12.1017"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set HPV Test"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1059"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Office Visit"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Preventive Care Services Established Office Visit, 18 and Up"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1025"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Preventive Care Services Initial Office Visit, 18 and Up"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1023"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Home Healthcare Services"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1016"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Telephone Visits"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1080"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Virtual Encounter"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1089"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Payer Type"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Encounter Inpatient"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Hospice Encounter"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1003"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Hospice Care Ambulatory"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Hospice Diagnosis"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Hysterectomy with No Residual Cervix"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1014"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Congenital or Acquired Absence of Cervix"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.111.12.1016"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Palliative Care Diagnosis"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1167"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Palliative Care Encounter"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1090"></resource>
+         </relatedArtifact>
+         <relatedArtifact>
+            <type value="depends-on"></type>
+            <display value="Value set Palliative Care Intervention"></display>
+            <resource value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1135"></resource>
+         </relatedArtifact>
+         <parameter>
+            <name value="Measurement Period"></name>
+            <use value="in"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="Period"></type>
+         </parameter>
+         <parameter>
+            <name value="Numerator"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="boolean"></type>
+         </parameter>
+         <parameter>
+            <name value="Denominator"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="boolean"></type>
+         </parameter>
+         <parameter>
+            <name value="Initial Population"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="boolean"></type>
+         </parameter>
+         <parameter>
+            <name value="Denominator Exclusions"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="boolean"></type>
+         </parameter>
+         <parameter>
+            <name value="SDE Sex"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="Coding"></type>
+         </parameter>
+         <parameter>
+            <name value="SDE Payer"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="*"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <parameter>
+            <name value="SDE Ethnicity"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <parameter>
+            <name value="SDE Race"></name>
+            <use value="out"></use>
+            <min value="0"></min>
+            <max value="1"></max>
+            <type value="Resource"></type>
+         </parameter>
+         <dataRequirement>
+            <type value="Patient"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient"></profile>
+            <mustSupport value="extension"></mustSupport>
+            <mustSupport value="url"></mustSupport>
+            <mustSupport value="birthDate"></mustSupport>
+            <mustSupport value="birthDate.value"></mustSupport>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Observation"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab"></profile>
+            <mustSupport value="code"></mustSupport>
+            <mustSupport value="effective"></mustSupport>
+            <mustSupport value="value"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.108.12.1017"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Observation"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab"></profile>
+            <mustSupport value="code"></mustSupport>
+            <mustSupport value="effective"></mustSupport>
+            <mustSupport value="value"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1059"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1025"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1023"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1016"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1080"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1089"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="hospitalization"></mustSupport>
+            <mustSupport value="hospitalization.dischargeDisposition"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1003"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Encounter"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1090"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Coverage"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage"></profile>
+            <mustSupport value="type"></mustSupport>
+            <mustSupport value="period"></mustSupport>
+            <codeFilter>
+               <path value="type"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Observation"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment"></profile>
+            <mustSupport value="code"></mustSupport>
+            <mustSupport value="value"></mustSupport>
+            <mustSupport value="effective"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <code>
+                  <system value="http://loinc.org"></system>
+                  <code value="45755-6"></code>
+                  <display value="Hospice care [Minimum Data Set]"></display>
+               </code>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Observation"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment"></profile>
+            <mustSupport value="code"></mustSupport>
+            <mustSupport value="effective"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <code>
+                  <system value="http://loinc.org"></system>
+                  <code value="71007-9"></code>
+                  <display value="Functional Assessment of Chronic Illness Therapy - Palliative Care Questionnaire (FACIT-Pal)"></display>
+               </code>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="ServiceRequest"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest"></profile>
+            <mustSupport value="code"></mustSupport>
+            <mustSupport value="authoredOn"></mustSupport>
+            <mustSupport value="authoredOn.value"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <mustSupport value="intent"></mustSupport>
+            <mustSupport value="intent.value"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Procedure"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure"></profile>
+            <mustSupport value="code"></mustSupport>
+            <mustSupport value="performed"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Procedure"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure"></profile>
+            <mustSupport value="code"></mustSupport>
+            <mustSupport value="performed"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1014"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Procedure"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure"></profile>
+            <mustSupport value="code"></mustSupport>
+            <mustSupport value="performed"></mustSupport>
+            <mustSupport value="status"></mustSupport>
+            <mustSupport value="status.value"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1135"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Condition"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns"></profile>
+            <mustSupport value="code"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Condition"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns"></profile>
+            <mustSupport value="code"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.111.12.1016"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Condition"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns"></profile>
+            <mustSupport value="code"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1167"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Condition"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis"></profile>
+            <mustSupport value="code"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Condition"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis"></profile>
+            <mustSupport value="code"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.111.12.1016"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+         <dataRequirement>
+            <type value="Condition"></type>
+            <profile value="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis"></profile>
+            <mustSupport value="code"></mustSupport>
+            <codeFilter>
+               <path value="code"></path>
+               <valueSet value="http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1167"></valueSet>
+            </codeFilter>
+         </dataRequirement>
+      </Library>
+   </contained>
+   <extension id="supplementalDataGuidance" url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-supplementalDataGuidance">
+      <extension url="guidance">
+         <valueString value="For every patient evaluated by this measure also identify payer, race, ethnicity and sex"></valueString>
+      </extension>
+      <extension url="usage">
+         <valueCodeableConcept>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+               <code value="supplemental-data"></code>
+               <display value="Supplemental Data"></display>
+            </coding>
+            <text value="Supplemental Data Guidance"></text>
+         </valueCodeableConcept>
+      </extension>
+   </extension>
+   <extension url="http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-effectiveDataRequirements">
+      <valueReference>
+         <reference value="#effective-data-requirements"></reference>
+      </valueReference>
+   </extension>
+   <url value="https://madie.cms.gov/Measure/CMS124FHIRCervicalCancerScreening"></url>
+   <identifier>
+      <use value="usual"></use>
+      <type>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/artifact-identifier-type"></system>
+            <code value="short-name"></code>
+            <display value="Short Name"></display>
+         </coding>
+      </type>
+      <system value="https://madie.cms.gov/measure/shortName"></system>
+      <value value="CMS124FHIR"></value>
+   </identifier>
+   <identifier>
+      <use value="official"></use>
+      <type>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/artifact-identifier-type"></system>
+            <code value="version-independent"></code>
+            <display value="Version Independent"></display>
+         </coding>
+      </type>
+      <system value="urn:ietf:rfc:3986"></system>
+      <value value="urn:uuid:3be5df74-24e1-46ed-b899-6e98b9e3760b"></value>
+   </identifier>
+   <identifier>
+      <use value="official"></use>
+      <type>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/artifact-identifier-type"></system>
+            <code value="version-specific"></code>
+            <display value="Version Specific"></display>
+         </coding>
+      </type>
+      <system value="urn:ietf:rfc:3986"></system>
+      <value value="urn:uuid:d5fb530b-1d57-424b-a8e2-3ef76f0f30c2"></value>
+   </identifier>
+   <identifier>
+      <use value="official"></use>
+      <type>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/artifact-identifier-type"></system>
+            <code value="publisher"></code>
+            <display value="Publisher"></display>
+         </coding>
+      </type>
+      <system value="https://madie.cms.gov/measure/cmsId"></system>
+      <value value="124FHIR"></value>
+      <assigner>
+         <display value="CMS"></display>
+      </assigner>
+   </identifier>
+   <version value="0.4.000"></version>
+   <name value="CMS124FHIRCervicalCancerScreening"></name>
+   <title value="Cervical Cancer ScreeningFHIR"></title>
+   <status value="active"></status>
+   <experimental value="false"></experimental>
+   <date value="2025-06-27T21:16:57+00:00"></date>
+   <publisher value="National Committee for Quality Assurance"></publisher>
+   <contact>
+      <telecom>
+         <system value="url"></system>
+         <value value="https://www.ncqa.org/"></value>
+      </telecom>
+   </contact>
+   <description value="Percentage of women 21-64 years of age who were screened for cervical cancer using either of the following criteria:
+- Women age 21-64 who had cervical cytology performed within the last 3 years
+- Women age 30-64 who had cervical human papillomavirus (HPV) testing performed within the last 5 years"></description>
+   <usage value="To ensure the measure is only looking for a cervical cytology test only after a woman turns 21 years of age, the youngest age in the initial population is 23.
+
+Please note the measure may include screenings performed outside the age range of patients referenced in the initial population. Screenings that occur prior to the measurement period are valid to meet measure criteria.
+
+Evidence of hrHPV testing within the last 5 years also captures patients who had cotesting; therefore additional methods to identify cotesting are not necessary.
+
+This eCQM is a patient-based measure.
+
+This FHIR-based measure has been derived from the QDM-based measure: CMS124v14.
+
+Please refer to the HL7 QI-Core Implementation Guide (https://hl7.org/fhir/us/qicore/STU6/) for more information on QI-Core and mapping recommendations from QDM to QI-Core STU 6. (https://hl7.org/fhir/us/qicore/STU6/qdm-to-qicore.html)."></usage>
+   <copyright value="This Physician Performance Measure (Measure) and related data specifications are owned and were developed by the National Committee for Quality Assurance (NCQA). NCQA is not responsible for any use of the Measure. NCQA makes no representations, warranties or endorsements about the quality of any product, test or protocol identified as numerator compliant or otherwise identified as meeting the requirements of the measure or specification. NCQA makes no representations, warranties, or endorsement about the quality of any organization or physician that uses or reports performance measures and NCQA has no liability to anyone who relies on such measures or specifications. NCQA holds a copyright in the Measure. The Measure may be used for internal, noncommercial purposes (e.g., use by healthcare providers in connection with their practices) without obtaining approval from NCQA. All other uses, including a commercial use (including but not limited to vendors using or embedding the measures and specifications into any product or service to calculate measure results for customers for any purpose), must be approved by NCQA and are subject to a license at the discretion of NCQA. (C) 2012-2025 National Committee for Quality Assurance. All Rights Reserved.
+
+Limited proprietary coding is contained in the Measure specifications for user convenience. Users of proprietary code sets should obtain all necessary licenses from the owners of the code sets. NCQA disclaims all liability for use or accuracy of any third-party codes contained in the specifications.
+
+CPT(R) codes, descriptions and other data are copyright 2025. American Medical Association. All rights reserved. CPT is a trademark of the American Medical Association. Fee schedules, relative value units, conversion factors and/or related components are not assigned by the AMA, are not part of CPT, and the AMA is not recommending their use. The AMA does not directly or indirectly practice medicine or dispense medical services. The AMA assumes no liability for data contained or not contained herein. Applicable FARS/DFARS restrictions apply to government use.
+
+Some measure specifications contain coding from LOINC(R) (https://loinc.org). The LOINC table, LOINC codes, LOINC panels and form file, LOINC linguistic variants file, LOINC/RSNA Radiology Playbook, and LOINC/IEEE Medical Device Code Mapping Table are copyright 2004-2025 Regenstrief Institute, Inc. and the Logical Observation Identifiers Names and Codes (LOINC) Committee, and are available at no cost under the license at https://loinc.org/kb/license/.
+
+This material contains SNOMED Clinical Terms(R) (SNOMED CT[R]) copyright 2004-2024 International Health Terminology Standards Development Organisation. 
+
+ICD-10 copyright 2025 World Health Organization. All Rights Reserved.
+
+Some measures use RxNorm, a standardized nomenclature and coding for clinical drugs and drug delivery devices, which is made publicly available courtesy of the U.S. National Library of Medicine (NLM), National Institutes of Health, Department of Health and Human Services. NLM is not responsible for the measures and does not endorse or recommend this or any other product.
+
+“HL7” is the registered trademark of Health Level Seven International."></copyright>
+   <effectivePeriod>
+      <start value="2026-01-01"></start>
+      <end value="2026-12-31"></end>
+   </effectivePeriod>
+   <author>
+      <name value="National Committee for Quality Assurance"></name>
+      <telecom>
+         <system value="url"></system>
+         <value value="https://www.ncqa.org/"></value>
+      </telecom>
+   </author>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - American Cancer Society. (2020). Cancer Facts &amp; Figures 2020. Atlanta: American Cancer Society.
+"></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - National Cancer Institute. (2020). Cancer of the Cervix Uteri - Cancer Stat Facts. https://seer.cancer.gov/statfacts/html/cervix.html
+"></citation>
+   </relatedArtifact>
+   <relatedArtifact>
+      <type value="citation"></type>
+      <citation value="CITATION - US Preventive Services Task Force, Curry, S. J., Krist, A. H., Owens, D. K., Barry, M. J., Caughey, A. B., … Wong, J. B. (2018). Screening for Cervical Cancer: US Preventive Services Task Force Recommendation Statement. JAMA, 320(7), 674–686. https://doi.org/10.1001/jama.2018.10897
+"></citation>
+   </relatedArtifact>
+   <library value="https://madie.cms.gov/Library/CMS124FHIRCervicalCancerScreening"></library>
+   <disclaimer value="The performance Measure is not a clinical guideline and does not establish a standard of medical care, and has not been tested for all potential applications. THE MEASURE AND SPECIFICATIONS ARE PROVIDED &quot;AS IS&quot; WITHOUT WARRANTY OF ANY KIND.
+ 
+Due to technical limitations, registered trademarks are indicated by (R) or [R] and unregistered trademarks are indicated by (TM) or [TM]."></disclaimer>
+   <rationale value="All women are at risk for cervical cancer. In 2020, an estimated 13,800 women were diagnosed with cervical cancer in the U.S., resulting in an estimated 4,290 deaths (National Cancer Institute, 2020). Screening can identify precancerous lesions and can detect invasive cancer early, when treatment is more likely to be successful (American Cancer Society, 2020)."></rationale>
+   <clinicalRecommendationStatement value="The U.S Preventive Services Task Force (USPSTF) recommends screening for cervical cancer every 3 years with cervical cytology alone in women aged 21 to 29 years. For women aged 30 to 65 years, the USPSTF recommends screening every 3 years with cervical cytology alone, every 5 years with high-risk human papillomavirus (hrHPV) testing alone, or every 5 years with hrHPV testing in combination with cytology (cotesting) (A recommendation) (USPSTF, 2018).
+
+The USPSTF recommends against screening for cervical cancer in women older than 65 years who have had adequate prior screening and are not otherwise at high risk for cervical cancer (D recommendation) (USPSTF, 2018).
+
+The USPSTF recommends against screening for cervical cancer in women younger than 21 years. (D recommendation) (USPSTF, 2018).
+
+The USPSTF recommends against screening for cervical cancer in women who have had a hysterectomy with removal of the cervix and do not have a history of a high-grade precancerous lesion (i.e., cervical intraepithelial neoplasia [CIN] grade 2 or 3) or cervical cancer (D recommendation) (USPSTF, 2018)."></clinicalRecommendationStatement>
+   <group id="Group_1">
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-scoring">
+         <valueCodeableConcept>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-scoring"></system>
+               <code value="proportion"></code>
+               <display value="Proportion"></display>
+            </coding>
+         </valueCodeableConcept>
+      </extension>
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-populationBasis">
+         <valueCode value="boolean"></valueCode>
+      </extension>
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-type">
+         <valueCodeableConcept>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-type"></system>
+               <code value="process"></code>
+               <display value="Process"></display>
+            </coding>
+         </valueCodeableConcept>
+      </extension>
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-rateAggregation">
+         <valueCode value="None"></valueCode>
+      </extension>
+      <extension url="http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-improvementNotation">
+         <valueCodeableConcept>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-improvement-notation"></system>
+               <code value="increase"></code>
+               <display value="Increased score indicates improvement"></display>
+            </coding>
+         </valueCodeableConcept>
+      </extension>
+      <population id="InitialPopulation_1">
+         <code>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-population"></system>
+               <code value="initial-population"></code>
+               <display value="Initial Population"></display>
+            </coding>
+         </code>
+         <description value="Women 24-64 years of age by the end of the measurement period with a visit during the measurement period"></description>
+         <criteria>
+            <language value="text/cql-identifier"></language>
+            <expression value="Initial Population"></expression>
+         </criteria>
+      </population>
+      <population id="Denominator_1">
+         <code>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-population"></system>
+               <code value="denominator"></code>
+               <display value="Denominator"></display>
+            </coding>
+         </code>
+         <description value="Equals Initial Population"></description>
+         <criteria>
+            <language value="text/cql-identifier"></language>
+            <expression value="Denominator"></expression>
+         </criteria>
+      </population>
+      <population id="DenominatorExclusion_1">
+         <code>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-population"></system>
+               <code value="denominator-exclusion"></code>
+               <display value="Denominator Exclusion"></display>
+            </coding>
+         </code>
+         <description value="Exclude patients who are in hospice care for any part of the measurement period.
+
+Women who had a hysterectomy with no residual cervix or a congenital absence of cervix.
+
+Exclude patients receiving palliative care for any part of the measurement period."></description>
+         <criteria>
+            <language value="text/cql-identifier"></language>
+            <expression value="Denominator Exclusions"></expression>
+         </criteria>
+      </population>
+      <population id="Numerator_1">
+         <code>
+            <coding>
+               <system value="http://terminology.hl7.org/CodeSystem/measure-population"></system>
+               <code value="numerator"></code>
+               <display value="Numerator"></display>
+            </coding>
+         </code>
+         <description value="Women with one or more screenings for cervical cancer. Appropriate screenings are defined by any one of the following criteria:
+- Cervical cytology performed during the measurement period or the two years prior to the measurement period for women 24-64 years of age by the end of the measurement period.
+
+- Cervical human papillomavirus (HPV) testing performed during the measurement period or the four years prior to the measurement period for women who are 30 years or older at the time of the test."></description>
+         <criteria>
+            <language value="text/cql-identifier"></language>
+            <expression value="Numerator"></expression>
+         </criteria>
+      </population>
+   </group>
+   <supplementalData id="sde-ethnicity">
+      <usage>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+            <code value="supplemental-data"></code>
+         </coding>
+      </usage>
+      <description value="SDE Ethnicity"></description>
+      <criteria>
+         <language value="text/cql-identifier"></language>
+         <expression value="SDE Ethnicity"></expression>
+      </criteria>
+   </supplementalData>
+   <supplementalData id="sde-payer">
+      <usage>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+            <code value="supplemental-data"></code>
+         </coding>
+      </usage>
+      <description value="SDE Payer"></description>
+      <criteria>
+         <language value="text/cql-identifier"></language>
+         <expression value="SDE Payer"></expression>
+      </criteria>
+   </supplementalData>
+   <supplementalData id="sde-race">
+      <usage>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+            <code value="supplemental-data"></code>
+         </coding>
+      </usage>
+      <description value="SDE Race"></description>
+      <criteria>
+         <language value="text/cql-identifier"></language>
+         <expression value="SDE Race"></expression>
+      </criteria>
+   </supplementalData>
+   <supplementalData id="sde-sex">
+      <usage>
+         <coding>
+            <system value="http://terminology.hl7.org/CodeSystem/measure-data-usage"></system>
+            <code value="supplemental-data"></code>
+         </coding>
+      </usage>
+      <description value="SDE Sex"></description>
+      <criteria>
+         <language value="text/cql-identifier"></language>
+         <expression value="SDE Sex"></expression>
+      </criteria>
+   </supplementalData>
+</Measure>

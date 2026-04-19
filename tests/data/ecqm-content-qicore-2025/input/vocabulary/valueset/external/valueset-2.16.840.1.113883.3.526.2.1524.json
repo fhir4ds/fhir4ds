@@ -1,0 +1,149 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1524-20250125",
+  "meta": {
+    "versionId": "42",
+    "lastUpdated": "2025-01-25T01:09:35.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-01-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1524",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1524"
+  } ],
+  "version": "20250125",
+  "name": "CataractSecondaryToOcularDisorders",
+  "title": "Cataract Secondary to Ocular Disorders",
+  "status": "active",
+  "date": "2025-01-25T01:09:35-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of a diagnosis of cataract that is a secondary diagnosis to other ocular conditions.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of cataract secondary to degenerative or inflammatory ocular disorders, cataract with neovascularization, or subcapsular glaucomatous flecks.),(Exclusion Criteria: Excludes concepts that represent a diagnosis for 'unspecified eye.')",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "1217661001",
+        "display": "Cataract due to degenerative disorder of eye (disorder)"
+      }, {
+        "code": "15738161000119104",
+        "display": "Cataract of right eye due to ocular disease (disorder)"
+      }, {
+        "code": "15738201000119109",
+        "display": "Cataract of left eye due to ocular disease (disorder)"
+      }, {
+        "code": "15738241000119106",
+        "display": "Cataract of left eye due to inflammatory disorder (disorder)"
+      }, {
+        "code": "15738281000119101",
+        "display": "Cataract of right eye due to inflammatory disorder (disorder)"
+      }, {
+        "code": "15738321000119106",
+        "display": "Cataract of bilateral eyes due to inflammatory disorder (disorder)"
+      }, {
+        "code": "15990151000119103",
+        "display": "Cataract due to and following ocular disease of bilateral eyes (disorder)"
+      }, {
+        "code": "15990191000119108",
+        "display": "Cataract due to and following ocular disease of left eye (disorder)"
+      }, {
+        "code": "15990231000119104",
+        "display": "Cataract due to and following ocular disease of right eye (disorder)"
+      }, {
+        "code": "193600001",
+        "display": "Cataract due to ocular disease (disorder)"
+      }, {
+        "code": "193602009",
+        "display": "Cataract due to inflammatory disorder (disorder)"
+      }, {
+        "code": "331941000119109",
+        "display": "Glaukomflecken of right eye (disorder)"
+      }, {
+        "code": "337561000119109",
+        "display": "Glaukomflecken of left eye (disorder)"
+      }, {
+        "code": "343351000119105",
+        "display": "Glaukomflecken of bilateral eyes (disorder)"
+      }, {
+        "code": "67733005",
+        "display": "Glaukomflecken (disorder)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:1aada375-65b0-4e8c-a0e4-c3d2faaa5ce4",
+    "timestamp": "2025-06-20T16:56:48-04:00",
+    "total": 9,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1217661001",
+      "display": "Cataract due to degenerative disorder of eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "15738161000119104",
+      "display": "Cataract of right eye due to ocular disease (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "15738201000119109",
+      "display": "Cataract of left eye due to ocular disease (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "15738241000119106",
+      "display": "Cataract of left eye due to inflammatory disorder (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "15738281000119101",
+      "display": "Cataract of right eye due to inflammatory disorder (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "15738321000119106",
+      "display": "Cataract of bilateral eyes due to inflammatory disorder (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "193600001",
+      "display": "Cataract secondary to ocular disease (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "193602009",
+      "display": "Cataract due to inflammatory disorder (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "67733005",
+      "display": "Subcapsular glaucomatous flecks (disorder)"
+    } ]
+  }
+}

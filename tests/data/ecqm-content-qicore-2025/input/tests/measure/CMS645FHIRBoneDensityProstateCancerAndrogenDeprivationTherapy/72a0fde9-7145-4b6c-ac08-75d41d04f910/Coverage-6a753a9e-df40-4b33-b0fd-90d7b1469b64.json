@@ -1,0 +1,29 @@
+{
+  "resourceType": "Coverage",
+  "id": "6a753a9e-df40-4b33-b0fd-90d7b1469b64",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+  },
+  "identifier": [ {
+    "system": "http://benefitsinc.com/certificate",
+    "value": "12345"
+  } ],
+  "status": "active",
+  "type": {
+    "coding": [ {
+      "system": "https://nahdo.org/sopt",
+      "version": "9.2",
+      "code": "6",
+      "display": "BLUE CROSS/BLUE SHIELD"
+    } ]
+  },
+  "beneficiary": {
+    "reference": "Patient/72a0fde9-7145-4b6c-ac08-75d41d04f910"
+  },
+  "period": {
+    "start": "2012-05-23"
+  },
+  "payor": [ {
+    "reference": "Organization/ad5836ba-10fa-4a1b-bccf-e4a81d466958"
+  } ]
+}

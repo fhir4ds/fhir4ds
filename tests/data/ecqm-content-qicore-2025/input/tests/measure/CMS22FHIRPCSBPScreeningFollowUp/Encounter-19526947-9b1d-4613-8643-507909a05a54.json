@@ -1,0 +1,29 @@
+{
+  "resourceType": "Encounter",
+  "id": "19526947-9b1d-4613-8643-507909a05a54",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "103705002",
+      "display": "Patient status observation (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/9b11d2b8-872b-49c5-90b2-740f4e218a92"
+  },
+  "period": {
+    "start": "2026-12-31T08:00:00.000+00:00",
+    "end": "2026-12-31T08:30:00.000+00:00"
+  }
+}

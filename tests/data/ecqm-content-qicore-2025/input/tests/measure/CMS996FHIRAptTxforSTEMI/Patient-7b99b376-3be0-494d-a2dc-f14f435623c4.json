@@ -1,0 +1,55 @@
+{
+  "resourceType": "Patient",
+  "id": "7b99b376-3be0-494d-a2dc-f14f435623c4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2076-8",
+        "display": "Native Hawaiian or Other Pacific Islander",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Native Hawaiian or Other Pacific Islander"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2186-5",
+        "display": "Not Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Not Hispanic or Latino"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248152002"
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://bonnie-fhir.healthit.gov/",
+    "value": "617be8ff1619a529957d62bb"
+  } ],
+  "name": [ {
+    "family": "DenExcl7Pass",
+    "given": [ "DxStartsBefore90dayPeriodEndsDuringED" ]
+  } ],
+  "gender": "female",
+  "birthDate": "1985-12-02"
+}

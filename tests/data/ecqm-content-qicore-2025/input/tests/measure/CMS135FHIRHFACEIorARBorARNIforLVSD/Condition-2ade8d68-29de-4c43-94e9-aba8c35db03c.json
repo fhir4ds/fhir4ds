@@ -1,0 +1,42 @@
+{
+  "resourceType": "Condition",
+  "id": "2ade8d68-29de-4c43-94e9-aba8c35db03c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "11082009",
+      "display": "Abnormal pregnancy (finding)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/d7067d60-b722-4bba-b78e-682d86c0b48e"
+  },
+  "onsetPeriod": {
+    "start": "2026-01-02T08:00:00.000+00:00"
+  }
+}

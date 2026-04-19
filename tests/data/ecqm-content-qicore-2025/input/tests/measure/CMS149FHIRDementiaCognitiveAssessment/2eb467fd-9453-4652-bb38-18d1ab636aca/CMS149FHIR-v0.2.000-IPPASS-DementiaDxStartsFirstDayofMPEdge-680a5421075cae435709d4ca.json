@@ -1,0 +1,419 @@
+{
+  "resourceType": "Bundle",
+  "id": "610d3a53be3d5dcbc43d6777",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/2eb467fd-9453-4652-bb38-18d1ab636aca",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "2eb467fd-9453-4652-bb38-18d1ab636aca",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "610d3a53be3d5dcbc43d6777"
+      } ],
+      "name": [ {
+        "family": "IPPass",
+        "given": [ "DementiaDxStartsFirstDayofMPEdge" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1969-03-02"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/2eb467fd-9453-4652-bb38-18d1ab636aca"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/dbc228fc-250b-43a9-91dc-aafbd1993186",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "dbc228fc-250b-43a9-91dc-aafbd1993186",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/202303",
+          "code": "185460008",
+          "display": "Home visit request by patient (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/2eb467fd-9453-4652-bb38-18d1ab636aca"
+      },
+      "period": {
+        "start": "2026-08-06T08:00:00.000+00:00",
+        "end": "2026-08-10T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/dbc228fc-250b-43a9-91dc-aafbd1993186"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/8d38f206-7ad6-4ef9-8abd-9b1cc9963090",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "8d38f206-7ad6-4ef9-8abd-9b1cc9963090",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/202303",
+          "code": "10349009",
+          "display": "Multi-infarct dementia with delirium (disorder)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/2eb467fd-9453-4652-bb38-18d1ab636aca"
+      },
+      "onsetDateTime": "2026-01-01T00:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/8d38f206-7ad6-4ef9-8abd-9b1cc9963090"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/b264571d-d1fb-46e3-a220-db88a08b07f1",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "b264571d-d1fb-46e3-a220-db88a08b07f1",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/202303",
+          "code": "185316007",
+          "display": "Indirect encounter (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/2eb467fd-9453-4652-bb38-18d1ab636aca"
+      },
+      "period": {
+        "start": "2026-08-06T08:00:00.000+00:00",
+        "end": "2026-08-10T08:15:00.000+00:00"
+      },
+      "diagnosis": [ {
+        "condition": {
+          "reference": "Condition/dementia-mental-degenerations-5d61"
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/b264571d-d1fb-46e3-a220-db88a08b07f1"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/8c463cf9-107a-4106-ba42-e353c45f7edb",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "8c463cf9-107a-4106-ba42-e353c45f7edb",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/202303",
+          "code": "10349009",
+          "display": "Multi-infarct dementia with delirium (disorder)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/2eb467fd-9453-4652-bb38-18d1ab636aca"
+      },
+      "onsetPeriod": {
+        "start": "2025-08-05T08:00:00.000+00:00",
+        "end": "2025-08-11T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/8c463cf9-107a-4106-ba42-e353c45f7edb"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/1337af7c-22b6-4ce5-9230-e81bad4fc9cf",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "1337af7c-22b6-4ce5-9230-e81bad4fc9cf",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/2eb467fd-9453-4652-bb38-18d1ab636aca"
+      },
+      "relationship": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+          "code": "self"
+        } ]
+      },
+      "period": {
+        "start": "2016-05-23",
+        "end": "2027-05-23"
+      },
+      "payor": [ {
+        "reference": "Organization/a5b2ecef-840a-4980-821b-294f3e41cf3f"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/1337af7c-22b6-4ce5-9230-e81bad4fc9cf"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/a5b2ecef-840a-4980-821b-294f3e41cf3f",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "a5b2ecef-840a-4980-821b-294f3e41cf3f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/a5b2ecef-840a-4980-821b-294f3e41cf3f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/8cf3788a-41d9-4555-910b-a57655727409",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "8cf3788a-41d9-4555-910b-a57655727409",
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "123456"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/8cf3788a-41d9-4555-910b-a57655727409"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/0ff1be90-0d17-4ba2-9f09-0405b2b292d3",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "0ff1be90-0d17-4ba2-9f09-0405b2b292d3",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "909dcc4e-2778-47b7-9fbc-3716b769163c-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "2eb467fd-9453-4652-bb38-18d1ab636aca"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#909dcc4e-2778-47b7-9fbc-3716b769163c-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Dementia Diagnosis begins exactly at start of MP with Home Visit and Patient Provider Interaction"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS149FHIRDementiaCognitiveAssessment",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/2eb467fd-9453-4652-bb38-18d1ab636aca"
+      }, {
+        "reference": "Encounter/dbc228fc-250b-43a9-91dc-aafbd1993186"
+      }, {
+        "reference": "Condition/8d38f206-7ad6-4ef9-8abd-9b1cc9963090"
+      }, {
+        "reference": "Encounter/b264571d-d1fb-46e3-a220-db88a08b07f1"
+      }, {
+        "reference": "Condition/8c463cf9-107a-4106-ba42-e353c45f7edb"
+      }, {
+        "reference": "Coverage/1337af7c-22b6-4ce5-9230-e81bad4fc9cf"
+      }, {
+        "reference": "Organization/a5b2ecef-840a-4980-821b-294f3e41cf3f"
+      }, {
+        "reference": "Practitioner/8cf3788a-41d9-4555-910b-a57655727409"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/0ff1be90-0d17-4ba2-9f09-0405b2b292d3"
+    }
+  } ]
+}

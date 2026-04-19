@@ -1,0 +1,131 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "ca73503a-7635-4bdc-bf41-c835131eef36",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "e5395b71-144d-46d5-8dea-2f6e42cf4383-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "5a329008-fcc1-4168-ab9c-89cb5dd6ff32"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#e5395b71-144d-46d5-8dea-2f6e42cf4383-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Testing multiple encounters, one with ED to Inpatient with antithrombotic, and one with Ed to Obs to Inpatient with tPA. \n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS72FHIRSTKAntithromboticDay2",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 2
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 2
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/5a329008-fcc1-4168-ab9c-89cb5dd6ff32"
+  }, {
+    "reference": "Encounter/4d515135-c60b-4366-86df-683ed679e4f6"
+  }, {
+    "reference": "Encounter/63fcd987-d536-4941-ab95-9a08e23c089d"
+  }, {
+    "reference": "Claim/5ca62962b8484628b8de1ec5"
+  }, {
+    "reference": "Encounter/ecea1d26-8f16-4734-9783-6f49fa861e60"
+  }, {
+    "reference": "Encounter/d2ae7ea6-6848-4597-a6d9-909fba96b9b6"
+  }, {
+    "reference": "Encounter/c0e1555d-b01a-44b1-9592-46305992e574"
+  }, {
+    "reference": "Claim/5ca62962b8484628b8de1ec5"
+  }, {
+    "reference": "Observation/2ae0869c-09c1-4621-a050-07063cbae575"
+  }, {
+    "reference": "MedicationAdministration/1a728db2-c2ca-4d94-aa8d-883cb5f2944c"
+  }, {
+    "reference": "MedicationAdministration/0dc80621-86a2-40ed-9e59-c0bf2ae52e2d"
+  }, {
+    "reference": "MedicationAdministration/23991024-22c3-46eb-bf4f-088407b4a762"
+  }, {
+    "reference": "MedicationRequest/3bee28b8-cc8d-48e6-8eb1-d3f8895c0d81"
+  }, {
+    "reference": "MedicationRequest/4d83ea2e-770b-4fd4-bfb3-1ee1d615a460"
+  }, {
+    "reference": "Condition/f4b2f31e-3ec1-409b-9a73-4eef98489859"
+  }, {
+    "reference": "Condition/aeaf04f9-ddeb-4d06-81d2-ba674f8c05ba"
+  }, {
+    "reference": "Coverage/badb8ba1-6fe1-46ec-83c0-67ff21e0a950"
+  }, {
+    "reference": "Organization/f28399bc-2b1b-43c2-87cb-c2f97e6a4976"
+  }, {
+    "reference": "Practitioner/5fc9aded-4610-4e87-98a0-7983ac9b1d4b"
+  } ]
+}

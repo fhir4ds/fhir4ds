@@ -1,0 +1,1880 @@
+{
+  "resourceType": "Measure",
+  "id": "CMS832HHAKIFHIR",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-shareablemeasure", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/executable-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cql-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/elm-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/proportion-measure-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Library",
+    "id": "effective-data-requirements",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://loinc.org",
+        "code": "9279-1",
+        "display": "Respiratory rate"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "248153007",
+        "display": "Male (finding)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "248152002",
+        "display": "Female (finding)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+        "code": "laboratory",
+        "display": "Laboratory"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://loinc.org",
+        "code": "8480-6",
+        "display": "Systolic blood pressure"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://loinc.org",
+        "code": "8867-4",
+        "display": "Heart rate"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Encounter with Age 18 and Length of Stay 48 Hours or More"
+      }, {
+        "url": "statement",
+        "valueString": "// Supports Initial Population\n\n/*\ndefine \"Encounter with Age 18 and Length of Stay 48 Hours or More\":\n  [\"Encounter\": \"Encounter Inpatient\"] InpatientEncounter\n                    where InpatientEncounter.period ends during day of \"Measurement Period\"\n                        and AgeInYearsAt(date from start of InpatientEncounter.period)>= 18\n                        and ( duration in hours of InpatientEncounter.hospitalizationWithObservation() >= 48 )*/ \n\n\n\ndefine \"Encounter with Age 18 and Length of Stay 48 Hours or More\":\n  [\"Encounter\": \"Encounter Inpatient\"] InpatientEncounter\n    where Patient.sex in { '248153007', '248152002' }\n      and InpatientEncounter.period ends during day of \"Measurement Period\"\n      and AgeInYearsAt(date from start of InpatientEncounter.period) >= 18\n      and ( duration in hours of InpatientEncounter.hospitalizationWithObservation ( ) >= 48 )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 0
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Inpatient Encounter with Creatinine"
+      }, {
+        "url": "statement",
+        "valueString": "// Supports Initial Population\n\n\ndefine \"Inpatient Encounter with Creatinine\":\n  from\n    \"Encounter with Age 18 and Length of Stay 48 Hours or More\" Encounter48Hours,\n    [\"LaboratoryResultObservation\": \"Creatinine Mass Per Volume\"] CreatinineTest\n    let HospitalizationPeriod: Encounter48Hours.hospitalizationWithObservation ( ),\n    CreatinineTestStart: CreatinineTest.effective.earliest ( )\n    where CreatinineTest.value is not null\n      and CreatinineTestStart during Interval[start of HospitalizationPeriod + 48 hours, end of HospitalizationPeriod]\n      and CreatinineTest.status in { 'final', 'amended', 'corrected' }\n    return Encounter48Hours"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 1
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Encounter with Creatinine and without Obstetrical Conditions"
+      }, {
+        "url": "statement",
+        "valueString": "// clause 2\n\n\n//-------------------------------- Supporting Definitions for Initial Population -----------------------------\n\n// Supports Initial Population\n// Used in other definitions throughout\n\n\n\n\n\ndefine \"Encounter with Creatinine and without Obstetrical Conditions\":\n  \"Inpatient Encounter with Creatinine\" EncounterWithCreatinine\n    where not exists ( ( EncounterWithCreatinine.encounterDiagnosis ( ) ) EncounterDiagnosis\n        where EncounterDiagnosis.code in \"Obstetrics and VTE Obstetrics\"\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 2
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Risk Variable Estimated Glomerular Filtration Rate for Females"
+      }, {
+        "url": "statement",
+        "valueString": "// -------------------------------- Risk Variable Definitions  -----------------------------\n\n\ndefine \"Risk Variable Estimated Glomerular Filtration Rate for Females\":\n  \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter\n    return Tuple {\n      encounterId: QualifyingEncounter.id,\n      eGFR: \"FemaleeGFR\"(QualifyingEncounter)\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 3
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Race"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Race\":\n  Patient.race R\n    return Tuple {\n      codes: R.ombCategory union R.detailed,\n      display: R.text\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 4
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "SDE Race"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Race\":\n  SDE.\"SDE Race\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 5
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Risk Variable First Respiratory Rate in Encounter"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Risk Variable First Respiratory Rate in Encounter\":\n  \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter\n    return Tuple {\n      encounterId: QualifyingEncounter.id,\n      firstRespiratoryRate: \"FirstRespiratoryRate\"(QualifyingEncounter)\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 6
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Risk Variable All Encounter Diagnoses with POA Indication"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Risk Variable All Encounter Diagnoses with POA Indication\":\n  from\n    \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter,\n    [Claim] claim\n    where claim.status = 'active'\n      and claim.use = 'claim'\n      and exists ( claim.item I\n          where I.encounter.references ( QualifyingEncounter )\n            and exists ( claim.diagnosis D\n                where D.sequence in claim.item.diagnosisSequence\n                  and D.onAdmission in \"Present on Admission or Clinically Undetermined\"\n            )\n      )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 7
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Sex"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Sex\":\n  case\n    when Patient.sex = '248153007' then \"Male (finding)\"\n    when Patient.sex = '248152002' then \"Female (finding)\"\n    else null\n  end"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 8
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "SDE Sex"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Sex\":\n  SDE.\"SDE Sex\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 9
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Risk Variable Estimated Glomerular Filtration Rate for Males"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Risk Variable Estimated Glomerular Filtration Rate for Males\":\n  \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter\n    return Tuple {\n      encounterId: QualifyingEncounter.id,\n      eGFR: \"MaleeGFR\"(QualifyingEncounter)\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 10
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Serum Creatinine Normal"
+      }, {
+        "url": "statement",
+        "valueString": "// Supports \"Encounter with 2 Times Serum Creatinine Increase\"\n// Supports \"Encounter with 1.5 Times Serum Creatinine Increase\"\n\n\n\ndefine \"Serum Creatinine Normal\":\n  if ( Patient.sex = '248152002' ) then 1.02 'mg/dL' \n    else 1.18 'mg/dL'"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 11
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Qualifying Creatinine Lab Result by Time"
+      }, {
+        "url": "statement",
+        "valueString": "// -------------------------------- Supporting Definitions for Creatinine calculations -----------------------------\n\n// Used throughout creatinine functions and defines  \n\n\n\ndefine \"Qualifying Creatinine Lab Result by Time\":\n  from\n    \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter,\n    [\"LaboratoryResultObservation\": \"Creatinine Mass Per Volume\"] CreatinineTestByTime\n    let CrEncId: QualifyingEncounter.id,\n    CrHospPeriod: QualifyingEncounter.hospitalizationWithObservation ( ),\n    CrLabId: CreatinineTestByTime.id,\n    CrTime: CreatinineTestByTime.effective.earliest ( ),\n    CrTimeIssued: CreatinineTestByTime.issued,\n    CrResult: CreatinineTestByTime.value as Quantity,\n    CrResultValue: CrResult.value,\n    CrResultUnit: CrResult.unit\n    where CrTime during CrHospPeriod\n      and CreatinineTestByTime.isLaboratory ( )\n      and CreatinineTestByTime.status in { 'final', 'amended', 'corrected' }\n      and CrResultUnit = 'mg/dL'\n      and CreatinineTestByTime.value is not null\n      and CreatinineTestByTime.value as Quantity > 0 'mg/dL'\n    return Tuple {\n      CrEncInPtId: CrEncId,\n      CrHospitalization: CrHospPeriod,\n      CrLabObsId: CrLabId,\n//                    LabCategory: CreatinineTestByQuantity.isLaboratory(),\n      \n      CrLabObsCategory: if CreatinineTestByTime.isLaboratory ( ) then 'laboratory' \n        else CreatinineTestByTime.isLaboratory ( ),\n      CrLabObsStatus: CreatinineTestByTime.status,\n      CrLabResult: CrResult,\n      CrLabResultUnit: CrResultUnit,\n      CrLabResultValue: CrResultValue,\n      CrLabTime: CrTime,\n      CrLabTimeIssued: CrTimeIssued\n    }\n    sort by CrLabTime"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 12
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Encounter with 1.5 Times Serum Creatinine Increase"
+      }, {
+        "url": "statement",
+        "valueString": "// Supporting Denominator Exclusion clause 4\n// Supporting Numerator               \n\n\n\ndefine \"Encounter with 1.5 Times Serum Creatinine Increase\":\n  from\n    \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter,\n    [\"LaboratoryResultObservation\": \"Creatinine Mass Per Volume\"] HighCreatinineTest,\n    [\"LaboratoryResultObservation\": \"Creatinine Mass Per Volume\"] LowCreatinineTest\n    let LowCreatinineTestTime: LowCreatinineTest.effective.earliest ( ),\n    HighCreatinineTestTime: HighCreatinineTest.effective.earliest ( ),\n    HospitalWithObservationPeriod: QualifyingEncounter.hospitalizationWithObservation ( )\n    where ( HighCreatinineTest.value > \"Serum Creatinine Normal\" )\n      and LowCreatinineTest.status in { 'final', 'amended', 'corrected' }\n      and HighCreatinineTest.status in { 'final', 'amended', 'corrected' }\n      and HighCreatinineTest.value = \"HighestSerumCreatinineResult\"(QualifyingEncounter)\n      and LowCreatinineTest.value = \"LowestSerumCreatinineResult\"(QualifyingEncounter)\n      and \"1.5IncreaseInCreatinine\"(QualifyingEncounter) >= LowCreatinineTest.value\n      and LowCreatinineTestTime 7 days or less before HighCreatinineTestTime\n      and LowCreatinineTestTime during HospitalWithObservationPeriod\n      and HighCreatinineTestTime during Interval[start of HospitalWithObservationPeriod + 48 hours, start of HospitalWithObservationPeriod + 30 days]\n      and HighCreatinineTestTime during HospitalWithObservationPeriod\n    return QualifyingEncounter"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 13
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Encounter with 2 Times Serum Creatinine Increase"
+      }, {
+        "url": "statement",
+        "valueString": "// Supporting Denominator Exclusion clause 4\n// Also Supporting Numerator clause 1\n\n\n\ndefine \"Encounter with 2 Times Serum Creatinine Increase\":\n  from\n    \"Encounter with 1.5 Times Serum Creatinine Increase\" EncounterWithHighCreatinine,\n    [\"LaboratoryResultObservation\": \"Creatinine Mass Per Volume\"] HighCreatinineTest,\n    [\"LaboratoryResultObservation\": \"Creatinine Mass Per Volume\"] LowCreatinineTest\n    let LowCreatinineTestTime: LowCreatinineTest.effective.earliest ( ),\n    HighCreatinineTestTime: HighCreatinineTest.effective.earliest ( ),\n    HospitalWithObservationPeriod: EncounterWithHighCreatinine.hospitalizationWithObservation ( )\n    where ( HighCreatinineTest.value > \"Serum Creatinine Normal\" )\n      and LowCreatinineTest.status in { 'final', 'amended', 'corrected' }\n      and HighCreatinineTest.status in { 'final', 'amended', 'corrected' }\n      and HighCreatinineTest.value = \"HighestSerumCreatinineResult\"(EncounterWithHighCreatinine)\n      and LowCreatinineTest.value = \"LowestSerumCreatinineResult\"(EncounterWithHighCreatinine)\n      and ( HighCreatinineTest.value as Quantity ) >= ( LowCreatinineTest.value as Quantity )\n      and LowCreatinineTestTime 7 days or less before HighCreatinineTestTime\n      and LowCreatinineTestTime during HospitalWithObservationPeriod\n      and HighCreatinineTestTime during Interval[start of HospitalWithObservationPeriod + 48 hours, start of HospitalWithObservationPeriod + 30 days]\n      and HighCreatinineTestTime during HospitalWithObservationPeriod\n    return EncounterWithHighCreatinine"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 14
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Encounter with Kidney Dialysis Started More Than 48 Hours After Arrival"
+      }, {
+        "url": "statement",
+        "valueString": "// Supports Numerator union clause 2\n\n\ndefine \"Encounter with Kidney Dialysis Started More Than 48 Hours After Arrival\":\n  from\n    [\"Procedure\": \"Hospital Based Dialysis Services\"] Dialysis,\n    \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter\n    let HospitalWithObservationPeriod: QualifyingEncounter.hospitalizationWithObservation ( )\n    where Dialysis.performed.toInterval ( ) starts during Interval[start of HospitalWithObservationPeriod + 48 hours, end of HospitalWithObservationPeriod]\n      and Dialysis.performed.toInterval ( ) starts during HospitalWithObservationPeriod\n    return QualifyingEncounter"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 15
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Encounter with Kidney Dialysis Started More Than 48 Hours After Arrival without High Creatinine"
+      }, {
+        "url": "statement",
+        "valueString": "// -------------------------------- Supporting Definitions for Numerator  -----------------------------\n\n// Numerator clause 1:  See \"Encounter with 2 Times Serum Creatinine Increase\"\n\n// Numerator union clause 2\n\n\n\n\ndefine \"Encounter with Kidney Dialysis Started More Than 48 Hours After Arrival without High Creatinine\":\n  \"Encounter with Kidney Dialysis Started More Than 48 Hours After Arrival\" EncounterWithDialysisAfter48Hours\n    where not ( exists ( \"Encounter with 2 Times Serum Creatinine Increase\" EncounterWithHighCreatinine\n          where ( EncounterWithHighCreatinine.period includes EncounterWithDialysisAfter48Hours.period )\n      )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 16
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Numerator"
+      }, {
+        "url": "statement",
+        "valueString": "// clause 6 \n\n\ndefine \"Numerator\":\n  \"Encounter with 2 Times Serum Creatinine Increase\" // clause 1\n    \n    union \"Encounter with Kidney Dialysis Started More Than 48 Hours After Arrival without High Creatinine\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 17
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Qualifying Systolic Blood Pressure Reading"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Qualifying Systolic Blood Pressure Reading\":\n  [\"USCoreBloodPressureProfile\"] BloodPressure\n    where BloodPressure.effective.earliest ( ) during day of \"Measurement Period\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 18
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Risk Variable First Systolic Blood Pressure in Encounter"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Risk Variable First Systolic Blood Pressure in Encounter\":\n  \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter\n    return Tuple {\n      encounterId: QualifyingEncounter.id,\n      firstSystolicBP: \"FirstSystolicBloodPressure\"(QualifyingEncounter)\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 19
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Risk Variable First Temperature in Encounter"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Risk Variable First Temperature in Encounter\":\n  \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter\n    return Tuple {\n      encounterId: QualifyingEncounter.id,\n      firstTemperature: \"FirstBodyTemperature\"(QualifyingEncounter)\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 20
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Initial Population"
+      }, {
+        "url": "statement",
+        "valueString": "// -------------------------------- Population Definitions -----------------------------\n\n\ndefine \"Initial Population\":\n  \"Encounter with Creatinine and without Obstetrical Conditions\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 21
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Denominator"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Denominator\":\n  \"Initial Population\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 22
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Payer"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Payer\":\n  [Coverage: type in \"Payer Type\"] Payer\n    return {\n      code: Payer.type,\n      period: Payer.period\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 23
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "SDE Payer"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Payer\":\n  SDE.\"SDE Payer\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 24
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Ethnicity"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Ethnicity\":\n  Patient.ethnicity E\n    return Tuple {\n      codes: { E.ombCategory } union E.detailed,\n      display: E.text\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 25
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "SDE Ethnicity"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Ethnicity\":\n  SDE.\"SDE Ethnicity\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 26
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Risk Variable First Heart Rate in Encounter"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Risk Variable First Heart Rate in Encounter\":\n  \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter\n    return Tuple {\n      encounterId: QualifyingEncounter.id,\n      firstHeartRate: \"FirstHeartRate\"(QualifyingEncounter)\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 27
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Encounter with Less Than 2 Creatinine Results within 48 Hours of Arrival"
+      }, {
+        "url": "statement",
+        "valueString": "// -------------------------------- Supporting Definitions for Denominator Exclusion  -----------------------------\n\n// Denominator Exclusion clause 1\n\n\n\ndefine \"Encounter with Less Than 2 Creatinine Results within 48 Hours of Arrival\":\n  \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter\n    where ( Count(\"CreatinineLabTestwithResultwithinFirst48Hours\"(QualifyingEncounter)) < 2 )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 28
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Male Encounter with eGFR Less Than 60"
+      }, {
+        "url": "statement",
+        "valueString": "// Supporting Denominator Exclusion clause 2  \n\n\ndefine \"Male Encounter with eGFR Less Than 60\":\n  \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter\n    where \"MaleeGFR\"(QualifyingEncounter) is not null\n      and \"MaleeGFR\"(QualifyingEncounter) as Decimal < 60"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 29
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Female Encounter with eGFR Less Than 60"
+      }, {
+        "url": "statement",
+        "valueString": "// Supporting Denominator Exclusion clause 2    \n\n\ndefine \"Female Encounter with eGFR Less Than 60\":\n  \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter\n    where \"FemaleeGFR\"(QualifyingEncounter) is not null\n      and \"FemaleeGFR\"(QualifyingEncounter) as Decimal < 60"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 30
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Encounter with Index eGFR Less Than 60 within First 48 Hours"
+      }, {
+        "url": "statement",
+        "valueString": "// Denonminator Exclusion clause 2\n\n\ndefine \"Encounter with Index eGFR Less Than 60 within First 48 Hours\":\n  \"Male Encounter with eGFR Less Than 60\"\n    union \"Female Encounter with eGFR Less Than 60\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 31
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Increase of 0.3 or More Using Lowest Creatinine within 24 Hours"
+      }, {
+        "url": "statement",
+        "valueString": "//define \"Encounter with 0.3 mg dL or More Increase in Creatinine\":\n  //Coalesce(\"Increase of 0.3 or More Using Lowest Creatinine within 24 Hours\",\"Increase of 0.3 or More Using First Creatinine within First 48 Hours\")\n\n/*\ndefine \"Encounter with 0.3 mg dL or More Increase in Creatinine\":\n  case\n    when \"Increase of 0.3 or More Using Lowest Creatinine within 24 Hours\" is not null\n      then \"Increase of 0.3 or More Using Lowest Creatinine within 24 Hours\"\n    when \"Increase of 0.3 or More Using First Creatinine within First 48 Hours\" is not null\n      then \"Increase of 0.3 or More Using First Creatinine within First 48 Hours\"\n    else null\n  end */\n\n  \n// Supporting Denominator Exclusion clause 3\n\n\n\n\n\ndefine \"Increase of 0.3 or More Using Lowest Creatinine within 24 Hours\":\n  from\n    \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter,\n    [\"LaboratoryResultObservation\": \"Creatinine Mass Per Volume\"] IndexCreatinineLabResult,\n    [\"LaboratoryResultObservation\": \"Creatinine Mass Per Volume\"] SubsequentCreatinineLabResult\n    let IndexCreatinineLabResultTime: IndexCreatinineLabResult.effective.earliest ( ),\n    SubsequentCreatinineLabResultTime: SubsequentCreatinineLabResult.effective.earliest ( ),\n    HospitalWithObservationPeriod: QualifyingEncounter.hospitalizationWithObservation ( )\n    where IndexCreatinineLabResult.status in { 'final', 'amended', 'corrected' }\n      and SubsequentCreatinineLabResult.status in { 'final', 'amended', 'corrected' }\n      and ( ( SubsequentCreatinineLabResult.value as Quantity ) - ( IndexCreatinineLabResult.value as Quantity ) ) > 0.299 'mg/dL'\n      and IndexCreatinineLabResult.value = \"LowestSerumCreatinineResult\"(QualifyingEncounter)\n      and IndexCreatinineLabResultTime during Interval[SubsequentCreatinineLabResultTime - 48 hours, SubsequentCreatinineLabResultTime]\n      and IndexCreatinineLabResultTime during HospitalWithObservationPeriod\n      and IndexCreatinineLabResultTime during Interval[start of HospitalWithObservationPeriod, start of HospitalWithObservationPeriod + 24 hours]\n      and SubsequentCreatinineLabResultTime during HospitalWithObservationPeriod\n      and SubsequentCreatinineLabResultTime during Interval[start of HospitalWithObservationPeriod, start of HospitalWithObservationPeriod + 48 hours]\n      and IndexCreatinineLabResult.id != SubsequentCreatinineLabResult.id\n    return QualifyingEncounter"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 32
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Increase of 0.3 or More Using First Creatinine within First 48 Hours"
+      }, {
+        "url": "statement",
+        "valueString": "// Supporting Denominator Exclusion clause 3            \n\n\ndefine \"Increase of 0.3 or More Using First Creatinine within First 48 Hours\":\n  from\n    \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter,\n    [\"LaboratoryResultObservation\": \"Creatinine Mass Per Volume\"] IndexCreatinineLabResult,\n    [\"LaboratoryResultObservation\": \"Creatinine Mass Per Volume\"] SubsequentCreatinineLabResult\n    let IndexCreatinineLabResultTime: IndexCreatinineLabResult.effective.earliest ( ),\n    SubsequentCreatinineLabResultTime: SubsequentCreatinineLabResult.effective.earliest ( ),\n    HospitalWithObservationPeriod: QualifyingEncounter.hospitalizationWithObservation ( )\n    where IndexCreatinineLabResult.status in { 'final', 'amended', 'corrected' }\n      and SubsequentCreatinineLabResult.status in { 'final', 'amended', 'corrected' }\n      and ( ( SubsequentCreatinineLabResult.value as Quantity ) - ( IndexCreatinineLabResult.value as Quantity ) ) > 0.299 'mg/dL'\n      and IndexCreatinineLabResult.value as Quantity = singleton from \"EarliestSerumCreatinineResult\"(QualifyingEncounter)\n      and IndexCreatinineLabResultTime during Interval[SubsequentCreatinineLabResultTime - 48 hours, SubsequentCreatinineLabResultTime]\n      and IndexCreatinineLabResultTime during HospitalWithObservationPeriod\n      and SubsequentCreatinineLabResultTime during Interval[start of HospitalWithObservationPeriod, start of HospitalWithObservationPeriod + 48 hours]\n      and SubsequentCreatinineLabResultTime during HospitalWithObservationPeriod\n      and IndexCreatinineLabResultTime during Interval[start of HospitalWithObservationPeriod, start of HospitalWithObservationPeriod + 48 hours]\n      and SubsequentCreatinineLabResultTime during Interval[start of HospitalWithObservationPeriod, start of HospitalWithObservationPeriod + 48 hours]\n      and IndexCreatinineLabResult.id != SubsequentCreatinineLabResult.id\n    return QualifyingEncounter"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 33
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Encounter with 0.3 mg dL or More Increase in Creatinine"
+      }, {
+        "url": "statement",
+        "valueString": "// Denominator Exclusion clause 3  (Coalesce doesn't seem to work as intended)\n\n\ndefine \"Encounter with 0.3 mg dL or More Increase in Creatinine\":\n  \"Increase of 0.3 or More Using Lowest Creatinine within 24 Hours\"\n    union \"Increase of 0.3 or More Using First Creatinine within First 48 Hours\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 34
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Encounter with Kidney Dialysis Started 48 Hours or Less After Arrival"
+      }, {
+        "url": "statement",
+        "valueString": "// Supporting Denominator Exclusion clause 4\n\n\ndefine \"Encounter with Kidney Dialysis Started 48 Hours or Less After Arrival\":\n  from\n    [\"Procedure\": \"Hospital Based Dialysis Services\"] Dialysis,\n    \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter\n    let HospitalWithObservationPeriod: QualifyingEncounter.hospitalizationWithObservation ( )\n    where Dialysis.performed.toInterval ( ) starts during Interval[start of HospitalWithObservationPeriod, start of HospitalWithObservationPeriod + 48 hours]\n      and Dialysis.performed.toInterval ( ) starts during HospitalWithObservationPeriod\n    return QualifyingEncounter"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 35
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Encounter with Kidney Dialysis Started 48 Hours or Less After Arrival without High Creatinine"
+      }, {
+        "url": "statement",
+        "valueString": "// Denominator Exclusion clause 4\n\n\ndefine \"Encounter with Kidney Dialysis Started 48 Hours or Less After Arrival without High Creatinine\":\n  \"Encounter with Kidney Dialysis Started 48 Hours or Less After Arrival\" EncounterWithKidneyDialysis48HoursOrAfter\n    where not ( exists ( \"Encounter with 2 Times Serum Creatinine Increase\" EncounterWithHighCreatinine\n          where ( EncounterWithHighCreatinine.period includes EncounterWithKidneyDialysis48HoursOrAfter.period )\n      )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 36
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Encounter with High Risk Diagnosis for AKI"
+      }, {
+        "url": "statement",
+        "valueString": "// Denominator Exclusion clause 5\n\n\ndefine \"Encounter with High Risk Diagnosis for AKI\":\n  \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter\n    where exists ( ( QualifyingEncounter.encounterDiagnosis ( ) ) EncounterDiagnosis\n        where ( EncounterDiagnosis.code in \"High Risk Diagnosis for AKI\" )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 37
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Encounter with High Risk Procedures for AKI"
+      }, {
+        "url": "statement",
+        "valueString": "// Denominator Exclusion clause 6\n\n\ndefine \"Encounter with High Risk Procedures for AKI\":\n  \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter\n    with [\"Procedure\": \"High Risk Procedures for AKI\"] HighRiskProcedures\n      such that HighRiskProcedures.performed.toInterval ( ) starts during QualifyingEncounter.hospitalizationWithObservation ( )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 38
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "Denominator Exclusion"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Denominator Exclusion\":\n  \"Encounter with Less Than 2 Creatinine Results within 48 Hours of Arrival\" // clause 1\n    \n    union \"Encounter with Index eGFR Less Than 60 within First 48 Hours\"     // clause 2\n    \n    union \"Encounter with 0.3 mg dL or More Increase in Creatinine\"          // clause 3\n    \n    union \"Encounter with Kidney Dialysis Started 48 Hours or Less After Arrival without High Creatinine\"  // clause 4\n    \n    union \"Encounter with High Risk Diagnosis for AKI\"                       // clause 5\n    \n    union \"Encounter with High Risk Procedures for AKI\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 39
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToString"
+      }, {
+        "url": "statement",
+        "valueString": "define function ToString(value uri): value.value"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 40
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToInterval"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Converts the given [Period](https://hl7.org/fhir/datatypes.html#Period)\nvalue to a CQL DateTime Interval\n@comment: If the start value of the given period is unspecified, the starting\nboundary of the resulting interval will be open (meaning the start of the interval\nis unknown, as opposed to interpreted as the beginning of time).\n*/\ndefine function ToInterval(period FHIR.Period):\n    if period is null then\n        null\n    else\n        if period.\"start\" is null then\n            Interval(period.\"start\".value, period.\"end\".value]\n        else\n            Interval[period.\"start\".value, period.\"end\".value]"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 41
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CQMCommon"
+      }, {
+        "url": "name",
+        "valueString": "hospitalizationWithObservation"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Hospitalization with Observation returns the total interval from the start of any immediately prior emergency department visit through the observation visit to the discharge of the given encounter\n*/\ndefine fluent function hospitalizationWithObservation(TheEncounter Encounter ):\n  TheEncounter Visit\n  \t\tlet ObsVisit: Last([Encounter: \"Observation Services\"] LastObs\n  \t\t\t\twhere LastObs.status = 'finished'\n            and LastObs.period ends 1 hour or less on or before start of Visit.period\n  \t\t\t\tsort by end of period\n  \t\t\t),\n  \t\t\tVisitStart: Coalesce(start of ObsVisit.period, start of Visit.period),\n  \t\t\tEDVisit: Last([Encounter: \"Emergency Department Visit\"] LastED\n  \t\t\t\twhere LastED.status = 'finished'\n            and LastED.period ends 1 hour or less on or before VisitStart\n  \t\t\t\tsort by end of period\n  \t\t\t)\n  \t\treturn Interval[Coalesce(start of EDVisit.period, VisitStart), end of Visit.period]"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 42
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "earliest"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Given an interval, return the starting point if the interval has a starting boundary specified,\notherwise, return the ending point\n*/\ndefine fluent function earliest(choice Choice<DateTime, Quantity, Interval<DateTime>, Interval<Quantity>> ):\n  (choice.toInterval()) period\n    return\n      if (period.\"hasStart\"()) then start of period\n      else end of period"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 43
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CQMCommon"
+      }, {
+        "url": "name",
+        "valueString": "encounterDiagnosis"
+      }, {
+        "url": "statement",
+        "valueString": "/*  \n@description: Returns the Condition resources referenced by the diagnosis element of the Encounter  \n*/\ndefine fluent function encounterDiagnosis(Encounter Encounter ):\n  Encounter.reasonReference D\n    return singleton from (([ConditionEncounterDiagnosis] union [ConditionProblemsHealthConcerns]) C where D.references(C.id))"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 44
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "references"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Returns true if the given reference is to the given resourceId\n@comment: Returns true if the `resourceId` parameter exactly equals the tail of the given reference.\nNOTE: This function assumes resources from the same source server.\n*/\ndefine fluent function references(reference Reference, resourceId String):\n  resourceId = Last(Split(reference.reference, '/'))"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 45
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "FemaleeGFR"
+      }, {
+        "url": "statement",
+        "valueString": "// eGFR functions return as decimal value rather than Quantity\n// Supports Denominator Exclusion clause 2\n// Supports risk variable \"Risk Variable Estimated Glomerular Filtration Rate for Females\"\n\n\n\n\ndefine function \"FemaleeGFR\"(QualifyingEncounter Encounter):\n  if Patient.sex = '248152002' then ( 142 * Min({(\"IndexCreatinine\"(QualifyingEncounter).value / 0.7), 1 }) ^ ( - 0.241 ) * Max({(\"IndexCreatinine\"(QualifyingEncounter).value / 0.7), 1 }) ^ ( - 1.200 ) * 0.9938 ^ ( AgeInYearsAt(start of QualifyingEncounter.hospitalizationWithObservation()) ) * 1.012 ) \n    else null"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 46
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToCode"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Converts the given FHIR [Coding](https://hl7.org/fhir/datatypes.html#Coding) value to a CQL Code.\n*/\ndefine function ToCode(coding FHIR.Coding):\n    if coding is null then\n        null\n    else\n        System.Code {\n          code: coding.code.value,\n          system: coding.system.value,\n          version: coding.version.value,\n          display: coding.display.value\n        }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 47
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "FirstRespiratoryRate"
+      }, {
+        "url": "statement",
+        "valueString": "define function \"FirstRespiratoryRate\"(QualifyingEncounter Encounter):\n  First([\"USCoreRespiratoryRateProfile\": \"Respiratory rate\"] FirstRespiration\n      where FirstRespiration.effective.earliest() during QualifyingEncounter.hospitalizationWithObservation()\n        and FirstRespiration.value is not null\n      sort by effective.earliest()\n  ).value as Quantity"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 48
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "MaleeGFR"
+      }, {
+        "url": "statement",
+        "valueString": "// eGFR functions return as decimal value rather than Quantity\n// Supports Denominator Exclusion clause 2\n// Supports risk variable \"Risk Variable Estimated Glomerular Filtration Rate for Females\"\n\n\n\n\ndefine function \"MaleeGFR\"(QualifyingEncounter Encounter):\n  if Patient.sex = '248153007' then ( 142 * Min({(\"IndexCreatinine\"(QualifyingEncounter).value / 0.9), 1 }) ^ ( - 0.302 ) * Max({(\"IndexCreatinine\"(QualifyingEncounter).value / 0.9), 1 }) ^ ( - 1.200 ) * 0.9938 ^ ( AgeInYearsAt(start of QualifyingEncounter.hospitalizationWithObservation()) ) ) \n    else null"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 49
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "HighestSerumCreatinineResult"
+      }, {
+        "url": "statement",
+        "valueString": "// The following functions work with Cr result as Quantity (not decimal, but Quantity value is decimal)\n\n// Supporting Denominator Exclusion clause 4 via \"Encounter with 2 Times Serum Creatinine Increase\"\n// Supporting Numerator via \"Encounter with 2 Times Serum Creatinine Increase\"\n\n\n\n\ndefine function \"HighestSerumCreatinineResult\"(QualifyingEncounter Encounter):\n  ( Max((from\n          \"Qualifying Creatinine Lab Result by Time\" LabTests\n          let LabResult: LabTests.CrLabResult\n          where LabTests.CrEncInPtId = QualifyingEncounter.id\n      ).CrLabResult\n    )\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 50
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "isLaboratory"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Returns true if the given observation is a laboratory observation\n*/\ndefine fluent function isLaboratory(observation Choice<\"SimpleObservation\", \n\"ObservationCancelled\",\n\"NonPatientObservation\",\n\"LaboratoryResultObservation\",\n\"ObservationClinicalResult\",\n\"ObservationScreeningAssessment\">):\n  exists (observation.category C\n    where C ~ \"laboratory\"\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 51
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToConcept"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Converts the given FHIR [CodeableConcept](https://hl7.org/fhir/datatypes.html#CodeableConcept) value to a CQL Concept.\n*/\ndefine function ToConcept(concept FHIR.CodeableConcept):\n    if concept is null then\n        null\n    else\n        System.Concept {\n            codes: concept.coding C return ToCode(C),\n            display: concept.text.value\n        }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 52
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "LowestSerumCreatinineResult"
+      }, {
+        "url": "statement",
+        "valueString": "// Supporting Denominator Exclusion clause 3 via \"Increase of 0.3 or More Using Lowest Creatinine within 24 Hours\"\n// and clause 4 via \"Encounter with 1.5 Times Serum Creatinine Increase\"\n// Supporting Numerator  via \"Encounter with 1.5 Times Serum Creatinine Increase\"             \n\n\n\n\ndefine function \"LowestSerumCreatinineResult\"(QualifyingEncounter Encounter):\n  ( Min((from\n          \"Qualifying Creatinine Lab Result by Time\" LabTests\n          let LabResult: LabTests.CrLabResult\n          where LabTests.CrEncInPtId = QualifyingEncounter.id\n      ).CrLabResult\n    )\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 53
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "1.5IncreaseInCreatinine"
+      }, {
+        "url": "statement",
+        "valueString": "// Supporting Denominator Exclusion clause 4 via \"Encounter with 1.5 Times Serum Creatinine Increase\"\n// Supporting Numerator  via \"Encounter with 1.5 Times Serum Creatinine Increase\"             \n\n\n\ndefine function \"1.5IncreaseInCreatinine\"(QualifyingEncounter Encounter):\n  \"HighestSerumCreatinineResult\"(QualifyingEncounter) / 1.5"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 54
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "toInterval"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Normalizes a value that is a choice of timing-valued types to an equivalent interval\n@comment: Normalizes a choice type of DateTime, Quanitty, Interval<DateTime>, or Interval<Quantity> types\nto an equivalent interval. This selection of choice types is a superset of the majority of choice types that are used as possible\nrepresentations for timing-valued elements in QICore, allowing this function to be used across any resource.\nThe input can be provided as a DateTime, Quantity, Interval<DateTime> or Interval<Quantity>.\nThe intent of this function is to provide a clear and concise mechanism to treat single\nelements that have multiple possible representations as intervals so that logic doesn't have to account\nfor the variability. More complex calculations (such as medication request period or dispense period\ncalculation) need specific guidance and consideration. That guidance may make use of this function, but\nthe focus of this function is on single element calculations where the semantics are unambiguous.\nIf the input is a DateTime, the result a DateTime Interval beginning and ending on that DateTime.\nIf the input is a Quantity, the quantity is expected to be a calendar-duration interpreted as an Age,\nand the result is a DateTime Interval beginning on the Date the patient turned that age and ending immediately before one year later.\nIf the input is a DateTime Interval, the result is the input.\nIf the input is a Quantity Interval, the quantities are expected to be calendar-durations interpreted as an Age, and the result\nis a DateTime Interval beginning on the date the patient turned the age given as the start of the quantity interval, and ending\nimmediately before one year later than the date the patient turned the age given as the end of the quantity interval.\nIf the input is a Timing, an error will be thrown indicating that Timing calculations are not implemented. Any other input will reslt in a null DateTime Interval\n*/\ndefine fluent function toInterval(choice Choice<DateTime, Quantity, Interval<DateTime>, Interval<Quantity>, Timing>):\n  case\n\t  when choice is DateTime then\n    \tInterval[choice as DateTime, choice as DateTime]\n\t\twhen choice is Interval<DateTime> then\n  \t\tchoice as Interval<DateTime>\n\t\twhen choice is Quantity then\n\t\t  Interval[Patient.birthDate + (choice as Quantity),\n\t\t\t  Patient.birthDate + (choice as Quantity) + 1 year)\n\t\twhen choice is Interval<Quantity> then\n\t\t  Interval[Patient.birthDate + (choice.low as Quantity),\n\t\t\t  Patient.birthDate + (choice.high as Quantity) + 1 year)\n\t\twhen choice is Timing then\n      Message(null, true, 'NOT_IMPLEMENTED', 'Error', 'Calculation of an interval from a Timing value is not supported') as Interval<DateTime>\n\t\telse\n\t\t\tnull as Interval<DateTime>\n\tend"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 55
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "FirstSystolicBloodPressure"
+      }, {
+        "url": "statement",
+        "valueString": "define function \"FirstSystolicBloodPressure\"(QualifyingEncounter Encounter):\n  First(\"Qualifying Systolic Blood Pressure Reading\" SBPReading\n      where SBPReading.effective.earliest() during QualifyingEncounter.hospitalizationWithObservation()\n      return singleton from(SBPReading.component SBPComponent\n          where SBPComponent.code ~ \"Systolic blood pressure\"\n          return SBPComponent.value as Quantity\n      )\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 56
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "FirstBodyTemperature"
+      }, {
+        "url": "statement",
+        "valueString": "// -------------------------------- Risk Variable supportin functions  -----------------------------\n\n\ndefine function \"FirstBodyTemperature\"(QualifyingEncounter Encounter):\n  First([\"USCoreBodyTemperatureProfile\": \"Body temperature\"] FirstTemperature\n      where FirstTemperature.effective.earliest() during QualifyingEncounter.hospitalizationWithObservation()\n        and FirstTemperature.value is not null\n      sort by effective.earliest()\n  ).value as Quantity"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 57
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "FirstHeartRate"
+      }, {
+        "url": "statement",
+        "valueString": "define function \"FirstHeartRate\"(QualifyingEncounter Encounter):\n  First([\"USCoreHeartRateProfile\": \"Heart rate\"] FirstHeartBeats\n      where FirstHeartBeats.effective.earliest() during QualifyingEncounter.hospitalizationWithObservation()\n        and FirstHeartBeats.value is not null\n      sort by effective.earliest()\n  ).value as Quantity"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 58
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "CreatinineLabTestwithResultwithinFirst48Hours"
+      }, {
+        "url": "statement",
+        "valueString": "/*\ndefine \"Encounter with 1.5 Times Serum Creatinine Increase\":\n  from\n    \"Encounter with Creatinine and without Obstetrical Conditions\" QualifyingEncounter,\n    [\"LaboratoryResultObservation\": \"Creatinine Mass Per Volume\"] CreatinineTest\n  let \n    LowestCreatinineTestWithin7DaysPrior: \"LowestSerumCreatinineWithin7DaysPrior\"(QualifyingEncounter, CreatinineTest),\n    CreatinineTestTime: CreatinineTest.effective.earliest(),\n    HospitalWithObservationPeriod: QualifyingEncounter.hospitalizationWithObservation()\n  where \n    CreatinineTest.value >= LowestCreatinineTestWithin7DaysPrior * 1.5\n    and CreatinineTest.value > \"Serum Creatinine Normal\"\n    and CreatinineTestTime during Interval[start of HospitalWithObservationPeriod + 48 hours, start of HospitalWithObservationPeriod + 30 days]\n  return QualifyingEncounter*/\n            \n\n// -------------------------------- Supporting Functions  for Creatinine calculations  -----------------------------\n\n// Supports Denominator Exclusion clause 1\n\n\n\n\ndefine function \"CreatinineLabTestwithResultwithinFirst48Hours\"(QualifyingEncounter Encounter):\n  from\n    [\"LaboratoryResultObservation\": \"Creatinine Mass Per Volume\"] CreatinineTest\n    where CreatinineTest.value is not null\n      and CreatinineTest.effective.earliest ( ) during Interval[start of QualifyingEncounter.hospitalizationWithObservation ( ), start of QualifyingEncounter.hospitalizationWithObservation ( ) + 48 hours]\n      and CreatinineTest.effective.earliest ( ) during QualifyingEncounter.hospitalizationWithObservation ( )\n      and CreatinineTest.status in { 'final', 'amended', 'corrected' }\n    return CreatinineTest"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 59
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "EarliestSerumCreatinineResult"
+      }, {
+        "url": "statement",
+        "valueString": "// Supports Denominator Exclusion clause 3\n\n\ndefine function \"EarliestSerumCreatinineResult\"(QualifyingEncounter Encounter):\n  from\n    \"Qualifying Creatinine Lab Result by Time\" LabTests\n    let LabResult: LabTests.CrLabResult\n    where ( \"EarliestSerumCreatinineTime\"(QualifyingEncounter) = LabTests.CrLabTime )\n    return LabResult as Quantity"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 60
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS832HHAKIFHIR"
+      }, {
+        "url": "name",
+        "valueString": "EarliestSerumCreatinineTime"
+      }, {
+        "url": "statement",
+        "valueString": "//  Supports Denominator Exclusion clause 3 via \"EarliestSerumCreatinineResult\" function  \n\n\ndefine function \"EarliestSerumCreatinineTime\"(QualifyingEncounter Encounter):\n  ( Min((from\n          \"Qualifying Creatinine Lab Result by Time\" LabTestsEarly\n          let LabResultEarly: LabTestsEarly.CrLabResult\n          where LabTestsEarly.CrEncInPtId = QualifyingEncounter.id\n      ).CrLabTime\n    )\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 61
+      } ]
+    } ],
+    "name": "EffectiveDataRequirements",
+    "status": "active",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/library-type",
+        "code": "module-definition"
+      } ]
+    },
+    "relatedArtifact": [ {
+      "type": "depends-on",
+      "display": "Library FHIRHelpers",
+      "resource": "https://madie.cms.gov/Library/FHIRHelpers|4.4.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library CQMCommon",
+      "resource": "https://madie.cms.gov/Library/CQMCommon|4.1.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library QICoreCommon",
+      "resource": "https://madie.cms.gov/Library/QICoreCommon|4.0.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library SDE",
+      "resource": "https://madie.cms.gov/Library/SupplementalDataElements|5.1.000"
+    }, {
+      "type": "depends-on",
+      "display": "Code system LOINC",
+      "resource": "http://loinc.org"
+    }, {
+      "type": "depends-on",
+      "display": "Code system SNOMEDCT",
+      "resource": "http://snomed.info/sct"
+    }, {
+      "type": "depends-on",
+      "display": "Code system ObservationCategoryCodes",
+      "resource": "http://terminology.hl7.org/CodeSystem/observation-category"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Encounter Inpatient",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Observation Services",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Emergency Department Visit",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Creatinine Mass Per Volume",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.21"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Obstetrics and VTE Obstetrics",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.33"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Present on Admission or Clinically Undetermined",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1147.197"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Hospital Based Dialysis Services",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.199"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Body temperature",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.152"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Payer Type",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"
+    }, {
+      "type": "depends-on",
+      "display": "Value set High Risk Diagnosis for AKI",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.12"
+    }, {
+      "type": "depends-on",
+      "display": "Value set High Risk Procedures for AKI",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.19"
+    } ],
+    "parameter": [ {
+      "name": "Measurement Period",
+      "use": "in",
+      "min": 0,
+      "max": "1",
+      "type": "Period"
+    }, {
+      "name": "Risk Variable Estimated Glomerular Filtration Rate for Females",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "SDE Race",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "Resource"
+    }, {
+      "name": "Risk Variable First Respiratory Rate in Encounter",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Risk Variable All Encounter Diagnoses with POA Indication",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "SDE Sex",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "Coding"
+    }, {
+      "name": "Risk Variable Estimated Glomerular Filtration Rate for Males",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Numerator",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Risk Variable First Systolic Blood Pressure in Encounter",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Risk Variable First Temperature in Encounter",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Denominator",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "SDE Payer",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Initial Population",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "SDE Ethnicity",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "Resource"
+    }, {
+      "name": "Risk Variable First Heart Rate in Encounter",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Denominator Exclusion",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    } ],
+    "dataRequirement": [ {
+      "type": "Patient",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ],
+      "mustSupport": [ "extension", "url", "birthDate", "birthDate.value" ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type", "status", "status.value", "period", "id", "id.value" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143"
+      } ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type", "status", "status.value", "period", "id", "id.value" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292"
+      } ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type", "period", "id", "id.value" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307"
+      } ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "id", "period", "id.value" ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ],
+      "mustSupport": [ "code", "effective", "value", "status", "status.value", "id", "id.value", "issued", "issued.value" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.21"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-respiratory-rate" ],
+      "mustSupport": [ "code", "effective", "value" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://loinc.org",
+          "code": "9279-1",
+          "display": "Respiratory rate"
+        } ]
+      } ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-respiratory-rate" ],
+      "mustSupport": [ "value" ]
+    }, {
+      "type": "Resource",
+      "profile": [ "http://hl7.org/fhir/StructureDefinition/Resource" ],
+      "mustSupport": [ "id", "id.value" ]
+    }, {
+      "type": "Claim",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-claim" ],
+      "mustSupport": [ "status", "status.value", "use", "use.value", "item", "diagnosis" ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.199"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.19"
+      } ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-blood-pressure" ],
+      "mustSupport": [ "effective", "component" ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-temperature" ],
+      "mustSupport": [ "code", "effective", "value" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.152"
+      } ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-temperature" ],
+      "mustSupport": [ "value" ]
+    }, {
+      "type": "Coverage",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ],
+      "mustSupport": [ "type", "period" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"
+      } ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-heart-rate" ],
+      "mustSupport": [ "code", "effective", "value" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://loinc.org",
+          "code": "8867-4",
+          "display": "Heart rate"
+        } ]
+      } ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-heart-rate" ],
+      "mustSupport": [ "value" ]
+    } ]
+  } ],
+  "extension": [ {
+    "id": "supplementalDataGuidance",
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-supplementalDataGuidance",
+    "extension": [ {
+      "url": "guidance",
+      "valueString": "For every patient evaluated by this measure also identify payer, race, ethnicity and sex"
+    }, {
+      "url": "usage",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+          "code": "supplemental-data",
+          "display": "Supplemental Data"
+        } ],
+        "text": "Supplemental Data Guidance"
+      }
+    } ]
+  }, {
+    "id": "riskAdjustmentVariableGuidance",
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-supplementalDataGuidance",
+    "extension": [ {
+      "url": "guidance",
+      "valueString": "Sex and Age.\n\nFirst vital signs since the encounter start:\n- Heart Rate\n- Respiratory Rate\n- Systolic Blood Pressure\n- Temperature. \n\nThe estimated glomerular filtration rate (eGFR) which is calculated using the index serum creatinine, patient sex, and age-based formula.\n\nPatient sex collected for risk adjustment and to calculate the eGFR is determined by the\nAdministrativeGender codes 'F' (female) and 'M' (male). These codes make up the \"ONC Administrative\nSex\" value set and are also used to derive the supplemental data element of patient sex for the measure.\n\nAll encounter diagnoses along with their present on admission (POA) indicators are being collected for the development of baseline risk adjustment model with initial focus on any encounter diagnoses captured for:\n- Cancer (leukemia, lymphoma, or metastatic cancer)\n- Diabetes\n- Heart failure\n- Hypertension\n- Obesity\n\nEncounter length of stay.\n\nPlease see the Hospital Harm - Acute Kidney Injury Risk Adjustment Methodology Report on the eCQM-specific page on the eCQI Resource Center website: https://ecqi.healthit.gov/"
+    }, {
+      "url": "usage",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+          "code": "risk-adjustment-factor",
+          "display": "Risk Adjustment Factor"
+        } ],
+        "text": "Risk Adjustment Variable Guidance"
+      }
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-effectiveDataRequirements",
+    "valueReference": {
+      "reference": "#effective-data-requirements"
+    }
+  } ],
+  "url": "https://madie.cms.gov/Measure/CMS832HHAKIFHIR",
+  "identifier": [ {
+    "use": "usual",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "short-name",
+        "display": "Short Name"
+      } ]
+    },
+    "system": "https://madie.cms.gov/measure/shortName",
+    "value": "CMS832FHIR"
+  }, {
+    "use": "official",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "version-independent",
+        "display": "Version Independent"
+      } ]
+    },
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:uuid:ceeb6884-0dc4-4f4d-be48-01a6a998b8d2"
+  }, {
+    "use": "official",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "version-specific",
+        "display": "Version Specific"
+      } ]
+    },
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:uuid:9045b3dd-5111-49de-9929-7b0101a3e5b2"
+  }, {
+    "use": "official",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "endorser",
+        "display": "Endorser"
+      } ]
+    },
+    "system": "https://madie.cms.gov/measure/cbeId",
+    "value": "3713e",
+    "assigner": {
+      "display": "CMS Consensus Based Entity"
+    }
+  }, {
+    "use": "official",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "publisher",
+        "display": "Publisher"
+      } ]
+    },
+    "system": "https://madie.cms.gov/measure/cmsId",
+    "value": "832FHIR",
+    "assigner": {
+      "display": "CMS"
+    }
+  } ],
+  "version": "0.2.000",
+  "name": "CMS832HHAKIFHIR",
+  "title": "Hospital Harm -  Acute Kidney InjuryFHIR",
+  "status": "active",
+  "experimental": false,
+  "date": "2025-05-27T15:45:18+00:00",
+  "publisher": "Centers for Medicare & Medicaid Services (CMS)",
+  "contact": [ {
+    "telecom": [ {
+      "system": "url",
+      "value": "https://www.cms.gov/"
+    } ]
+  } ],
+  "description": "The measure assesses the number of inpatient hospitalizations for patients age 18 and older who have an acute kidney injury (stage 2 or greater) that occurred during the encounter. Acute kidney injury (AKI) stage 2 or greater is defined as a substantial increase in serum creatinine value, or by the initiation of kidney dialysis (continuous renal replacement therapy (CRRT), hemodialysis or peritoneal dialysis).",
+  "usage": "A patient characteristic of male or female sex is required as part of the initial population criteria, as sex is crucial to this measure. For example:\n- The eGFR estimating equation that is used to identify AKI is sex-specific; and\n- The reference ranges for the serum creatinine value are sex-specific, which matters because the serum creatinine must rise to a sex-specific abnormal value to be flagged as AKI.\n\nExclude encounters that do not have at least two serum creatine values within 48 hours of arrival. Two values are needed within this timeframe to determine if the patient has AKI or moderate-to-severe renal dysfunction on arrival.\n\nFor encounters for patients without harm, as identified by 2 times increase in serum creatinine, query for initiation of renal dialysis during hospitalization, defined by the start of dialysis occurring during the encounter.\n- If dialysis starts more than 48 hours after the start of the encounter, this meets numerator criteria.\n- If dialysis starts 48 hours or less after the start of the encounter, this meets denominator exclusion criteria.\n\nEncounters for patients with an increase in serum creatinine value of at least 0.3 mg/dL between the index serum creatinine and any subsequent serum creatinine taken within 48 hours of the encounter start are excluded. Due to the variability of decimal precision within programming languages and calculation tools, the value of >=0.3 mg/dL is expressed in the logic as >0.299 mg/dL.\n\nNote the measure is currently confined to using mg/dL as the unit of measurement for creatinine and mL/min as the unit of measurement for eGFR results. \n\nWhen reporting the first body temperature for risk adjustment, values from either Celsius or Fahrenheit readings are acceptable to report but Celsius readings are preferred. \n\nThis eCQM is an episode-based measure. An episode is defined as each inpatient hospitalization or encounter that ends during the measurement period.\n\nThis FHIR-based measure has been derived from the QDM-based measure: CMS832v3. Please refer to the HL7 QI-Core Implementation Guide (https://hl7.org/fhir/us/qicore/STU6/) for more information on QI-Core and mapping recommendations from QDM to QI-Core STU 6  (https://hl7.org/fhir/us/qicore/STU6/qdm-to-qicore.html).",
+  "copyright": "Limited proprietary coding is contained in the Measure specifications for user convenience. Users of proprietary code sets should obtain all necessary licenses from the owners of the code sets. American Institutes for Research(R), formerly IMPAQ International, disclaims all liability for use or accuracy of any third party codes contained in the specifications.\n\nLOINC(R) copyright 2004-2023 Regenstrief Institute, Inc. This material contains SNOMED Clinical Terms(R) (SNOMED CT[R]) copyright 2004-2023 International Health Terminology Standards Development Organisation. ICD-10 copyright 2023 World Health Organization. All Rights Reserved.",
+  "effectivePeriod": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "author": [ {
+    "name": "American Institutes for Research (AIR)",
+    "telecom": [ {
+      "system": "url",
+      "value": "https://www.air.org"
+    } ]
+  } ],
+  "relatedArtifact": [ {
+    "type": "citation",
+    "citation": "CITATION - Ahmed, A., Vairavan, S., Akhoundi, A., Wilson, G., Chiofolo, C., Chbat, N., & Kashani, K. (2015). Development and validation of electronic surveillance tool for acute kidney injury: A retrospective analysis. J Crit Care, 30(5), 988-993. doi: 10.1016/j.jcrc.2015.05.007\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Barbar, S.D., Clere-Jehl, R., Bourredjem, A., Hernu, R., Montin,i F., Bruyère, R., Lebert, C., Bohé, J., Badie, J., Erald,i J.P., Rigaud, J.P., Levy, B., Siam,i S., Louis, G., Bouadma, L., Constantin, J.M., Mercier, E., Klouche, K., du Cheyron, D., ... Quenot, J.P. (2018). IDEAL-ICU Trial Investigators and the CRICS TRIGGERSEP Network. Timing of renal-replacement therapy in patients with acute kidney injury and sepsis. N Engl J Med. 2018 Oct 11;379(15):1431-1442. doi: 10.1056/NEJMoa1803213. PMID: 30304656\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Cho, A., Lee, J.E., Yoon, J.Y., Jang, H.R., Huh, W., Kim, Y.G., & Oh, H.Y. (2012). Effect of an electronic alert on risk of contrast-induced acute kidney injury in hospitalized patients undergoing computed tomography. American Journal of Kidney Diseases, 60(1), 74-81. doi: 10.1053/j.ajkd.2012.02.331. Epub 2012 Apr 11. PMID: 22497793\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Delgado, C., Baweja, M., Crews, D.C., Eneanya, N.D., Gadegbeku, C.A., Inker, L.A., Mendu, M L., Miller, W.G., Moxey-Mims, M.M., Roberts, G.V., St Peter, W.L., Warfield, C., & Powe, N.R. (2021). A unifying approach for GFR estimation: Recommendations of the NKF-ASN task force on reassessing the inclusion of race in diagnosing kidney disease. Journal of the American Society of Nephrology: JASN, 32(12), 2994–3015. doi: 10.1681/ASN.2021070988. Epub 2021 Dec 1. PMID: 34556489; PMCID: PMC8638402\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Delgado, C., Baweja, M., Crews, D.C., Eneanya, N.D., Gadegbeku, C.A., Inker, L.A., Mendu, M.L., Miller, W.G., Moxey-Mims, M.M., Roberts, G.V., St Peter, W.L., Warfield, C., & Powe, N.R. (2022). A unifying approach for GFR estimation: Recommendations of the NKF-ASN task force on reassessing the inclusion of race in diagnosing kidney disease. American journal of kidney diseases: The official journal of the National Kidney Foundation, 79(2), 268–288.e1. doi: 10.1053/j.ajkd.2021.08.003. Epub 2021 Sep 23. PMID: 34563581\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Diao, J.A., Inker, L.A., Levey, A.S., Tighiouart, H., Powe, N.R., & Manrai, A.K. (2021). In search of a better equation - Performance and equity in estimates of kidney function. N Engl J Med. 2021 Feb 4;384(5):396-399. doi: 10.1056/NEJMp2028243. Epub 2021 Jan 6. PMID: 33406354; PMCID: PMC8084706\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Gaudry, S., Hajage, D., Schortgen, F., Martin-Lefevre, L., Pons, B., Boulet, E., Boyer, A., Chevrel, G., Lerolle, N., Carpentier, D., de Prost, N., Lautrette, A., Bretagnol, A., Mayaux, J., Nseir, S., Megarbane, B., Thirion, M., Forel, J.M., Maize,l J., ... Dreyfuss, D. (2016). Initiation strategies for renal-replacement therapy in the intensive care unit. N Engl J Med. 2016 Jul 14;375(2):122-33. doi: 10.1056/NEJMoa1603017. Epub 2016 May 15. PMID: 27181456\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Göcze, I., Jauch, D., Götz, M., Kennedy, P., Jung, B., Zeman, F., Gnewuch, C., Graf, B. M., Gnann, W., Banas, B., Bein, T., Schlitt, H. J., & Bergler, T. (2018). Biomarker-guided Intervention to Prevent Acute Kidney Injury After Major Surgery: The Prospective Randomized BigpAK Study. Annals of surgery, 267(6), 1013–1020. doi: 10.1097/SLA.0000000000002485. PMID: 28857811\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Inker, L.A., Eneanya, N.D., Coresh, J., Tighiouart, H., Wang, D., Sang, Y., Crews, D.C., Doria, A., Estrella, M.M., Froissart, M., Grams, M.E., Greene, T., Grubb, A., Gudnason, V., Gutiérrez, O.M., Kalil, R., Karger, A.B., Mauer, M., Navis, G., ... Levey, A.S.(2021). Chronic Kidney Disease Epidemiology Collaboration. New creatinine- and cystatin c-based equations to estimate GFR without race. N Engl J Med. 2021 Nov 4;385(19):1737-1749. doi: 10.1056/NEJMoa2102953. Epub 2021 Sep 23. PMID: 34554658; PMCID: PMC8822996\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Kellum, J.A., Chawla, L.S., Keener, C., Singbartl, K., Palevsky, P.M., Pike, F.L., Yealy, D.M., Huang, D.T., Angus, D.C., & ProCESS and ProGReSS-AKI Investigators. (2016). The effects of alternative resuscitation strategies on acute kidney injury in patients with septic shock. American journal of respiratory and critical care medicine, 193(3), 281–287. doi: 10.1164/rccm.201505-0995OC. PMID: 26398704; PMCID: PMC4803059\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Kidney Disease: Improving Global Outcomes (KDIGO). (2012). KDIGO 2012 Clinical practice guideline for acute kidney injury. Kidney International, Suppl. 2, 1–141. doi:10.1038/kisup.2012.2\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Kirkendall, E.S., Spires, W.L., Mottes, T.A., Schaffzin, J.K., Barclay, C., & Goldstein, S.L. (2014). Development and performance of electronic acute kidney injury triggers to identify pediatric patients at risk for nephrotoxic medication-associated harm. Applied Clinical Informatics, 5(2), 313-333. doi: 10.4338/ACI-2013-12-RA-0102. PMID: 25024752; PMCID: PMC4081739\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Lameire, N.H., Levin, A., Kellum, J.A., Cheung, M., Jadoul, M., Winkelmayer, W.C., Stevens, P.E., & Conference Participants. (2021). Harmonizing acute and chronic kidney disease definition and classification: report of a Kidney Disease: Improving Global Outcomes (KDIGO) Consensus Conference. Kidney International, 100(3), 516–526. https://doi.org/10.1016/j.kint.2021.06.028\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Lopes, J. A., & Jorge, S. (2013). The RIFLE and AKIN classifications for acute kidney injury: A critical and comprehensive review. Clinical Kidney Journal, 6(1), 8-14. doi: 10.1093/ckj/sfs160. Epub 2012 Jan 1. PMID: 27818745; PMCID: PMC5094385\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Meersch, M., Schmidt, C., Hoffmeier, A., Van Aken, H., Wempe, C., Gerss, J., & Zarbock, A. (2017). Prevention of cardiac surgery-associated AKI by implementing the KDIGO guidelines in high risk patients identified by biomarkers: the PrevAKI randomized controlled trial. Intensive care medicine, 43(11), 1551–1561. doi: 10.1007/s00134-016-4670-3. Epub 2017 Jan 21. Erratum in: Intensive Care Med. 2017 Mar 7;: PMID: 28110412; PMCID: PMC5633630\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Nijssen, E.C., Rennenberg, R J., Nelemans, P.J., Essers, B.A., Janssen, M.M., Vermeeren, M.A., Ommen, V.V., & Wildberger, J.E. (2017). Prophylactic hydration to protect renal function from intravascular iodinated contrast material in patients at high risk of contrast-induced nephropathy (AMACING): a prospective, randomised, phase 3, controlled, open-label, non-inferiority trial. Lancet (London, England), 389(10076), 1312–1322. doi: 10.1016/S0140-6736(17)30057-0. Epub 2017 Feb 21. PMID: 28233565\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Ostermann, M., Bellomo, R., Burdmann, E.A., Doi, K., Endre, Z.H., Goldstein, S.L., Kane-Gill, S.L., Liu, K.D., Prowle, J.R., Shaw, A.D., Srisawat, N., Cheung, M., Jadoul, M., Winkelmayer, W.C., Kellum, J.A., & Conference Participants. (2020). Controversies in acute kidney injury: conclusions from a Kidney Disease: Improving Global Outcomes (KDIGO) Conference. Kidney international, 98(2), 294–309. doi: 10.1016/j.kint.2020.04.020. Epub 2020 Apr 26. PMID: 32709292; PMCID: PMC8481001\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Porter, C.J., Juurlink, I., Bisset, L.H., Bavakunji, R., Mehta, R.L., & Devonald, M.A. (2014). A real-time electronic alert to improve detection of acute kidney injury in a large teaching hospital. Nephrol Dial Transplant, 29(10), 1888-1893. doi: 10.1093/ndt/gfu082\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Schwager, E., Ghosh, E., Eshelman, L., Pasupathy, K.S., Barreto, E.F., & Kashani, K. (2023). Accurate and interpretable prediction of ICU-acquired AKI. Journal of critical care, 75, 154278. https://doi.org/10.1016/j.jcrc.2023.154278\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Selby, N.M., Crowley, L., Fluck, R.J., McIntyre, C.W., Monaghan, J., Lawson, N., & Kolhe, N.V. (2012). Use of electronic results reporting to diagnose and monitor AKI in hospitalized patients. Clinical Journal of The American Society of Nephrology: CJASN, 7(4), 533-540. doi: 10.2215/CJN.08970911. Epub 2012 Feb 23. PMID: 22362062\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Self, W.H., Semler, M.W., Wanderer, J.P., Wang, L., Byrne, D.W., Collins, S.P., Slovis, C.M., Lindsell, C.J., Ehrenfeld, J.M., Siew, E.D., Shaw, A.D., Bernard, G.R., Rice, T.W., & SALT-ED Investigators. (2018). Balanced crystalloids versus saline in noncritically ill adults. The New England journal of medicine, 378(9), 819–828. doi: 10.1056/NEJMoa1711586. Epub 2018 Feb 27. PMID: 29485926; PMCID: PMC5846618\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Thongprayoon, C., Hansrivijit, P., Kovvuru, K., Kanduri, S.R., Torres-Ortiz, A., Acharya, P., Gonzalez-Suarez, M.L., Kaewput, W., Bathini, T., & Cheungpasitporn, W. (2020). Diagnostics, risk factors, treatment and outcomes of acute kidney injury in a new paradigm. Journal of clinical medicine, 9(4), 1104. https://doi.org/10.3390/jcm9041104\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Wilson, F. P., Yang, W., & Feldman, H.I. (2013). Predictors of death and dialysis in severe AKI: The UPHS-AKI cohort. Clinical Journal of the American Society of Nephrology, 8(4), 527-537. doi: 10.2215/cjn.06450612\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Wilson, F.P., Reese, P.P., Shashaty, M.G., Ellenberg, S.S., Gitelman, Y., Bansal, A.D., & Fuchs, B. (2014). A trial of in-hospital, electronic alerts for acute kidney injury: Design and rationale. Clinical Trials, 11(5), 521-529. doi: 10.1177/1740774514542619. Epub 2014 Jul 14. PMID: 25023200; PMCID: PMC4156885\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Zarbock, A., Kellum, J.A., Schmidt, C., Van Aken, H., Wempe, C., Pavenstädt, H., Boanta, A., Gerß, J., & Meersch, M. (2016). Effect of early vs delayed initiation of renal replacement therapy on mortality in critically ill patients with acute kidney injury: The ELAIN Randomized Clinical Trial. JAMA, 315(20), 2190–2199. doi: 10.1001/jama.2016.5828. PMID: 27209269\n"
+  } ],
+  "library": [ "https://madie.cms.gov/Library/CMS832HHAKIFHIR" ],
+  "disclaimer": "This performance measure is not a clinical guideline and does not establish a standard of medical care, and has not been tested for all potential applications.\n\nTHE MEASURES AND SPECIFICATIONS ARE PROVIDED \"AS IS\" WITHOUT WARRANTY OF ANY KIND. \n\nDue to technical limitations, registered trademarks are indicated by (R) or [R] and unregistered trademarks are indicated by (TM) or [TM].",
+  "rationale": "This measure focuses on stage 2 or greater acute kidney injury as an outcome in the hospital inpatient setting. The incidence of AKI in general hospitalized patients is 10%–20%, and among critically ill patients, the incidence of AKI has been reported as high as 45–50%; in cardiac surgery patients it ranges from 30%-50% (Thongprayoon et al., 2020). Less severe acute kidney injury and acute kidney injury requiring dialysis affect approximately 2,000 to 3,000 and 200 to 300 per million population per year, respectively. Acute kidney injury may result in the need for dialysis, and is associated with an increased risk of mortality (Schwager et al., 2023; Wilson et al., 2013). \n\nWhile not all instances of acute kidney injury are avoidable and may be due to natural progression of underlying illness or a complication of a necessary treatment such as chemotherapy, a proportion of acute kidney injury cases are preventable and treatable. The Kidney Disease: Improving Global Outcomes (KDIGO) guidelines suggest careful management of hemodynamic status, fluids, and vasoactive medications for the prevention of acute kidney injury (KDIGO, 2012). Several studies identified through systematic literature searches developed or evaluated the effectiveness of acute kidney injury electronic alert systems (Schwager et al., 2023; Selby et al., 2012; Ahmed et al., 2015; Porter et al., 2014; Wilson et al., 2014; Kirkendall et al., 2014; Cho et al., 2012). These studies used data elements for defining acute kidney injury that were already present and populated in the electronic health record (EHR). For acute kidney injury diagnosis, all except two were limited to using serum creatinine levels, suggesting that this is the most reliable and consistently available electronic data element for defining acute kidney injury.",
+  "clinicalRecommendationStatement": "Serum creatinine is an accepted proxy for acute kidney disease (Ostermann et al., 2020; KDIGO, 2012). It is cited by many guidelines for defining and monitoring acute kidney injury (Lameire et al., 2021; Ostermann et al., 2020; Lopes & Jorge, 2013; KDIGO, 2012). eGFR equations that incorporate creatinine and cystatin C but omit race are more accurate and lead to smaller differences between Black participants and non-Black participants than new equations without race with either creatinine or cystatin C alone (Inker et al., 2021).  As a result, a new race-neutral eGFR equation that that measures serum creatinine or cystatin C incorporate age, sex, and race to estimate measured GFR has been developed and is recommended by the Task Force from the National Kidney Foundation and American Society of Nephrology (Inker et al., 2021; Diao et al., 2021; Delgado et al., 2021; Delgado et al., 2022).  It was recommended by the Task Force to use within the measure a Chronic Kidney Disease Epidemiology Collaboration (CKD-EPI) creatinine equation refit without the race variable. This functionality has been available to all laboratories in the United States (Delgado et al., 2021; Delgado et al., 2022), and has acceptable performance characteristics and potential consequences that do not disproportionately affect any one group of individuals.\n\nThe KDIGO offers clinical practice guidelines for preventing and managing acute kidney injury:\n\nFLUIDS\n3.1.1: In the absence of hemorrhagic shock, we suggest using isotonic crystalloids rather than colloids (albumin or starches) as initial management for expansion of intravascular volume in patients at risk for acute kidney injury or with acute kidney injury. (Level 2, grade B)\n\nVASOPRESSORS\n3.1.2: We recommend the use of vasopressors in conjunction with fluids in patients with vasomotor shock with, or at risk for, acute kidney injury. (Level 1, grade C)\n\nPROTOCOLIZED HEMODYNAMIC MANAGEMENT\n3.1.3: We suggest using protocol-based management of hemodynamic and oxygenation parameters to prevent development or worsening of acute kidney injury in high-risk patients in the perioperative setting (2C) or in patients with septic shock. (Level 2, grade C)\n\nIn April 2019, KDIGO held a follow-up conference (Ostermann et al., 2020). The effectiveness of the 2012 KDIGO recommendations in preventing AKI was also noted to have been confirmed in small single-center randomized controlled trials (RCTs), such as the Prevention of AKI (PrevAKI) and the Biomarker Guided Intervention for Prevention of AKI (BigpAK) studies (Meersch et al., 2017; Göcze et al., 2018). In addition, results of RCTs have provided new data relevant to several facets of preventing and managing AKI, including early resuscitation, fluid therapy, prevention of contrast-associated AKI, and timing of acute renal replacement therapy (RRT) (Kellum et al., 2016; Nijssen et al., 2017; Self et al., 2018; Zarbock et al, 2016; Gaudry et al., 2016; Barbar et al., 2018).",
+  "group": [ {
+    "id": "Group_1",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-scoring",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-scoring",
+          "code": "proportion",
+          "display": "Proportion"
+        } ]
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-populationBasis",
+      "valueCode": "Encounter"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-type",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-type",
+          "code": "outcome",
+          "display": "Outcome"
+        } ]
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-rateAggregation",
+      "valueCode": "None"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-improvementNotation",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-improvement-notation",
+          "code": "decrease",
+          "display": "increase"
+        } ]
+      }
+    } ],
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "description": "Inpatient hospitalizations that end during the measurement period for patients 18 years of age or older without an obstetrical or pregnancy related condition, with a length of stay of 48 hours or longer, and who had at least one serum creatinine value after 48 hours from the start of the hospitalization",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Initial Population"
+      }
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "description": "Equals Initial Population",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Denominator"
+      }
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "description": "Inpatient hospitalizations for patients with an increase in serum creatinine value of at least 0.3 mg/dL\nbetween the index serum creatinine and a subsequent serum creatinine taken within 48 hours of the encounter start.\n\nInpatient hospitalizations for patients with the index eGFR value of <60 mL/min within 48 hours of the encounter start.\n\nInpatient hospitalizations for patients who have less than two serum creatinine results within the first 48 hours of the encounter start.\n\nInpatient hospitalizations for patients who have kidney dialysis (CRRT, hemodialysis or peritoneal dialysis) initiated 48 hours or less after the encounter start, and who do not have evidence of a 2 times increase in serum creatinine.\n\nInpatient hospitalizations for patients with at least one specified diagnosis present on admission during the encounter that puts them at extremely high risk for AKI:\n- Hemolytic Uremic Syndrome (HUS)\n- Large Body Surface Area (BSA) Burns\n- Traumatic Avulsion of Kidney\n- Rapidly Progressive Nephritic Syndrome\n- Thrombotic Thrombocytopenic Purpura\n- Out of Hospital Cardiac Arrest (OHCA)\n\nInpatient hospitalizations for patients who have at least one specified procedure that starts during the encounter that puts them at extremely high risk for AKI:\n- Extracorporeal membrane oxygenation (ECMO)\n- Intra-Aortic Balloon Pump\n- Resuscitative Endovascular Balloon Occlusion of the Aorta (REBOA)\n- Nephrectomy",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Denominator Exclusion"
+      }
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "description": "Inpatient hospitalizations for patients who develop AKI (stage 2 or greater) during the encounter, as evidenced by:\n\nA subsequent increase in serum creatinine value at least 2 times higher than the lowest serum creatinine value, and the increased value is greater than the highest sex-specific normal value for serum creatinine.\n\nOr:\n\nKidney dialysis (CRRT, hemodialysis or peritoneal dialysis) initiated more than 48 hours after the start of the encounter. Evidence of a 2 times increase in serum creatinine is not required.\n\nOnly one harm is counted per encounter.",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Numerator"
+      }
+    } ]
+  } ],
+  "supplementalData": [ {
+    "id": "sde-ethnicity",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "individual"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "subject-list"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "summary"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "data-collection"
+    } ],
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Ethnicity",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Ethnicity"
+    }
+  }, {
+    "id": "sde-payer",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "individual"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "subject-list"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "summary"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "data-collection"
+    } ],
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Payer",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Payer"
+    }
+  }, {
+    "id": "sde-race",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "individual"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "subject-list"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "summary"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "data-collection"
+    } ],
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Race",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Race"
+    }
+  }, {
+    "id": "sde-sex",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "individual"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "subject-list"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "summary"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "data-collection"
+    } ],
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Sex",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Sex"
+    }
+  }, {
+    "id": "risk-variable-estimated-glomerular-filtration-rate-for-females",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "individual"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "subject-list"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "summary"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "data-collection"
+    } ],
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "risk-adjustment-factor"
+      } ]
+    } ],
+    "description": "Risk Variable Estimated Glomerular Filtration Rate for Females",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "Risk Variable Estimated Glomerular Filtration Rate for Females"
+    }
+  }, {
+    "id": "risk-variable-estimated-glomerular-filtration-rate-for-males",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "individual"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "subject-list"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "summary"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "data-collection"
+    } ],
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "risk-adjustment-factor"
+      } ]
+    } ],
+    "description": "Risk Variable Estimated Glomerular Filtration Rate for Males",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "Risk Variable Estimated Glomerular Filtration Rate for Males"
+    }
+  }, {
+    "id": "risk-variable-all-encounter-diagnoses-with-poa-indication",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "individual"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "subject-list"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "summary"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "data-collection"
+    } ],
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "risk-adjustment-factor"
+      } ]
+    } ],
+    "description": "Risk Variable All Encounter Diagnoses with POA Indication",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "Risk Variable All Encounter Diagnoses with POA Indication"
+    }
+  }, {
+    "id": "risk-variable-first-heart-rate-in-encounter",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "individual"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "subject-list"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "summary"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "data-collection"
+    } ],
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "risk-adjustment-factor"
+      } ]
+    } ],
+    "description": "Risk Variable First Heart Rate in Encounter",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "Risk Variable First Heart Rate in Encounter"
+    }
+  }, {
+    "id": "risk-variable-first-respiratory-rate-in-encounter",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "individual"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "subject-list"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "summary"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "data-collection"
+    } ],
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "risk-adjustment-factor"
+      } ]
+    } ],
+    "description": "Risk Variable First Respiratory Rate in Encounter",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "Risk Variable First Respiratory Rate in Encounter"
+    }
+  }, {
+    "id": "risk-variable-first-systolic-blood-pressure-in-encounter",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "individual"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "subject-list"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "summary"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "data-collection"
+    } ],
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "risk-adjustment-factor"
+      } ]
+    } ],
+    "description": "Risk Variable First Systolic Blood Pressure in Encounter",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "Risk Variable First Systolic Blood Pressure in Encounter"
+    }
+  }, {
+    "id": "risk-variable-first-temperature-in-encounter",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "individual"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "subject-list"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "summary"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-includeInReportType",
+      "valueCode": "data-collection"
+    } ],
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "risk-adjustment-factor"
+      } ]
+    } ],
+    "description": "Risk Variable First Temperature in Encounter",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "Risk Variable First Temperature in Encounter"
+    }
+  } ]
+}

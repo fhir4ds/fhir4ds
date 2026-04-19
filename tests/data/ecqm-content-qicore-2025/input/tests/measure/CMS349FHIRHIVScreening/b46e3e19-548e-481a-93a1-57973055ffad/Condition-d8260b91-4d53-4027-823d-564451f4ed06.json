@@ -1,0 +1,40 @@
+{
+  "resourceType": "Condition",
+  "id": "d8260b91-4d53-4027-823d-564451f4ed06",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-9-cm",
+      "version": "2013",
+      "code": "042",
+      "display": "Human immunodeficiency virus [HIV] disease",
+      "userSelected": true
+    }, {
+      "system": "http://snomed.info/sct",
+      "code": "165816005",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b46e3e19-548e-481a-93a1-57973055ffad"
+  },
+  "onsetDateTime": "2024-12-31T08:00:00.000+00:00"
+}

@@ -1,0 +1,22 @@
+{
+  "resourceType": "Location",
+  "id": "9d9625f0-e1c9-47f3-af37-af39282bf79c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-location" ]
+  },
+  "identifier": [ {
+    "use": "usual",
+    "system": "http://exampleoflocation.com",
+    "value": "B1-S.F2"
+  } ],
+  "name": "Medical Surgical East, first floor",
+  "type": [ {
+    "coding": [ {
+      "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+      "version": "2020",
+      "code": "1025-6",
+      "display": "Trauma Critical Care",
+      "userSelected": true
+    } ]
+  } ]
+}

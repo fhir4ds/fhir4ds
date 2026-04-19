@@ -1,0 +1,13 @@
+{
+  "resourceType": "Location",
+  "id": "e7cfe6d7-ac5b-4b40-87d2-b84b52aaf886",
+  "type": [ {
+    "coding": [ {
+      "system": "http://cts.nlm.nih.gov/fhir/cs/hsloc",
+      "version": "2020",
+      "code": "1025-6",
+      "display": "Trauma Critical Care",
+      "userSelected": true
+    } ]
+  } ]
+}

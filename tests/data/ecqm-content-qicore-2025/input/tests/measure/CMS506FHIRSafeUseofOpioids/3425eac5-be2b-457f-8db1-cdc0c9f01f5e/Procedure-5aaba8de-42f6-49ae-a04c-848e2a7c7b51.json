@@ -1,0 +1,25 @@
+{
+  "resourceType": "Procedure",
+  "id": "5aaba8de-42f6-49ae-a04c-848e2a7c7b51",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-12-31T00:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "103735009",
+      "display": "Palliative care (regime/therapy)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/3425eac5-be2b-457f-8db1-cdc0c9f01f5e"
+  },
+  "performedDateTime": "2026-12-31T00:00:00.000+00:00"
+}

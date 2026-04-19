@@ -1,0 +1,14 @@
+{
+  "resourceType": "Coverage",
+  "id": "68bfde7f-f67e-4811-9e05-9448e940bb88",
+  "status": "active",
+  "beneficiary": {
+    "reference": "Patient/f859dd94-f201-4517-a368-32b98dd486c9"
+  },
+  "period": {
+    "start": "1975-01-02T08:00:00.000+00:00"
+  },
+  "payor": [ {
+    "reference": "Organization/853f3eab-f726-40bf-bf86-f5926008e1ba"
+  } ]
+}

@@ -1,0 +1,18 @@
+{
+  "resourceType": "Procedure",
+  "id": "8bb8469f-cd0f-4af7-9ad2-4c5ed70858bc",
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "18946005"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/fc59a209-22d4-4881-aa12-9a19fd91c083"
+  },
+  "performedPeriod": {
+    "start": "2026-12-06T11:00:00.000+00:00",
+    "end": "2026-12-07T11:15:00.000+00:00"
+  }
+}

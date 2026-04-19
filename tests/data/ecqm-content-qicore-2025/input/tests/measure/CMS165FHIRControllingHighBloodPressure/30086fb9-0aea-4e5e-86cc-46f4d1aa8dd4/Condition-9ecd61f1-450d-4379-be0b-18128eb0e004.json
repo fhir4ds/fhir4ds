@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "9ecd61f1-450d-4379-be0b-18128eb0e004",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "Z94.0",
+      "display": "Kidney transplant status"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/30086fb9-0aea-4e5e-86cc-46f4d1aa8dd4"
+  },
+  "onsetDateTime": "2026-06-30T23:59:59.000+00:00"
+}

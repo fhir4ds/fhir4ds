@@ -1,0 +1,264 @@
+{
+  "resourceType": "Bundle",
+  "id": "DENEXFail-PalliativeCareSurveyStatusNotFinal",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/43efb820-9e6e-4180-9a4d-2d7459896e5f",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "43efb820-9e6e-4180-9a4d-2d7459896e5f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "DENEXFail",
+        "given": [ "PalliativeCareSurveyStatusNotFinal" ]
+      } ],
+      "gender": "female",
+      "birthDate": "2007-12-31"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/43efb820-9e6e-4180-9a4d-2d7459896e5f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/503d3696-1cad-46bd-bb64-ed88ea4b1266",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "503d3696-1cad-46bd-bb64-ed88ea4b1266",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "3391000175108",
+          "display": "Office visit for pediatric care and assessment (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/43efb820-9e6e-4180-9a4d-2d7459896e5f"
+      },
+      "period": {
+        "start": "2026-01-01T00:00:00.000+00:00",
+        "end": "2026-01-01T01:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/503d3696-1cad-46bd-bb64-ed88ea4b1266"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/3f2e80a4-494f-4436-b099-054c4b377014",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "3f2e80a4-494f-4436-b099-054c4b377014",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "371125006",
+          "display": "Labile essential hypertension (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/43efb820-9e6e-4180-9a4d-2d7459896e5f"
+      },
+      "onsetDateTime": "2026-06-30T23:59:59.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/3f2e80a4-494f-4436-b099-054c4b377014"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/38b19d07-a601-462d-bca8-e9167b9eb2eb",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "38b19d07-a601-462d-bca8-e9167b9eb2eb",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation" ]
+      },
+      "status": "entered-in-error",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "71007-9",
+          "display": "Functional Assessment of Chronic Illness Therapy - Palliative Care Questionnaire (FACIT-Pal)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/43efb820-9e6e-4180-9a4d-2d7459896e5f"
+      },
+      "effectivePeriod": {
+        "start": "2025-12-31T00:00:00.000+00:00",
+        "end": "2026-01-01T01:00:00.000+00:00"
+      },
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "373066001",
+          "display": "Yes (qualifier value)"
+        } ]
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/38b19d07-a601-462d-bca8-e9167b9eb2eb"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/c24550cb-ab86-4369-9363-ec5cfc9fb61f",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "c24550cb-ab86-4369-9363-ec5cfc9fb61f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "933821f1-5d2d-4c4f-a7e5-ac7bb2679c65-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "43efb820-9e6e-4180-9a4d-2d7459896e5f"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#933821f1-5d2d-4c4f-a7e5-ac7bb2679c65-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Palliative care survey status not final"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS165FHIRControllingHighBloodPressure",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/43efb820-9e6e-4180-9a4d-2d7459896e5f"
+      }, {
+        "reference": "Encounter/503d3696-1cad-46bd-bb64-ed88ea4b1266"
+      }, {
+        "reference": "Condition/3f2e80a4-494f-4436-b099-054c4b377014"
+      }, {
+        "reference": "Observation/38b19d07-a601-462d-bca8-e9167b9eb2eb"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/c24550cb-ab86-4369-9363-ec5cfc9fb61f"
+    }
+  } ]
+}

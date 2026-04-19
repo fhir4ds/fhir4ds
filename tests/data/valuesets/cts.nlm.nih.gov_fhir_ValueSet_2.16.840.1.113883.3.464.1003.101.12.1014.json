@@ -1,0 +1,51 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.464.1003.101.12.1014",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:01.920-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1014",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "2.16.840.1.113883.3.464.1003.101.12.1014"
+    }
+  ],
+  "version": "20240203",
+  "name": "CareServicesinLongTermResidentialFacility",
+  "title": "Care Services in Long Term Residential Facility",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:5511fa8d-3954-44cc-a7cd-3001f40410f9",
+    "timestamp": "2025-06-20T17:04:01-04:00",
+    "total": 2,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "209099002",
+        "display": "History and physical examination with management of domiciliary or rest home patient (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230901",
+        "code": "210098006",
+        "display": "Domiciliary or rest home patient evaluation and management (procedure)"
+      }
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "resourceType": "Observation",
+  "id": "3d9fb3b1-7e3d-48fa-b918-e940b4873843",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "exam",
+      "display": "Exam",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.73",
+      "code": "79880-1",
+      "display": "Visual acuity best corrected Right eye by Snellen eye chart",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/edcca964-8fb0-4672-85cb-8e64495d3077"
+  },
+  "effectiveDateTime": "2026-06-01T08:00:00.000Z",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2021-09",
+      "code": "424703005",
+      "display": "Distance vision 20/40 (finding)",
+      "userSelected": true
+    } ]
+  }
+}

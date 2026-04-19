@@ -1,0 +1,19 @@
+{
+  "resourceType": "AdverseEvent",
+  "id": "0ac59e21-2460-46ba-9711-255ad65cf699",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-adverseevent" ]
+  },
+  "actuality": "actual",
+  "event": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "1300134005",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/ae9b2ef7-b1a1-454e-8ada-811a48fd9008"
+  },
+  "date": "2026-12-09T11:00:00.000+00:00"
+}

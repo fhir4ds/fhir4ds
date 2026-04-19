@@ -1,0 +1,147 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.92-20250325",
+  "meta": {
+    "versionId": "35",
+    "lastUpdated": "2025-03-25T01:12:16.000-04:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Institutes for Research Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-03-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-03-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.92",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.92"
+  } ],
+  "version": "20250325",
+  "name": "ProstateCancer",
+  "title": "Prostate Cancer",
+  "status": "active",
+  "date": "2025-03-25T01:12:16-04:00",
+  "publisher": "American Institutes for Research Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of diagnoses for prostate cancer.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of prostate cancer.),(Exclusion Criteria: No exclusions.)",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "1208457007",
+        "display": "Small cell neuroendocrine carcinoma of prostate (disorder)"
+      }, {
+        "code": "254900004",
+        "display": "Carcinoma of prostate (disorder)"
+      }, {
+        "code": "278060005",
+        "display": "Endometrioid carcinoma of prostate (disorder)"
+      }, {
+        "code": "314969001",
+        "display": "Local recurrence of malignant tumor of prostate (disorder)"
+      }, {
+        "code": "369485004",
+        "display": "Malignant tumor involving prostate by direct extension from bladder (disorder)"
+      }, {
+        "code": "399068003",
+        "display": "Malignant tumor of prostate (disorder)"
+      }, {
+        "code": "399490008",
+        "display": "Adenocarcinoma of prostate (disorder)"
+      }, {
+        "code": "399590005",
+        "display": "Squamous cell carcinoma of prostate (disorder)"
+      }, {
+        "code": "427492003",
+        "display": "Hormone refractory prostate cancer (disorder)"
+      }, {
+        "code": "93974005",
+        "display": "Primary malignant neoplasm of prostate (disorder)"
+      }, {
+        "code": "94503003",
+        "display": "Metastatic malignant neoplasm to prostate (disorder)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:110c494a-4b14-478f-8124-d948fcdf87c8",
+    "timestamp": "2025-06-20T16:56:07-04:00",
+    "total": 11,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1208457007",
+      "display": "Small cell neuroendocrine carcinoma of prostate (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "254900004",
+      "display": "Carcinoma of prostate (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "278060005",
+      "display": "Endometrioid carcinoma of prostate (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "314969001",
+      "display": "Local recurrence of malignant tumor of prostate (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "369485004",
+      "display": "Malignant tumor involving prostate by direct extension from bladder (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "399068003",
+      "display": "Malignant tumor of prostate (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "399490008",
+      "display": "Adenocarcinoma of prostate (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "399590005",
+      "display": "Squamous cell carcinoma of prostate (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "427492003",
+      "display": "Hormone refractory prostate cancer (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "93974005",
+      "display": "Primary malignant neoplasm of prostate (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "94503003",
+      "display": "Metastatic malignant neoplasm to prostate (disorder)"
+    } ]
+  }
+}

@@ -1,0 +1,551 @@
+{
+  "resourceType": "Bundle",
+  "id": "4163431316163131",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/426369f7-d9ec-4923-8628-465229c5f958",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "426369f7-d9ec-4923-8628-465229c5f958",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "http://terminology.hl7.org/CodeSystem/v3-NullFlavor",
+            "code": "UNK",
+            "display": "unknown"
+          }
+        }, {
+          "url": "text",
+          "valueString": "unknown"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "6543131313"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "NUMERPass",
+        "given": [ "PtHasActiveBetaBlocker" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1983-07-27"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/426369f7-d9ec-4923-8628-465229c5f958"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/713c5ba1-7245-4d7c-b1c7-413326d996dc",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "713c5ba1-7245-4d7c-b1c7-413326d996dc",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "version": "2024",
+          "code": "99213",
+          "display": "Established patient office or other outpatient visit, 20-29 minutes"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/426369f7-d9ec-4923-8628-465229c5f958"
+      },
+      "period": {
+        "start": "2026-02-27T14:40:00.000+00:00",
+        "end": "2026-02-27T14:55:00.000+00:00"
+      },
+      "length": {
+        "value": 0,
+        "unit": "days"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/713c5ba1-7245-4d7c-b1c7-413326d996dc"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/13525a6a-66ec-4a3d-8d42-41535c9dba29",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "13525a6a-66ec-4a3d-8d42-41535c9dba29",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "version": "2024",
+          "code": "99212"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/426369f7-d9ec-4923-8628-465229c5f958"
+      },
+      "period": {
+        "start": "2026-06-12T11:50:00.000+00:00",
+        "end": "2026-06-12T12:00:00.000+00:00"
+      },
+      "length": {
+        "value": 0,
+        "unit": "days"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/13525a6a-66ec-4a3d-8d42-41535c9dba29"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/51e7cf11-1ac9-43bb-b69f-af2018bc1860",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "51e7cf11-1ac9-43bb-b69f-af2018bc1860",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "Active"
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "Confirmed"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "problem list item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "version": "2024",
+          "code": "I11.0",
+          "display": "Hypertensive heart disease with heart failure"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/426369f7-d9ec-4923-8628-465229c5f958"
+      },
+      "onsetPeriod": {
+        "start": "2026-02-22T14:40:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/51e7cf11-1ac9-43bb-b69f-af2018bc1860"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/93e10f98-f0e3-4cb4-a219-d6e17bfc30fb",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "93e10f98-f0e3-4cb4-a219-d6e17bfc30fb",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.336",
+        "value": "Practitioner-23"
+      } ],
+      "active": true,
+      "name": [ {
+        "family": "Careful",
+        "given": [ "Adam" ],
+        "prefix": [ "Dr" ]
+      } ],
+      "address": [ {
+        "use": "home",
+        "line": [ "534 Erewhon St" ],
+        "city": "PleasantVille",
+        "state": "UT",
+        "postalCode": "84414"
+      } ],
+      "qualification": [ {
+        "identifier": [ {
+          "system": "http://example.org/UniversityIdentifier",
+          "value": "12345"
+        } ],
+        "code": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0360",
+            "code": "BS",
+            "display": "Bachelor of Science"
+          } ],
+          "text": "Bachelor of Science"
+        },
+        "period": {
+          "start": "1996"
+        },
+        "issuer": {
+          "display": "Example University"
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/93e10f98-f0e3-4cb4-a219-d6e17bfc30fb"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationRequest/dca3370f-6b25-43b7-a541-752f1a1c4be6",
+    "resource": {
+      "resourceType": "MedicationRequest",
+      "id": "dca3370f-6b25-43b7-a541-752f1a1c4be6",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+      },
+      "status": "completed",
+      "intent": "order",
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "version": "04012024",
+          "code": "200031"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/426369f7-d9ec-4923-8628-465229c5f958"
+      },
+      "authoredOn": "2026-06-12T14:57:00.000+00:00",
+      "requester": {
+        "reference": "Practitioner/93e10f98-f0e3-4cb4-a219-d6e17bfc30fb"
+      },
+      "dosageInstruction": [ {
+        "timing": {
+          "event": [ "2026-02-27T11:45:00+00:00" ],
+          "repeat": {
+            "boundsPeriod": {
+              "start": "2026-02-27"
+            },
+            "frequency": 1,
+            "period": 1,
+            "periodUnit": "d"
+          },
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-GTSAbbreviation",
+              "code": "QD"
+            } ]
+          }
+        },
+        "route": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "code": "26643006",
+            "display": "Oral use"
+          } ]
+        },
+        "doseAndRate": [ {
+          "doseQuantity": {
+            "value": 4,
+            "unit": "mg",
+            "system": "http://unitsofmeasure.org",
+            "code": "mg"
+          }
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationRequest/dca3370f-6b25-43b7-a541-752f1a1c4be6"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/c037d343-ed9b-4962-82fc-f7015ee140b9",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "c037d343-ed9b-4962-82fc-f7015ee140b9",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-heart-rate" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "vital-signs",
+          "display": "Vital Signs"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "8867-4"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/426369f7-d9ec-4923-8628-465229c5f958"
+      },
+      "effectiveDateTime": "2026-02-27T11:52:00.000+00:00",
+      "valueQuantity": {
+        "value": 45,
+        "unit": "/min",
+        "system": "http://unitsofmeasure.org",
+        "code": "/min"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/c037d343-ed9b-4962-82fc-f7015ee140b9"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/cbadb38b-72eb-4b40-97af-753de891225d",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "cbadb38b-72eb-4b40-97af-753de891225d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-heart-rate" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "vital-signs",
+          "display": "Vital Signs"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "8867-4"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/426369f7-d9ec-4923-8628-465229c5f958"
+      },
+      "effectiveDateTime": "2026-02-27T14:45:00.000+00:00",
+      "valueQuantity": {
+        "value": 45,
+        "unit": "/min",
+        "system": "http://unitsofmeasure.org",
+        "code": "/min"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/cbadb38b-72eb-4b40-97af-753de891225d"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/976fe333-d2ef-4384-984d-1c3c368c4be0",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "976fe333-d2ef-4384-984d-1c3c368c4be0",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "Active"
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "Confirmed"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "problem list item"
+        } ]
+      } ],
+      "severity": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "24484000",
+          "display": "Severe (severity modifier) (qualifier value)"
+        } ]
+      },
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "134401001",
+          "display": "Left ventricular systolic dysfunction (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/426369f7-d9ec-4923-8628-465229c5f958"
+      },
+      "onsetPeriod": {
+        "start": "2026-02-18T14:40:00.000+00:00",
+        "end": "2026-02-18T14:55:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/976fe333-d2ef-4384-984d-1c3c368c4be0"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/7852f713-8c56-434d-9c71-812423c5d2a2",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "7852f713-8c56-434d-9c71-812423c5d2a2",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "5cf98d5d-8ac0-4006-8a75-8b2f3109d132-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "426369f7-d9ec-4923-8628-465229c5f958"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#5cf98d5d-8ac0-4006-8a75-8b2f3109d132-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient is currently taking a beta blocker and falls into numerator"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS144FHIRHFBetaBlockerTherapyforLVSD",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/426369f7-d9ec-4923-8628-465229c5f958"
+      }, {
+        "reference": "Encounter/713c5ba1-7245-4d7c-b1c7-413326d996dc"
+      }, {
+        "reference": "Encounter/13525a6a-66ec-4a3d-8d42-41535c9dba29"
+      }, {
+        "reference": "Condition/51e7cf11-1ac9-43bb-b69f-af2018bc1860"
+      }, {
+        "reference": "Practitioner/93e10f98-f0e3-4cb4-a219-d6e17bfc30fb"
+      }, {
+        "reference": "MedicationRequest/dca3370f-6b25-43b7-a541-752f1a1c4be6"
+      }, {
+        "reference": "Observation/c037d343-ed9b-4962-82fc-f7015ee140b9"
+      }, {
+        "reference": "Observation/cbadb38b-72eb-4b40-97af-753de891225d"
+      }, {
+        "reference": "Condition/976fe333-d2ef-4384-984d-1c3c368c4be0"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/7852f713-8c56-434d-9c71-812423c5d2a2"
+    }
+  } ]
+}

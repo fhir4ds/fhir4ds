@@ -1,0 +1,46 @@
+{
+  "resourceType": "Claim",
+  "id": "80c3c4cb-296f-4ed7-8682-9c974466ef2a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-claim" ]
+  },
+  "status": "active",
+  "type": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/claim-type",
+      "code": "institutional",
+      "display": "Institutional"
+    } ]
+  },
+  "use": "claim",
+  "patient": {
+    "reference": "Patient/25c753a7-b6b4-4335-bd7c-05b68b0324a4"
+  },
+  "created": "2026-11-01",
+  "provider": {
+    "reference": "Organization/Organization-1"
+  },
+  "priority": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/processpriority",
+      "code": "normal"
+    } ]
+  },
+  "diagnosis": [ {
+    "sequence": 1,
+    "diagnosisCodeableConcept": {
+      "coding": [ {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "code": "M80.00XA",
+        "display": "Age-related osteoporosis with current pathological fracture, unspecified site, initial encounter for fracture"
+      } ]
+    }
+  } ],
+  "item": [ {
+    "sequence": 1,
+    "diagnosisSequence": [ 1, 2 ],
+    "encounter": [ {
+      "reference": "Encounter/891d5a3a-9c91-4bc3-8172-6f751c0c1363"
+    } ]
+  } ]
+}

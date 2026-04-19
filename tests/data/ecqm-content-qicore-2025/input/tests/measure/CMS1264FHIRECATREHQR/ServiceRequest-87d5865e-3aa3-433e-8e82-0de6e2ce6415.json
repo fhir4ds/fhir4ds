@@ -1,0 +1,21 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "87d5865e-3aa3-433e-8e82-0de6e2ce6415",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "19712007",
+      "display": "Patient transfer, to another health care facility (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/2c2a7958-4d1a-4142-9360-8045067a1c5b"
+  },
+  "authoredOn": "2027-05-01T08:59:00.000+00:00"
+}

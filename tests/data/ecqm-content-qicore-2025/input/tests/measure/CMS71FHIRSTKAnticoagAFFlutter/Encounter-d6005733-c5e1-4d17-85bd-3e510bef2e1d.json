@@ -1,0 +1,42 @@
+{
+  "resourceType": "Encounter",
+  "id": "d6005733-c5e1-4d17-85bd-3e510bef2e1d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient encounter"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "32485007"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/02ee41e8-26d8-4575-a999-32ee2204d745"
+  },
+  "period": {
+    "start": "2026-11-20T08:00:00Z",
+    "end": "2026-11-24T08:15:00.000+00:00"
+  },
+  "length": {
+    "value": 4,
+    "unit": "days"
+  },
+  "reasonReference": [ {
+    "reference": "Condition/e92c5248-4a30-404b-a422-9469b9f18d41"
+  } ],
+  "hospitalization": {
+    "dischargeDisposition": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "445060000",
+        "display": "Left Against Medical Advice"
+      } ]
+    }
+  }
+}

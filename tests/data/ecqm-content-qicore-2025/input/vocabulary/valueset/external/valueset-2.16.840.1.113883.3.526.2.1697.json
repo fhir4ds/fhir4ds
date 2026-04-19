@@ -1,0 +1,211 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1697-20250125",
+  "meta": {
+    "versionId": "45",
+    "lastUpdated": "2025-01-25T01:09:35.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-01-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1697",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1697"
+  } ],
+  "version": "20250125",
+  "name": "OtherDisordersOfOpticNerve",
+  "title": "Other Disorders of Optic Nerve",
+  "status": "active",
+  "date": "2025-01-25T01:09:35-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of a diagnosis for other disorders of optic nerve.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of ischemic optic neuropathy.),(Exclusion Criteria: Excludes concepts that represent a diagnosis for 'unspecified eye.')",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "1231226002",
+        "display": "Non-arteritic posterior ischemic optic neuropathy (disorder)"
+      }, {
+        "code": "14357004",
+        "display": "Ischemic optic neuropathy (disorder)"
+      }, {
+        "code": "15731601000119100",
+        "display": "Anterior ischemic optic neuropathy of left eye (disorder)"
+      }, {
+        "code": "15731641000119103",
+        "display": "Anterior ischemic optic neuropathy of right eye (disorder)"
+      }, {
+        "code": "16376191000119109",
+        "display": "Arteritic anterior ischemic optic neuropathy of bilateral eyes (disorder)"
+      }, {
+        "code": "16376241000119109",
+        "display": "Arteritic anterior ischemic optic neuropathy of left eye (disorder)"
+      }, {
+        "code": "16376391000119106",
+        "display": "Arteritic anterior ischemic optic neuropathy of right eye (disorder)"
+      }, {
+        "code": "230508004",
+        "display": "Arteritic ischemic optic neuropathy (disorder)"
+      }, {
+        "code": "230509007",
+        "display": "Non-arteritic ischemic optic neuropathy (disorder)"
+      }, {
+        "code": "334651000119101",
+        "display": "Ischemic optic neuropathy of right eye (disorder)"
+      }, {
+        "code": "340251000119108",
+        "display": "Ischemic optic neuropathy of left eye (disorder)"
+      }, {
+        "code": "345611000119102",
+        "display": "Ischemic optic neuropathy of bilateral eyes (disorder)"
+      }, {
+        "code": "404659001",
+        "display": "Anterior ischemic optic neuropathy (disorder)"
+      }, {
+        "code": "415147002",
+        "display": "Posterior ischemic optic neuropathy (disorder)"
+      }, {
+        "code": "733506009",
+        "display": "Arteritic anterior ischemic optic neuropathy (disorder)"
+      }, {
+        "code": "838324008",
+        "display": "Autoimmune optic neuropathy (disorder)"
+      }, {
+        "code": "838363001",
+        "display": "Arteritic anterior ischemic optic neuropathy due to giant cell arteritis (disorder)"
+      }, {
+        "code": "860808008",
+        "display": "Idiopathic non-arteritic ischemic optic neuropathy (disorder)"
+      }, {
+        "code": "860884007",
+        "display": "Idiopathic non-arteritic posterior ischemic optic neuropathy (disorder)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:02b17b8d-ab27-4199-b0d5-2a3f58fad59e",
+    "timestamp": "2025-06-20T17:02:41-04:00",
+    "total": 19,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1231226002",
+      "display": "Non-arteritic posterior ischemic optic neuropathy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "14357004",
+      "display": "Ischemic optic neuropathy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "15731601000119100",
+      "display": "Anterior ischemic optic neuropathy of left eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "15731641000119103",
+      "display": "Anterior ischemic optic neuropathy of right eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "16376191000119109",
+      "display": "Arteritic anterior ischemic optic neuropathy of bilateral eyes (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "16376241000119109",
+      "display": "Arteritic anterior ischemic optic neuropathy of left eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "16376391000119106",
+      "display": "Arteritic anterior ischemic optic neuropathy of right eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "230508004",
+      "display": "Arteritic ischemic optic neuropathy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "230509007",
+      "display": "Non-arteritic ischemic optic neuropathy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "334651000119101",
+      "display": "Ischemic optic neuropathy of right eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "340251000119108",
+      "display": "Ischemic optic neuropathy of left eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "345611000119102",
+      "display": "Ischemic optic neuropathy of bilateral eyes (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "404659001",
+      "display": "Anterior ischemic optic neuropathy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "415147002",
+      "display": "Posterior ischemic optic neuropathy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "733506009",
+      "display": "Arteritic anterior ischemic optic neuropathy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "838324008",
+      "display": "Autoimmune optic neuropathy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "838363001",
+      "display": "Arteritic anterior ischemic optic neuropathy due to giant cell arteritis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "860808008",
+      "display": "Idiopathic non-arteritic ischemic optic neuropathy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "860884007",
+      "display": "Idiopathic non-arteritic posterior ischemic optic neuropathy (disorder)"
+    } ]
+  }
+}

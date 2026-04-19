@@ -152,17 +152,16 @@ pip install -e ".[dev]"
 pytest fhir4ds/
 
 # Run specific subpackage tests
-pytest fhir4ds/fhirpath/tests/
-pytest fhir4ds/cql/tests/
+pytest fhir4ds/fhirpath/tests/unit/
+pytest fhir4ds/dqm/tests/
 
-# Run official compliance tests
-pytest fhir4ds/cql/tests/official/test_cql_compliance.py
-python3 scripts/run_compliance.py --test-dir fhir4ds/fhirpath/tests/compliance/r4
+# Run official spec conformance suites
+python3 conformance/scripts/run_all.py
 ```
 
-## Benchmarking
+## Benchmarks
 
-Performance benchmarking tools and datasets are located in the `benchmarking/` directory. See [benchmarking/AGENTS.md](./benchmarking/AGENTS.md) for details.
+Performance benchmarking tools and results are located in the `benchmarks/` directory. See [benchmarks/AGENTS.md](./benchmarks/AGENTS.md) for details.
 
 ## License
 

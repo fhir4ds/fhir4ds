@@ -1,0 +1,21 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "26cfa2c9-8b71-4043-8e77-fa3f19bacee5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "385763009",
+      "display": "Hospice Care Ambulatory"
+    } ]
+  },
+  "subject": {
+    "reference": "http://GoodHealthcare.com/fhir/Patient/46464646"
+  },
+  "authoredOn": "2026-01-04T08:00:00.000+00:00"
+}

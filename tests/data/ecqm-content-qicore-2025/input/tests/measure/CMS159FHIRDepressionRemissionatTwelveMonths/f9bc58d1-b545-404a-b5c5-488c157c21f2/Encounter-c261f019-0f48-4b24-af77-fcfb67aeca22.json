@@ -1,0 +1,28 @@
+{
+  "resourceType": "Encounter",
+  "id": "c261f019-0f48-4b24-af77-fcfb67aeca22",
+  "status": "finished",
+  "class": {
+    "system": "http://www.ama-assn.org/go/cpt",
+    "code": "90791",
+    "display": "Psychiatric diagnostic evaluation",
+    "userSelected": true
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "90791"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/f9bc58d1-b545-404a-b5c5-488c157c21f2"
+  },
+  "period": {
+    "start": "2013-02-05T14:30:00+00:00",
+    "end": "2013-02-05T14:50:00+00:00"
+  },
+  "length": {
+    "value": 0,
+    "unit": "days"
+  }
+}

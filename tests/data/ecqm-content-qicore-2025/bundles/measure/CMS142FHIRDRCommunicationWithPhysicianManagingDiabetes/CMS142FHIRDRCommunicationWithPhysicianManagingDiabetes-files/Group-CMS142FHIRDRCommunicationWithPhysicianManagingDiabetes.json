@@ -1,0 +1,332 @@
+{
+  "resourceType": "Group",
+  "id": "CMS142FHIRDRCommunicationWithPhysicianManagingDiabetes",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS142FHIRDRCommunicationWithPhysicianManagingDiabetes"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/15b275f0-8540-4c32-8ab6-29e535dcea64",
+      "display": "NumerFailCommDone1HrB4EncEdge NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/15b275f0-8540-4c32-8ab6-29e535dcea64",
+      "display": "NumerFailCommDone1HrB4EncEdge NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b85440e4-b902-49cd-b3d6-363ba7a99bce",
+      "display": "CommEdemaPresentNotDonePatientReasonLOS DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b85440e4-b902-49cd-b3d6-363ba7a99bce",
+      "display": "CommEdemaPresentNotDonePatientReasonLOS DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/03b74242-d93e-438e-ac6a-f46b41548209",
+      "display": "CommEdemaAbsentNotDoneMR DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/03b74242-d93e-438e-ac6a-f46b41548209",
+      "display": "CommEdemaAbsentNotDoneMR DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5df18a61-3644-4004-b66f-84530f643a74",
+      "display": "EncHasNoStartDt IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5df18a61-3644-4004-b66f-84530f643a74",
+      "display": "EncHasNoStartDt IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3783189c-3c29-4687-9f89-c3306c6d28fd",
+      "display": "ExamDuringEnc DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3783189c-3c29-4687-9f89-c3306c6d28fd",
+      "display": "ExamDuringEnc DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/05f1e2a6-b317-42bb-827f-993ca3995f5b",
+      "display": "CommEdemaPresentNotDoneMR DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/05f1e2a6-b317-42bb-827f-993ca3995f5b",
+      "display": "CommEdemaPresentNotDoneMR DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f4b75f60-a150-404c-b139-e85b84b04bfe",
+      "display": "RetinopathyDxRefuted IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f4b75f60-a150-404c-b139-e85b84b04bfe",
+      "display": "RetinopathyDxRefuted IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/73734a3e-0dc8-44ce-a5a2-070b1ab48aaf",
+      "display": "NoRetinopathyDx IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/73734a3e-0dc8-44ce-a5a2-070b1ab48aaf",
+      "display": "NoRetinopathyDx IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6aef5a18-59bd-4a47-80bc-2bd44636e41f",
+      "display": "CommEdemaAbsentNotDoneMR DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6aef5a18-59bd-4a47-80bc-2bd44636e41f",
+      "display": "CommEdemaAbsentNotDoneMR DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/eb6c9df0-6dc7-4940-8785-0863f01b6e42",
+      "display": "Enc1MinAfterMPStart IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/eb6c9df0-6dc7-4940-8785-0863f01b6e42",
+      "display": "Enc1MinAfterMPStart IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3df53f41-2dd3-4f7c-9745-0566541661c4",
+      "display": "FundusExam1MinB4EncStart DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3df53f41-2dd3-4f7c-9745-0566541661c4",
+      "display": "FundusExam1MinB4EncStart DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bc456bd5-d133-48dd-bbfc-228fa3f22c9a",
+      "display": "Enc1MinB4MPEnd IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bc456bd5-d133-48dd-bbfc-228fa3f22c9a",
+      "display": "Enc1MinB4MPEnd IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9bdcc79c-f0b7-438e-9e2b-3f6a4350caf6",
+      "display": "EncHasNoEndDate IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9bdcc79c-f0b7-438e-9e2b-3f6a4350caf6",
+      "display": "EncHasNoEndDate IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/164018dc-af9e-47b8-901f-70d00e101e43",
+      "display": "NoEncDuringMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/164018dc-af9e-47b8-901f-70d00e101e43",
+      "display": "NoEncDuringMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/28492651-41c3-4e9e-a68f-9b7836e3eca9",
+      "display": "CommEdemaAbsentNotDoneMR DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/28492651-41c3-4e9e-a68f-9b7836e3eca9",
+      "display": "CommEdemaAbsentNotDoneMR DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0abeb5d4-0e98-4b8f-9745-2435306d9978",
+      "display": "RetinopathyDxUnconfirmed IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0abeb5d4-0e98-4b8f-9745-2435306d9978",
+      "display": "RetinopathyDxUnconfirmed IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c90e9816-b69c-423c-827c-475f63f1ef7d",
+      "display": "MacularExambeforeEncounter DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c90e9816-b69c-423c-827c-475f63f1ef7d",
+      "display": "MacularExambeforeEncounter DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dea40dde-9674-4a89-987f-0617a78a5e94",
+      "display": "EncB4MPEdge IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dea40dde-9674-4a89-987f-0617a78a5e94",
+      "display": "EncB4MPEdge IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/41ae0086-ac99-4a31-9546-21b054bbf7d8",
+      "display": "CommEdemaPresentNotDonePR DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/41ae0086-ac99-4a31-9546-21b054bbf7d8",
+      "display": "CommEdemaPresentNotDonePR DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3835c33d-b335-44d7-a7b6-c8a0d5420290",
+      "display": "BothCommANDEdemaPresentAfterEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3835c33d-b335-44d7-a7b6-c8a0d5420290",
+      "display": "BothCommANDEdemaPresentAfterEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/70727b4f-7bb8-4782-8462-f7fe286aed50",
+      "display": "RetinopathyDxEnteredInError IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/70727b4f-7bb8-4782-8462-f7fe286aed50",
+      "display": "RetinopathyDxEnteredInError IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/54e602f1-ae48-421f-ac5f-417538ae401e",
+      "display": "DiabeticRetinopathyDx1MinAfterEncEnd IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/54e602f1-ae48-421f-ac5f-417538ae401e",
+      "display": "DiabeticRetinopathyDx1MinAfterEncEnd IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9a9e1543-79a1-47a0-a3dd-5ac008bbea65",
+      "display": "MacularExambeforeEncounter DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9a9e1543-79a1-47a0-a3dd-5ac008bbea65",
+      "display": "MacularExambeforeEncounter DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d9840e8c-3359-42c2-b354-4b236c3c1b15",
+      "display": "CommEdemaAbsentNotDoneMR DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d9840e8c-3359-42c2-b354-4b236c3c1b15",
+      "display": "CommEdemaAbsentNotDoneMR DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fa93e3b9-fe40-4a1c-be89-536969a54f2c",
+      "display": "DiabeticRetinopathyDx1MinB4EncStart IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fa93e3b9-fe40-4a1c-be89-536969a54f2c",
+      "display": "DiabeticRetinopathyDx1MinB4EncStart IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2dd72971-2da8-4365-8147-106425cf4a6f",
+      "display": "CommEdemaAbsentNotDoneMR DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2dd72971-2da8-4365-8147-106425cf4a6f",
+      "display": "CommEdemaAbsentNotDoneMR DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0b2799e8-0b28-4307-9fce-5441ee9950ae",
+      "display": "RetinopathyDxWithEnc IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0b2799e8-0b28-4307-9fce-5441ee9950ae",
+      "display": "RetinopathyDxWithEnc IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ccee7cc2-a83f-4b0b-8cda-43099234b75d",
+      "display": "DiabeticRetinopathyDxInactive IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ccee7cc2-a83f-4b0b-8cda-43099234b75d",
+      "display": "DiabeticRetinopathyDxInactive IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/afe0cb42-4b07-4874-8ea2-46e9ecc94787",
+      "display": "FundusExam1MinAfterEncEnd DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/afe0cb42-4b07-4874-8ea2-46e9ecc94787",
+      "display": "FundusExam1MinAfterEncEnd DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/380d6e3a-1fc1-474c-a8f3-8e6ba4f0dd42",
+      "display": "CommEdemaAbsentAftEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/380d6e3a-1fc1-474c-a8f3-8e6ba4f0dd42",
+      "display": "CommEdemaAbsentAftEnc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/356705b1-d6dd-44fd-916e-209c55981b0a",
+      "display": "FundusExam1MinAfterEncStart DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/356705b1-d6dd-44fd-916e-209c55981b0a",
+      "display": "FundusExam1MinAfterEncStart DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3eba9b35-c636-42be-b34d-d4efacf3cbd2",
+      "display": "AgeLT18 IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3eba9b35-c636-42be-b34d-d4efacf3cbd2",
+      "display": "AgeLT18 IPFail"
+    }
+  } ]
+}

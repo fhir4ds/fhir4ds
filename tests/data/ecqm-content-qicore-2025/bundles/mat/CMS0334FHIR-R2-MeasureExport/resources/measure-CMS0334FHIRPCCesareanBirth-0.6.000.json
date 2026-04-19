@@ -1,0 +1,1382 @@
+{
+  "resourceType": "Measure",
+  "id": "CMS0334FHIRPCCesareanBirth",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-shareablemeasure", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/executable-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cql-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/elm-measure-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/proportion-measure-cqfm" ]
+  },
+  "text": {
+    "status": "extensions",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\" class=\"col-12\">\n  <table class=\"narrative-table\">\n    <tbody>\n<tr>\n\n<th colspan=\"2\" scope=\"row\" class=\"row-header\">Knowledge Artifact Metadata</th>\n\n</tr>\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Name (machine-readable)</th>\n\n<td class=\"content-container\">CMS0334FHIRPCCesareanBirth</td>\n</tr>\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Title (human-readable)</th>\n\n<td class=\"content-container\">Cesarean BirthFHIR</td>\n</tr>\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Status</th>\n\n<td class=\"content-container\">active</td>\n</tr>\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Experimental</th>\n\n<td class=\"content-container\">false</td>\n</tr>\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Description</th>\n\n<td class=\"content-container\">Nulliparous patients with a term, singleton baby in a vertex position delivered by cesarean birth</td>\n</tr>\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Clinical Usage</th>\n\n<td class=\"content-container\">Vertex position is modeled implicitly, as the measure excludes deliveries with abnormal presentations.\n\nPatients who do not receive prenatal care and have no documented gestational age or estimated due date are implicitly excluded from the measure, as gestational age is required to meet denominator criteria. \n\nThis measure allows for 3 approaches to determine gestational age (GA) in the following order of precedence:\n\n1.  The GA is calculated using the American College of Obstetricians and Gynecologists ReVITALize guidelines.*\n2.  When the calculated GA is not available, the GA is obtained from a discrete field in the electronic health record. The intent is to capture the last estimated GA in the interval starting 24 hours or less prior to delivery and ending before midnight on the same day of delivery.\n3.  The GA is based on ICD10 or SNOMED codes indicative of weeks gestation.  This option is only used when results from items #1 and #2 (see above) are not available.\n \n*ACOG ReVITALize Guidelines for Calculating Gestational Age (ACOG, 2014):      \n     \n               Gestational Age = (280-(EDD minus Reference Date))/7\n\n--Estimated Due Date (EDD):  The best obstetrical Estimated Due Date is determined by last menstrual period if confirmed by early ultrasound or no ultrasound performed, or early ultrasound if no known last menstrual period or the ultrasound is not consistent with last menstrual period, or known date of fertilization (e.g., assisted reproductive technology) \n--Reference Date is the date on which you are trying to determine gestational age. For purposes of this dQM, Reference Date would be the Date of Delivery.   \n\nNote however the calculation may yield a non-whole number, and gestational age should be rounded off to the nearest completed week. For example, an infant born on the 5th day of the 36th week (35 weeks and 5/7 days) is at a gestational age of 35 weeks, not 36 weeks.\n\nThe timing relationship of relevantDatetime 42 weeks or less before TimeOfDelivery is applied to the data elements of parity, gravida, preterm/term live births for which prenatal records may include relevant information. \n\nNote: The dQM and chart-based measure slightly digress in the denominator and denominator exclusion logic. The chart-based measure excludes single stillbirth and patients with multiple gestations from the denominator. These concepts are mutually exclusive of the denominator requirement of live singleton newborn and therefore the logic does not address single stillbirth nor multiple gestation.\n\nParity, preterm and term live births may be updated by the electronic health record software or by clinicians during a delivery encounter. To capture the pre-delivery value, organizations may need to create a rule or calculation to capture the number prior to the delivery start time.\n\n&quot;Gravida&quot;, &quot;PretermBirth&quot;, &quot;TermBirth&quot; and &quot;Parity&quot; results should be submitted via QRDA I as integer, and not as number or quantity.\n\nDefinitions:  \nParity: The number of pregnancies reaching 20 weeks gestation regardless of the number of fetuses or outcomes\nGravidity: The number of pregnancies, current and past, regardless of the pregnancy outcome  \nPreterm Birth: The number of births  &gt;= 20 weeks and &lt; 37 weeks gestation, regardless of outcome \nTerm Birth: The number of births &gt;= 37 weeks gestation, regardless of outcome\nNulliparous: Parity = 0 or Gravidity = 1 or Preterm &amp; Term Births both = 0.\n\nNote regarding Improvement Notation:  Decreased score indicates improvement - The Joint Commission does not want to encourage inappropriately low Cesarean rates that may be unsafe to patients. Acceptable PC-02 rates are 30% or lower, however there is not an established threshold for what rate may be too low. PC-06 serves as a balancing measure for PC-02 to guard against any unanticipated or unintended consequences and to identify unforeseen complications that might arise as a result of quality improvement activities and efforts for this measure. In order to identify areas for improvement, hospitals may want to review results based on specific ICD-10 codes or patient populations. Data could then be analyzed further determine specific patterns or trends to help reduce cesarean births.\n\nThis dQM is an episode-based measure.  An episode is defined as each inpatient hospitalization or encounter that ends during the measurement period.\n\nThis FHIR-based measure has been derived from the QDM-based measure: CMS334v7. Please refer to the HL7 QI-Core Implementation Guide (https://hl7.org/fhir/us/qicore/STU6/) for more information on QI-Core and mapping recommendations from QDM to QI-Core STU 6 (https://hl7.org/fhir/us/qicore/STU6/qdm-to-qicore.html).</td>\n</tr>\n\n\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Effective Period</th>\n\n<td class=\"content-container\">2026-01-01..2026-12-31</td>\n</tr>\n\n\n\n\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Measure Developer</th>\n\n<td class=\"content-container\">The Joint Commission</td>\n</tr>\n\n\n\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Measure Steward</th>\n\n<td class=\"content-container\">The Joint Commission</td>\n</tr>\n\n\n\n\n\n\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Copyright</th>\n\n<td class=\"content-container\">Measure specifications are in the Public Domain.\n\nLOINC(R) copyright 2004-2024 Regenstrief Institute, Inc. This material contains SNOMED Clinical Terms(R) (SNOMED CT[R]) copyright 2004-2024 International Health Terminology Standards Development Organisation. ICD-10 copyright 2024 World Health Organization. All Rights Reserved.</td>\n</tr>\n\n\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - Agency for Healthcare Research and Quality. (2002). AHRQ Quality Indicators Guide to Inpatient Quality Indicators: Quality of Care in Hospitals Volume, Mortality, and Utilization. Revision 4 (2004, December 22). AHRQ Pub. No. 02-RO204.\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: Citation - American College of Obstetricians and Gynecologists, &amp; Society for Maternal-Fetal Medicine. (2018). Obstetric Care Consensus No. 7: Placenta Accreta Spectrum. Obstetrics and Gynecology, 132(6), e259–e275. https://doi.org/10.1097/AOG.0000000000002983\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - American College of Obstetricians and Gynecologists. (2000). Task Force on Cesarean Delivery Rates. Evaluation of Cesarean Delivery. (Developed under the direction of the Task Force on Cesarean Delivery Rates, Roger K. Freeman, MD, Chair, Arnold W. Cohen, MD, Richard Depp III, MD, Fredric D. Frigoletto Jr, MD, Gary D.V. Hankins, MD, Ellice Lieberman, MD, DrPH, M. Kathryn Menard, MD, David A. Nagey, MD, Carol W. Saffold, MD, Lisa Sams, RNC, MSN and ACOG Staff: Stanley Zinberg, MD, MS, Debra A. Hawks, MPH, and Elizabeth Steele)\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: Citation - American College of Obstetricians and Gynecologists. (2014). Revitalize: Obstetrics Data Definitions Version 1.0. American College of Obstetricians and Gynecologists. Revitalize: Obstetrics Data Definitions Version 1.0 - Search (bing.com)\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: Citation - American College of Obstetricians and Gynecologists. (2020). ACOG Practice Bulletin Number 220: Management of Genital Herpes in Pregnancy. Obstetrics &amp; Gynecology, 135(5), e193-e200.\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - Bailit, J.L., Garrett, J.M., Miller, W.C., McMahon, M.J., &amp; Cefalo, R.C. (2002). Hospital primary cesarean delivery rates and the risk of poor neonatal outcomes. American Journal Obstetrics &amp; Gynecology, 187(3):721-7. https://doi.org/10.1067/mob.2002.125886\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - Berkowitz, G. S., Fiarman, G. S., Mojica, M. A., Bauman, J., &amp; de Regt, R. H. (1989). Effect of physician characteristics on the cesarean birth rate. American Journal of Obstetrics and Gynecology, 161(1), 146–149. https://doi.org/10.1016/0002-9378(89)90252-4\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - Centers for Disease Control and Prevention. (2020) Recent trends in vaginal birth after cesarean delivery: United States, 2016-2018. Retrieved from National Center for Health Statistics: https://www.cdc.gov/nchs/products/databriefs/db359.htm\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - Goyert, G. L., Bottoms, S. F., Treadwell, M. C., &amp; Nehra, P. C. (1989). The physician factor in cesarean birth rates. The New England Journal of Medicine, 320(11), 706–709. https://doi.org/10.1056/NEJM198903163201106\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - Kozhimannil, K. B., Law, M. R., &amp; Virnig, B. A. (2013). Cesarean delivery rates vary tenfold among US hospitals; reducing variation may address quality and cost issues. Health Affairs, 32(3), 527-535. https://doi.org/10.1377/hlthaff.2012.1030\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - Luthy, D. A., Malmgren, J. A., Zingheim, R. W., &amp; Leininger, C. J. (2003). Physician contribution to a cesarean delivery risk model. American Journal of Obstetrics and Gynecology, 188(6), 1579–1587. https://doi.org/10.1067/mob.2003.389\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - Main E. K., Bloomfield, L., &amp; Hunt, G. (2004). Development of a large-scale obstetric quality-improvement program that focused on the nulliparous patient at term. American Journal of Obstetrics and Gynecology, 190(6), 1747-56. https://doi.org/10.1016/j.ajog.2004.02.055\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - Main, E. K., Chang, S. C., Cape, V., Sakowski, C., Smith, H., &amp; Vasher, J. (2019). Safety assessment of a large-scale improvement collaborative to reduce nulliparous cesarean delivery rates. Obstetrics and Gynecology, 133(4), 613-623. https://doi.org/10.1097/AOG.0000000000003109\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - Main, E. K., Moore, D., Farrell, B., Schimmel, L. D., Altman, R. J., Abrahams, C., . . . Sterling, J. (2006). Is there a useful cesarean birth measure? Assessment of the nulliparous term singleton vertex cesarean birth rate as a tool for obstetric quality improvement. American Journal of Obstetrics and Gynecology, 194(6), 1644–1651. https://doi.org/10.1016/j.ajog.2006.03.013\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - Main, E. K., Morton, C. H., Melsop, K., Hopkins, D., Giuliani, G., &amp; Gould, J. B. (2012). Creating a public agenda for maternity safety and quality in cesarean delivery. Obstetrics and Gynecology, 120(5), 1194-1198. https://doi.org/10.1097/aog.0b013e31826fc13d\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - Rosenstein, M. G., Chang, S. C., Sakowski, C., Markow, C., Teleki, S., Lang, L., . . . Main, E. K. (2021). Hospital quality improvement interventions, statewide policy initiatives, and rates of cesarean delivery for nulliparous, term, singleton, vertex births in California. JAMA, 325(16), 1631-1639. https://doi.org/10.1001/jama.2021.3816\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - Sakala, C., Belanoff, C., &amp; Declercq, E. R. (2020). Factors Associated with Unplanned Primary Cesarean Birth: Secondary analysis of the listening to mothers in California survey. BMC Pregnancy and Childbirth, 20(1), 462. https://doi.org/10.1186/s12884-020-03095-4\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: Citation - Society of Maternal-Fetal (SMFM) Publications Committee, Sinkey, R. G., Odibo, A. O., &amp; Dashe, J. S. (2015). #37: Diagnosis and management of vasa previa. American Journal of Obstetrics &amp; Gynecology, 213(5), 615-619. https://doi.org/10.1016/j.ajog.2015.08.031\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Citation</th>\n\n  \n  \n  <td class=\"content-container\">\n    \n    \n    <em>Citation</em>: CITATION - Symum, H., &amp; Zayas-Castro, J. L. (2023). A multistate decomposition analysis of cesarean rate variations, associated health outcomes, and financial implications in the United States. American Journal of Perinatology, 40(13), 1473-1483. https://doi.org/10.1055/s-0041-1736538\n\n    \n    \n    \n    \n  </td>\n</tr>\n\n\n\n\n\n\n\n\n\n\n<tr>\n\n<th colspan=\"2\" scope=\"row\" class=\"row-header\">Measure Metadata</th>\n\n</tr>\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Short Name Identifier</th>\n\n<td class=\"content-container\">CMS0334FHIR</td>\n</tr>\n\n\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Version Independent Identifier</th>\n\n<td class=\"content-container\">urn:uuid:e5be4439-ce75-43cc-aabc-856aec66e841</td>\n</tr>\n\n\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Version Specific Identifier</th>\n\n<td class=\"content-container\">urn:uuid:cc4a8b5e-f7d8-42f2-95ad-aef56143af99</td>\n</tr>\n\n\n\n  \n    \n    \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Publisher (CMS) Identifier</th>\n\n<td class=\"content-container\">334FHIR</td>\n</tr>\n\n  \n\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Identifier</th>\n\n<td class=\"content-container\">0471e</td>\n</tr>\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Version Number</th>\n\n<td class=\"content-container\">0.6.000</td>\n</tr>\n\n\n\n\n\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Rationale</th>\n\n<td class=\"content-container\">The removal of any pressure to not perform a cesarean birth has led to a skyrocketing of hospital, state and national cesarean birth (CB) rates. Some hospitals' CB rates were over 50%. Hospitals with CB rates at 15-20% have infant outcomes that are just as good and better maternal outcomes (Symum &amp; Zayas-Castro, 2023). There is no data that higher rates improve any outcomes, yet the CB rates continue to rise (Bailit, Garrett, Miller, McMahon, &amp; Cefalo, 2002; Main, Bloomfield, &amp; Hunt, 2004). This measure seeks to focus attention on the most variable portion of the CB epidemic, the term labor CB in nulliparous patients. This population segment accounts for the large majority of the variable portion of the CB rate and is the area most affected by subjectivity.\n\nAs compared to other CB measures, what is different about Nulliparous, Term, Singleton, Vertex (NTSV) CB rate is that there are clear cut quality improvement activities that can be done to address the differences. Main et al. (2012) found that over 60% of the variation among hospitals can be attributed to first birth labor induction rates and first birth early labor admission rates (Main et al., 2006). The results showed if labor was forced when the cervix was not ready the outcomes were poorer. Rosenstein et al. (2021) also showed that labor and delivery guidelines can make a difference in labor outcomes. Many authors have shown that physician factors, rather than patient characteristics or obstetric diagnoses are the major driver for the difference in rates within a hospital (Berkowitz, Fiarman, Mojica, Bauman, &amp; de Regt, 1989; Goyert, Bottoms, Treadwell, &amp; Nehra, 1989; Luthy, Malmgren, Zingheim, &amp; Leininger, 2003; Symum &amp; Zayas-Castro, 2023; Main et al., 2006). The dramatic variation in cesarean rates seen in all populations studied is striking. Cesarean rates varied tenfold in US hospitals nationwide across hospitals (Agency for Healthcare Research and Quality [AHRQ], 2002), from 7.1% to 69.9%, and there was a 15-fold variation among low-risk women, from 2.4% to 36.5% (Kozhimannil, Law, &amp; Virnig, 2013).\n\nA reduction in the number of NTSV patients delivering by cesarean birth will result in increased patient safety, a substantial decrease in maternal and neonatal morbidity and substantial savings in health care costs (Main et al., 2019). Successful quality improvement efforts incorporate audit and feedback strategies combined with provider and nurse education, guidelines and peer review.\n\nThe measure will assist health care organizations to track NTSV patients delivering by cesarean birth to reduce the occurrence. Nulliparous patients have 4-6 times the cesarean birth rate than multiparous patients thus the NTSV population is the largest driver of primary cesarean birth rate (Sakala, Belanoff, &amp; Declercq, 2020). NTSV has a large variation among facilities, thus identifying an important population on which to focus quality improvement efforts.\n\nIn accordance with the American College of Obstetricians and Gynecologists (ACOG) recommendations (2020), cesarean delivery is indicated for patients with active genital lesions of genital herpes or prodromal symptoms (i.e., vulvar pain or burning at delivery) that may indicate viral shedding. Therefore, the measure will exclude encounters with a diagnosis of active genital herpes.\n\nIn addition, the accepted approach to treat placenta accreta spectrum, or the range of pathologic adherence of the placenta that includes placenta increta, placenta percreta, and placenta accreta, as well as placenta previa, is cesarean delivery (ACOG &amp; Society for Maternal-Fetal Medicine (SMFM), 2018). Vasa previa is an indication for cesarean delivery (SMFM Publications Committee, Sinkey, Odibo, &amp; Dashe, 2015). Accordingly, placenta previa, vasa previa, and placenta accreta spectrum are all qualifying conditions to also be excluded from the measure. \n \nUltimately, a reduction in primary cesarean births will reduce the number of patients having repeat cesarean births (almost 90% of mothers who have a primary cesarean birth will have subsequent cesarean birth (Centers for Disease Control and Prevention, 2020)). Thus, improvement in the rates of cesarean birth for the first birth will reduce the morbidity of all future births and avoid all the controversies with trial of labor after cesarean/elective repeat cesareans.</td>\n</tr>\n\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Clinical Recommendation Statement</th>\n\n<td class=\"content-container\">The (ACOG) report, Evaluation of Cesarean Delivery (2000), recognizes the importance of the Nulliparous, Term, Singleton, Vertex (NTSV) population as the optimal focus for measurement and quality improvement action. A reduction in the number of nulliparous patients with live term singleton newborns in vertex position delivering by cesarean birth will result in increased patient safety, a substantial decrease in maternal and neonatal morbidity and substantial savings in health care costs.</td>\n</tr>\n\n\n\n\n  \n    \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Supplemental Data Guidance</th>\n\n<td class=\"content-container\">For every patient evaluated by this measure also identify payer, race, ethnicity, sex and calculated gestational age\n </td>\n</tr>\n\n  \n\n\n\n\n\n\n  \n    \n    <tr>\n\n<th colspan=\"2\" scope=\"row\" class=\"row-header\">Measure Population Criteria (ID: Group_1)</th>\n\n</tr>\n  \n  \n  \n  \n    <tr>\n      \n        \n<th scope=\"row\" class=\"row-header\">Initial Population</th>\n\n      \n      <td class=\"content-container\">\n        \n        <em>ID</em>: InitialPopulation_1\n        <br/>\n        \n        \n          <em>Description</em>:\n          <p style=\"white-space: pre-line\" class=\"tab-one\">Inpatient hospitalizations for patients age greater than or equal to 8 years and less than 65 admitted to the hospital for inpatient acute care who undergo a delivery procedure with a discharge date during the measurement period</p>\n        \n        \n          \n            \n            <em>Logic Definition</em>: <a href=\"#cms0334fhirpccesareanbirth-initial-population\">Initial Population</a> \n          \n        \n      </td>\n    </tr>\n  \n\n  \n    <tr>\n      \n        \n<th scope=\"row\" class=\"row-header\">Denominator</th>\n\n      \n      <td class=\"content-container\">\n        \n        <em>ID</em>: Denominator_1\n        <br/>\n        \n        \n          <em>Description</em>:\n          <p style=\"white-space: pre-line\" class=\"tab-one\">Inpatient hospitalizations for nulliparous patients who delivered a live term singleton newborn greater than or equal to 37 weeks' gestation\n\nSee Guidance and Definition Sections for more details.</p>\n        \n        \n          \n            \n            <em>Logic Definition</em>: <a href=\"#cms0334fhirpccesareanbirth-denominator\">Denominator</a> \n          \n        \n      </td>\n    </tr>\n  \n\n  \n    <tr>\n      \n        \n<th scope=\"row\" class=\"row-header\">Denominator Exclusion</th>\n\n      \n      <td class=\"content-container\">\n        \n        <em>ID</em>: DenominatorExclusion_1\n        <br/>\n        \n        \n          <em>Description</em>:\n          <p style=\"white-space: pre-line\" class=\"tab-one\">Inpatient hospitalizations for patients with any of the following conditions during the encounter:\n-abnormal presentation\n-genital herpes\n -placenta previa\n-vasa previa\n- placenta accreta\n-placenta increta\n-placenta percreta</p>\n        \n        \n          \n            \n            <em>Logic Definition</em>: <a href=\"#cms0334fhirpccesareanbirth-denominator-exclusions\">Denominator Exclusions</a> \n          \n        \n      </td>\n    </tr>\n  \n\n  \n    <tr>\n      \n        \n<th scope=\"row\" class=\"row-header\">Numerator</th>\n\n      \n      <td class=\"content-container\">\n        \n        <em>ID</em>: Numerator_1\n        <br/>\n        \n        \n          <em>Description</em>:\n          <p style=\"white-space: pre-line\" class=\"tab-one\">Inpatient hospitalizations for patients who deliver by cesarean section</p>\n        \n        \n          \n            \n            <em>Logic Definition</em>: <a href=\"#cms0334fhirpccesareanbirth-numerator\">Numerator</a> \n          \n        \n      </td>\n    </tr>\n  \n\n  \n  \n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Population Basis</th>\n\n<td class=\"content-container\">Encounter</td>\n</tr>\n\n\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Scoring</th>\n\n<td class=\"content-container\">[http://terminology.hl7.org/CodeSystem/measure-scoring#proportion: 'Proportion']</td>\n</tr>\n\n\n\n\n\n\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Type</th>\n\n<td class=\"content-container\">[http://terminology.hl7.org/CodeSystem/measure-type#outcome: 'Outcome']</td>\n</tr>\n\n\n\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Rate Aggregation</th>\n\n<td class=\"content-container\">None</td>\n</tr>\n\n\n\n  \n<tr>\n\n<th scope=\"row\" class=\"row-header\">Improvement Notation</th>\n\n<td class=\"content-container\">[http://terminology.hl7.org/CodeSystem/measure-improvement-notation#decrease: 'Decreased score indicates improvement']</td>\n</tr>\n\n\n\n\n  <tr>\n\n<th colspan=\"2\" scope=\"row\" class=\"row-header\">Supplemental Data Elements</th>\n\n</tr>\n\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Supplemental Data Element</th>\n\n  <td class=\"content-container\">\n    \n      <em>ID</em>: sde-ethnicity\n      \n      <br/>\n      \n    \n    \n      \n        \n          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]\n        \n        <br/>\n      \n    \n    \n      <em>Description</em>: SDE Ethnicity\n    \n    \n      \n        <br/>\n        \n        <em>Logic Definition</em>: <a href=\"#cms0334fhirpccesareanbirth-sde-ethnicity\">SDE Ethnicity</a> \n      \n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Supplemental Data Element</th>\n\n  <td class=\"content-container\">\n    \n      <em>ID</em>: sde-race\n      \n      <br/>\n      \n    \n    \n      \n        \n          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]\n        \n        <br/>\n      \n    \n    \n      <em>Description</em>: SDE Race\n    \n    \n      \n        <br/>\n        \n        <em>Logic Definition</em>: <a href=\"#cms0334fhirpccesareanbirth-sde-race\">SDE Race</a> \n      \n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Supplemental Data Element</th>\n\n  <td class=\"content-container\">\n    \n      <em>ID</em>: sde-sex\n      \n      <br/>\n      \n    \n    \n      \n        \n          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]\n        \n        <br/>\n      \n    \n    \n      <em>Description</em>: SDE Sex\n    \n    \n      \n        <br/>\n        \n        <em>Logic Definition</em>: <a href=\"#cms0334fhirpccesareanbirth-sde-sex\">SDE Sex</a> \n      \n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Supplemental Data Element</th>\n\n  <td class=\"content-container\">\n    \n      <em>ID</em>: sde-payer\n      \n      <br/>\n      \n    \n    \n      \n        \n          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]\n        \n        <br/>\n      \n    \n    \n      <em>Description</em>: SDE Payer\n    \n    \n      \n        <br/>\n        \n        <em>Logic Definition</em>: <a href=\"#cms0334fhirpccesareanbirth-sde-payer\">SDE Payer</a> \n      \n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Supplemental Data Element</th>\n\n  <td class=\"content-container\">\n    \n      <em>ID</em>: sde-variable-calculated-gestational-age\n      \n      <br/>\n      \n    \n    \n      \n        \n          <em>Usage Code</em>: [http://terminology.hl7.org/CodeSystem/measure-data-usage#supplemental-data]\n        \n        <br/>\n      \n    \n    \n      <em>Description</em>: SDE Variable Calculated Gestational Age\n    \n    \n      \n        <br/>\n        \n        <em>Logic Definition</em>: <a href=\"#cms0334fhirpccesareanbirth-sde-variable-calculated-gestational-age\">SDE Variable Calculated Gestational Age</a> \n      \n    \n  </td>\n</tr>\n\n\n<tr>\n\n<th colspan=\"2\" scope=\"row\" class=\"row-header\">Measure Logic</th>\n\n</tr>\n\n<tr>\n\n<th scope=\"row\" class=\"row-header\">Primary Library</th>\n\n<td class=\"content-container\">https://madie.cms.gov/Library/CMS0334FHIRPCCesareanBirth</td>\n</tr>\n\n\n\n\n  \n  \n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Library SDE\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: https://madie.cms.gov/Library/SupplementalDataElements|5.1.000\n    <br/>\n    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/SupplementalDataElements|5.1.000</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Library FHIRHelpers\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: https://madie.cms.gov/Library/FHIRHelpers|4.4.000\n    <br/>\n    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/FHIRHelpers|4.4.000</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Library PCMaternal\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: https://madie.cms.gov/Library/PCMaternal|5.25.000\n    <br/>\n    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/PCMaternal|5.25.000</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Library CQMCommon\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: https://madie.cms.gov/Library/CQMCommon|4.1.000\n    <br/>\n    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/CQMCommon|4.1.000</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Library QICoreCommon\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: https://madie.cms.gov/Library/QICoreCommon|4.0.000\n    <br/>\n    <em>Canonical URL</em>: <tt>https://madie.cms.gov/Library/QICoreCommon|4.0.000</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Code system SNOMEDCT\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://snomed.info/sct\n    <br/>\n    <em>Canonical URL</em>: <tt>http://snomed.info/sct</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Code system LOINC\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://loinc.org\n    <br/>\n    <em>Canonical URL</em>: <tt>http://loinc.org</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Encounter Inpatient\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Delivery Procedures\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.59\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.59</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Observation Services\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set ED Visit and OB Triage\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1029.369\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1029.369</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Estimated Gestational Age at Delivery\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.26\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.26</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set 37 to 42 Plus Weeks Gestation\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.68\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.68</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Delivery of Singleton\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.99\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.99</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Cesarean Birth\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.282\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.282</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Payer Type\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Abnormal Presentation\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.105\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.105</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Placenta Accreta Spectrum Previa or Vasa Previa\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.37\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.37</tt>\n    \n  </td>\n</tr>\n\n<tr>\n  \n  \n  \n  \n  \n<th scope=\"row\" class=\"row-header\">Dependency</th>\n\n  \n  <td class=\"content-container\">\n    \n    <em>Description</em>: Value set Genital Herpes\n    \n    <br/>\n    \n    \n    \n    \n    \n    \n    <em>Resource</em>: http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1049\n    <br/>\n    <em>Canonical URL</em>: <tt>http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1049</tt>\n    \n  </td>\n</tr>\n\n\n  \n  <tr>\n    <th scope=\"row\" class=\"row-header\">Direct Reference Code</th>\n    <td class=\"content-container\">\n      \n        <em>Display</em>: Male (finding)\n        <br/>\n      \n      <em>Code</em>: 248153007\n      <br/>\n      <em>System</em>: <tt>http://snomed.info/sct</tt>\n    </td>\n  </tr>\n\n  <tr>\n    <th scope=\"row\" class=\"row-header\">Direct Reference Code</th>\n    <td class=\"content-container\">\n      \n        <em>Display</em>: Female (finding)\n        <br/>\n      \n      <em>Code</em>: 248152002\n      <br/>\n      <em>System</em>: <tt>http://snomed.info/sct</tt>\n    </td>\n  </tr>\n\n  <tr>\n    <th scope=\"row\" class=\"row-header\">Direct Reference Code</th>\n    <td class=\"content-container\">\n      \n        <em>Display</em>: Date and time of obstetric delivery\n        <br/>\n      \n      <em>Code</em>: 93857-1\n      <br/>\n      <em>System</em>: <tt>http://loinc.org</tt>\n    </td>\n  </tr>\n\n  <tr>\n    <th scope=\"row\" class=\"row-header\">Direct Reference Code</th>\n    <td class=\"content-container\">\n      \n        <em>Display</em>: Delivery date Estimated\n        <br/>\n      \n      <em>Code</em>: 11778-8\n      <br/>\n      <em>System</em>: <tt>http://loinc.org</tt>\n    </td>\n  </tr>\n\n  <tr>\n    <th scope=\"row\" class=\"row-header\">Direct Reference Code</th>\n    <td class=\"content-container\">\n      \n        <em>Display</em>: [#] Pregnancies\n        <br/>\n      \n      <em>Code</em>: 11996-6\n      <br/>\n      <em>System</em>: <tt>http://loinc.org</tt>\n    </td>\n  </tr>\n\n  <tr>\n    <th scope=\"row\" class=\"row-header\">Direct Reference Code</th>\n    <td class=\"content-container\">\n      \n        <em>Display</em>: [#] Parity\n        <br/>\n      \n      <em>Code</em>: 11977-6\n      <br/>\n      <em>System</em>: <tt>http://loinc.org</tt>\n    </td>\n  </tr>\n\n  <tr>\n    <th scope=\"row\" class=\"row-header\">Direct Reference Code</th>\n    <td class=\"content-container\">\n      \n        <em>Display</em>: [#] Births.preterm\n        <br/>\n      \n      <em>Code</em>: 11637-6\n      <br/>\n      <em>System</em>: <tt>http://loinc.org</tt>\n    </td>\n  </tr>\n\n  <tr>\n    <th scope=\"row\" class=\"row-header\">Direct Reference Code</th>\n    <td class=\"content-container\">\n      \n        <em>Display</em>: [#] Births.term\n        <br/>\n      \n      <em>Code</em>: 11639-2\n      <br/>\n      <em>System</em>: <tt>http://loinc.org</tt>\n    </td>\n  </tr>\n\n  \n  \n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: Measurement Period\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: in\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: 1\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Period\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: Numerator\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: *\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: Denominator\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: *\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: Initial Population\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: *\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: Denominator Exclusions\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: *\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: SDE Sex\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: 1\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Coding\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: SDE Payer\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: *\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: SDE Ethnicity\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: 1\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: SDE Race\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: 1\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n<tr>\n  \n<th scope=\"row\" class=\"row-header\">Parameter</th>\n\n  <td class=\"content-container\">\n    \n    <em>Name</em>: SDE Variable Calculated Gestational Age\n    \n    \n    <br/>\n    \n    \n    <em>Use</em>: out\n    \n    \n    <br/>\n    \n    \n    <em>Min Cardinality</em>: 0\n    \n    \n    <br/>\n    \n    \n    <em>Max Cardinality</em>: *\n    \n    \n    <br/>\n    \n    \n    <em>Type</em>: Resource\n    \n  </td>\n</tr>\n\n  \n  \n  <tr>\n    <th colspan=\"2\" scope=\"row\" class=\"section-header\"><a name=\"effective-data-requirements\"> </a>Measure Logic Data Requirements</th>\n  </tr>\n  \n  \n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Patient\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: extension, birthDate, birthDate.value, url\n    <br/>\n   \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Encounter\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: type, period, status, status.value, reasonCode, id, id.value\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: type</span>\n    <br/>\n  \n  \n  \n    <span class=\"tab-one\"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143\n    <br/> \n  \n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Encounter\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: type, period, status, status.value, reasonCode, id, id.value\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: type</span>\n    <br/>\n  \n  \n  \n    <span class=\"tab-one\"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1029.369\n    <br/> \n  \n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Encounter\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: type, status, status.value, period, reasonCode, id, id.value\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: type</span>\n    <br/>\n  \n  \n  \n    <span class=\"tab-one\"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307\n    <br/> \n  \n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Procedure\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: code, status, status.value, performed\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: code</span>\n    <br/>\n  \n  \n  \n    <span class=\"tab-one\"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.59\n    <br/> \n  \n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Procedure\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: code, performed, status, status.value\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: code</span>\n    <br/>\n  \n  \n  \n    <span class=\"tab-one\"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.282\n    <br/> \n  \n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Observation\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: code, value, status, status.value, effective\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: code</span>\n    <br/>\n  \n  \n  \n  \n    <span class=\"tab-one\"><em>Code(s)</em>: \n    \n      \n      http://loinc.org#93857-1: 'Date and time of obstetric delivery'\n      \n    \n    </span>\n    <br/>\n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Observation\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: code, value, status, status.value, effective\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: code</span>\n    <br/>\n  \n  \n  \n  \n    <span class=\"tab-one\"><em>Code(s)</em>: \n    \n      \n      http://loinc.org#11778-8: 'Delivery date Estimated'\n      \n    \n    </span>\n    <br/>\n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Observation\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: code, effective, value, status, status.value\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: code</span>\n    <br/>\n  \n  \n  \n    <span class=\"tab-one\"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.26\n    <br/> \n  \n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Observation\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: code, value, status, status.value, effective\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: code</span>\n    <br/>\n  \n  \n  \n  \n    <span class=\"tab-one\"><em>Code(s)</em>: \n    \n      \n      http://loinc.org#11996-6: '[#] Pregnancies'\n      \n    \n    </span>\n    <br/>\n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Observation\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: code, effective, status, status.value, value\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: code</span>\n    <br/>\n  \n  \n  \n  \n    <span class=\"tab-one\"><em>Code(s)</em>: \n    \n      \n      http://loinc.org#11977-6: '[#] Parity'\n      \n    \n    </span>\n    <br/>\n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Observation\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: code, effective, status, status.value, value\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: code</span>\n    <br/>\n  \n  \n  \n  \n    <span class=\"tab-one\"><em>Code(s)</em>: \n    \n      \n      http://loinc.org#11637-6: '[#] Births.preterm'\n      \n    \n    </span>\n    <br/>\n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Observation\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: code, effective, status, status.value, value\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: code</span>\n    <br/>\n  \n  \n  \n  \n    <span class=\"tab-one\"><em>Code(s)</em>: \n    \n      \n      http://loinc.org#11639-2: '[#] Births.term'\n      \n    \n    </span>\n    <br/>\n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Observation\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: value\n    <br/>\n   \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Observation\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: code, effective, status, status.value\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: code</span>\n    <br/>\n  \n  \n  \n    <span class=\"tab-one\"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.105\n    <br/> \n  \n  \n  \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Condition\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis\n    <br/>        \n  \n   \n   \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Condition\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns\n    <br/>        \n  \n   \n   \n   \n  </td>\n</tr>\n\n<tr>\n  <th scope=\"row\" class=\"row-header\">Data Requirement</th>\n  <td class=\"content-container\">\n    <em>Type</em>: Coverage\n    <br/>\n  \n    <em>Profile(s)</em>: \n  \n    http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage\n    <br/>        \n  \n   \n   \n    <em>Must Support Elements</em>: type, period\n    <br/>\n   \n  \n    <em>Code Filter(s)</em>: \n    <br/>\n  \n  \n    <span class=\"tab-one\"><em>Path</em>: type</span>\n    <br/>\n  \n  \n  \n    <span class=\"tab-one\"><em>ValueSet</em>:</span> http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591\n    <br/> \n  \n  \n  \n   \n  </td>\n</tr>\n\n  \n  <tr>\n\n<th colspan=\"2\" scope=\"row\" class=\"row-header\">Measure Logic Definitions</th>\n\n</tr>\n  \n          \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"supplementaldataelements-sde-sex\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> SupplementalDataElements</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Sex&quot;:\n  case\n    when Patient.sex = '248153007' then &quot;Male (finding)&quot;\n    when Patient.sex = '248152002' then &quot;Female (finding)&quot;\n    else null\n  end</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-sde-sex\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Sex&quot;:\n  SDE.&quot;SDE Sex&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cqmcommon-inpatient-encounter\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CQMCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Inpatient Encounter&quot;:\n  [Encounter: &quot;Encounter Inpatient&quot;] EncounterInpatient\n    where EncounterInpatient.status = 'finished'\n      and EncounterInpatient.period ends during day of &quot;Measurement Period&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"pcmaternal-encounter-with-age-range\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> PCMaternal</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Encounter With Age Range&quot;:\n CQMCommon.&quot;Inpatient Encounter&quot; InpatientEncounter\n                      where AgeInYearsAt(date from start of InpatientEncounter.period) in Interval[ 8, 65 )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"pcmaternal-delivery-encounter-with-age-range\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> PCMaternal</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Delivery Encounter With Age Range&quot;:\n  &quot;Encounter With Age Range&quot; EncounterWithAge\n                with [&quot;Procedure&quot;: &quot;Delivery Procedures&quot;] DeliveryProcedure\n                such that DeliveryProcedure.status = 'completed'\n                and DeliveryProcedure.performed.toInterval  ( ) starts during EncounterWithAge.hospitalizationWithEDOBTriageObservation ()</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-delivery-encounter-with-calculated-gestational-age-greater-than-or-equal-to-37-weeks\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Delivery Encounter With Calculated Gestational Age Greater Than Or Equal To 37 Weeks&quot;:\n  PCMaternal.&quot;Delivery Encounter With Age Range&quot; DeliveryEncounter\n    where DeliveryEncounter.calculatedGestationalAge ( ) &gt;= 37</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-delivery-encounter-with-estimated-gestational-age-greater-than-or-equal-to-37-weeks\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Delivery Encounter With Estimated Gestational Age Greater Than Or Equal To 37 Weeks&quot;:\n  PCMaternal.&quot;Delivery Encounter With Age Range&quot; DeliveryEncounter\n    where DeliveryEncounter.calculatedGestationalAge ( ) is null\n      and DeliveryEncounter.lastEstimatedGestationalAge ( ) &gt;= 37 weeks</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-delivery-encounter-with-gestational-age-greater-than-or-equal-to-37-weeks-based-on-coding\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Delivery Encounter With Gestational Age Greater Than Or Equal To 37 Weeks Based On Coding&quot;:\n  PCMaternal.&quot;Delivery Encounter With Age Range&quot; DeliveryEncounter\n    let CGA: DeliveryEncounter.calculatedGestationalAge ( ),\n    EGA: DeliveryEncounter.lastEstimatedGestationalAge ( )\n    where CGA is null\n      and EGA is null\n      and exists ( ( DeliveryEncounter.encounterDiagnosis ( ) ) EncounterDiagnosis\n          where EncounterDiagnosis.code in &quot;37 to 42 Plus Weeks Gestation&quot;\n//      where EncounterDiagnosis.reasonCode in &quot;37 to 42 Plus Weeks Gestation&quot;\n//        or EncounterDiagnosis.encounterDiagnosis().code in &quot;37 to 42 Plus Weeks Gestation&quot; \n      \n      \n      )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-delivery-encounter-with-gestational-age-greater-than-or-equal-to-37-weeks\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Delivery Encounter With Gestational Age Greater Than Or Equal To 37 Weeks&quot;:\n  &quot;Delivery Encounter With Calculated Gestational Age Greater Than Or Equal To 37 Weeks&quot;\n    union &quot;Delivery Encounter With Estimated Gestational Age Greater Than Or Equal To 37 Weeks&quot;\n    union &quot;Delivery Encounter With Gestational Age Greater Than Or Equal To 37 Weeks Based On Coding&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-encounter-with-singleton-delivery\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Encounter With Singleton Delivery&quot;:\n  PCMaternal.&quot;Delivery Encounter With Age Range&quot; DeliveryEncounter\n    where DeliveryEncounter.reasonCode in &quot;Delivery of Singleton&quot;\n      or DeliveryEncounter.encounterDiagnosis ( ).code in &quot;Delivery of Singleton&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-singleton-delivery-encounters-at-37-plus-weeks-gravida-1-parity-0,-no-previous-births\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*      where (ThirtySevenWeeksPlusEncounter.reasonCode in &quot;Placenta Accreta Spectrum Previa or Vasa Previa&quot;\n        or ThirtySevenWeeksPlusEncounter.encounterDiagnosis().code in &quot;Placenta Accreta Spectrum Previa or Vasa Previa&quot;)\n        or \n        (ThirtySevenWeeksPlusEncounter.reasonCode in &quot;Genital Herpes&quot;\n            or ThirtySevenWeeksPlusEncounter.encounterDiagnosis().code in &quot;Genital Herpes&quot;) */\n\n\ndefine &quot;Singleton Delivery Encounters At 37 Plus Weeks Gravida 1 Parity 0, No Previous Births&quot;:\n  ( &quot;Delivery Encounter With Gestational Age Greater Than Or Equal To 37 Weeks&quot;\n    intersect &quot;Encounter With Singleton Delivery&quot; ) SingletonEncounterGE37Weeks\n    where ( ( SingletonEncounterGE37Weeks.lastGravida ( ) = 1 )\n        or ( SingletonEncounterGE37Weeks.lastParity ( ) = 0 )\n        or ( ( SingletonEncounterGE37Weeks.lastHistoryPretermBirth ( ) = 0 )\n            and ( SingletonEncounterGE37Weeks.lastHistoryTermBirth ( ) = 0 )\n        )\n    )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-delivery-encounter-with-cesarean-birth\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Delivery Encounter With Cesarean Birth&quot;:\n  &quot;Singleton Delivery Encounters At 37 Plus Weeks Gravida 1 Parity 0, No Previous Births&quot; ThirtySevenWeeksPlusEncounter\n    with [&quot;Procedure&quot;: &quot;Cesarean Birth&quot;] CSection\n      such that CSection.performed.toInterval ( ) during ThirtySevenWeeksPlusEncounter.hospitalizationWithEDOBTriageObservation ( )\n        and CSection.status = 'completed'</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-numerator\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Numerator&quot;:\n  &quot;Delivery Encounter With Cesarean Birth&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-denominator\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Denominator&quot;:\n  &quot;Singleton Delivery Encounters At 37 Plus Weeks Gravida 1 Parity 0, No Previous Births&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"supplementaldataelements-sde-payer\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> SupplementalDataElements</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Payer&quot;:\n  [Coverage: type in &quot;Payer Type&quot;] Payer\n    return {\n      code: Payer.type,\n      period: Payer.period\n    }</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-sde-payer\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Payer&quot;:\n  SDE.&quot;SDE Payer&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-initial-population\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Initial Population&quot;:\n  PCMaternal.&quot;Delivery Encounter With Age Range&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"supplementaldataelements-sde-ethnicity\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> SupplementalDataElements</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Ethnicity&quot;:\n  Patient.ethnicity E\n    return Tuple {\n      codes: { E.ombCategory } union E.detailed,\n      display: E.text\n    }</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-sde-ethnicity\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Ethnicity&quot;:\n  SDE.&quot;SDE Ethnicity&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-encounter-with-abnormal-presentation\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Encounter With Abnormal Presentation&quot;:\n  &quot;Singleton Delivery Encounters At 37 Plus Weeks Gravida 1 Parity 0, No Previous Births&quot; ThirtySevenWeeksPlusEncounter\n    let LastAbnormalPresentation: Last([&quot;SimpleObservation&quot;: &quot;Abnormal Presentation&quot;] AbnormalPresentation\n        where AbnormalPresentation.effective.earliest() before or on ThirtySevenWeeksPlusEncounter.lastTimeOfDelivery()\n          and AbnormalPresentation.status in { 'final', 'amended', 'corrected' }\n        sort by effective.earliest()\n    )\n    where LastAbnormalPresentation.effective.earliest ( ) during ThirtySevenWeeksPlusEncounter.hospitalizationWithEDOBTriageObservation ( )\n      or exists ( ( ThirtySevenWeeksPlusEncounter.encounterDiagnosis ( ) ) EncounterDiagnosis\n          where EncounterDiagnosis.code in &quot;Abnormal Presentation&quot;\n      )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-encounter-with-genital-herpes,-placenta-previa,-vasa-previa-or-placenta-accreta-spectrum\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Encounter With Genital Herpes, Placenta Previa, Vasa Previa Or Placenta Accreta Spectrum&quot;:\n  &quot;Singleton Delivery Encounters At 37 Plus Weeks Gravida 1 Parity 0, No Previous Births&quot; ThirtySevenWeeksPlusEncounter\n    where exists ( ( ThirtySevenWeeksPlusEncounter.encounterDiagnosis ( ) ) EncounterDiagnosis\n        where EncounterDiagnosis.code in &quot;Placenta Accreta Spectrum Previa or Vasa Previa&quot;\n          or EncounterDiagnosis.code in &quot;Genital Herpes&quot;\n    )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-delivery-encounter-with-abnormal-presentation,-genital-herpes,-placenta-previa,-vasa-previa-or-placenta-accreta-spectrum\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Delivery Encounter With Abnormal Presentation, Genital Herpes, Placenta Previa, Vasa Previa Or Placenta Accreta Spectrum&quot;:\n  &quot;Encounter With Abnormal Presentation&quot;\n    union &quot;Encounter With Genital Herpes, Placenta Previa, Vasa Previa Or Placenta Accreta Spectrum&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-denominator-exclusions\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Denominator Exclusions&quot;:\n  &quot;Delivery Encounter With Abnormal Presentation, Genital Herpes, Placenta Previa, Vasa Previa Or Placenta Accreta Spectrum&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"supplementaldataelements-sde-race\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> SupplementalDataElements</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Race&quot;:\n  Patient.race R\n    return Tuple {\n      codes: R.ombCategory union R.detailed,\n      display: R.text\n    }</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-sde-race\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Race&quot;:\n  SDE.&quot;SDE Race&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"pcmaternal-variable-calculated-gestational-age\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> PCMaternal</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;Variable Calculated Gestational Age&quot;:\n &quot;Delivery Encounter With Age Range&quot; DeliveryEncounter\n    let CGA: DeliveryEncounter.calculatedGestationalAge()\n    return {\n      EncounterID: DeliveryEncounter.id,\n      CalculatedCGA: CGA\n    }</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-sde-variable-calculated-gestational-age\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define &quot;SDE Variable Calculated Gestational Age&quot;:\n  PCMaternal.&quot;Variable Calculated Gestational Age&quot;</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"fhirhelpers-tostring\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> FHIRHelpers</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define function ToString(value uri): value.value</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"fhirhelpers-tointerval\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> FHIRHelpers</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Converts the given [Period](https://hl7.org/fhir/datatypes.html#Period)\nvalue to a CQL DateTime Interval\n@comment: If the start value of the given period is unspecified, the starting\nboundary of the resulting interval will be open (meaning the start of the interval\nis unknown, as opposed to interpreted as the beginning of time).\n*/\ndefine function ToInterval(period FHIR.Period):\n    if period is null then\n        null\n    else\n        if period.&quot;start&quot; is null then\n            Interval(period.&quot;start&quot;.value, period.&quot;end&quot;.value]\n        else\n            Interval[period.&quot;start&quot;.value, period.&quot;end&quot;.value]</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"qicorecommon-tointerval\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> QICoreCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Normalizes a value that is a choice of timing-valued types to an equivalent interval\n@comment: Normalizes a choice type of DateTime, Quanitty, Interval&lt;DateTime&gt;, or Interval&lt;Quantity&gt; types\nto an equivalent interval. This selection of choice types is a superset of the majority of choice types that are used as possible\nrepresentations for timing-valued elements in QICore, allowing this function to be used across any resource.\nThe input can be provided as a DateTime, Quantity, Interval&lt;DateTime&gt; or Interval&lt;Quantity&gt;.\nThe intent of this function is to provide a clear and concise mechanism to treat single\nelements that have multiple possible representations as intervals so that logic doesn't have to account\nfor the variability. More complex calculations (such as medication request period or dispense period\ncalculation) need specific guidance and consideration. That guidance may make use of this function, but\nthe focus of this function is on single element calculations where the semantics are unambiguous.\nIf the input is a DateTime, the result a DateTime Interval beginning and ending on that DateTime.\nIf the input is a Quantity, the quantity is expected to be a calendar-duration interpreted as an Age,\nand the result is a DateTime Interval beginning on the Date the patient turned that age and ending immediately before one year later.\nIf the input is a DateTime Interval, the result is the input.\nIf the input is a Quantity Interval, the quantities are expected to be calendar-durations interpreted as an Age, and the result\nis a DateTime Interval beginning on the date the patient turned the age given as the start of the quantity interval, and ending\nimmediately before one year later than the date the patient turned the age given as the end of the quantity interval.\nIf the input is a Timing, an error will be thrown indicating that Timing calculations are not implemented. Any other input will reslt in a null DateTime Interval\n*/\ndefine fluent function toInterval(choice Choice&lt;DateTime, Quantity, Interval&lt;DateTime&gt;, Interval&lt;Quantity&gt;, Timing&gt;):\n  case\n\t  when choice is DateTime then\n    \tInterval[choice as DateTime, choice as DateTime]\n\t\twhen choice is Interval&lt;DateTime&gt; then\n  \t\tchoice as Interval&lt;DateTime&gt;\n\t\twhen choice is Quantity then\n\t\t  Interval[Patient.birthDate + (choice as Quantity),\n\t\t\t  Patient.birthDate + (choice as Quantity) + 1 year)\n\t\twhen choice is Interval&lt;Quantity&gt; then\n\t\t  Interval[Patient.birthDate + (choice.low as Quantity),\n\t\t\t  Patient.birthDate + (choice.high as Quantity) + 1 year)\n\t\twhen choice is Timing then\n      Message(null, true, 'NOT_IMPLEMENTED', 'Error', 'Calculation of an interval from a Timing value is not supported') as Interval&lt;DateTime&gt;\n\t\telse\n\t\t\tnull as Interval&lt;DateTime&gt;\n\tend</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"pcmaternal-hospitalizationwithedobtriageobservation\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> PCMaternal</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define fluent function hospitalizationWithEDOBTriageObservation (TheEncounter Encounter ):\n  /*hospitalizationWithEDOBTriageObservation returns the total interval from the start of any immediately prior emergency department visit or OB Triage visit through the observation visit to the discharge of the given encounter*/\n  TheEncounter Visit\n    let ObsVisit: Last([&quot;Encounter&quot;: &quot;Observation Services&quot;] LastObs\n        where LastObs.period ends 1 hour or less on or before start of Visit.period\n          and LastObs.status = 'finished'\n        sort by \n        end of period\n    ),\n    VisitStart: Coalesce(start of ObsVisit.period, start of Visit.period),\n    EDOBTriageVisit: Last([&quot;Encounter&quot;: &quot;ED Visit and OB Triage&quot;] LastEDOBTriage\n        where LastEDOBTriage.period ends 1 hour or less on or before VisitStart\n          and LastEDOBTriage.status = 'finished'\n        sort by \n        end of period\n    )\n    return Interval[Coalesce(start of EDOBTriageVisit.period, VisitStart), \n    end of Visit.period]</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"pcmaternal-calculatedgestationalage\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> PCMaternal</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define fluent function calculatedGestationalAge (TheEncounter Encounter ):\n  //Gestational Age = (280 -(Estimated Delivery Date minus Reference Date/Delivery Date))/7\n ( 280 - ( difference in days between TheEncounter.lastTimeOfDelivery () and TheEncounter.lastEstimatedDeliveryDate( )) ) div 7</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"pcmaternal-lasttimeofdelivery\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> PCMaternal</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define fluent function lastTimeOfDelivery (TheEncounter Encounter ):\n  Last([&quot;SimpleObservation&quot;: &quot;Date and time of obstetric delivery&quot;] TimeOfDelivery\n      where TimeOfDelivery.value as DateTime is not null\n        and TimeOfDelivery.status in { 'final', 'amended', 'corrected' }\n        and TimeOfDelivery.effective.earliest () during TheEncounter.hospitalizationWithEDOBTriageObservation ()\n        and TimeOfDelivery.value as DateTime during TheEncounter.hospitalizationWithEDOBTriageObservation()\n      sort by effective.earliest()\n  ).value as DateTime</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"qicorecommon-earliest\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> QICoreCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Given an interval, return the starting point if the interval has a starting boundary specified,\notherwise, return the ending point\n*/\ndefine fluent function earliest(choice Choice&lt;DateTime, Quantity, Interval&lt;DateTime&gt;, Interval&lt;Quantity&gt;&gt; ):\n  (choice.toInterval()) period\n    return\n      if (period.&quot;hasStart&quot;()) then start of period\n      else end of period</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"qicorecommon-hasstart\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> QICoreCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Given an interval, return true if the interval has a starting boundary specified\n(i.e. the start of the interval is not null and not the minimum DateTime value)\n*/\ndefine fluent function hasStart(period Interval&lt;DateTime&gt; ):\n  not ( start of period is null\n      or start of period = minimum DateTime\n  )</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"pcmaternal-lastestimateddeliverydate\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> PCMaternal</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define fluent function lastEstimatedDeliveryDate (TheEncounter Encounter ):\n  /*This function identifies the last time the EDD was assessed 42 weeks or less prior to or on delivery and stores the result of that assessment.*/\n  Last([&quot;SimpleObservation&quot;: &quot;Delivery date Estimated&quot;] EstimatedDateOfDelivery\n      where EstimatedDateOfDelivery.value as DateTime is not null\n        and EstimatedDateOfDelivery.status in { 'final', 'amended', 'corrected' }\n        and EstimatedDateOfDelivery.effective.earliest ( ) 42 weeks or less before or on TheEncounter.lastTimeOfDelivery ()\n      sort by effective.earliest ( )\n  ).value as DateTime</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"pcmaternal-lastestimatedgestationalage\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> PCMaternal</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define fluent function lastEstimatedGestationalAge (TheEncounter Encounter ):\n  Last([&quot;SimpleObservation&quot;: &quot;Estimated Gestational Age at Delivery&quot;] EstimatedGestationalAge\n  let EGATiming:  EstimatedGestationalAge.effective.earliest() where \n  (EGATiming 24 hours or less before or on TheEncounter.lastTimeOfDelivery () \n  and EstimatedGestationalAge.value is not null \n  and EstimatedGestationalAge.status in { 'final', 'amended', 'corrected' }) or \n      (EGATiming same day as TheEncounter.lastTimeOfDelivery () \n      and EGATiming during TheEncounter.hospitalizationWithEDOBTriageObservation() \n      and EstimatedGestationalAge.value is not null)\n sort by effective.earliest ())\n         .value as Quantity</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cqmcommon-encounterdiagnosis\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CQMCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*  \n@description: Returns the Condition resources referenced by the diagnosis element of the Encounter  \n*/\ndefine fluent function encounterDiagnosis(Encounter Encounter ):\n  Encounter.reasonReference D\n    return singleton from (([ConditionEncounterDiagnosis] union [ConditionProblemsHealthConcerns]) C where D.references(C.id))</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"qicorecommon-references\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> QICoreCommon</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Returns true if the given reference is to the given resourceId\n@comment: Returns true if the `resourceId` parameter exactly equals the tail of the given reference.\nNOTE: This function assumes resources from the same source server.\n*/\ndefine fluent function references(reference Reference, resourceId String):\n  resourceId = Last(Split(reference.reference, '/'))</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"fhirhelpers-toconcept\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> FHIRHelpers</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Converts the given FHIR [CodeableConcept](https://hl7.org/fhir/datatypes.html#CodeableConcept) value to a CQL Concept.\n*/\ndefine function ToConcept(concept FHIR.CodeableConcept):\n    if concept is null then\n        null\n    else\n        System.Concept {\n            codes: concept.coding C return ToCode(C),\n            display: concept.text.value\n        }</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"fhirhelpers-tocode\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> FHIRHelpers</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">/*\n@description: Converts the given FHIR [Coding](https://hl7.org/fhir/datatypes.html#Coding) value to a CQL Code.\n*/\ndefine function ToCode(coding FHIR.Coding):\n    if coding is null then\n        null\n    else\n        System.Code {\n          code: coding.code.value,\n          system: coding.system.value,\n          version: coding.version.value,\n          display: coding.display.value\n        }</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-lastgravida\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define fluent function lastGravida(TheEncounter Encounter):\n  Last([&quot;SimpleObservation&quot;: &quot;[#] Pregnancies&quot;] Gravida\n      where Gravida.value is not null\n        and Gravida.status in { 'final', 'amended', 'corrected' }\n        and Gravida.effective.earliest() 42 weeks or less before TheEncounter.lastTimeOfDelivery()\n      sort by effective.earliest()\n  ).value as Integer</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-lastparity\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define fluent function lastParity(TheEncounter Encounter):\n  Last([&quot;SimpleObservation&quot;: &quot;[#] Parity&quot;] Parity\n      where Parity.effective.earliest() 42 weeks or less before TheEncounter.lastTimeOfDelivery()\n        and Parity.status in { 'final', 'amended', 'corrected' }\n        and Parity.value is not null\n      sort by effective.earliest()\n  ).value as Integer</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-lasthistorypretermbirth\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define fluent function lastHistoryPretermBirth(TheEncounter Encounter):\n  Last([&quot;SimpleObservation&quot;: &quot;[#] Births.preterm&quot;] PretermBirth\n      where PretermBirth.effective.earliest() 42 weeks or less before TheEncounter.lastTimeOfDelivery()\n        and PretermBirth.status in { 'final', 'amended', 'corrected' }\n        and PretermBirth.value is not null\n      sort by effective.earliest()\n  ).value as Integer</code></pre>\n  </td>\n\n</tr>\n        \n<tr>\n  <th scope=\"row\" rowspan=\"2\" class=\"row-header\">\n    \n      \n      <a name=\"cms0334fhirpccesareanbirth-lasthistorytermbirth\"> </a>\n    \n    Logic Definition\n  </th>\n\n  <td class=\"content-container\"><em>Library Name:</em> CMS0334FHIRPCCesareanBirth</td>\n\n</tr>\n<tr>\n\n  <td>\n    <pre style=\"border: none;\" class=\"content-container highlight language-cql\"><code class=\"language-cql\">define fluent function lastHistoryTermBirth(TheEncounter Encounter):\n  Last([&quot;SimpleObservation&quot;: &quot;[#] Births.term&quot;] TermBirth\n      where TermBirth.effective.earliest() 42 weeks or less before TheEncounter.lastTimeOfDelivery()\n        and TermBirth.status in { 'final', 'amended', 'corrected' }\n        and TermBirth.value is not null\n      sort by effective.earliest()\n  ).value as Integer</code></pre>\n  </td>\n\n</tr>\n\n  \n\n<tr>\n  <th colspan=\"2\" scope=\"row\" class=\"row-header\">Generated using version 0.4.7 of the sample-content-ig Liquid templates</th>\n</tr>\n\n    </tbody>\n  </table>\n</div>"
+  },
+  "contained": [ {
+    "resourceType": "Library",
+    "id": "effective-data-requirements",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "248153007",
+        "display": "Male (finding)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://snomed.info/sct",
+        "code": "248152002",
+        "display": "Female (finding)"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://loinc.org",
+        "code": "93857-1",
+        "display": "Date and time of obstetric delivery"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://loinc.org",
+        "code": "11778-8",
+        "display": "Delivery date Estimated"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://loinc.org",
+        "code": "11996-6",
+        "display": "[#] Pregnancies"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://loinc.org",
+        "code": "11977-6",
+        "display": "[#] Parity"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://loinc.org",
+        "code": "11637-6",
+        "display": "[#] Births.preterm"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-directReferenceCode",
+      "valueCoding": {
+        "system": "http://loinc.org",
+        "code": "11639-2",
+        "display": "[#] Births.term"
+      }
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Sex"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Sex\":\n  case\n    when Patient.sex = '248153007' then \"Male (finding)\"\n    when Patient.sex = '248152002' then \"Female (finding)\"\n    else null\n  end"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 0
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "SDE Sex"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Sex\":\n  SDE.\"SDE Sex\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 1
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CQMCommon"
+      }, {
+        "url": "name",
+        "valueString": "Inpatient Encounter"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Inpatient Encounter\":\n  [Encounter: \"Encounter Inpatient\"] EncounterInpatient\n    where EncounterInpatient.status = 'finished'\n      and EncounterInpatient.period ends during day of \"Measurement Period\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 2
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "PCMaternal"
+      }, {
+        "url": "name",
+        "valueString": "Encounter With Age Range"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Encounter With Age Range\":\n CQMCommon.\"Inpatient Encounter\" InpatientEncounter\n                      where AgeInYearsAt(date from start of InpatientEncounter.period) in Interval[ 8, 65 )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 3
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "PCMaternal"
+      }, {
+        "url": "name",
+        "valueString": "Delivery Encounter With Age Range"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Delivery Encounter With Age Range\":\n  \"Encounter With Age Range\" EncounterWithAge\n                with [\"Procedure\": \"Delivery Procedures\"] DeliveryProcedure\n                such that DeliveryProcedure.status = 'completed'\n                and DeliveryProcedure.performed.toInterval  ( ) starts during EncounterWithAge.hospitalizationWithEDOBTriageObservation ()"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 4
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "Delivery Encounter With Calculated Gestational Age Greater Than Or Equal To 37 Weeks"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Delivery Encounter With Calculated Gestational Age Greater Than Or Equal To 37 Weeks\":\n  PCMaternal.\"Delivery Encounter With Age Range\" DeliveryEncounter\n    where DeliveryEncounter.calculatedGestationalAge ( ) >= 37"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 5
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "Delivery Encounter With Estimated Gestational Age Greater Than Or Equal To 37 Weeks"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Delivery Encounter With Estimated Gestational Age Greater Than Or Equal To 37 Weeks\":\n  PCMaternal.\"Delivery Encounter With Age Range\" DeliveryEncounter\n    where DeliveryEncounter.calculatedGestationalAge ( ) is null\n      and DeliveryEncounter.lastEstimatedGestationalAge ( ) >= 37 weeks"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 6
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "Delivery Encounter With Gestational Age Greater Than Or Equal To 37 Weeks Based On Coding"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Delivery Encounter With Gestational Age Greater Than Or Equal To 37 Weeks Based On Coding\":\n  PCMaternal.\"Delivery Encounter With Age Range\" DeliveryEncounter\n    let CGA: DeliveryEncounter.calculatedGestationalAge ( ),\n    EGA: DeliveryEncounter.lastEstimatedGestationalAge ( )\n    where CGA is null\n      and EGA is null\n      and exists ( ( DeliveryEncounter.encounterDiagnosis ( ) ) EncounterDiagnosis\n          where EncounterDiagnosis.code in \"37 to 42 Plus Weeks Gestation\"\n//      where EncounterDiagnosis.reasonCode in \"37 to 42 Plus Weeks Gestation\"\n//        or EncounterDiagnosis.encounterDiagnosis().code in \"37 to 42 Plus Weeks Gestation\" \n      \n      \n      )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 7
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "Delivery Encounter With Gestational Age Greater Than Or Equal To 37 Weeks"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Delivery Encounter With Gestational Age Greater Than Or Equal To 37 Weeks\":\n  \"Delivery Encounter With Calculated Gestational Age Greater Than Or Equal To 37 Weeks\"\n    union \"Delivery Encounter With Estimated Gestational Age Greater Than Or Equal To 37 Weeks\"\n    union \"Delivery Encounter With Gestational Age Greater Than Or Equal To 37 Weeks Based On Coding\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 8
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "Encounter With Singleton Delivery"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Encounter With Singleton Delivery\":\n  PCMaternal.\"Delivery Encounter With Age Range\" DeliveryEncounter\n    where DeliveryEncounter.reasonCode in \"Delivery of Singleton\"\n      or DeliveryEncounter.encounterDiagnosis ( ).code in \"Delivery of Singleton\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 9
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "Singleton Delivery Encounters At 37 Plus Weeks Gravida 1 Parity 0, No Previous Births"
+      }, {
+        "url": "statement",
+        "valueString": "/*      where (ThirtySevenWeeksPlusEncounter.reasonCode in \"Placenta Accreta Spectrum Previa or Vasa Previa\"\n        or ThirtySevenWeeksPlusEncounter.encounterDiagnosis().code in \"Placenta Accreta Spectrum Previa or Vasa Previa\")\n        or \n        (ThirtySevenWeeksPlusEncounter.reasonCode in \"Genital Herpes\"\n            or ThirtySevenWeeksPlusEncounter.encounterDiagnosis().code in \"Genital Herpes\") */\n\n\ndefine \"Singleton Delivery Encounters At 37 Plus Weeks Gravida 1 Parity 0, No Previous Births\":\n  ( \"Delivery Encounter With Gestational Age Greater Than Or Equal To 37 Weeks\"\n    intersect \"Encounter With Singleton Delivery\" ) SingletonEncounterGE37Weeks\n    where ( ( SingletonEncounterGE37Weeks.lastGravida ( ) = 1 )\n        or ( SingletonEncounterGE37Weeks.lastParity ( ) = 0 )\n        or ( ( SingletonEncounterGE37Weeks.lastHistoryPretermBirth ( ) = 0 )\n            and ( SingletonEncounterGE37Weeks.lastHistoryTermBirth ( ) = 0 )\n        )\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 10
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "Delivery Encounter With Cesarean Birth"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Delivery Encounter With Cesarean Birth\":\n  \"Singleton Delivery Encounters At 37 Plus Weeks Gravida 1 Parity 0, No Previous Births\" ThirtySevenWeeksPlusEncounter\n    with [\"Procedure\": \"Cesarean Birth\"] CSection\n      such that CSection.performed.toInterval ( ) during ThirtySevenWeeksPlusEncounter.hospitalizationWithEDOBTriageObservation ( )\n        and CSection.status = 'completed'"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 11
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "Numerator"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Numerator\":\n  \"Delivery Encounter With Cesarean Birth\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 12
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "Denominator"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Denominator\":\n  \"Singleton Delivery Encounters At 37 Plus Weeks Gravida 1 Parity 0, No Previous Births\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 13
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Payer"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Payer\":\n  [Coverage: type in \"Payer Type\"] Payer\n    return {\n      code: Payer.type,\n      period: Payer.period\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 14
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "SDE Payer"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Payer\":\n  SDE.\"SDE Payer\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 15
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "Initial Population"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Initial Population\":\n  PCMaternal.\"Delivery Encounter With Age Range\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 16
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Ethnicity"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Ethnicity\":\n  Patient.ethnicity E\n    return Tuple {\n      codes: { E.ombCategory } union E.detailed,\n      display: E.text\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 17
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "SDE Ethnicity"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Ethnicity\":\n  SDE.\"SDE Ethnicity\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 18
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "Encounter With Abnormal Presentation"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Encounter With Abnormal Presentation\":\n  \"Singleton Delivery Encounters At 37 Plus Weeks Gravida 1 Parity 0, No Previous Births\" ThirtySevenWeeksPlusEncounter\n    let LastAbnormalPresentation: Last([\"SimpleObservation\": \"Abnormal Presentation\"] AbnormalPresentation\n        where AbnormalPresentation.effective.earliest() before or on ThirtySevenWeeksPlusEncounter.lastTimeOfDelivery()\n          and AbnormalPresentation.status in { 'final', 'amended', 'corrected' }\n        sort by effective.earliest()\n    )\n    where LastAbnormalPresentation.effective.earliest ( ) during ThirtySevenWeeksPlusEncounter.hospitalizationWithEDOBTriageObservation ( )\n      or exists ( ( ThirtySevenWeeksPlusEncounter.encounterDiagnosis ( ) ) EncounterDiagnosis\n          where EncounterDiagnosis.code in \"Abnormal Presentation\"\n      )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 19
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "Encounter With Genital Herpes, Placenta Previa, Vasa Previa Or Placenta Accreta Spectrum"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Encounter With Genital Herpes, Placenta Previa, Vasa Previa Or Placenta Accreta Spectrum\":\n  \"Singleton Delivery Encounters At 37 Plus Weeks Gravida 1 Parity 0, No Previous Births\" ThirtySevenWeeksPlusEncounter\n    where exists ( ( ThirtySevenWeeksPlusEncounter.encounterDiagnosis ( ) ) EncounterDiagnosis\n        where EncounterDiagnosis.code in \"Placenta Accreta Spectrum Previa or Vasa Previa\"\n          or EncounterDiagnosis.code in \"Genital Herpes\"\n    )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 20
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "Delivery Encounter With Abnormal Presentation, Genital Herpes, Placenta Previa, Vasa Previa Or Placenta Accreta Spectrum"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Delivery Encounter With Abnormal Presentation, Genital Herpes, Placenta Previa, Vasa Previa Or Placenta Accreta Spectrum\":\n  \"Encounter With Abnormal Presentation\"\n    union \"Encounter With Genital Herpes, Placenta Previa, Vasa Previa Or Placenta Accreta Spectrum\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 21
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "Denominator Exclusions"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Denominator Exclusions\":\n  \"Delivery Encounter With Abnormal Presentation, Genital Herpes, Placenta Previa, Vasa Previa Or Placenta Accreta Spectrum\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 22
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "SupplementalDataElements"
+      }, {
+        "url": "name",
+        "valueString": "SDE Race"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Race\":\n  Patient.race R\n    return Tuple {\n      codes: R.ombCategory union R.detailed,\n      display: R.text\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 23
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "SDE Race"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Race\":\n  SDE.\"SDE Race\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 24
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "PCMaternal"
+      }, {
+        "url": "name",
+        "valueString": "Variable Calculated Gestational Age"
+      }, {
+        "url": "statement",
+        "valueString": "define \"Variable Calculated Gestational Age\":\n \"Delivery Encounter With Age Range\" DeliveryEncounter\n    let CGA: DeliveryEncounter.calculatedGestationalAge()\n    return {\n      EncounterID: DeliveryEncounter.id,\n      CalculatedCGA: CGA\n    }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 25
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "SDE Variable Calculated Gestational Age"
+      }, {
+        "url": "statement",
+        "valueString": "define \"SDE Variable Calculated Gestational Age\":\n  PCMaternal.\"Variable Calculated Gestational Age\""
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 26
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToString"
+      }, {
+        "url": "statement",
+        "valueString": "define function ToString(value uri): value.value"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 27
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToInterval"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Converts the given [Period](https://hl7.org/fhir/datatypes.html#Period)\nvalue to a CQL DateTime Interval\n@comment: If the start value of the given period is unspecified, the starting\nboundary of the resulting interval will be open (meaning the start of the interval\nis unknown, as opposed to interpreted as the beginning of time).\n*/\ndefine function ToInterval(period FHIR.Period):\n    if period is null then\n        null\n    else\n        if period.\"start\" is null then\n            Interval(period.\"start\".value, period.\"end\".value]\n        else\n            Interval[period.\"start\".value, period.\"end\".value]"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 28
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "toInterval"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Normalizes a value that is a choice of timing-valued types to an equivalent interval\n@comment: Normalizes a choice type of DateTime, Quanitty, Interval<DateTime>, or Interval<Quantity> types\nto an equivalent interval. This selection of choice types is a superset of the majority of choice types that are used as possible\nrepresentations for timing-valued elements in QICore, allowing this function to be used across any resource.\nThe input can be provided as a DateTime, Quantity, Interval<DateTime> or Interval<Quantity>.\nThe intent of this function is to provide a clear and concise mechanism to treat single\nelements that have multiple possible representations as intervals so that logic doesn't have to account\nfor the variability. More complex calculations (such as medication request period or dispense period\ncalculation) need specific guidance and consideration. That guidance may make use of this function, but\nthe focus of this function is on single element calculations where the semantics are unambiguous.\nIf the input is a DateTime, the result a DateTime Interval beginning and ending on that DateTime.\nIf the input is a Quantity, the quantity is expected to be a calendar-duration interpreted as an Age,\nand the result is a DateTime Interval beginning on the Date the patient turned that age and ending immediately before one year later.\nIf the input is a DateTime Interval, the result is the input.\nIf the input is a Quantity Interval, the quantities are expected to be calendar-durations interpreted as an Age, and the result\nis a DateTime Interval beginning on the date the patient turned the age given as the start of the quantity interval, and ending\nimmediately before one year later than the date the patient turned the age given as the end of the quantity interval.\nIf the input is a Timing, an error will be thrown indicating that Timing calculations are not implemented. Any other input will reslt in a null DateTime Interval\n*/\ndefine fluent function toInterval(choice Choice<DateTime, Quantity, Interval<DateTime>, Interval<Quantity>, Timing>):\n  case\n\t  when choice is DateTime then\n    \tInterval[choice as DateTime, choice as DateTime]\n\t\twhen choice is Interval<DateTime> then\n  \t\tchoice as Interval<DateTime>\n\t\twhen choice is Quantity then\n\t\t  Interval[Patient.birthDate + (choice as Quantity),\n\t\t\t  Patient.birthDate + (choice as Quantity) + 1 year)\n\t\twhen choice is Interval<Quantity> then\n\t\t  Interval[Patient.birthDate + (choice.low as Quantity),\n\t\t\t  Patient.birthDate + (choice.high as Quantity) + 1 year)\n\t\twhen choice is Timing then\n      Message(null, true, 'NOT_IMPLEMENTED', 'Error', 'Calculation of an interval from a Timing value is not supported') as Interval<DateTime>\n\t\telse\n\t\t\tnull as Interval<DateTime>\n\tend"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 29
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "PCMaternal"
+      }, {
+        "url": "name",
+        "valueString": "hospitalizationWithEDOBTriageObservation"
+      }, {
+        "url": "statement",
+        "valueString": "define fluent function hospitalizationWithEDOBTriageObservation (TheEncounter Encounter ):\n  /*hospitalizationWithEDOBTriageObservation returns the total interval from the start of any immediately prior emergency department visit or OB Triage visit through the observation visit to the discharge of the given encounter*/\n  TheEncounter Visit\n    let ObsVisit: Last([\"Encounter\": \"Observation Services\"] LastObs\n        where LastObs.period ends 1 hour or less on or before start of Visit.period\n          and LastObs.status = 'finished'\n        sort by \n        end of period\n    ),\n    VisitStart: Coalesce(start of ObsVisit.period, start of Visit.period),\n    EDOBTriageVisit: Last([\"Encounter\": \"ED Visit and OB Triage\"] LastEDOBTriage\n        where LastEDOBTriage.period ends 1 hour or less on or before VisitStart\n          and LastEDOBTriage.status = 'finished'\n        sort by \n        end of period\n    )\n    return Interval[Coalesce(start of EDOBTriageVisit.period, VisitStart), \n    end of Visit.period]"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 30
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "PCMaternal"
+      }, {
+        "url": "name",
+        "valueString": "calculatedGestationalAge"
+      }, {
+        "url": "statement",
+        "valueString": "define fluent function calculatedGestationalAge (TheEncounter Encounter ):\n  //Gestational Age = (280 -(Estimated Delivery Date minus Reference Date/Delivery Date))/7\n ( 280 - ( difference in days between TheEncounter.lastTimeOfDelivery () and TheEncounter.lastEstimatedDeliveryDate( )) ) div 7"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 31
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "PCMaternal"
+      }, {
+        "url": "name",
+        "valueString": "lastTimeOfDelivery"
+      }, {
+        "url": "statement",
+        "valueString": "define fluent function lastTimeOfDelivery (TheEncounter Encounter ):\n  Last([\"SimpleObservation\": \"Date and time of obstetric delivery\"] TimeOfDelivery\n      where TimeOfDelivery.value as DateTime is not null\n        and TimeOfDelivery.status in { 'final', 'amended', 'corrected' }\n        and TimeOfDelivery.effective.earliest () during TheEncounter.hospitalizationWithEDOBTriageObservation ()\n        and TimeOfDelivery.value as DateTime during TheEncounter.hospitalizationWithEDOBTriageObservation()\n      sort by effective.earliest()\n  ).value as DateTime"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 32
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "earliest"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Given an interval, return the starting point if the interval has a starting boundary specified,\notherwise, return the ending point\n*/\ndefine fluent function earliest(choice Choice<DateTime, Quantity, Interval<DateTime>, Interval<Quantity>> ):\n  (choice.toInterval()) period\n    return\n      if (period.\"hasStart\"()) then start of period\n      else end of period"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 33
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "hasStart"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Given an interval, return true if the interval has a starting boundary specified\n(i.e. the start of the interval is not null and not the minimum DateTime value)\n*/\ndefine fluent function hasStart(period Interval<DateTime> ):\n  not ( start of period is null\n      or start of period = minimum DateTime\n  )"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 34
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "PCMaternal"
+      }, {
+        "url": "name",
+        "valueString": "lastEstimatedDeliveryDate"
+      }, {
+        "url": "statement",
+        "valueString": "define fluent function lastEstimatedDeliveryDate (TheEncounter Encounter ):\n  /*This function identifies the last time the EDD was assessed 42 weeks or less prior to or on delivery and stores the result of that assessment.*/\n  Last([\"SimpleObservation\": \"Delivery date Estimated\"] EstimatedDateOfDelivery\n      where EstimatedDateOfDelivery.value as DateTime is not null\n        and EstimatedDateOfDelivery.status in { 'final', 'amended', 'corrected' }\n        and EstimatedDateOfDelivery.effective.earliest ( ) 42 weeks or less before or on TheEncounter.lastTimeOfDelivery ()\n      sort by effective.earliest ( )\n  ).value as DateTime"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 35
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "PCMaternal"
+      }, {
+        "url": "name",
+        "valueString": "lastEstimatedGestationalAge"
+      }, {
+        "url": "statement",
+        "valueString": "define fluent function lastEstimatedGestationalAge (TheEncounter Encounter ):\n  Last([\"SimpleObservation\": \"Estimated Gestational Age at Delivery\"] EstimatedGestationalAge\n  let EGATiming:  EstimatedGestationalAge.effective.earliest() where \n  (EGATiming 24 hours or less before or on TheEncounter.lastTimeOfDelivery () \n  and EstimatedGestationalAge.value is not null \n  and EstimatedGestationalAge.status in { 'final', 'amended', 'corrected' }) or \n      (EGATiming same day as TheEncounter.lastTimeOfDelivery () \n      and EGATiming during TheEncounter.hospitalizationWithEDOBTriageObservation() \n      and EstimatedGestationalAge.value is not null)\n sort by effective.earliest ())\n         .value as Quantity"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 36
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CQMCommon"
+      }, {
+        "url": "name",
+        "valueString": "encounterDiagnosis"
+      }, {
+        "url": "statement",
+        "valueString": "/*  \n@description: Returns the Condition resources referenced by the diagnosis element of the Encounter  \n*/\ndefine fluent function encounterDiagnosis(Encounter Encounter ):\n  Encounter.reasonReference D\n    return singleton from (([ConditionEncounterDiagnosis] union [ConditionProblemsHealthConcerns]) C where D.references(C.id))"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 37
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "QICoreCommon"
+      }, {
+        "url": "name",
+        "valueString": "references"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Returns true if the given reference is to the given resourceId\n@comment: Returns true if the `resourceId` parameter exactly equals the tail of the given reference.\nNOTE: This function assumes resources from the same source server.\n*/\ndefine fluent function references(reference Reference, resourceId String):\n  resourceId = Last(Split(reference.reference, '/'))"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 38
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToConcept"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Converts the given FHIR [CodeableConcept](https://hl7.org/fhir/datatypes.html#CodeableConcept) value to a CQL Concept.\n*/\ndefine function ToConcept(concept FHIR.CodeableConcept):\n    if concept is null then\n        null\n    else\n        System.Concept {\n            codes: concept.coding C return ToCode(C),\n            display: concept.text.value\n        }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 39
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "FHIRHelpers"
+      }, {
+        "url": "name",
+        "valueString": "ToCode"
+      }, {
+        "url": "statement",
+        "valueString": "/*\n@description: Converts the given FHIR [Coding](https://hl7.org/fhir/datatypes.html#Coding) value to a CQL Code.\n*/\ndefine function ToCode(coding FHIR.Coding):\n    if coding is null then\n        null\n    else\n        System.Code {\n          code: coding.code.value,\n          system: coding.system.value,\n          version: coding.version.value,\n          display: coding.display.value\n        }"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 40
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "lastGravida"
+      }, {
+        "url": "statement",
+        "valueString": "define fluent function lastGravida(TheEncounter Encounter):\n  Last([\"SimpleObservation\": \"[#] Pregnancies\"] Gravida\n      where Gravida.value is not null\n        and Gravida.status in { 'final', 'amended', 'corrected' }\n        and Gravida.effective.earliest() 42 weeks or less before TheEncounter.lastTimeOfDelivery()\n      sort by effective.earliest()\n  ).value as Integer"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 41
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "lastParity"
+      }, {
+        "url": "statement",
+        "valueString": "define fluent function lastParity(TheEncounter Encounter):\n  Last([\"SimpleObservation\": \"[#] Parity\"] Parity\n      where Parity.effective.earliest() 42 weeks or less before TheEncounter.lastTimeOfDelivery()\n        and Parity.status in { 'final', 'amended', 'corrected' }\n        and Parity.value is not null\n      sort by effective.earliest()\n  ).value as Integer"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 42
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "lastHistoryPretermBirth"
+      }, {
+        "url": "statement",
+        "valueString": "define fluent function lastHistoryPretermBirth(TheEncounter Encounter):\n  Last([\"SimpleObservation\": \"[#] Births.preterm\"] PretermBirth\n      where PretermBirth.effective.earliest() 42 weeks or less before TheEncounter.lastTimeOfDelivery()\n        and PretermBirth.status in { 'final', 'amended', 'corrected' }\n        and PretermBirth.value is not null\n      sort by effective.earliest()\n  ).value as Integer"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 43
+      } ]
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition",
+      "extension": [ {
+        "url": "libraryName",
+        "valueString": "CMS0334FHIRPCCesareanBirth"
+      }, {
+        "url": "name",
+        "valueString": "lastHistoryTermBirth"
+      }, {
+        "url": "statement",
+        "valueString": "define fluent function lastHistoryTermBirth(TheEncounter Encounter):\n  Last([\"SimpleObservation\": \"[#] Births.term\"] TermBirth\n      where TermBirth.effective.earliest() 42 weeks or less before TheEncounter.lastTimeOfDelivery()\n        and TermBirth.status in { 'final', 'amended', 'corrected' }\n        and TermBirth.value is not null\n      sort by effective.earliest()\n  ).value as Integer"
+      }, {
+        "url": "displaySequence",
+        "valueInteger": 44
+      } ]
+    } ],
+    "name": "EffectiveDataRequirements",
+    "status": "active",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/library-type",
+        "code": "module-definition"
+      } ]
+    },
+    "relatedArtifact": [ {
+      "type": "depends-on",
+      "display": "Library SDE",
+      "resource": "https://madie.cms.gov/Library/SupplementalDataElements|5.1.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library FHIRHelpers",
+      "resource": "https://madie.cms.gov/Library/FHIRHelpers|4.4.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library PCMaternal",
+      "resource": "https://madie.cms.gov/Library/PCMaternal|5.25.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library CQMCommon",
+      "resource": "https://madie.cms.gov/Library/CQMCommon|4.1.000"
+    }, {
+      "type": "depends-on",
+      "display": "Library QICoreCommon",
+      "resource": "https://madie.cms.gov/Library/QICoreCommon|4.0.000"
+    }, {
+      "type": "depends-on",
+      "display": "Code system SNOMEDCT",
+      "resource": "http://snomed.info/sct"
+    }, {
+      "type": "depends-on",
+      "display": "Code system LOINC",
+      "resource": "http://loinc.org"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Encounter Inpatient",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Delivery Procedures",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.59"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Observation Services",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143"
+    }, {
+      "type": "depends-on",
+      "display": "Value set ED Visit and OB Triage",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1029.369"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Estimated Gestational Age at Delivery",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.26"
+    }, {
+      "type": "depends-on",
+      "display": "Value set 37 to 42 Plus Weeks Gestation",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.68"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Delivery of Singleton",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.99"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Cesarean Birth",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.282"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Payer Type",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Abnormal Presentation",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.105"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Placenta Accreta Spectrum Previa or Vasa Previa",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.37"
+    }, {
+      "type": "depends-on",
+      "display": "Value set Genital Herpes",
+      "resource": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.12.1049"
+    } ],
+    "parameter": [ {
+      "name": "Measurement Period",
+      "use": "in",
+      "min": 0,
+      "max": "1",
+      "type": "Period"
+    }, {
+      "name": "Numerator",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Denominator",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Initial Population",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "Denominator Exclusions",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "SDE Sex",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "Coding"
+    }, {
+      "name": "SDE Payer",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    }, {
+      "name": "SDE Ethnicity",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "Resource"
+    }, {
+      "name": "SDE Race",
+      "use": "out",
+      "min": 0,
+      "max": "1",
+      "type": "Resource"
+    }, {
+      "name": "SDE Variable Calculated Gestational Age",
+      "use": "out",
+      "min": 0,
+      "max": "*",
+      "type": "Resource"
+    } ],
+    "dataRequirement": [ {
+      "type": "Patient",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ],
+      "mustSupport": [ "extension", "birthDate", "birthDate.value", "url" ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type", "period", "status", "status.value", "reasonCode", "id", "id.value" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143"
+      } ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type", "period", "status", "status.value", "reasonCode", "id", "id.value" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1029.369"
+      } ]
+    }, {
+      "type": "Encounter",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ],
+      "mustSupport": [ "type", "status", "status.value", "period", "reasonCode", "id", "id.value" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "status", "status.value", "performed" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.59"
+      } ]
+    }, {
+      "type": "Procedure",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ],
+      "mustSupport": [ "code", "performed", "status", "status.value" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.282"
+      } ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ],
+      "mustSupport": [ "code", "value", "status", "status.value", "effective" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://loinc.org",
+          "code": "93857-1",
+          "display": "Date and time of obstetric delivery"
+        } ]
+      } ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ],
+      "mustSupport": [ "code", "value", "status", "status.value", "effective" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://loinc.org",
+          "code": "11778-8",
+          "display": "Delivery date Estimated"
+        } ]
+      } ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ],
+      "mustSupport": [ "code", "effective", "value", "status", "status.value" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.26"
+      } ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ],
+      "mustSupport": [ "code", "value", "status", "status.value", "effective" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://loinc.org",
+          "code": "11996-6",
+          "display": "[#] Pregnancies"
+        } ]
+      } ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ],
+      "mustSupport": [ "code", "effective", "status", "status.value", "value" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://loinc.org",
+          "code": "11977-6",
+          "display": "[#] Parity"
+        } ]
+      } ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ],
+      "mustSupport": [ "code", "effective", "status", "status.value", "value" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://loinc.org",
+          "code": "11637-6",
+          "display": "[#] Births.preterm"
+        } ]
+      } ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ],
+      "mustSupport": [ "code", "effective", "status", "status.value", "value" ],
+      "codeFilter": [ {
+        "path": "code",
+        "code": [ {
+          "system": "http://loinc.org",
+          "code": "11639-2",
+          "display": "[#] Births.term"
+        } ]
+      } ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ],
+      "mustSupport": [ "value" ]
+    }, {
+      "type": "Observation",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ],
+      "mustSupport": [ "code", "effective", "status", "status.value" ],
+      "codeFilter": [ {
+        "path": "code",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.105"
+      } ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+    }, {
+      "type": "Condition",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+    }, {
+      "type": "Coverage",
+      "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ],
+      "mustSupport": [ "type", "period" ],
+      "codeFilter": [ {
+        "path": "type",
+        "valueSet": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591"
+      } ]
+    } ]
+  } ],
+  "extension": [ {
+    "id": "supplementalDataGuidance",
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-supplementalDataGuidance",
+    "extension": [ {
+      "url": "guidance",
+      "valueString": "For every patient evaluated by this measure also identify payer, race, ethnicity, sex and calculated gestational age\n "
+    }, {
+      "url": "usage",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+          "code": "supplemental-data",
+          "display": "Supplemental Data"
+        } ],
+        "text": "Supplemental Data Guidance"
+      }
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-effectiveDataRequirements",
+    "valueReference": {
+      "reference": "#effective-data-requirements"
+    }
+  } ],
+  "url": "https://madie.cms.gov/Measure/CMS0334FHIRPCCesareanBirth",
+  "identifier": [ {
+    "use": "usual",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "short-name",
+        "display": "Short Name"
+      } ]
+    },
+    "system": "https://madie.cms.gov/measure/shortName",
+    "value": "CMS0334FHIR"
+  }, {
+    "use": "official",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "version-independent",
+        "display": "Version Independent"
+      } ]
+    },
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:uuid:e5be4439-ce75-43cc-aabc-856aec66e841"
+  }, {
+    "use": "official",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "version-specific",
+        "display": "Version Specific"
+      } ]
+    },
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:uuid:cc4a8b5e-f7d8-42f2-95ad-aef56143af99"
+  }, {
+    "use": "official",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "endorser",
+        "display": "Endorser"
+      } ]
+    },
+    "system": "https://madie.cms.gov/measure/cbeId",
+    "value": "0471e",
+    "assigner": {
+      "display": "CMS Consensus Based Entity"
+    }
+  }, {
+    "use": "official",
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/artifact-identifier-type",
+        "code": "publisher",
+        "display": "Publisher"
+      } ]
+    },
+    "system": "https://madie.cms.gov/measure/cmsId",
+    "value": "334FHIR",
+    "assigner": {
+      "display": "CMS"
+    }
+  } ],
+  "version": "0.6.000",
+  "name": "CMS0334FHIRPCCesareanBirth",
+  "title": "Cesarean BirthFHIR",
+  "status": "active",
+  "experimental": false,
+  "date": "2025-06-21T01:50:02+00:00",
+  "publisher": "The Joint Commission",
+  "contact": [ {
+    "telecom": [ {
+      "system": "url",
+      "value": "https://www.jointcommission.org/"
+    } ]
+  } ],
+  "description": "Nulliparous patients with a term, singleton baby in a vertex position delivered by cesarean birth",
+  "usage": "Vertex position is modeled implicitly, as the measure excludes deliveries with abnormal presentations.\n\nPatients who do not receive prenatal care and have no documented gestational age or estimated due date are implicitly excluded from the measure, as gestational age is required to meet denominator criteria. \n\nThis measure allows for 3 approaches to determine gestational age (GA) in the following order of precedence:\n\n1.  The GA is calculated using the American College of Obstetricians and Gynecologists ReVITALize guidelines.*\n2.  When the calculated GA is not available, the GA is obtained from a discrete field in the electronic health record. The intent is to capture the last estimated GA in the interval starting 24 hours or less prior to delivery and ending before midnight on the same day of delivery.\n3.  The GA is based on ICD10 or SNOMED codes indicative of weeks gestation.  This option is only used when results from items #1 and #2 (see above) are not available.\n \n*ACOG ReVITALize Guidelines for Calculating Gestational Age (ACOG, 2014):      \n     \n               Gestational Age = (280-(EDD minus Reference Date))/7\n\n--Estimated Due Date (EDD):  The best obstetrical Estimated Due Date is determined by last menstrual period if confirmed by early ultrasound or no ultrasound performed, or early ultrasound if no known last menstrual period or the ultrasound is not consistent with last menstrual period, or known date of fertilization (e.g., assisted reproductive technology) \n--Reference Date is the date on which you are trying to determine gestational age. For purposes of this dQM, Reference Date would be the Date of Delivery.   \n\nNote however the calculation may yield a non-whole number, and gestational age should be rounded off to the nearest completed week. For example, an infant born on the 5th day of the 36th week (35 weeks and 5/7 days) is at a gestational age of 35 weeks, not 36 weeks.\n\nThe timing relationship of relevantDatetime 42 weeks or less before TimeOfDelivery is applied to the data elements of parity, gravida, preterm/term live births for which prenatal records may include relevant information. \n\nNote: The dQM and chart-based measure slightly digress in the denominator and denominator exclusion logic. The chart-based measure excludes single stillbirth and patients with multiple gestations from the denominator. These concepts are mutually exclusive of the denominator requirement of live singleton newborn and therefore the logic does not address single stillbirth nor multiple gestation.\n\nParity, preterm and term live births may be updated by the electronic health record software or by clinicians during a delivery encounter. To capture the pre-delivery value, organizations may need to create a rule or calculation to capture the number prior to the delivery start time.\n\n\"Gravida\", \"PretermBirth\", \"TermBirth\" and \"Parity\" results should be submitted via QRDA I as integer, and not as number or quantity.\n\nDefinitions:  \nParity: The number of pregnancies reaching 20 weeks gestation regardless of the number of fetuses or outcomes\nGravidity: The number of pregnancies, current and past, regardless of the pregnancy outcome  \nPreterm Birth: The number of births  >= 20 weeks and < 37 weeks gestation, regardless of outcome \nTerm Birth: The number of births >= 37 weeks gestation, regardless of outcome\nNulliparous: Parity = 0 or Gravidity = 1 or Preterm & Term Births both = 0.\n\nNote regarding Improvement Notation:  Decreased score indicates improvement - The Joint Commission does not want to encourage inappropriately low Cesarean rates that may be unsafe to patients. Acceptable PC-02 rates are 30% or lower, however there is not an established threshold for what rate may be too low. PC-06 serves as a balancing measure for PC-02 to guard against any unanticipated or unintended consequences and to identify unforeseen complications that might arise as a result of quality improvement activities and efforts for this measure. In order to identify areas for improvement, hospitals may want to review results based on specific ICD-10 codes or patient populations. Data could then be analyzed further determine specific patterns or trends to help reduce cesarean births.\n\nThis dQM is an episode-based measure.  An episode is defined as each inpatient hospitalization or encounter that ends during the measurement period.\n\nThis FHIR-based measure has been derived from the QDM-based measure: CMS334v7. Please refer to the HL7 QI-Core Implementation Guide (https://hl7.org/fhir/us/qicore/STU6/) for more information on QI-Core and mapping recommendations from QDM to QI-Core STU 6 (https://hl7.org/fhir/us/qicore/STU6/qdm-to-qicore.html).",
+  "copyright": "Measure specifications are in the Public Domain.\n\nLOINC(R) copyright 2004-2024 Regenstrief Institute, Inc. This material contains SNOMED Clinical Terms(R) (SNOMED CT[R]) copyright 2004-2024 International Health Terminology Standards Development Organisation. ICD-10 copyright 2024 World Health Organization. All Rights Reserved.",
+  "effectivePeriod": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "author": [ {
+    "name": "The Joint Commission",
+    "telecom": [ {
+      "system": "url",
+      "value": "https://www.jointcommission.org/"
+    } ]
+  } ],
+  "relatedArtifact": [ {
+    "type": "citation",
+    "citation": "CITATION - Agency for Healthcare Research and Quality. (2002). AHRQ Quality Indicators Guide to Inpatient Quality Indicators: Quality of Care in Hospitals Volume, Mortality, and Utilization. Revision 4 (2004, December 22). AHRQ Pub. No. 02-RO204.\n"
+  }, {
+    "type": "citation",
+    "citation": "Citation - American College of Obstetricians and Gynecologists, & Society for Maternal-Fetal Medicine. (2018). Obstetric Care Consensus No. 7: Placenta Accreta Spectrum. Obstetrics and Gynecology, 132(6), e259–e275. https://doi.org/10.1097/AOG.0000000000002983\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - American College of Obstetricians and Gynecologists. (2000). Task Force on Cesarean Delivery Rates. Evaluation of Cesarean Delivery. (Developed under the direction of the Task Force on Cesarean Delivery Rates, Roger K. Freeman, MD, Chair, Arnold W. Cohen, MD, Richard Depp III, MD, Fredric D. Frigoletto Jr, MD, Gary D.V. Hankins, MD, Ellice Lieberman, MD, DrPH, M. Kathryn Menard, MD, David A. Nagey, MD, Carol W. Saffold, MD, Lisa Sams, RNC, MSN and ACOG Staff: Stanley Zinberg, MD, MS, Debra A. Hawks, MPH, and Elizabeth Steele)\n"
+  }, {
+    "type": "citation",
+    "citation": "Citation - American College of Obstetricians and Gynecologists. (2014). Revitalize: Obstetrics Data Definitions Version 1.0. American College of Obstetricians and Gynecologists. Revitalize: Obstetrics Data Definitions Version 1.0 - Search (bing.com)\n"
+  }, {
+    "type": "citation",
+    "citation": "Citation - American College of Obstetricians and Gynecologists. (2020). ACOG Practice Bulletin Number 220: Management of Genital Herpes in Pregnancy. Obstetrics & Gynecology, 135(5), e193-e200.\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Bailit, J.L., Garrett, J.M., Miller, W.C., McMahon, M.J., & Cefalo, R.C. (2002). Hospital primary cesarean delivery rates and the risk of poor neonatal outcomes. American Journal Obstetrics & Gynecology, 187(3):721-7. https://doi.org/10.1067/mob.2002.125886\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Berkowitz, G. S., Fiarman, G. S., Mojica, M. A., Bauman, J., & de Regt, R. H. (1989). Effect of physician characteristics on the cesarean birth rate. American Journal of Obstetrics and Gynecology, 161(1), 146–149. https://doi.org/10.1016/0002-9378(89)90252-4\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Centers for Disease Control and Prevention. (2020) Recent trends in vaginal birth after cesarean delivery: United States, 2016-2018. Retrieved from National Center for Health Statistics: https://www.cdc.gov/nchs/products/databriefs/db359.htm\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Goyert, G. L., Bottoms, S. F., Treadwell, M. C., & Nehra, P. C. (1989). The physician factor in cesarean birth rates. The New England Journal of Medicine, 320(11), 706–709. https://doi.org/10.1056/NEJM198903163201106\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Kozhimannil, K. B., Law, M. R., & Virnig, B. A. (2013). Cesarean delivery rates vary tenfold among US hospitals; reducing variation may address quality and cost issues. Health Affairs, 32(3), 527-535. https://doi.org/10.1377/hlthaff.2012.1030\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Luthy, D. A., Malmgren, J. A., Zingheim, R. W., & Leininger, C. J. (2003). Physician contribution to a cesarean delivery risk model. American Journal of Obstetrics and Gynecology, 188(6), 1579–1587. https://doi.org/10.1067/mob.2003.389\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Main E. K., Bloomfield, L., & Hunt, G. (2004). Development of a large-scale obstetric quality-improvement program that focused on the nulliparous patient at term. American Journal of Obstetrics and Gynecology, 190(6), 1747-56. https://doi.org/10.1016/j.ajog.2004.02.055\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Main, E. K., Chang, S. C., Cape, V., Sakowski, C., Smith, H., & Vasher, J. (2019). Safety assessment of a large-scale improvement collaborative to reduce nulliparous cesarean delivery rates. Obstetrics and Gynecology, 133(4), 613-623. https://doi.org/10.1097/AOG.0000000000003109\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Main, E. K., Moore, D., Farrell, B., Schimmel, L. D., Altman, R. J., Abrahams, C., . . . Sterling, J. (2006). Is there a useful cesarean birth measure? Assessment of the nulliparous term singleton vertex cesarean birth rate as a tool for obstetric quality improvement. American Journal of Obstetrics and Gynecology, 194(6), 1644–1651. https://doi.org/10.1016/j.ajog.2006.03.013\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Main, E. K., Morton, C. H., Melsop, K., Hopkins, D., Giuliani, G., & Gould, J. B. (2012). Creating a public agenda for maternity safety and quality in cesarean delivery. Obstetrics and Gynecology, 120(5), 1194-1198. https://doi.org/10.1097/aog.0b013e31826fc13d\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Rosenstein, M. G., Chang, S. C., Sakowski, C., Markow, C., Teleki, S., Lang, L., . . . Main, E. K. (2021). Hospital quality improvement interventions, statewide policy initiatives, and rates of cesarean delivery for nulliparous, term, singleton, vertex births in California. JAMA, 325(16), 1631-1639. https://doi.org/10.1001/jama.2021.3816\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Sakala, C., Belanoff, C., & Declercq, E. R. (2020). Factors Associated with Unplanned Primary Cesarean Birth: Secondary analysis of the listening to mothers in California survey. BMC Pregnancy and Childbirth, 20(1), 462. https://doi.org/10.1186/s12884-020-03095-4\n"
+  }, {
+    "type": "citation",
+    "citation": "Citation - Society of Maternal-Fetal (SMFM) Publications Committee, Sinkey, R. G., Odibo, A. O., & Dashe, J. S. (2015). #37: Diagnosis and management of vasa previa. American Journal of Obstetrics & Gynecology, 213(5), 615-619. https://doi.org/10.1016/j.ajog.2015.08.031\n"
+  }, {
+    "type": "citation",
+    "citation": "CITATION - Symum, H., & Zayas-Castro, J. L. (2023). A multistate decomposition analysis of cesarean rate variations, associated health outcomes, and financial implications in the United States. American Journal of Perinatology, 40(13), 1473-1483. https://doi.org/10.1055/s-0041-1736538\n"
+  } ],
+  "library": [ "https://madie.cms.gov/Library/CMS0334FHIRPCCesareanBirth" ],
+  "disclaimer": "These performance measures are not clinical guidelines, do not establish a standard of medical care, and have not been tested for all potential applications. The measures and specifications are provided without warranty.",
+  "rationale": "The removal of any pressure to not perform a cesarean birth has led to a skyrocketing of hospital, state and national cesarean birth (CB) rates. Some hospitals' CB rates were over 50%. Hospitals with CB rates at 15-20% have infant outcomes that are just as good and better maternal outcomes (Symum & Zayas-Castro, 2023). There is no data that higher rates improve any outcomes, yet the CB rates continue to rise (Bailit, Garrett, Miller, McMahon, & Cefalo, 2002; Main, Bloomfield, & Hunt, 2004). This measure seeks to focus attention on the most variable portion of the CB epidemic, the term labor CB in nulliparous patients. This population segment accounts for the large majority of the variable portion of the CB rate and is the area most affected by subjectivity.\n\nAs compared to other CB measures, what is different about Nulliparous, Term, Singleton, Vertex (NTSV) CB rate is that there are clear cut quality improvement activities that can be done to address the differences. Main et al. (2012) found that over 60% of the variation among hospitals can be attributed to first birth labor induction rates and first birth early labor admission rates (Main et al., 2006). The results showed if labor was forced when the cervix was not ready the outcomes were poorer. Rosenstein et al. (2021) also showed that labor and delivery guidelines can make a difference in labor outcomes. Many authors have shown that physician factors, rather than patient characteristics or obstetric diagnoses are the major driver for the difference in rates within a hospital (Berkowitz, Fiarman, Mojica, Bauman, & de Regt, 1989; Goyert, Bottoms, Treadwell, & Nehra, 1989; Luthy, Malmgren, Zingheim, & Leininger, 2003; Symum & Zayas-Castro, 2023; Main et al., 2006). The dramatic variation in cesarean rates seen in all populations studied is striking. Cesarean rates varied tenfold in US hospitals nationwide across hospitals (Agency for Healthcare Research and Quality [AHRQ], 2002), from 7.1% to 69.9%, and there was a 15-fold variation among low-risk women, from 2.4% to 36.5% (Kozhimannil, Law, & Virnig, 2013).\n\nA reduction in the number of NTSV patients delivering by cesarean birth will result in increased patient safety, a substantial decrease in maternal and neonatal morbidity and substantial savings in health care costs (Main et al., 2019). Successful quality improvement efforts incorporate audit and feedback strategies combined with provider and nurse education, guidelines and peer review.\n\nThe measure will assist health care organizations to track NTSV patients delivering by cesarean birth to reduce the occurrence. Nulliparous patients have 4-6 times the cesarean birth rate than multiparous patients thus the NTSV population is the largest driver of primary cesarean birth rate (Sakala, Belanoff, & Declercq, 2020). NTSV has a large variation among facilities, thus identifying an important population on which to focus quality improvement efforts.\n\nIn accordance with the American College of Obstetricians and Gynecologists (ACOG) recommendations (2020), cesarean delivery is indicated for patients with active genital lesions of genital herpes or prodromal symptoms (i.e., vulvar pain or burning at delivery) that may indicate viral shedding. Therefore, the measure will exclude encounters with a diagnosis of active genital herpes.\n\nIn addition, the accepted approach to treat placenta accreta spectrum, or the range of pathologic adherence of the placenta that includes placenta increta, placenta percreta, and placenta accreta, as well as placenta previa, is cesarean delivery (ACOG & Society for Maternal-Fetal Medicine (SMFM), 2018). Vasa previa is an indication for cesarean delivery (SMFM Publications Committee, Sinkey, Odibo, & Dashe, 2015). Accordingly, placenta previa, vasa previa, and placenta accreta spectrum are all qualifying conditions to also be excluded from the measure. \n \nUltimately, a reduction in primary cesarean births will reduce the number of patients having repeat cesarean births (almost 90% of mothers who have a primary cesarean birth will have subsequent cesarean birth (Centers for Disease Control and Prevention, 2020)). Thus, improvement in the rates of cesarean birth for the first birth will reduce the morbidity of all future births and avoid all the controversies with trial of labor after cesarean/elective repeat cesareans.",
+  "clinicalRecommendationStatement": "The (ACOG) report, Evaluation of Cesarean Delivery (2000), recognizes the importance of the Nulliparous, Term, Singleton, Vertex (NTSV) population as the optimal focus for measurement and quality improvement action. A reduction in the number of nulliparous patients with live term singleton newborns in vertex position delivering by cesarean birth will result in increased patient safety, a substantial decrease in maternal and neonatal morbidity and substantial savings in health care costs.",
+  "group": [ {
+    "id": "Group_1",
+    "extension": [ {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-scoring",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-scoring",
+          "code": "proportion",
+          "display": "Proportion"
+        } ]
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-populationBasis",
+      "valueCode": "Encounter"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-type",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-type",
+          "code": "outcome",
+          "display": "Outcome"
+        } ]
+      }
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-rateAggregation",
+      "valueCode": "None"
+    }, {
+      "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-improvementNotation",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-improvement-notation",
+          "code": "decrease",
+          "display": "Decreased score indicates improvement"
+        } ]
+      }
+    }, {
+      "url": "http://hl7.org/fhir/StructureDefinition/cqf-improvementNotationGuidance",
+      "valueMarkdown": "The Joint Commission does not encourage inappropriately low Cesarean rates that may be unsafe to patients. Acceptable PC-02 rates are 30% or lower, however there is not an established threshold for what rate may be too low. PC-06 serves as a balancing measure for PC-02 to guard against any unanticipated or unintended consequences and to identify unforeseen complications that might arise as a result of quality improvement activities and efforts for this measure. In order to identify areas for improvement, hospitals may want to review results based on specific ICD-10 codes or patient populations. Data could then be analyzed further to determine specific patterns or trends to help reduce cesarean births."
+    } ],
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "description": "Inpatient hospitalizations for patients age greater than or equal to 8 years and less than 65 admitted to the hospital for inpatient acute care who undergo a delivery procedure with a discharge date during the measurement period",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Initial Population"
+      }
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "description": "Inpatient hospitalizations for nulliparous patients who delivered a live term singleton newborn greater than or equal to 37 weeks' gestation\n\nSee Guidance and Definition Sections for more details.",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Denominator"
+      }
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "description": "Inpatient hospitalizations for patients with any of the following conditions during the encounter:\n-abnormal presentation\n-genital herpes\n -placenta previa\n-vasa previa\n- placenta accreta\n-placenta increta\n-placenta percreta",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Denominator Exclusions"
+      }
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "description": "Inpatient hospitalizations for patients who deliver by cesarean section",
+      "criteria": {
+        "language": "text/cql-identifier",
+        "expression": "Numerator"
+      }
+    } ]
+  } ],
+  "supplementalData": [ {
+    "id": "sde-ethnicity",
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Ethnicity",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Ethnicity"
+    }
+  }, {
+    "id": "sde-race",
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Race",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Race"
+    }
+  }, {
+    "id": "sde-sex",
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Sex",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Sex"
+    }
+  }, {
+    "id": "sde-payer",
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Payer",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Payer"
+    }
+  }, {
+    "id": "sde-variable-calculated-gestational-age",
+    "usage": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/measure-data-usage",
+        "code": "supplemental-data"
+      } ]
+    } ],
+    "description": "SDE Variable Calculated Gestational Age",
+    "criteria": {
+      "language": "text/cql-identifier",
+      "expression": "SDE Variable Calculated Gestational Age"
+    }
+  } ]
+}

@@ -1,0 +1,112 @@
+{
+  "resourceType": "Group",
+  "id": "CMS871HHHyperFHIR",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS871HHHyperFHIR"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/b61275a4-b5d3-4d47-8be2-9e6cfe03832c",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b61275a4-b5d3-4d47-8be2-9e6cfe03832c",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/79283b75-4588-428b-b4e6-50ebb9b9acf6",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/79283b75-4588-428b-b4e6-50ebb9b9acf6",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fd579f44-757b-4c98-9b09-27b17b935650",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fd579f44-757b-4c98-9b09-27b17b935650",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/76dc2b63-710c-4ac5-afef-f76c2ef07dcd",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/76dc2b63-710c-4ac5-afef-f76c2ef07dcd",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/98533ccd-24ee-41b3-aab2-ef6cbf89e00d",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/98533ccd-24ee-41b3-aab2-ef6cbf89e00d",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/48c2ed10-7c2d-4130-a215-a6f72b169111",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/48c2ed10-7c2d-4130-a215-a6f72b169111",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/null",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/patient-113a6e72-7049-4a7f-90cf-5ec3435b0dee",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/93c2a45f-f96e-4c48-a102-a35e38e8ec40",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/93c2a45f-f96e-4c48-a102-a35e38e8ec40",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/baf4bf9c-5aa3-422d-a5d2-fdb37b0c8f44",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/baf4bf9c-5aa3-422d-a5d2-fdb37b0c8f44",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7507debb-a991-4de0-bd71-634a684ddcd7",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7507debb-a991-4de0-bd71-634a684ddcd7",
+      "display": "Patient Example"
+    }
+  } ]
+}

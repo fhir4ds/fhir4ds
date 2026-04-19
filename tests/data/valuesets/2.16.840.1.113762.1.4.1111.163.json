@@ -1,0 +1,207 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1111.163",
+  "meta": {
+    "versionId": "20",
+    "lastUpdated": "2026-02-07T01:00:59.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2026-02-07"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2026-02-07"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.163",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1111.163"
+    }
+  ],
+  "version": "20260207",
+  "name": "EmergencyDepartmentEvaluationNote",
+  "title": "Emergency Department Evaluation Note",
+  "status": "active",
+  "date": "2026-02-07T01:00:59-05:00",
+  "publisher": "Acumen OP Steward",
+  "expansion": {
+    "identifier": "urn:uuid:eb36b4f8-b450-4013-9e3c-5029704a2f6d",
+    "timestamp": "2026-03-13T12:53:27-04:00",
+    "total": 25,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "15507-7",
+        "display": "Emergency department Progress note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "28568-4",
+        "display": "Physician Emergency department Note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "34111-5",
+        "display": "Emergency department Note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "34878-9",
+        "display": "Emergency medicine Note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "51846-4",
+        "display": "Emergency department Consult note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "54094-8",
+        "display": "Emergency department Triage note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "55176-2",
+        "display": "ED arrival and first assessment data at First encounter Set DEEDS"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "55177-0",
+        "display": "ED History and Physical Examination Data Set DEEDS"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "68552-9",
+        "display": "Emergency medicine Emergency department Admission evaluation note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "74211-4",
+        "display": "Emergency department+Hospital Summary of episode note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "78249-0",
+        "display": "Emergency department Admission history and physical note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "78307-6",
+        "display": "Emergency department History and physical note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "78337-3",
+        "display": "Emergency department Initial evaluation note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "78341-5",
+        "display": "Emergency department Transfer summary note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "80741-2",
+        "display": "Emergency medicine Emergency department Plan of care note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "80746-1",
+        "display": "Emergency department Plan of care note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "83818-5",
+        "display": "Attending Emergency department Note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "89883-3",
+        "display": "Emergency medicine Telehealth Note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "96335-5",
+        "display": "Emergency department Summary note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "97659-7",
+        "display": "Emergency medicine Emergency department Admission history and physical note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "97660-5",
+        "display": "Emergency medicine Emergency department Evaluation note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "97666-2",
+        "display": "Emergency medicine Emergency department History and physical note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "97667-0",
+        "display": "Emergency medicine Emergency department Initial evaluation note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "97669-6",
+        "display": "Emergency medicine Emergency department Progress note"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "97670-4",
+        "display": "Emergency medicine Emergency department Transfer summary note"
+      }
+    ]
+  }
+}

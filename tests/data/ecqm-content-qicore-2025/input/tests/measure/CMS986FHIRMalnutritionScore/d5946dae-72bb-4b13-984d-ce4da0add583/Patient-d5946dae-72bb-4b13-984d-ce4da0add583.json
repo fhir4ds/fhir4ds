@@ -1,0 +1,61 @@
+{
+  "resourceType": "Patient",
+  "id": "d5946dae-72bb-4b13-984d-ce4da0add583",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2106-3",
+        "display": "White",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "White"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Hispanic or Latino"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248153007"
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://madie.cms.gov/",
+    "value": "FirstMinMP"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "text": "FirstMinMP",
+    "family": "MSROBSPass4",
+    "given": [ "FirstMinMP" ]
+  } ],
+  "gender": "male",
+  "birthDate": "2007-03-02",
+  "address": [ {
+    "text": "FirstMinMP, Screened Not at risk Assessed Severely Malnourished Diagnosed Care Plan, ID=FirstMinMP, DOB: 03 Feb 2007"
+  } ]
+}

@@ -1,0 +1,206 @@
+{
+  "resourceType": "Bundle",
+  "id": "610965b898086b538055c14a",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/243bc4d8-841e-4760-a65b-13013bf5204c",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "243bc4d8-841e-4760-a65b-13013bf5204c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "text": {
+        "status": "generated",
+        "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">EncOverlapsMPStart <b>IPPFAIL </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>80993906fee6145b7a0aa9099fda8108238f7d436ea84320e27372252a04acb5</td></tr><tr><td>Date of birth</td><td><span>31 July 1992</span></td></tr></tbody></table></div>"
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "610965b898086b538055c14a"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "IPPFail",
+        "given": [ "EncOverlapsMPStart" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1994-07-31"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/243bc4d8-841e-4760-a65b-13013bf5204c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/1481c34c-400b-4b8b-9bc2-8d491882bc4c",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "1481c34c-400b-4b8b-9bc2-8d491882bc4c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "code": "99385"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/243bc4d8-841e-4760-a65b-13013bf5204c"
+      },
+      "period": {
+        "start": "2025-12-31T23:59:00.000+00:00",
+        "end": "2026-01-01T08:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/1481c34c-400b-4b8b-9bc2-8d491882bc4c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/b6ae0f72-b565-489f-878c-ddace55e59de",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "b6ae0f72-b565-489f-878c-ddace55e59de",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "954a14b6-27de-4287-b687-701f802221a5-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "243bc4d8-841e-4760-a65b-13013bf5204c"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#954a14b6-27de-4287-b687-701f802221a5-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient qualifies by age but qualifying encounter starts before measurement period start."
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS349FHIRHIVScreening",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/243bc4d8-841e-4760-a65b-13013bf5204c"
+      }, {
+        "reference": "Encounter/1481c34c-400b-4b8b-9bc2-8d491882bc4c"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/b6ae0f72-b565-489f-878c-ddace55e59de"
+    }
+  } ]
+}

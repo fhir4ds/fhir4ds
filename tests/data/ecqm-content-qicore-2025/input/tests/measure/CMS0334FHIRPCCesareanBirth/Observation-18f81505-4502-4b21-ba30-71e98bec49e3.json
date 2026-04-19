@@ -1,0 +1,25 @@
+{
+  "resourceType": "Observation",
+  "id": "18f81505-4502-4b21-ba30-71e98bec49e3",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "exam",
+      "display": "exam",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "93857-1"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/298c7561-670d-426e-8df0-28667037b43c"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "resourceType": "Encounter",
+  "id": "de60cb2d-b25f-43a9-a700-2135adef38a2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "183452005",
+      "display": "Emergency hospital admission (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/0e3be52f-723e-4df4-a584-337daa19e259"
+  },
+  "period": {
+    "start": "2026-01-01T00:01:00.000+00:00",
+    "end": "2026-01-02T08:30:00.000+00:00"
+  },
+  "hospitalization": {
+    "dischargeDisposition": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "183919006",
+        "display": "Urgent admission to hospice (procedure)",
+        "userSelected": true
+      } ]
+    }
+  }
+}

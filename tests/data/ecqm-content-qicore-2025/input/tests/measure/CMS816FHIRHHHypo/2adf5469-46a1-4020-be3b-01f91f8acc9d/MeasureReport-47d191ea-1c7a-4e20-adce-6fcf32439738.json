@@ -1,0 +1,85 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "47d191ea-1c7a-4e20-adce-6fcf32439738",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "c21905ac-c723-4ccf-a193-f597bcaa88e2-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "2adf5469-46a1-4020-be3b-01f91f8acc9d"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#c21905ac-c723-4ccf-a193-f597bcaa88e2-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Encounter with meds and 3 glucose labs. All results are less than 40, and all within 24 hours of hypo med. Meets num = 1 harm per encounter."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS816FHIRHHHypo",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Encounter/89916ba0-2e88-4ad5-9173-a9d6d8e06c3b"
+  }, {
+    "reference": "MedicationAdministration/9a72d000-1f3b-409b-a8fb-4774cc633b5e"
+  }, {
+    "reference": "Observation/24be7109-b52d-4ffc-85e4-796bcb54082c"
+  }, {
+    "reference": "Observation/320be7ef-79f0-4383-af1a-f78b289a12e2"
+  }, {
+    "reference": "Observation/a3cbefb7-84df-409e-85be-0fe887598d05"
+  }, {
+    "reference": "Patient/2adf5469-46a1-4020-be3b-01f91f8acc9d"
+  } ]
+}

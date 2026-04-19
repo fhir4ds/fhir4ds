@@ -1,0 +1,39 @@
+{
+  "resourceType": "Encounter",
+  "id": "0ae1f051-bc9d-470d-9e66-103eedf67bf7",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "183452005",
+      "display": "Emergency hospital admission (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/f049e76a-aef1-4e8f-a8bd-dfdb419de551"
+  },
+  "period": {
+    "start": "2026-12-29T12:00:00.000+00:00",
+    "end": "2026-12-31T12:15:00.000+00:00"
+  },
+  "hospitalization": {
+    "dischargeDisposition": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "306701001",
+        "display": "Discharge to community hospital (procedure)",
+        "userSelected": true
+      } ]
+    }
+  }
+}

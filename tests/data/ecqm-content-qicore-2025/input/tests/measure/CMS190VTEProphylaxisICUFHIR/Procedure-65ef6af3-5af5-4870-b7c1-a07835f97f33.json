@@ -1,0 +1,38 @@
+{
+  "resourceType": "Procedure",
+  "id": "65ef6af3-5af5-4870-b7c1-a07835f97f33",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-11-01T13:35:00.000+00:00"
+  } ],
+  "status": "not-done",
+  "statusReason": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "443390004",
+      "display": "Refusal of treatment by patient (situation)",
+      "userSelected": true
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2025-03",
+      "code": "442410008",
+      "display": "Application of venous foot pump (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/632831b0-1ebf-47b5-b439-3a124cd77c37"
+  },
+  "_performedDateTime": {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "not-performed"
+    } ]
+  }
+}

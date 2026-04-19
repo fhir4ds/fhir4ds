@@ -1,0 +1,70 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1045.99",
+  "meta": {
+    "versionId": "31",
+    "lastUpdated": "2026-02-04T14:15:55.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2021-06-11"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2021-06-11"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.99",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1045.99"
+    }
+  ],
+  "version": "20210611",
+  "name": "DeliveryOfSingleton",
+  "title": "Delivery of Singleton",
+  "status": "active",
+  "experimental": false,
+  "date": "2021-06-11T01:01:24-04:00",
+  "publisher": "Joint Commission",
+  "expansion": {
+    "identifier": "urn:uuid:8bd4f5fa-5d70-4800-b165-88f1b6a413ed",
+    "timestamp": "2026-03-13T13:02:20-04:00",
+    "total": 2,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "169826009",
+        "display": "Single live birth from singleton pregnancy (finding)"
+      },
+      {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2026",
+        "code": "Z37.0",
+        "display": "Single live birth"
+      }
+    ]
+  }
+}

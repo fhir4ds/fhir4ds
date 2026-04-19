@@ -1,0 +1,365 @@
+{
+  "resourceType": "Bundle",
+  "id": "4616513133030",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/ab48e0c0-6543-4537-8f00-bfcdcba7a81b",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "ab48e0c0-6543-4537-8f00-bfcdcba7a81b",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2076-8",
+            "display": "Native Hawaiian or Other Pacific Islander"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Native Hawaiian or Other Pacific Islander"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "60d4bda907206d58cd96b128"
+      } ],
+      "name": [ {
+        "family": "NUMERFail",
+        "given": [ "BCGBeforeStagingBackNotClinicallyRelevant" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1951-12-25"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/ab48e0c0-6543-4537-8f00-bfcdcba7a81b"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/f4f59561-ee25-4354-9445-14847955b474",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "f4f59561-ee25-4354-9445-14847955b474",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "185463005",
+          "display": "Visit out of hours (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/ab48e0c0-6543-4537-8f00-bfcdcba7a81b"
+      },
+      "period": {
+        "start": "2026-04-02T08:00:00.000+00:00",
+        "end": "2026-04-02T09:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/f4f59561-ee25-4354-9445-14847955b474"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/37fdc44f-dedd-4844-ad3e-fda3ebcb9f01",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "37fdc44f-dedd-4844-ad3e-fda3ebcb9f01",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "Active"
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "Confirmed"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "version": "2024",
+          "code": "C67.1",
+          "display": "Malignant neoplasm of dome of bladder"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/ab48e0c0-6543-4537-8f00-bfcdcba7a81b"
+      },
+      "onsetPeriod": {
+        "start": "2026-04-02T08:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/37fdc44f-dedd-4844-ad3e-fda3ebcb9f01"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/8f7c2f1c-c109-4824-8f99-d25862c337a9",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "8f7c2f1c-c109-4824-8f99-d25862c337a9",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-04-06T08:00:00.000+00:00"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "254292007",
+          "display": "Tumor staging"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/ab48e0c0-6543-4537-8f00-bfcdcba7a81b"
+      },
+      "performedPeriod": {
+        "start": "2026-04-02T08:00:00.000+00:00",
+        "end": "2026-04-06T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/8f7c2f1c-c109-4824-8f99-d25862c337a9"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/f5d33838-438a-4852-8a8a-506966aa45ee",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "f5d33838-438a-4852-8a8a-506966aa45ee",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+      },
+      "partOf": [ {
+        "reference": "Procedure/8f7c2f1c-c109-4824-8f99-d25862c337a9"
+      } ],
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "procedure",
+          "display": "Procedure"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "21902-2",
+          "display": "Stage group.pathology Cancer"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/ab48e0c0-6543-4537-8f00-bfcdcba7a81b"
+      },
+      "effectivePeriod": {
+        "start": "2026-02-01T08:00:00.000+00:00",
+        "end": "2026-06-02T08:15:00.000+00:00"
+      },
+      "issued": "2026-06-02T08:15:00.000+00:00",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "1228883000",
+          "display": "American Joint Committee on Cancer cTa (qualifier value)"
+        } ]
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/f5d33838-438a-4852-8a8a-506966aa45ee"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationAdministration/10f47116-e5c0-4a37-8c15-6068695fd83f",
+    "resource": {
+      "resourceType": "MedicationAdministration",
+      "id": "10f47116-e5c0-4a37-8c15-6068695fd83f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+      },
+      "status": "completed",
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "version": "04012024",
+          "code": "1653484",
+          "display": "BCG, live, Tice strain 50 MG/ML Topical Suspension"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/ab48e0c0-6543-4537-8f00-bfcdcba7a81b"
+      },
+      "effectivePeriod": {
+        "start": "2026-04-02T08:00:00.000+00:00",
+        "end": "2026-04-02T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationAdministration/10f47116-e5c0-4a37-8c15-6068695fd83f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/4ca5da9c-bd91-4b6d-934c-409f3003b899",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "4ca5da9c-bd91-4b6d-934c-409f3003b899",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "fe555a72-3b1a-427e-a7af-62dc3b03cc4f-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "ab48e0c0-6543-4537-8f00-bfcdcba7a81b"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#fe555a72-3b1a-427e-a7af-62dc3b03cc4f-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Female patient with OV in MP and initial bladder CA dx but staging delayed.  BCG given before staging results back.  Clinically improbable. Should fail  Performed as expected."
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS646FHIRIntravesicalBacillusCalmetteGuerinForBladderCancer",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/ab48e0c0-6543-4537-8f00-bfcdcba7a81b"
+      }, {
+        "reference": "Encounter/f4f59561-ee25-4354-9445-14847955b474"
+      }, {
+        "reference": "Condition/37fdc44f-dedd-4844-ad3e-fda3ebcb9f01"
+      }, {
+        "reference": "Procedure/8f7c2f1c-c109-4824-8f99-d25862c337a9"
+      }, {
+        "reference": "Observation/f5d33838-438a-4852-8a8a-506966aa45ee"
+      }, {
+        "reference": "MedicationAdministration/10f47116-e5c0-4a37-8c15-6068695fd83f"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/4ca5da9c-bd91-4b6d-934c-409f3003b899"
+    }
+  } ]
+}

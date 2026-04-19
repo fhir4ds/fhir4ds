@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "f326cd27-0cf6-4354-a26a-d1320d6d1be7",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "75303-8",
+      "display": "Nutrition assessment narrative",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/47963aa4-4cbe-4129-b115-888542ba8b1d"
+  },
+  "effectiveDateTime": "2026-10-10T10:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "371597004",
+      "display": "Emaciated (finding)",
+      "userSelected": true
+    } ]
+  }
+}

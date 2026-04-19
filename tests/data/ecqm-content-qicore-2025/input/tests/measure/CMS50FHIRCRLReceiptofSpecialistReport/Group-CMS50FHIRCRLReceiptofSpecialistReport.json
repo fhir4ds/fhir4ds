@@ -1,0 +1,342 @@
+{
+  "resourceType": "Group",
+  "id": "CMS50FHIRCRLReceiptofSpecialistReport",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS50FHIRCRLReceiptofSpecialistReport"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/3c747b52-446b-4107-aff5-a6121d5e9ffc",
+      "display": "EncBeforeMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3c747b52-446b-4107-aff5-a6121d5e9ffc",
+      "display": "EncBeforeMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0fbfcffb-d7b0-4956-b860-22bac50ca7ea",
+      "display": "ReferralAfterRefPeriod IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0fbfcffb-d7b0-4956-b860-22bac50ca7ea",
+      "display": "ReferralAfterRefPeriod IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2feec6c6-7250-4391-a4ee-0d5006cc70bc",
+      "display": "1stof2ReferralWithConsultantReport NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2feec6c6-7250-4391-a4ee-0d5006cc70bc",
+      "display": "1stof2ReferralWithConsultantReport NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c1b6ce43-8310-4776-8103-1e0d6bc08fc6",
+      "display": "2Referrals1MinApart2ndClosed NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c1b6ce43-8310-4776-8103-1e0d6bc08fc6",
+      "display": "2Referrals1MinApart2ndClosed NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cf289d58-f8a0-4f58-a62d-39fc1762318a",
+      "display": "ReferralBeforeRefPeriod IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cf289d58-f8a0-4f58-a62d-39fc1762318a",
+      "display": "ReferralBeforeRefPeriod IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/03556842-5a83-41e6-8f43-5801d151336b",
+      "display": "ConsRptAfterMP NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/03556842-5a83-41e6-8f43-5801d151336b",
+      "display": "ConsRptAfterMP NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/929d656d-006c-46c3-81c5-6ca1c82146d2",
+      "display": "2ndReferralWithConsReport NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/929d656d-006c-46c3-81c5-6ca1c82146d2",
+      "display": "2ndReferralWithConsReport NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b20c7bc3-8545-4807-8212-5fb687463efc",
+      "display": "EncAndReferralDuringPeriods DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b20c7bc3-8545-4807-8212-5fb687463efc",
+      "display": "EncAndReferralDuringPeriods DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e2a4f358-87f1-4fe1-b4e1-27969993d361",
+      "display": "EncounterInvalidType IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e2a4f358-87f1-4fe1-b4e1-27969993d361",
+      "display": "EncounterInvalidType IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/12c82f74-5184-450f-9de1-ea211f3bf47a",
+      "display": "EncRefNewPsychDRC DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/12c82f74-5184-450f-9de1-ea211f3bf47a",
+      "display": "EncRefNewPsychDRC DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/075f9e36-6a87-47ac-952e-aeb295f184d9",
+      "display": "EncAndReferralDuringPeriods DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/075f9e36-6a87-47ac-952e-aeb295f184d9",
+      "display": "EncAndReferralDuringPeriods DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9b46ce43-4c9e-4112-8d8d-89c01cef28b0",
+      "display": "NoReferral IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9b46ce43-4c9e-4112-8d8d-89c01cef28b0",
+      "display": "NoReferral IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/65d214fa-db56-4076-9ecc-485c31229b0f",
+      "display": "EncAndReferralDuringPeriods DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/65d214fa-db56-4076-9ecc-485c31229b0f",
+      "display": "EncAndReferralDuringPeriods DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f117390a-55f1-49b7-920a-c64d1934c89c",
+      "display": "EncOverlapsStartMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f117390a-55f1-49b7-920a-c64d1934c89c",
+      "display": "EncOverlapsStartMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/849d31ab-b698-4cb4-99eb-fc3ad8aceda9",
+      "display": "EncAfterMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/849d31ab-b698-4cb4-99eb-fc3ad8aceda9",
+      "display": "EncAfterMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b1788e29-83a4-4a89-a488-6d0a861f13cd",
+      "display": "ConsNotLinkedToReferral NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b1788e29-83a4-4a89-a488-6d0a861f13cd",
+      "display": "ConsNotLinkedToReferral NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a4eb4933-e343-4e4b-b4bd-f582c42979be",
+      "display": "EncounterInvalidStatus IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a4eb4933-e343-4e4b-b4bd-f582c42979be",
+      "display": "EncounterInvalidStatus IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f2634662-4c9c-4963-b3f4-f90c3794bcc3",
+      "display": "EncRefNewPsychDRC DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f2634662-4c9c-4963-b3f4-f90c3794bcc3",
+      "display": "EncRefNewPsychDRC DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/854f73d5-2461-4c12-b214-c4a3ceecfe36",
+      "display": "NoEncounter IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/854f73d5-2461-4c12-b214-c4a3ceecfe36",
+      "display": "NoEncounter IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bf87bf51-99d7-4765-a19a-f68c9fcf6a2e",
+      "display": "ConsRptLastDayOfMP NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bf87bf51-99d7-4765-a19a-f68c9fcf6a2e",
+      "display": "ConsRptLastDayOfMP NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e25e1d4a-6240-4bd6-8d8a-2773e7a920b6",
+      "display": "EncOverlapsEndMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e25e1d4a-6240-4bd6-8d8a-2773e7a920b6",
+      "display": "EncOverlapsEndMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3041ca48-5558-4fa4-829f-c3d6129bdd54",
+      "display": "2Referrals1MinApartBothClosed NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3041ca48-5558-4fa4-829f-c3d6129bdd54",
+      "display": "2Referrals1MinApartBothClosed NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/408f74fc-488e-4d0e-8d4b-cd3f17955b31",
+      "display": "ConsReportOverlapsEndsAfterReferral NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/408f74fc-488e-4d0e-8d4b-cd3f17955b31",
+      "display": "ConsReportOverlapsEndsAfterReferral NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/25b1e840-7e85-4140-9c1b-773d4daa6dee",
+      "display": "ReferralAfterRefPeriodNextMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/25b1e840-7e85-4140-9c1b-773d4daa6dee",
+      "display": "ReferralAfterRefPeriodNextMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d9a98a4c-9208-4370-b07c-1c5c63fd09b6",
+      "display": "ReferralIntentNotOrder IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d9a98a4c-9208-4370-b07c-1c5c63fd09b6",
+      "display": "ReferralIntentNotOrder IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3e48a3fd-0416-470f-a3c5-3635f18f2913",
+      "display": "EncRefNewPsychDRC DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3e48a3fd-0416-470f-a3c5-3635f18f2913",
+      "display": "EncRefNewPsychDRC DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c1493a4a-56c3-40ba-b209-edca6d9a0b9d",
+      "display": "2Referrals1MinApart1stClosed NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c1493a4a-56c3-40ba-b209-edca6d9a0b9d",
+      "display": "2Referrals1MinApart1stClosed NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8e1e9821-1176-4dd0-a361-1931cbc5029e",
+      "display": "ReferralDayEndRefPeriod DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8e1e9821-1176-4dd0-a361-1931cbc5029e",
+      "display": "ReferralDayEndRefPeriod DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/648157ed-8a6e-43b5-9481-9498848ae5ea",
+      "display": "1stAnd2ndReferralsWithConsultantReports NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/648157ed-8a6e-43b5-9481-9498848ae5ea",
+      "display": "1stAnd2ndReferralsWithConsultantReports NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dc409230-77aa-4b66-bc1d-84e421089367",
+      "display": "EncRefNewPsychDRC DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dc409230-77aa-4b66-bc1d-84e421089367",
+      "display": "EncRefNewPsychDRC DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6138f86b-449c-4828-9b62-fe2bed4157b1",
+      "display": "ReferralStatusNotValid IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6138f86b-449c-4828-9b62-fe2bed4157b1",
+      "display": "ReferralStatusNotValid IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/445106a4-1531-4830-8726-4ea6c1d27484",
+      "display": "Cons1MinBeforeReferral NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/445106a4-1531-4830-8726-4ea6c1d27484",
+      "display": "Cons1MinBeforeReferral NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/37605377-59e5-4f97-b12f-797753056b96",
+      "display": "EncRefNewPsychDRC DenomPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/37605377-59e5-4f97-b12f-797753056b96",
+      "display": "EncRefNewPsychDRC DenomPass"
+    }
+  } ]
+}

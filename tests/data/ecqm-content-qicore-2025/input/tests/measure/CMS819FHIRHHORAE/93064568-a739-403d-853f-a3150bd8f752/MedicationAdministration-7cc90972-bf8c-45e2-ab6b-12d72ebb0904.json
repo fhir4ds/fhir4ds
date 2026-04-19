@@ -1,0 +1,30 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "7cc90972-bf8c-45e2-ab6b-12d72ebb0904",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "2540703",
+      "display": "Opioid Antagonist"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/93064568-a739-403d-853f-a3150bd8f752"
+  },
+  "effectivePeriod": {
+    "start": "2026-08-11T20:14:00.000+00:00"
+  },
+  "dosage": {
+    "route": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "34206005",
+        "display": "Subcutaneous route (qualifier value)"
+      } ]
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "resourceType": "Condition",
+  "id": "cbfba007-b14c-4cc4-a4bf-cce376be7e9f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "active",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2020-09",
+      "code": "401303003",
+      "display": "Acute ST segment elevation myocardial infarction (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/429886b7-c347-43d9-9400-979978760850"
+  },
+  "encounter": {
+    "reference": "Encounter/c0f7221c-3fe5-4336-9ca9-52856e990c8e"
+  },
+  "recordedDate": "2026-10-28T08:00:00.000+00:00"
+}

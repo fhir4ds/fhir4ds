@@ -40,9 +40,8 @@ def singletonFrom_scalar(lst: list[Any] | None) -> Any:
     CQL SingletonFrom(list) - scalar version.
 
     Returns the single element if list has exactly 1 element.
-    Returns NULL if list is empty, NULL, or has >1 elements.
-
-    Per CQL spec, when >1 element exists, returns NULL with optional warning.
+    Returns NULL if list is empty or NULL.
+    Raises ValueError if list has >1 elements (CQL §20.30).
     """
     if lst is None:
         return None
@@ -50,12 +49,11 @@ def singletonFrom_scalar(lst: list[Any] | None) -> Any:
         return None
     if len(lst) == 1:
         return lst[0]
-    # >1 element: return NULL and log warning
-    logger.warning(
-        "SingletonFrom called on list with %d elements; returning NULL per CQL spec",
-        len(lst)
+    # >1 element: raise runtime error per CQL spec §20.30
+    raise ValueError(
+        f"SingletonFrom: Expected a list with at most one element, "
+        f"but found a list with {len(lst)} elements."
     )
-    return None
 
 
 def elementAt_scalar(lst: list[Any] | None, index: int | None) -> Any:
@@ -248,7 +246,7 @@ def jsonConcat_scalar(left: Any, right: Any) -> list[Any]:
         else:
             result.append(right)
 
-    return result if result else None
+    return result
 
 
 # Legacy aliases for backward compatibility

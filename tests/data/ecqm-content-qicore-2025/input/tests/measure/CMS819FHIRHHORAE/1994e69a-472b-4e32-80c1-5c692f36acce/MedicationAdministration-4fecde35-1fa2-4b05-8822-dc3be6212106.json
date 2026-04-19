@@ -1,0 +1,39 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "4fecde35-1fa2-4b05-8822-dc3be6212106",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "2022-04",
+      "code": "1659929",
+      "display": "1 ML naloxone hydrochloride 0.4 MG/ML Injection",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1994e69a-472b-4e32-80c1-5c692f36acce"
+  },
+  "effectivePeriod": {
+    "start": "2026-08-11T20:15:00.000+00:00"
+  },
+  "dosage": {
+    "route": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "34206005",
+        "display": "Subcutaneous route (qualifier value)",
+        "userSelected": true
+      } ]
+    },
+    "dose": {
+      "value": 0.4,
+      "unit": "mg",
+      "system": "http://unitsofmeasure.org",
+      "code": "mg"
+    }
+  }
+}

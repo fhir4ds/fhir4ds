@@ -1,0 +1,49 @@
+{
+  "resourceType": "Task",
+  "id": "7e4785aa-78e9-4500-b527-593edf5cc6ef",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-tasknotdone" ]
+  },
+  "identifier": [ {
+    "use": "official",
+    "system": "http:/goodhealth.org/identifiers",
+    "value": "20170201-002"
+  } ],
+  "status": "rejected",
+  "statusReason": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183932001",
+      "display": "Procedure contraindictated (situation)",
+      "userSelected": true
+    } ]
+  },
+  "intent": "proposal",
+  "priority": "routine",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "428191000124101",
+      "display": "Documentation of current medications (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "focus": {
+    "reference": "Patient/3d42d9f8-0381-4562-94b7-314fcd27fae5"
+  },
+  "for": {
+    "reference": "Patient/3d42d9f8-0381-4562-94b7-314fcd27fae5"
+  },
+  "executionPeriod": {
+    "start": "2026-08-01T08:45:00+10:00",
+    "end": "2026-08-01T08:45:00.000+00:00"
+  },
+  "reasonCode": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "0",
+      "display": "No Reason",
+      "userSelected": true
+    } ]
+  }
+}

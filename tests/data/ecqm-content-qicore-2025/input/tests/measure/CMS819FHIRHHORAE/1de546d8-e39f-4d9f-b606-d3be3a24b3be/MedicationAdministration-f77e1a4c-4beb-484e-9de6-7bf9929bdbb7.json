@@ -1,0 +1,37 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "f77e1a4c-4beb-484e-9de6-7bf9929bdbb7",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "2023-01",
+      "code": "2592953",
+      "display": "2 ML nalmefene 1 MG/ML Injection",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1de546d8-e39f-4d9f-b606-d3be3a24b3be"
+  },
+  "effectiveDateTime": "2026-04-07T20:16:00.000+00:00",
+  "dosage": {
+    "route": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "34206005",
+        "display": "Subcutaneous route (qualifier value)",
+        "userSelected": true
+      } ]
+    },
+    "dose": {
+      "value": 2,
+      "unit": "mg",
+      "system": "http://unitsofmeasure.org",
+      "code": "mg"
+    }
+  }
+}

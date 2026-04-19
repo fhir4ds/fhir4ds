@@ -1,0 +1,35 @@
+{
+  "resourceType": "Encounter",
+  "id": "f788f818-41fe-4915-ad8c-e89b3b9d169d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient encounter"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183452005"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/0ae60eb8-3b74-46bb-9cde-1b4684891bf9"
+  },
+  "period": {
+    "start": "2026-02-02T08:00:00.000+00:00",
+    "end": "2026-02-22T08:15:00.000+00:00"
+  },
+  "hospitalization": {
+    "dischargeDisposition": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "428371000124100",
+        "display": "Discharged to Health Care Facility for Hospice Care"
+      } ]
+    }
+  }
+}

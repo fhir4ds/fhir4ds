@@ -102,13 +102,37 @@ from ...translator.fhirpath_builder import (
 class ListsMixin:
     """Mixin providing list operations, method invocations, and aggregation."""
     def _translate_interval(self, interval: Interval, boolean_context: bool = False) -> SQLExpression:
-        """Translate a CQL interval to SQL."""
+        """Translate a CQL interval to SQL.
+
+        CQL distinguishes ``Interval[null, null]`` (null interval) from
+        ``Interval[null as Integer, null as Integer]`` (universal integer
+        interval with unbounded bounds).  The former evaluates to *null*,
+        the latter produces a real interval.  We detect typed-null bounds
+        at the AST level (``null as <Type>`` is ``BinaryExpression(op='as',
+        left=Literal(null))``) and pass the sentinel ``__null__`` to
+        ``intervalFromBounds`` so the UDF keeps null-null → None for the
+        untyped case while returning a valid JSON interval for the typed case.
+        """
         # Interval bounds are always scalar values.  Using SCALAR usage ensures
         # that definition references become correlated subqueries instead of
         # JOIN-alias references (j1.value) which would be invisible inside
         # nested subqueries.
         low = self.translate(interval.low, usage=ExprUsage.SCALAR) if interval.low else SQLNull()
         high = self.translate(interval.high, usage=ExprUsage.SCALAR) if interval.high else SQLNull()
+
+        # Detect typed-null bounds at the AST level:
+        # ``null as Integer`` parses as BinaryExpression(op='as', left=Literal(null))
+        def _is_typed_null_ast(ast_node):
+            """Return True if the AST node is ``null as <Type>``."""
+            return (isinstance(ast_node, BinaryExpression)
+                    and getattr(ast_node, 'operator', '') == 'as'
+                    and isinstance(getattr(ast_node, 'left', None), Literal)
+                    and getattr(ast_node.left, 'value', object()) is None)
+
+        if interval.low and _is_typed_null_ast(interval.low):
+            low = SQLLiteral("__null__")
+        if interval.high and _is_typed_null_ast(interval.high):
+            high = SQLLiteral("__null__")
 
         return SQLInterval(
             low=low,
@@ -371,22 +395,20 @@ class ListsMixin:
         )
 
     def _translate_tuple_expression(self, tup: TupleExpression, boolean_context: bool = False) -> SQLExpression:
-        """Translate a CQL tuple to SQL struct, wrapped as JSON for resource compatibility."""
-        # Build a DuckDB struct using named argument syntax: struct_pack(name := value, ...)
+        """Translate a CQL tuple to SQL JSON using json_object().
+        
+        Uses json_object('key', value, ...) instead of to_json(struct_pack(key := value))
+        because struct_pack's := syntax fails inside DuckDB CASE expressions.
+        """
         args = []
         for elem in tup.elements:
             name = elem.name
             value = self.translate(elem.type, boolean_context=False)
-            # Narrow SELECT * subqueries: struct_pack fields are scalar so
-            # multi-column subqueries must be reduced to the resource column.
             value = self._narrow_to_resource_column(value)
-            args.append(SQLNamedArg(name=name, value=value))
+            args.append(SQLLiteral(value=name))
+            args.append(value)
 
-        struct = SQLFunctionCall(name="struct_pack", args=args)
-        # Wrap with to_json() so the result is a JSON string.
-        # Downstream code accesses Tuple fields via fhirpath_text(resource, 'field')
-        # which requires JSON input, not a DuckDB STRUCT.
-        return SQLFunctionCall(name="to_json", args=[struct])
+        return SQLFunctionCall(name="json_object", args=args)
 
     def _translate_instance_expression(self, inst: InstanceExpression, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL instance expression to SQL."""
@@ -434,14 +456,15 @@ class ListsMixin:
 
             return self._translate_quantity(Quantity(value=value, unit=unit), boolean_context)
 
-        # Generic instance - build struct
+        # Generic instance - build JSON object
         args = []
         for elem in inst.elements:
             name = elem.name
             value = self.translate(elem.type, boolean_context=False)
-            args.append(SQLNamedArg(name=name, value=value))
+            args.append(SQLLiteral(value=name))
+            args.append(value)
 
-        return SQLFunctionCall(name="struct_pack", args=args)
+        return SQLFunctionCall(name="json_object", args=args)
 
     def _translate_method_invocation(self, expr: MethodInvocation, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL method invocation to SQL."""
@@ -763,11 +786,11 @@ class ListsMixin:
                 args=[SQLSubquery(query=inner_select)]
             )
 
-        # Generic fallback: translate source as list, apply list_distinct
+        # Generic fallback: translate source as list, apply order-preserving Distinct macro
         source = self.translate(node.source, usage=ExprUsage.LIST)
         if _is_list_returning_sql(source):
-            return SQLFunctionCall(name="list_distinct", args=[source])
-        return SQLFunctionCall(name="list_distinct",
+            return SQLFunctionCall(name='"Distinct"', args=[source])
+        return SQLFunctionCall(name='"Distinct"',
                                args=[SQLFunctionCall(name="LIST", args=[source])])
 
     def _translate_first_last_with_window(self, query: Query, direction: str = "ASC") -> SQLExpression:
@@ -1734,8 +1757,13 @@ class ListsMixin:
                 else_clause=SQLNull(),
             )
 
-        # For array/list expressions, use cardinality check with array_length
-        # CASE WHEN array_length(source, 1) = 1 THEN source[1] ELSE NULL END
+        # For array/list expressions, use cardinality check with array_length.
+        # CQL §20.30: singleton from raises a runtime error if >1 elements.
+        # For literal arrays with known element count, we can detect this at
+        # translation time and route to the error-raising UDF directly.
+        if isinstance(source, SQLArray) and len(source.elements) > 1:
+            # Known to have >1 elements — always errors at runtime
+            return SQLFunctionCall(name="SingletonFrom", args=[source])
         return SQLCase(
             when_clauses=[
                 (
@@ -1961,11 +1989,12 @@ class ListsMixin:
             )
             return SQLExists(subquery=SQLSubquery(query=exists_select))
 
-        # For SQLArray (literal lists), use array_length > 0
+        # For SQLArray (literal lists), CQL Exists checks for non-null elements.
+        # Use list_count (skips nulls) instead of array_length (counts all).
         if isinstance(source, SQLArray):
             return SQLBinaryOp(
                 operator=">",
-                left=SQLFunctionCall(name="array_length", args=[source]),
+                left=SQLFunctionCall(name="list_count", args=[source]),
                 right=SQLLiteral(value=0),
             )
 

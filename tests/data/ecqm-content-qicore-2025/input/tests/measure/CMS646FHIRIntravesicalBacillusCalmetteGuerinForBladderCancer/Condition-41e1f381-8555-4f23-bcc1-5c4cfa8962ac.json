@@ -1,0 +1,42 @@
+{
+  "resourceType": "Condition",
+  "id": "41e1f381-8555-4f23-bcc1-5c4cfa8962ac",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "278046008",
+      "display": "Mixed histology urothelial cell carcinoma for Urology Care"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f0c276f8-af7b-4c0b-b413-6b9730bcabbb"
+  },
+  "onsetPeriod": {
+    "start": "2026-06-06T08:00:00.000+00:00"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "resourceType": "Procedure",
+  "id": "ddfd5cfc-5e08-4746-93ad-682bdefa2eb3",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-02-01T08:00:00.000+00:00"
+  } ],
+  "status": "unknown",
+  "code": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/hcpcs",
+      "version": "2024",
+      "code": "G0182",
+      "display": "Physician supervision of a patient under a medicare-approved hospice (patient not present) requiring complex and multidisciplinary care modalities involving regular physician development and/or revision of care plans, review of subsequent reports of patient status, review of laboratory and other studies, communication (including telephone calls) with other health care professionals involved in the patient's care, integration of new information into the medical treatment plan and/or adjustment of medical therapy, within a calendar month, 30 minutes or more"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/230e1741-32b1-4d01-8249-84d9cb872af5"
+  },
+  "performedPeriod": {
+    "start": "2026-01-01T08:00:00.000+00:00",
+    "end": "2026-02-01T08:15:00.000+00:00"
+  }
+}

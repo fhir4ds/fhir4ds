@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "e95180ca-3254-47ea-bd1b-3eab095f0dc9",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "75303-8",
+      "display": "Nutrition assessment narrative",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/997a0126-0a02-4157-a081-53ee4013a412"
+  },
+  "effectiveDateTime": "2026-08-25T10:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "441951000124102",
+      "display": "Starvation-related malnutrition (disorder)",
+      "userSelected": true
+    } ]
+  }
+}

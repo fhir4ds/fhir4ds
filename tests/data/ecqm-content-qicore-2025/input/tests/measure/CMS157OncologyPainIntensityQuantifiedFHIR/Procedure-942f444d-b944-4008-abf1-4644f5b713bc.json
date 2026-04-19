@@ -1,0 +1,25 @@
+{
+  "resourceType": "Procedure",
+  "id": "942f444d-b944-4008-abf1-4644f5b713bc",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-12-22T14:50:00.000Z"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "96405"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/be20e6d8-f2f2-49d9-abc1-39e93ba36a1c"
+  },
+  "performedPeriod": {
+    "start": "2025-12-22T14:45:00.000Z",
+    "end": "2025-12-22T14:45:00.000Z"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "resourceType": "Condition",
+  "id": "d6af730b-ec07-402f-be2e-4d992609c980",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/ValueSet/condition-ver-status",
+      "code": "confirmed",
+      "display": "confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    }, {
+      "system": "http://snomed.info/sct",
+      "code": "439401001",
+      "display": "Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "788891004",
+      "display": "Chronic pain after cancer treatment (finding)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/5e76e39a-8a30-4035-8d44-3362f4826aa7"
+  },
+  "onsetPeriod": {
+    "start": "2025-12-31T08:00:00.000+00:00",
+    "end": "2025-12-31T08:00:00.000+00:00"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "measure_id": "CMS133",
+  "patient_count": 73,
+  "timings_ms": {
+    "cql_parse_ms": 22.44457500637509,
+    "sql_generation_ms": 1192.202989012003,
+    "sql_execution_ms": 133.11146802152507,
+    "total_ms": 1347.759032039903
+  },
+  "patients_per_second": 54.16398500369218,
+  "comparison": {
+    "total_patients": 73,
+    "matching_patients": 73,
+    "accuracy_pct": 100.0
+  }
+}

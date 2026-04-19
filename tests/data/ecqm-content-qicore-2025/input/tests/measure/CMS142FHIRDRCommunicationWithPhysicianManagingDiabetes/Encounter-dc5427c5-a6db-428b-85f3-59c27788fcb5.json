@@ -1,0 +1,30 @@
+{
+  "resourceType": "Encounter",
+  "id": "dc5427c5-a6db-428b-85f3-59c27788fcb5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory",
+    "userSelected": true
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "18170008",
+      "display": "Subsequent nursing facility visit (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/3783189c-3c29-4687-9f89-c3306c6d28fd"
+  },
+  "period": {
+    "start": "2026-03-09T08:00:00.000+00:00",
+    "end": "2026-03-09T08:15:00.000+00:00"
+  }
+}

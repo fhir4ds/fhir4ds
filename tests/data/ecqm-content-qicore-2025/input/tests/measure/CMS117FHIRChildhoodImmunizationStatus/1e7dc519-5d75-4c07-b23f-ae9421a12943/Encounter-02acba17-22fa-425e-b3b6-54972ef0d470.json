@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "02acba17-22fa-425e-b3b6-54972ef0d470",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "185317003",
+      "display": "Telephone encounter (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/1e7dc519-5d75-4c07-b23f-ae9421a12943"
+  },
+  "period": {
+    "start": "2026-01-01T01:00:00.000Z",
+    "end": "2026-01-01T01:15:00.000Z"
+  }
+}

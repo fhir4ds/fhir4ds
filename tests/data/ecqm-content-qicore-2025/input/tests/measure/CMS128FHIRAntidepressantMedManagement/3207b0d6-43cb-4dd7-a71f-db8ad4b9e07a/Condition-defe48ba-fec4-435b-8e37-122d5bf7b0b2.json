@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "defe48ba-fec4-435b-8e37-122d5bf7b0b2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "15193003",
+      "display": "Severe recurrent major depression with psychotic features, mood-incongruent (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/3207b0d6-43cb-4dd7-a71f-db8ad4b9e07a"
+  },
+  "onsetDateTime": "2026-01-01T01:00:00.000Z"
+}

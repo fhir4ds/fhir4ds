@@ -1,0 +1,31 @@
+{
+  "resourceType": "Observation",
+  "id": "b9271754-11d2-42f2-9186-e53ecca5f5b8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "confirmed",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.73",
+      "code": "32451-7",
+      "display": "Physical findings of Macula",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/3df53f41-2dd3-4f7c-9745-0566541661c4"
+  },
+  "effectiveDateTime": "2026-03-09T07:59:00.000+00:00",
+  "issued": "2026-03-09T07:59:00.000+00:00",
+  "valueBoolean": true
+}

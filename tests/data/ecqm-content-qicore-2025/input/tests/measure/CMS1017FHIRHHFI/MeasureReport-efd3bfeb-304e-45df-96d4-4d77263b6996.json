@@ -1,0 +1,129 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "efd3bfeb-304e-45df-96d4-4d77263b6996",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "d9926aa8-f038-4260-8097-e67ce8eae382-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "972573e8-bd51-4b77-a954-39babec1a055"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#d9926aa8-f038-4260-8097-e67ce8eae382-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Encounter with a major injury POA. Also has another maj injury NPOA. Had adverse event fall during encounter. Major Inj POA doesn't cause exclusion since there was another major injury NPOA with a fall to meet denom and numerator. DENEX fails."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS1017FHIRHHFI",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "NumeratorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator-exclusion",
+          "display": "Numerator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "MeasureObservation_1_1_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "measure-observation",
+          "display": "Measure Observation"
+        } ]
+      },
+      "count": 3
+    }, {
+      "id": "MeasureObservation_1_2_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "measure-observation",
+          "display": "Measure Observation"
+        } ]
+      },
+      "count": 1
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Encounter/96b10ab0-6c2c-4d47-a2dd-42723228835c"
+  }, {
+    "reference": "Encounter/68b1b108-684a-454f-a577-faa64ab5189a"
+  }, {
+    "reference": "Condition/1b518423-1ad3-4720-b518-2010820554a5"
+  }, {
+    "reference": "Condition/31234e52-b252-4c92-b89d-809874bba58f"
+  }, {
+    "reference": "Patient/972573e8-bd51-4b77-a954-39babec1a055"
+  }, {
+    "reference": "Claim/9ea30b44-ff7b-44b2-bc08-35226ea38830"
+  }, {
+    "reference": "Claim/c8a9faa8-9e9b-4f1b-9c19-2f09ab0f5bab"
+  }, {
+    "reference": "AdverseEvent/e585a7c8-5155-4b6f-945e-8d13acb046ce"
+  } ]
+}

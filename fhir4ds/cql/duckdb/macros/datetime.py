@@ -38,9 +38,37 @@ def registerDateTimeMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute("CREATE MACRO IF NOT EXISTS Year(dt) AS system.year(dt)")
     con.execute("CREATE MACRO IF NOT EXISTS Month(dt) AS system.month(dt)")
     con.execute("CREATE MACRO IF NOT EXISTS Day(dt) AS system.day(dt)")
-    con.execute("CREATE MACRO IF NOT EXISTS Hour(dt) AS system.hour(dt)")
-    con.execute("CREATE MACRO IF NOT EXISTS Minute(dt) AS system.minute(dt)")
-    con.execute("CREATE MACRO IF NOT EXISTS Second(dt) AS system.second(dt)")
+    # Hour/Minute/Second/Millisecond: CQL time values may be strings ('T12:00:00'),
+    # so try TIME cast first (stripping leading T), then TIMESTAMP cast.
+    # CAST(dt AS VARCHAR) ensures non-string types work with system.ltrim.
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS Hour(dt) AS "
+        "COALESCE("
+        "  system.hour(TRY_CAST(system.ltrim(CAST(dt AS VARCHAR), 'T') AS TIME)),"
+        "  system.hour(TRY_CAST(dt AS TIMESTAMP))"
+        ")"
+    )
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS Minute(dt) AS "
+        "COALESCE("
+        "  system.minute(TRY_CAST(system.ltrim(CAST(dt AS VARCHAR), 'T') AS TIME)),"
+        "  system.minute(TRY_CAST(dt AS TIMESTAMP))"
+        ")"
+    )
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS Second(dt) AS "
+        "COALESCE("
+        "  system.second(TRY_CAST(system.ltrim(CAST(dt AS VARCHAR), 'T') AS TIME)),"
+        "  system.second(TRY_CAST(dt AS TIMESTAMP))"
+        ")"
+    )
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS Millisecond(dt) AS "
+        "COALESCE("
+        "  system.millisecond(TRY_CAST(system.ltrim(CAST(dt AS VARCHAR), 'T') AS TIME)),"
+        "  system.millisecond(TRY_CAST(dt AS TIMESTAMP))"
+        ") % 1000"
+    )
 
     # ============================================
     # Date constructors (avoiding reserved keywords)
@@ -74,10 +102,33 @@ def registerDateTimeMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "- CASE WHEN EXTRACT(DAY FROM CAST(end_dt AS DATE)) < EXTRACT(DAY FROM CAST(start_dt AS DATE)) "
         "THEN 1 ELSE 0 END END"
     )
-    con.execute("CREATE MACRO IF NOT EXISTS DaysBetween(start_dt, end_dt) AS system.date_diff('day', CAST(start_dt AS DATE), CAST(end_dt AS DATE))")
-    con.execute("CREATE MACRO IF NOT EXISTS HoursBetween(start_dt, end_dt) AS system.date_diff('hour', CAST(start_dt AS TIMESTAMP), CAST(end_dt AS TIMESTAMP))")
-    con.execute("CREATE MACRO IF NOT EXISTS MinutesBetween(start_dt, end_dt) AS system.date_diff('minute', CAST(start_dt AS TIMESTAMP), CAST(end_dt AS TIMESTAMP))")
-    con.execute("CREATE MACRO IF NOT EXISTS SecondsBetween(start_dt, end_dt) AS system.date_diff('second', CAST(start_dt AS TIMESTAMP), CAST(end_dt AS TIMESTAMP))")
+    # CQL §22.21 DurationBetween: floor of elapsed time, NOT boundary crossings.
+    # Use epoch_ms-based calculation with TIMESTAMPTZ for timezone support.
+    # TIMESTAMPTZ preserves timezone offsets; time strings fall back to anchored TIMESTAMP.
+    # Pad partial time strings (e.g., "06" → "06:00:00") for valid TIMESTAMP parsing.
+    _time_pad = (
+        "CASE "
+        "WHEN length(system.ltrim(CAST({0} AS VARCHAR), 'T')) <= 2 "
+        "THEN system.ltrim(CAST({0} AS VARCHAR), 'T') || ':00:00' "
+        "WHEN length(system.ltrim(CAST({0} AS VARCHAR), 'T')) <= 5 "
+        "THEN system.ltrim(CAST({0} AS VARCHAR), 'T') || ':00' "
+        "ELSE system.ltrim(CAST({0} AS VARCHAR), 'T') END"
+    )
+    _ems = (
+        "COALESCE("
+        "epoch_ms(TRY_CAST({0} AS TIMESTAMPTZ)), "
+        "epoch_ms(CAST('1970-01-01T' || (" + _time_pad + ") AS TIMESTAMP))"
+        ")"
+    )
+    _start_ems = _ems.format("start_dt")
+    _end_ems = _ems.format("end_dt")
+    _diff = f"({_end_ems} - {_start_ems})"
+    con.execute(f"CREATE MACRO IF NOT EXISTS DaysBetween(start_dt, end_dt) AS CAST(TRUNC({_diff} / 86400000.0) AS BIGINT)")
+    con.execute(f"CREATE MACRO IF NOT EXISTS WeeksBetween(start_dt, end_dt) AS CAST(TRUNC({_diff} / 604800000.0) AS BIGINT)")
+    con.execute(f"CREATE MACRO IF NOT EXISTS HoursBetween(start_dt, end_dt) AS CAST(TRUNC({_diff} / 3600000.0) AS BIGINT)")
+    con.execute(f"CREATE MACRO IF NOT EXISTS MinutesBetween(start_dt, end_dt) AS CAST(TRUNC({_diff} / 60000.0) AS BIGINT)")
+    con.execute(f"CREATE MACRO IF NOT EXISTS SecondsBetween(start_dt, end_dt) AS CAST(TRUNC({_diff} / 1000.0) AS BIGINT)")
+    con.execute(f"CREATE MACRO IF NOT EXISTS MillisecondsBetween(start_dt, end_dt) AS CAST({_diff} AS BIGINT)")
 
 
 __all__ = ["registerDateTimeMacros"]

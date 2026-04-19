@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "798de447-125c-46de-add5-feda5c595d4b.1",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2024-11-01T00:00:00.000Z"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+      "code": "0QP604Z",
+      "display": "Removal of Internal Fixation Device from Right Upper Femur, Open Approach"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/17a6abc8-6736-45ef-a53d-3be1d3609179"
+  },
+  "performedPeriod": {
+    "start": "2024-11-01T00:00:00.000Z",
+    "end": "2024-11-01T01:00:00.000Z"
+  }
+}

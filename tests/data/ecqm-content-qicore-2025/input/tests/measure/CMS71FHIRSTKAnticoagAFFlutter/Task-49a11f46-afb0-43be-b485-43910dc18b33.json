@@ -1,0 +1,28 @@
+{
+  "resourceType": "Task",
+  "id": "49a11f46-afb0-43be-b485-43910dc18b33",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-taskrejected" ]
+  },
+  "status": "rejected",
+  "statusReason": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183932001",
+      "userSelected": true
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/CodeSystem/task-code",
+      "code": "fulfill"
+    } ]
+  },
+  "focus": {
+    "reference": "MedicationRequest/90eaaedf-a341-4d07-bd82-4899f0956178"
+  },
+  "executionPeriod": {
+    "start": "2026-11-24T08:16:00Z",
+    "end": "2026-11-24T08:17:00.000+00:00"
+  }
+}

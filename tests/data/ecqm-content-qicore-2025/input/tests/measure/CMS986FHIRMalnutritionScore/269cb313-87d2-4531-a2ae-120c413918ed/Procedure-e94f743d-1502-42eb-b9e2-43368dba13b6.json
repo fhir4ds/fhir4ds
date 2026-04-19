@@ -1,0 +1,30 @@
+{
+  "resourceType": "Procedure",
+  "id": "e94f743d-1502-42eb-b9e2-43368dba13b6",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-03-02T11:30:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "410172000",
+      "display": "Nutrition care management (procedure)"
+    } ],
+    "text": "Nutrition care management (procedure)"
+  },
+  "subject": {
+    "reference": "Patient/269cb313-87d2-4531-a2ae-120c413918ed"
+  },
+  "encounter": {
+    "reference": "Encounter/ScreNotatriNorefNoasseDxCpMSROBSpass1"
+  },
+  "performedPeriod": {
+    "start": "2026-03-01T11:30:00.000+00:00",
+    "end": "2026-03-07T08:15:00.000+00:00"
+  }
+}

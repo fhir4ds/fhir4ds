@@ -1,0 +1,21 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "2cb742d5-e09b-4ca4-97ec-2d07b8f7e166",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "34534-8",
+      "display": "EKG 12 channel panel",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c3f55d79-b10c-4d2b-8699-a7538867159d"
+  },
+  "authoredOn": "2026-12-31T10:10:00.000+00:00"
+}

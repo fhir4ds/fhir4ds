@@ -1,0 +1,34 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "fc90f691-7d3b-488a-b07d-bccc04639b81",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "version": "2022-03",
+        "code": "413311005",
+        "display": "Patient non-compliant - declined intervention / support (situation)",
+        "userSelected": true
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "11524-6",
+      "display": "EKG study",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c41f9946-cb0f-4489-8367-581a5b876165"
+  },
+  "authoredOn": "2026-12-31T10:20:00.000+00:00"
+}

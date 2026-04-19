@@ -1,0 +1,105 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "8ccc0787-15ec-45ff-9f9e-6c846dae589b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "cdfd59f4-85c1-481c-98bf-d306cfad8cc3-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "ab7f5ace-9ac6-4077-bee9-444abeac4f51"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#cdfd59f4-85c1-481c-98bf-d306cfad8cc3-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient has 2 ambulatory encounters, HF diagnosis and LVSD and meets denominator exception with confirmed allergy to ARB ingredient"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS135FHIRHFACEIorARBorARNIforLVSD",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 1
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/ab7f5ace-9ac6-4077-bee9-444abeac4f51"
+  }, {
+    "reference": "Encounter/dd757eb1-9d77-4c25-b897-85b56d3b7e4b"
+  }, {
+    "reference": "Encounter/66848a1a-57c5-48e5-a700-aff75b571456"
+  }, {
+    "reference": "Condition/a3ec794d-02b6-4762-9f56-db8884a6fdc5"
+  }, {
+    "reference": "Condition/b199dccb-b5fe-47e5-8fd4-bc87649868a2"
+  }, {
+    "reference": "AllergyIntolerance/c7fb137a-ee11-4bed-a30c-a98a5ce084f9"
+  } ]
+}

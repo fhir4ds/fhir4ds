@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "02eb5fbd-9401-4275-b5d6-0f0ce467038b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-01-02T00:00:00.000Z"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "90670",
+      "display": "Pneumococcal conjugate vaccine, 13 valent (PCV13), for intramuscular use"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/15067a1f-bfa9-4dbc-b622-b2da823bea79"
+  },
+  "performedPeriod": {
+    "start": "2025-01-02T00:00:00.000Z",
+    "end": "2025-01-02T23:59:59.000Z"
+  }
+}

@@ -48,12 +48,42 @@ def _parse_date(value: str) -> date | None:
         return None
 
 
+def _parse_time(value: str) -> "time | None":
+    """Parse time from ISO 8601 / CQL time string (e.g. '15:59:59.999' or 'T15:59:59.999')."""
+    from datetime import time as _time_class
+    if not value:
+        return None
+    try:
+        s = value.lstrip("T").strip()
+        # Normalize fractional seconds to 6 digits for fromisoformat compatibility
+        if '.' in s:
+            base, frac = s.split('.', 1)
+            frac = frac.ljust(6, '0')[:6]
+            s = f"{base}.{frac}"
+        return _time_class.fromisoformat(s)
+    except (ValueError, TypeError):
+        return None
+
+
 def _parse_datetime(value: str) -> datetime | None:
     """Parse datetime from ISO 8601 string."""
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        val = value.replace("Z", "+00:00")
+        # Normalize partial fractional seconds (.4 → .400000) for Python 3.10 compat
+        if '.' in val:
+            dot_idx = val.rindex('.')
+            end = dot_idx + 1
+            while end < len(val) and val[end].isdigit():
+                end += 1
+            frac = val[dot_idx+1:end]
+            frac = frac.ljust(6, '0')[:6]
+            val = val[:dot_idx+1] + frac + val[end:]
+        # Handle space-separated datetime
+        if ' ' in val and 'T' not in val:
+            val = val.replace(' ', 'T', 1)
+        return datetime.fromisoformat(val)
     except ValueError as e:
         _logger.warning("_parse_datetime failed: %s", e)
         return None
@@ -202,6 +232,78 @@ def differenceInDays(start: str | None, end: str | None) -> int | None:
         return (e - s).days
     except (ValueError, TypeError, AttributeError) as e:
         _logger.warning("UDF differenceInDays failed: %s", e)
+        return None
+
+
+def differenceInWeeks(start: str | None, end: str | None) -> int | None:
+    """Calculate difference in weeks (CQL §19.2 — boundary crossings)."""
+    days = differenceInDays(start, end)
+    if days is None:
+        return None
+    return days // 7
+
+
+def differenceInHours(start: str | None, end: str | None) -> int | None:
+    """Calculate difference in hours (boundary crossings)."""
+    if start is None or end is None:
+        return None
+    try:
+        s = _parse_datetime(start) or (_dt_class.combine(date(2000, 1, 1), _parse_time(start)) if _parse_time(start) else None)
+        e = _parse_datetime(end) or (_dt_class.combine(date(2000, 1, 1), _parse_time(end)) if _parse_time(end) else None)
+        if not s or not e:
+            return None
+        delta = e - s
+        return int(delta.total_seconds()) // 3600
+    except (ValueError, TypeError, AttributeError) as ex:
+        _logger.warning("UDF differenceInHours failed: %s", ex)
+        return None
+
+
+def differenceInMinutes(start: str | None, end: str | None) -> int | None:
+    """Calculate difference in minutes (boundary crossings)."""
+    if start is None or end is None:
+        return None
+    try:
+        s = _parse_datetime(start) or (_dt_class.combine(date(2000, 1, 1), _parse_time(start)) if _parse_time(start) else None)
+        e = _parse_datetime(end) or (_dt_class.combine(date(2000, 1, 1), _parse_time(end)) if _parse_time(end) else None)
+        if not s or not e:
+            return None
+        delta = e - s
+        return int(delta.total_seconds()) // 60
+    except (ValueError, TypeError, AttributeError) as ex:
+        _logger.warning("UDF differenceInMinutes failed: %s", ex)
+        return None
+
+
+def differenceInSeconds(start: str | None, end: str | None) -> int | None:
+    """Calculate difference in seconds (boundary crossings)."""
+    if start is None or end is None:
+        return None
+    try:
+        s = _parse_datetime(start) or (_dt_class.combine(date(2000, 1, 1), _parse_time(start)) if _parse_time(start) else None)
+        e = _parse_datetime(end) or (_dt_class.combine(date(2000, 1, 1), _parse_time(end)) if _parse_time(end) else None)
+        if not s or not e:
+            return None
+        delta = e - s
+        return int(delta.total_seconds())
+    except (ValueError, TypeError, AttributeError) as ex:
+        _logger.warning("UDF differenceInSeconds failed: %s", ex)
+        return None
+
+
+def differenceInMilliseconds(start: str | None, end: str | None) -> int | None:
+    """Calculate difference in milliseconds (boundary crossings)."""
+    if start is None or end is None:
+        return None
+    try:
+        s = _parse_datetime(start) or (_dt_class.combine(date(2000, 1, 1), _parse_time(start)) if _parse_time(start) else None)
+        e = _parse_datetime(end) or (_dt_class.combine(date(2000, 1, 1), _parse_time(end)) if _parse_time(end) else None)
+        if not s or not e:
+            return None
+        delta = e - s
+        return int(delta.total_seconds() * 1000)
+    except (ValueError, TypeError, AttributeError) as ex:
+        _logger.warning("UDF differenceInMilliseconds failed: %s", ex)
         return None
 
 
@@ -461,6 +563,20 @@ def dateAddQuantity(date_val: str | None, quantity_json: str | None) -> str | No
         value = float(value)
         unit_lower = unit.lower()
 
+        # Try time-only value first (e.g. '15:59:59.999')
+        t = _parse_time(date_val)
+        if t is not None:
+            # Anchor to a reference date for arithmetic, then extract time
+            from datetime import time as _time_class
+            ref_dt = _dt_class(2000, 1, 1, t.hour, t.minute, t.second, t.microsecond)
+            if unit_lower in _TIMEDELTA_UNITS:
+                result_dt = ref_dt + timedelta(**{_TIMEDELTA_UNITS[unit_lower]: value})
+                result_time = result_dt.time()
+                # Format as CQL Time string with milliseconds
+                ms = result_time.microsecond // 1000
+                return f"T{result_time.hour:02d}:{result_time.minute:02d}:{result_time.second:02d}.{ms:03d}"
+            return None
+
         dt = _parse_datetime(date_val)
         if dt is None:
             dt = _parse_date(date_val)
@@ -545,6 +661,11 @@ def registerDatetimeUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("differenceInYears", differenceInYears, null_handling="special")
     con.create_function("differenceInMonths", differenceInMonths, null_handling="special")
     con.create_function("differenceInDays", differenceInDays, null_handling="special")
+    con.create_function("differenceInWeeks", differenceInWeeks, null_handling="special")
+    con.create_function("differenceInHours", differenceInHours, null_handling="special")
+    con.create_function("differenceInMinutes", differenceInMinutes, null_handling="special")
+    con.create_function("differenceInSeconds", differenceInSeconds, null_handling="special")
+    con.create_function("differenceInMilliseconds", differenceInMilliseconds, null_handling="special")
     con.create_function("dateComponent", dateComponent, null_handling="special")
     # DateTime comparison with precision
     con.create_function("dateTimeSameAs", dateTimeSameAs, null_handling="special")

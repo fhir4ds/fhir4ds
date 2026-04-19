@@ -1,0 +1,95 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "78d094f3-e3eb-4ef0-a5a8-8f58ff0dcfcd",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "277f0828-512b-4aac-a685-77c0f13c2371-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "4e0c6578-8b8d-4c10-98d6-7c0a7c2ea385"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#277f0828-512b-4aac-a685-77c0f13c2371-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "IP encounter where patient had 0.3 increase in SCr within first 48 hours, using first creatinine in first 48 hours as there is no SCr within first 24 hours. Meets Denominator Exclusion."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS832HHAKIFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/4e0c6578-8b8d-4c10-98d6-7c0a7c2ea385"
+  }, {
+    "reference": "Encounter/e3c7ad79-c109-4970-b471-b6e431728069"
+  }, {
+    "reference": "Observation/fabbbb7f-34ed-4fe8-8949-a41717247baf"
+  }, {
+    "reference": "Observation/1b86cbdf-5745-406c-8935-497bcae7c46f"
+  }, {
+    "reference": "Observation/4219a7f0-8445-4265-9c4b-e93c41ee58c0"
+  }, {
+    "reference": "Observation/60bbc303-bd62-46cd-8466-a76244016d30"
+  } ]
+}

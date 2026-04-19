@@ -1,0 +1,82 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1029.359",
+  "meta": {
+    "versionId": "6",
+    "lastUpdated": "2024-03-22T12:20:04.000-04:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2021-01-21"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2021-01-21"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1029.359",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1029.359"
+    }
+  ],
+  "version": "20210121",
+  "name": "Tracheostomy",
+  "title": "Tracheostomy",
+  "status": "active",
+  "experimental": false,
+  "date": "2022-03-07T11:14:02-05:00",
+  "publisher": "Joint Commission",
+  "expansion": {
+    "identifier": "urn:uuid:d769612d-df49-479c-958f-cb733744af13",
+    "timestamp": "2026-03-13T12:53:16-04:00",
+    "total": 4,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0B110F4",
+        "display": "Bypass Trachea to Cutaneous with Tracheostomy Device, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0B113F4",
+        "display": "Bypass Trachea to Cutaneous with Tracheostomy Device, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0B114F4",
+        "display": "Bypass Trachea to Cutaneous with Tracheostomy Device, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "43988005",
+        "display": "Temporary tracheostomy (procedure)"
+      }
+    ]
+  }
+}

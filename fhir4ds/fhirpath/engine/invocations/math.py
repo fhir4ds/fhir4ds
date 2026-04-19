@@ -96,12 +96,23 @@ def mod(ctx, x, y):
     if y == 0:
         return []
 
-    # FHIRPath §6.6: mod uses truncated division (not floor division)
-    import math as _math
-    result = _math.fmod(float(x), float(y))
-    if isinstance(x, int) and isinstance(y, int):
-        return int(result)
-    return result
+    # FHIRPath §6.6: mod uses truncated division.
+    # Use Decimal arithmetic to avoid floating point precision issues.
+    from decimal import Decimal, InvalidOperation
+    try:
+        dx = Decimal(str(x))
+        dy = Decimal(str(y))
+        # fmod semantics: x - int(x/y) * y  (truncated division)
+        result = dx - int(dx / dy) * dy
+        if isinstance(x, int) and isinstance(y, int):
+            return int(result)
+        return result
+    except (InvalidOperation, ValueError):
+        import math as _math
+        result = _math.fmod(float(x), float(y))
+        if isinstance(x, int) and isinstance(y, int):
+            return int(result)
+        return result
 
 
 # HACK: for only polymorphic function

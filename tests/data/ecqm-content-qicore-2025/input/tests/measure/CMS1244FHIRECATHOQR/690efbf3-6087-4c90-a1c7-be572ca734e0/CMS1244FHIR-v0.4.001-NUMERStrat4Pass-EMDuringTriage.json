@@ -1,0 +1,755 @@
+{
+  "resourceType": "Bundle",
+  "id": "661579e3db207d74c03b8a50",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/690efbf3-6087-4c90-a1c7-be572ca734e0",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "690efbf3-6087-4c90-a1c7-be572ca734e0",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2076-8",
+            "display": "Native Hawaiian or Other Pacific Islander",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Native Hawaiian or Other Pacific Islander"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248152002"
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "661579e3db207d74c03b8a50"
+      } ],
+      "name": [ {
+        "family": "NUMERStrat4Pass",
+        "given": [ "EMDuringTriage" ]
+      } ],
+      "gender": "female",
+      "birthDate": "2008-12-31"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/690efbf3-6087-4c90-a1c7-be572ca734e0"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/a3c88096-896b-4ad2-8707-2cc0f5bb4464",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "a3c88096-896b-4ad2-8707-2cc0f5bb4464",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMER",
+        "display": "emergency"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2023-09",
+          "code": "225390008",
+          "display": "Triage (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/690efbf3-6087-4c90-a1c7-be572ca734e0"
+      },
+      "period": {
+        "start": "2027-05-01T08:00:00.000+00:00",
+        "end": "2027-05-01T13:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/a3c88096-896b-4ad2-8707-2cc0f5bb4464"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/0e552b8f-6b73-414a-bd1d-36f47e15d3d1",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "0e552b8f-6b73-414a-bd1d-36f47e15d3d1",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMER",
+        "display": "emergency"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2023-09",
+          "code": "4525004",
+          "display": "Emergency department patient visit (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/690efbf3-6087-4c90-a1c7-be572ca734e0"
+      },
+      "period": {
+        "start": "2027-05-01T08:00:00.000+00:00",
+        "end": "2027-05-01T12:15:00.000+00:00"
+      },
+      "diagnosis": [ {
+        "condition": {
+          "reference": "Condition/0cc1be24-b2ce-4df6-8fb0-1af071e66249"
+        },
+        "use": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/diagnosis-role",
+            "code": "billing"
+          } ]
+        },
+        "rank": 1
+      } ],
+      "location": [ {
+        "location": {
+          "reference": "Location/ee51d8c4-8856-427b-b73d-95a7b741c4b9"
+        },
+        "period": {
+          "start": "2027-05-01T07:45:00.000+00:00",
+          "end": "2027-05-01T16:31:00.000+00:00"
+        }
+      }, {
+        "location": {
+          "reference": "Location/a88f97d3-05c0-4cd2-b5d1-af90b8da793e"
+        },
+        "period": {
+          "start": "2027-05-01T09:31:00.000+00:00",
+          "end": "2027-05-01T12:15:00.000+00:00"
+        }
+      }, {
+        "location": {
+          "reference": "Location/e7a5c2c6-d294-4255-9f05-7f185d8a34b9"
+        },
+        "period": {
+          "start": "2027-05-01T08:40:00.000+00:00",
+          "end": "2027-05-01T12:15:00.000+00:00"
+        }
+      }, {
+        "location": {
+          "reference": "Location/4ff8ccc4-f761-4899-9c15-1670963f74f6"
+        },
+        "period": {
+          "start": "2027-05-01T08:30:00.000+00:00",
+          "end": "2027-05-01T15:46:00.000+00:00"
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/0e552b8f-6b73-414a-bd1d-36f47e15d3d1"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Location/ee51d8c4-8856-427b-b73d-95a7b741c4b9",
+    "resource": {
+      "resourceType": "Location",
+      "id": "ee51d8c4-8856-427b-b73d-95a7b741c4b9",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-location" ]
+      },
+      "identifier": [ {
+        "use": "usual",
+        "system": "http://exampleoflocation.com",
+        "value": "B1-S.F1"
+      } ],
+      "name": "Medical Surgical East, first floor",
+      "type": [ {
+        "coding": [ {
+          "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+          "version": "2022",
+          "code": "1108-0",
+          "display": "Emergency Department",
+          "userSelected": true
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Location/ee51d8c4-8856-427b-b73d-95a7b741c4b9"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Location/a88f97d3-05c0-4cd2-b5d1-af90b8da793e",
+    "resource": {
+      "resourceType": "Location",
+      "id": "a88f97d3-05c0-4cd2-b5d1-af90b8da793e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-location" ]
+      },
+      "identifier": [ {
+        "use": "usual",
+        "system": "http://exampleoflocation.com",
+        "value": "B1-S.F2"
+      } ],
+      "name": "Medical Surgical East, first floor",
+      "type": [ {
+        "coding": [ {
+          "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+          "version": "2022",
+          "code": "1209-6",
+          "display": "Treatment Room",
+          "userSelected": true
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Location/a88f97d3-05c0-4cd2-b5d1-af90b8da793e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/0cc1be24-b2ce-4df6-8fb0-1af071e66249",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "0cc1be24-b2ce-4df6-8fb0-1af071e66249",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2023-09",
+          "code": "10349009",
+          "display": "Multi-infarct dementia with delirium (disorder)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/690efbf3-6087-4c90-a1c7-be572ca734e0"
+      },
+      "recordedDate": "2027-04-09T08:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/0cc1be24-b2ce-4df6-8fb0-1af071e66249"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Location/4ff8ccc4-f761-4899-9c15-1670963f74f6",
+    "resource": {
+      "resourceType": "Location",
+      "id": "4ff8ccc4-f761-4899-9c15-1670963f74f6",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-location" ]
+      },
+      "identifier": [ {
+        "use": "usual",
+        "system": "http://exampleoflocation.com",
+        "value": "B1-S.F2"
+      } ],
+      "name": "Medical Surgical East, first floor",
+      "type": [ {
+        "coding": [ {
+          "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+          "version": "2022",
+          "code": "1108-0",
+          "display": "Emergency Department",
+          "userSelected": true
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Location/4ff8ccc4-f761-4899-9c15-1670963f74f6"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Location/e7a5c2c6-d294-4255-9f05-7f185d8a34b9",
+    "resource": {
+      "resourceType": "Location",
+      "id": "e7a5c2c6-d294-4255-9f05-7f185d8a34b9",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-location" ]
+      },
+      "identifier": [ {
+        "use": "usual",
+        "system": "http://exampleoflocation.com",
+        "value": "B1-S.F2"
+      } ],
+      "name": "Medical Surgical East, first floor",
+      "type": [ {
+        "coding": [ {
+          "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+          "version": "2022",
+          "code": "1209-6",
+          "display": "Treatment Room"
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Location/e7a5c2c6-d294-4255-9f05-7f185d8a34b9"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/claim/ClaimBehavior-NotSubsAbuse",
+    "resource": {
+      "resourceType": "Claim",
+      "id": "ClaimBehavior-NotSubsAbuse",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-claim" ]
+      },
+      "status": "active",
+      "type": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/claim-type",
+          "code": "institutional"
+        } ]
+      },
+      "use": "claim",
+      "patient": {
+        "reference": "Patient/690efbf3-6087-4c90-a1c7-be572ca734e0"
+      },
+      "created": "2027-05-01",
+      "provider": {
+        "reference": "Practitioner/d0130982-114b-4c4a-a310-cd848d21607c"
+      },
+      "priority": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/processpriority",
+          "code": "normal"
+        } ]
+      },
+      "diagnosis": [ {
+        "sequence": 1,
+        "diagnosisReference": {
+          "reference": "Condition/0cc1be24-b2ce-4df6-8fb0-1af071e66249"
+        },
+        "type": [ {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/ex-diagnosistype",
+            "code": "principal"
+          } ]
+        } ]
+      } ],
+      "insurance": [ {
+        "sequence": 1,
+        "focal": true,
+        "coverage": {
+          "reference": "Coverage/decc7d8c-579c-404b-87b0-8b78caf5e1ad"
+        }
+      } ],
+      "item": [ {
+        "sequence": 1,
+        "diagnosisSequence": [ 1 ],
+        "productOrService": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/ex-USCLS",
+            "code": "99555"
+          } ]
+        },
+        "encounter": [ {
+          "reference": "Encounter/0e552b8f-6b73-414a-bd1d-36f47e15d3d1"
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Claim/ClaimBehavior-NotSubsAbuse"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/decc7d8c-579c-404b-87b0-8b78caf5e1ad",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "decc7d8c-579c-404b-87b0-8b78caf5e1ad",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MB"
+          } ]
+        }
+      } ],
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/690efbf3-6087-4c90-a1c7-be572ca734e0"
+      },
+      "relationship": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+          "code": "self"
+        } ]
+      },
+      "payor": [ {
+        "reference": "Organization/a101752e-b618-4a76-8bc2-c7742e639a54"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/decc7d8c-579c-404b-87b0-8b78caf5e1ad"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/a101752e-b618-4a76-8bc2-c7742e639a54",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "a101752e-b618-4a76-8bc2-c7742e639a54",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/a101752e-b618-4a76-8bc2-c7742e639a54"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/d0130982-114b-4c4a-a310-cd848d21607c",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "d0130982-114b-4c4a-a310-cd848d21607c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "9999999896"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/d0130982-114b-4c4a-a310-cd848d21607c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/d35ea6a9-f199-4ed0-a4b3-1113329c9ca7",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "d35ea6a9-f199-4ed0-a4b3-1113329c9ca7",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "ea2c176f-e63e-49a7-bd7a-1ebcbbe7388d-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "690efbf3-6087-4c90-a1c7-be572ca734e0"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#ea2c176f-e63e-49a7-bd7a-1ebcbbe7388d-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Adult, mental diagnosis, LOS 8+ hours, EM overlaps with Triage"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS1244FHIRECATHOQR",
+      "period": {
+        "start": "2027-01-01",
+        "end": "2027-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 0.0
+        },
+        "stratifier": [ {
+          "id": "Stratification_1_1",
+          "code": [ {
+            "text": "Strata-1"
+          } ],
+          "stratum": [ {
+            "value": {
+              "text": "Strata-1"
+            },
+            "population": [ {
+              "id": "InitialPopulation_1",
+              "code": {
+                "coding": [ {
+                  "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                  "code": "initial-population",
+                  "display": "Initial Population"
+                } ]
+              },
+              "count": 0
+            }, {
+              "id": "Denominator_1",
+              "code": {
+                "coding": [ {
+                  "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                  "code": "denominator",
+                  "display": "Denominator"
+                } ]
+              },
+              "count": 0
+            }, {
+              "id": "Numerator_1",
+              "code": {
+                "coding": [ {
+                  "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                  "code": "numerator",
+                  "display": "Numerator"
+                } ]
+              },
+              "count": 0
+            } ]
+          } ]
+        }, {
+          "id": "Stratification_1_2",
+          "code": [ {
+            "text": "Strata-2"
+          } ],
+          "stratum": [ {
+            "value": {
+              "text": "Strata-2"
+            },
+            "population": [ {
+              "id": "InitialPopulation_1",
+              "code": {
+                "coding": [ {
+                  "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                  "code": "initial-population",
+                  "display": "Initial Population"
+                } ]
+              },
+              "count": 0
+            }, {
+              "id": "Denominator_1",
+              "code": {
+                "coding": [ {
+                  "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                  "code": "denominator",
+                  "display": "Denominator"
+                } ]
+              },
+              "count": 0
+            }, {
+              "id": "Numerator_1",
+              "code": {
+                "coding": [ {
+                  "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                  "code": "numerator",
+                  "display": "Numerator"
+                } ]
+              },
+              "count": 0
+            } ]
+          } ]
+        }, {
+          "id": "Stratification_1_3",
+          "code": [ {
+            "text": "Strata-3"
+          } ],
+          "stratum": [ {
+            "value": {
+              "text": "Strata-3"
+            },
+            "population": [ {
+              "id": "InitialPopulation_1",
+              "code": {
+                "coding": [ {
+                  "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                  "code": "initial-population",
+                  "display": "Initial Population"
+                } ]
+              },
+              "count": 0
+            }, {
+              "id": "Denominator_1",
+              "code": {
+                "coding": [ {
+                  "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                  "code": "denominator",
+                  "display": "Denominator"
+                } ]
+              },
+              "count": 0
+            }, {
+              "id": "Numerator_1",
+              "code": {
+                "coding": [ {
+                  "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                  "code": "numerator",
+                  "display": "Numerator"
+                } ]
+              },
+              "count": 0
+            } ]
+          } ]
+        }, {
+          "id": "Stratification_1_4",
+          "code": [ {
+            "text": "Strata-4"
+          } ],
+          "stratum": [ {
+            "value": {
+              "text": "Strata-4"
+            },
+            "population": [ {
+              "id": "InitialPopulation_1",
+              "code": {
+                "coding": [ {
+                  "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                  "code": "initial-population",
+                  "display": "Initial Population"
+                } ]
+              },
+              "count": 1
+            }, {
+              "id": "Denominator_1",
+              "code": {
+                "coding": [ {
+                  "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                  "code": "denominator",
+                  "display": "Denominator"
+                } ]
+              },
+              "count": 1
+            }, {
+              "id": "Numerator_1",
+              "code": {
+                "coding": [ {
+                  "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                  "code": "numerator",
+                  "display": "Numerator"
+                } ]
+              },
+              "count": 1
+            } ]
+          } ]
+        } ]
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/690efbf3-6087-4c90-a1c7-be572ca734e0"
+      }, {
+        "reference": "Encounter/a3c88096-896b-4ad2-8707-2cc0f5bb4464"
+      }, {
+        "reference": "Encounter/0e552b8f-6b73-414a-bd1d-36f47e15d3d1"
+      }, {
+        "reference": "Location/ee51d8c4-8856-427b-b73d-95a7b741c4b9"
+      }, {
+        "reference": "Location/a88f97d3-05c0-4cd2-b5d1-af90b8da793e"
+      }, {
+        "reference": "Condition/0cc1be24-b2ce-4df6-8fb0-1af071e66249"
+      }, {
+        "reference": "Location/4ff8ccc4-f761-4899-9c15-1670963f74f6"
+      }, {
+        "reference": "Location/e7a5c2c6-d294-4255-9f05-7f185d8a34b9"
+      }, {
+        "reference": "Claim/ClaimBehavior-NotSubsAbuse"
+      }, {
+        "reference": "Coverage/decc7d8c-579c-404b-87b0-8b78caf5e1ad"
+      }, {
+        "reference": "Organization/a101752e-b618-4a76-8bc2-c7742e639a54"
+      }, {
+        "reference": "Practitioner/d0130982-114b-4c4a-a310-cd848d21607c"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/d35ea6a9-f199-4ed0-a4b3-1113329c9ca7"
+    }
+  } ]
+}

@@ -1,0 +1,24 @@
+{
+  "resourceType": "DeviceRequest",
+  "id": "6da3c6a2-28b8-4941-bb02-ca169b8e1128",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-devicerequest" ]
+  },
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-DeviceRequest.doNotPerform",
+    "valueBoolean": false
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "codeCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183240000",
+      "display": "Self-propelled wheelchair (physical object)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1905549a-1783-4195-95b9-b0879cb81d96"
+  },
+  "authoredOn": "2026-11-01T23:59:00.000+00:00"
+}

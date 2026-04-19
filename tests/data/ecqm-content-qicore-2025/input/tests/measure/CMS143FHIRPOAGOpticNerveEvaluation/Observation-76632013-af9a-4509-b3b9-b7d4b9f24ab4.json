@@ -1,0 +1,31 @@
+{
+  "resourceType": "Observation",
+  "id": "76632013-af9a-4509-b3b9-b7d4b9f24ab4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "laboratory",
+      "display": "laboratory",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.73",
+      "code": "71486-5",
+      "display": "Left eye Optic disc or retinal nerve fiber layer structural abnormalities by Ophthalmoscopy"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/7263b5ad-e3fe-45af-8775-b827ecfd1c93"
+  },
+  "effectiveDateTime": "2026-01-26T07:59:00.000+00:00",
+  "valueQuantity": {
+    "value": 0.7
+  }
+}

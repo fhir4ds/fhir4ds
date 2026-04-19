@@ -1,0 +1,33 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "2a751dc7-4243-4600-80f5-0ac8fac291b7",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "407563006",
+        "display": "Treatment not tolerated (situation)",
+        "userSelected": true
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "308470006",
+      "display": "Referral to general physician (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1f16120b-56c9-4d72-8dd4-01d8a0175d77"
+  },
+  "authoredOn": "2026-01-01T08:20:00.000+00:00"
+}

@@ -1,0 +1,632 @@
+{
+  "resourceType": "Group",
+  "id": "CMS69FHIRPCSBMIScreenAndFollowUp",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS69FHIRPCSBMIScreenAndFollowUp"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/8c89947a-a52b-4a41-86a8-166b0560355b",
+      "display": "MedicalReasonMedicationForAboveNormalBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8c89947a-a52b-4a41-86a8-166b0560355b",
+      "display": "MedicalReasonMedicationForAboveNormalBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a0aacdbc-4954-48af-aa88-361ea7e32736",
+      "display": "HighBMIAndConditionEndsBeforeInterventionPerformed NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a0aacdbc-4954-48af-aa88-361ea7e32736",
+      "display": "HighBMIAndConditionEndsBeforeInterventionPerformed NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/57858042-c2aa-49f4-b401-1f1fd9ab289a",
+      "display": "DischargeToHomeHospiceCareDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/57858042-c2aa-49f4-b401-1f1fd9ab289a",
+      "display": "DischargeToHomeHospiceCareDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1ba2fc33-1a1b-416b-bb3c-79ba5d0d3359",
+      "display": "HighBMIAndInterventionOrderedFollowUpConditionEndsB4InterventionOrder NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1ba2fc33-1a1b-416b-bb3c-79ba5d0d3359",
+      "display": "HighBMIAndInterventionOrderedFollowUpConditionEndsB4InterventionOrder NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ddfb765a-a3fb-467f-a9d9-ac6faf4cea9a",
+      "display": "LowBMIAndInterventionPerformedCondition NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ddfb765a-a3fb-467f-a9d9-ac6faf4cea9a",
+      "display": "LowBMIAndInterventionPerformedCondition NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6553adbf-2a30-4861-97e6-cca7d2274f01",
+      "display": "NoFollowUpPlanMedicalReasonMedicationForAboveNormalBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6553adbf-2a30-4861-97e6-cca7d2274f01",
+      "display": "NoFollowUpPlanMedicalReasonMedicationForAboveNormalBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c1df0273-aad8-41a8-859c-edd204bb4f16",
+      "display": "MedicalReasonNoReferralForLowBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c1df0273-aad8-41a8-859c-edd204bb4f16",
+      "display": "MedicalReasonNoReferralForLowBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1b102c21-830a-41a5-ac27-9aa77ea5adfe",
+      "display": "HospicePerformedDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1b102c21-830a-41a5-ac27-9aa77ea5adfe",
+      "display": "HospicePerformedDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7ac9722f-8763-4380-a741-53ee4bb98819",
+      "display": "NotRequestedReferralForHighWeight DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7ac9722f-8763-4380-a741-53ee4bb98819",
+      "display": "NotRequestedReferralForHighWeight DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/097cbc7a-d22e-4395-9fcf-fd1f904f7c92",
+      "display": "HospiceProcedure DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/097cbc7a-d22e-4395-9fcf-fd1f904f7c92",
+      "display": "HospiceProcedure DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6f03c77f-035f-4e3a-a8d9-57892dec4030",
+      "display": "Patient18DayOfEncounter DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6f03c77f-035f-4e3a-a8d9-57892dec4030",
+      "display": "Patient18DayOfEncounter DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d4d064be-d55a-47b5-9bfd-993afebd95a5",
+      "display": "DischargeToHospiceFacilityAfterMP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d4d064be-d55a-47b5-9bfd-993afebd95a5",
+      "display": "DischargeToHospiceFacilityAfterMP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c84bf29f-80ac-4bf0-beeb-404ba96a3fa8",
+      "display": "DischargeToHospiceFacilityAfterMP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c84bf29f-80ac-4bf0-beeb-404ba96a3fa8",
+      "display": "DischargeToHospiceFacilityAfterMP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/050201c2-c2c4-46e6-8288-a34f99caebdc",
+      "display": "HighBMIAndInterventionOrderedMedication NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/050201c2-c2c4-46e6-8288-a34f99caebdc",
+      "display": "HighBMIAndInterventionOrderedMedication NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/405d4940-7ab2-4d26-b55f-3c27e07eba33",
+      "display": "LowBMIAndConditionEndsBeforeInterventionPerformed (1) NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/405d4940-7ab2-4d26-b55f-3c27e07eba33",
+      "display": "LowBMIAndConditionEndsBeforeInterventionPerformed (1) NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ff09cf1e-5b30-45c7-9cc6-d5daf48a3933",
+      "display": "MedicalReasonNotPerformed DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ff09cf1e-5b30-45c7-9cc6-d5daf48a3933",
+      "display": "MedicalReasonNotPerformed DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/353cb8b7-96ac-4b51-9a0d-60cd64e6d854",
+      "display": "PalliativeCareProcedure DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/353cb8b7-96ac-4b51-9a0d-60cd64e6d854",
+      "display": "PalliativeCareProcedure DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7902e3dc-f3da-4cc2-9f2e-4a6c8cd33b88",
+      "display": "LowBMIAndInterventionPerformed NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7902e3dc-f3da-4cc2-9f2e-4a6c8cd33b88",
+      "display": "LowBMIAndInterventionPerformed NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8e130410-9710-45f3-ac56-e69dee0755d9",
+      "display": "Patient18LastDayOfEncounter DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8e130410-9710-45f3-ac56-e69dee0755d9",
+      "display": "Patient18LastDayOfEncounter DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d3054ffa-e17b-4611-b7e0-4523fb0f9e1d",
+      "display": "LowBMIAndInterventionOrderedFollowUpConditionEndsB4InterventionOrder NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d3054ffa-e17b-4611-b7e0-4523fb0f9e1d",
+      "display": "LowBMIAndInterventionOrderedFollowUpConditionEndsB4InterventionOrder NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/736b5472-4a6f-4278-80d3-373d1c78c4c5",
+      "display": "HospiceObservationAssessment DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/736b5472-4a6f-4278-80d3-373d1c78c4c5",
+      "display": "HospiceObservationAssessment DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a327cf96-81c4-46ff-9619-6fd9981bb90c",
+      "display": "MedicalReasonNotPerformed DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a327cf96-81c4-46ff-9619-6fd9981bb90c",
+      "display": "MedicalReasonNotPerformed DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/09e4ff5a-fe3b-4c89-a36e-68f64c7e489c",
+      "display": "PalliativeCareProcedure DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/09e4ff5a-fe3b-4c89-a36e-68f64c7e489c",
+      "display": "PalliativeCareProcedure DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/30561eea-67f0-487c-aff4-a2dea36cb0f9",
+      "display": "EncounterOneDayAfterMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/30561eea-67f0-487c-aff4-a2dea36cb0f9",
+      "display": "EncounterOneDayAfterMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/27849d59-3cef-40bf-8338-a6ec7c0bcf81",
+      "display": "LowBMIAndInterventionOrderedMedication NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/27849d59-3cef-40bf-8338-a6ec7c0bcf81",
+      "display": "LowBMIAndInterventionOrderedMedication NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6092a810-f9e0-4975-9582-37bbb06e8e56",
+      "display": "PalliativeCareEncounter DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6092a810-f9e0-4975-9582-37bbb06e8e56",
+      "display": "PalliativeCareEncounter DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1c607e84-c7c2-4dae-bf63-a75d7a9cfd38",
+      "display": "ObeseDxEndsBeforeIntervention NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1c607e84-c7c2-4dae-bf63-a75d7a9cfd38",
+      "display": "ObeseDxEndsBeforeIntervention NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/659f9c7b-5c1c-475f-bfcb-77c246fa7a28",
+      "display": "MedicalReasonMedicationForAboveNormalBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/659f9c7b-5c1c-475f-bfcb-77c246fa7a28",
+      "display": "MedicalReasonMedicationForAboveNormalBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5d34e56e-f4f1-4817-b7e4-e4c57f811300",
+      "display": "Pregnant DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5d34e56e-f4f1-4817-b7e4-e4c57f811300",
+      "display": "Pregnant DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5d48c3b8-93e9-4e29-8c20-a002761d9e24",
+      "display": "Pregnant DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5d48c3b8-93e9-4e29-8c20-a002761d9e24",
+      "display": "Pregnant DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9d92be1d-6fc8-40f2-99a0-4be9ce1f244b",
+      "display": "HighBMIAndInterventionPerformedCondition NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9d92be1d-6fc8-40f2-99a0-4be9ce1f244b",
+      "display": "HighBMIAndInterventionPerformedCondition NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/80a53697-3fdb-4721-87aa-64462a6708dd",
+      "display": "PregnancyOnset1YearAgo DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/80a53697-3fdb-4721-87aa-64462a6708dd",
+      "display": "PregnancyOnset1YearAgo DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6f0c3642-5efc-4923-ac24-9f5e9d1831d6",
+      "display": "DischargeToHospiceFacilityAfterMP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6f0c3642-5efc-4923-ac24-9f5e9d1831d6",
+      "display": "DischargeToHospiceFacilityAfterMP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1e23fb8f-e27b-4553-a62a-f66edeb4528a",
+      "display": "HighBMIAndInterventionPerformedCondition NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1e23fb8f-e27b-4553-a62a-f66edeb4528a",
+      "display": "HighBMIAndInterventionPerformedCondition NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/88a2b45a-7866-445a-8242-91ec0ebb7646",
+      "display": "MedicalReasonFollowupPlanLowBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/88a2b45a-7866-445a-8242-91ec0ebb7646",
+      "display": "MedicalReasonFollowupPlanLowBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/463dd868-997d-472f-962c-96383fd2a5c4",
+      "display": "LowBMIAndInterventionPerformedCondition NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/463dd868-997d-472f-962c-96383fd2a5c4",
+      "display": "LowBMIAndInterventionPerformedCondition NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b98fcec4-23a5-41bd-82d8-bad2f50ffc9c",
+      "display": "NoFollowUpPlanMedicalReasonMedicationForBelowNormalBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b98fcec4-23a5-41bd-82d8-bad2f50ffc9c",
+      "display": "NoFollowUpPlanMedicalReasonMedicationForBelowNormalBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/45b1ce40-0f49-4559-8c3b-5c2a8070b0a7",
+      "display": "DischargeToHospiceFacilityDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/45b1ce40-0f49-4559-8c3b-5c2a8070b0a7",
+      "display": "DischargeToHospiceFacilityDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8e38b797-4dec-437d-8bf0-6f0fc78f8ea7",
+      "display": "HighBMIAndInterventionOrderedFollowUp NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8e38b797-4dec-437d-8bf0-6f0fc78f8ea7",
+      "display": "HighBMIAndInterventionOrderedFollowUp NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1102009b-6f05-4bab-9fd1-191e81cf50e8",
+      "display": "HighBMIAndInterventionPerformed NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1102009b-6f05-4bab-9fd1-191e81cf50e8",
+      "display": "HighBMIAndInterventionPerformed NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dda79f3f-4c4f-454a-bae2-9751a0114e91",
+      "display": "Patient17DayOfEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dda79f3f-4c4f-454a-bae2-9751a0114e91",
+      "display": "Patient17DayOfEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/42e6b4d6-defc-4ec5-894f-e3333e3039a3",
+      "display": "NormalBMIAt24pt9 NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/42e6b4d6-defc-4ec5-894f-e3333e3039a3",
+      "display": "NormalBMIAt24pt9 NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f5ae6269-d09b-47f8-a519-f1a8a81549fc",
+      "display": "HighBMIAndInterventionPerformedCondition NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f5ae6269-d09b-47f8-a519-f1a8a81549fc",
+      "display": "HighBMIAndInterventionPerformedCondition NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0278fdf0-f067-46e8-aeb1-fb96dff3c947",
+      "display": "HTN130DeclinedNonPharm DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0278fdf0-f067-46e8-aeb1-fb96dff3c947",
+      "display": "HTN130DeclinedNonPharm DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/461fdfab-fcc1-4630-9dae-2ba3a6ab0c25",
+      "display": "NormalBMIAt18pt5 NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/461fdfab-fcc1-4630-9dae-2ba3a6ab0c25",
+      "display": "NormalBMIAt18pt5 NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d318f512-656e-43bf-a409-16b6e24462a9",
+      "display": "Pregnant DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d318f512-656e-43bf-a409-16b6e24462a9",
+      "display": "Pregnant DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/953ef59d-4c39-40ef-8067-87b5ecf84727",
+      "display": "HospiceOrder DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/953ef59d-4c39-40ef-8067-87b5ecf84727",
+      "display": "HospiceOrder DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/03f01144-2230-42ab-b81f-594e1c2baa62",
+      "display": "PalliativeCareEncounterAfterMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/03f01144-2230-42ab-b81f-594e1c2baa62",
+      "display": "PalliativeCareEncounterAfterMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8835a50b-0a0f-4e2f-94fa-7c180cd7f905",
+      "display": "LowBMIAndInterventionOrderedCondition2 NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8835a50b-0a0f-4e2f-94fa-7c180cd7f905",
+      "display": "LowBMIAndInterventionOrderedCondition2 NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5ef4acf3-4b42-41fd-8793-7d1a9342865a",
+      "display": "HospiceCondition DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5ef4acf3-4b42-41fd-8793-7d1a9342865a",
+      "display": "HospiceCondition DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ecce155-635d-47ec-b35d-d53126423a81",
+      "display": "PalliativeCareObservation DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ecce155-635d-47ec-b35d-d53126423a81",
+      "display": "PalliativeCareObservation DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/296d38e4-d69b-481e-a8cf-f7eee8b9e5d7",
+      "display": "Age18HasEnc IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/296d38e4-d69b-481e-a8cf-f7eee8b9e5d7",
+      "display": "Age18HasEnc IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/260e1fc8-227f-4c16-bfc6-22625380a12c",
+      "display": "MedicalReasonNoFollowupPlanHighBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/260e1fc8-227f-4c16-bfc6-22625380a12c",
+      "display": "MedicalReasonNoFollowupPlanHighBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cd81ff3a-3d2b-472e-bf0f-f951aee7d2c4",
+      "display": "Patient18DayOfEncounter DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cd81ff3a-3d2b-472e-bf0f-f951aee7d2c4",
+      "display": "Patient18DayOfEncounter DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c3caf126-12a2-473f-8f51-1c7828d63d16",
+      "display": "HighBMIAndInterventionOrderedReferral NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c3caf126-12a2-473f-8f51-1c7828d63d16",
+      "display": "HighBMIAndInterventionOrderedReferral NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1f16120b-56c9-4d72-8dd4-01d8a0175d77",
+      "display": "ElevatedDeclineFU DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1f16120b-56c9-4d72-8dd4-01d8a0175d77",
+      "display": "ElevatedDeclineFU DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2a976bc2-493b-421f-842e-36d31463f261",
+      "display": "Patient18DayOfEncounter DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2a976bc2-493b-421f-842e-36d31463f261",
+      "display": "Patient18DayOfEncounter DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a4a1ed63-89ff-4d27-8819-136873e13171",
+      "display": "MedicalReasonMedicationForLowBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a4a1ed63-89ff-4d27-8819-136873e13171",
+      "display": "MedicalReasonMedicationForLowBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/823e94a5-e1a7-4d2a-b289-3133f0b1772c",
+      "display": "VirtualEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/823e94a5-e1a7-4d2a-b289-3133f0b1772c",
+      "display": "VirtualEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ca6deaeb-459d-4d1a-9daf-e454ff76a6f0",
+      "display": "HospiceCondition DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ca6deaeb-459d-4d1a-9daf-e454ff76a6f0",
+      "display": "HospiceCondition DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7b34e64e-e7fe-402c-9a26-12da90662897",
+      "display": "DischargeToHospiceFacilityDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7b34e64e-e7fe-402c-9a26-12da90662897",
+      "display": "DischargeToHospiceFacilityDuringMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6d26d364-a06c-49e6-84df-280ec6b7a8a3",
+      "display": "MedicalReasonNoReferralHighBMI DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6d26d364-a06c-49e6-84df-280ec6b7a8a3",
+      "display": "MedicalReasonNoReferralHighBMI DENEXCEPPass"
+    }
+  } ]
+}

@@ -1,0 +1,107 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "b8a1331a-81d8-4166-baaa-daeb3c6b1b51",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "a3f07901-e123-425a-b394-86d6d9c830cc-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "3731688f-4261-42cc-943a-202b69beab97"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-inputParameters",
+    "valueReference": {
+      "reference": "#a3f07901-e123-425a-b394-86d6d9c830cc-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "IP Female Enc #1 with eGFR of 63. SCr is within first 24 hours.\nVScode: Denominator Exclusion=[Encounter(id=DENEXPass-TwoEncFemaleeGFRLowAndHigh-03)]"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS832HHAKIFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "67b50f879214df46de2f1fdb",
+    "population": [ {
+      "id": "DA0D3694-7F57-4FB9-8410-1F64E44CA01E",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 2
+    }, {
+      "id": "624D8554-9CB0-4BF0-882D-05C4F88BCC2C",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 2
+    }, {
+      "id": "000FF050-D4A2-4C8B-8123-4538D35D5441",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "01644D07-D9F8-403E-A66D-109ABA29BB6E",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/3731688f-4261-42cc-943a-202b69beab97"
+  }, {
+    "reference": "Encounter/ac310383-d5e6-443d-9913-d4593115f622"
+  }, {
+    "reference": "Encounter/9ab4f707-c85d-4ee8-a6f5-3e272b1680a9"
+  }, {
+    "reference": "Encounter/36b9e3b4-6eb1-4d3c-9dd4-ae2b4c2b64a8"
+  }, {
+    "reference": "Observation/8736167f-a40d-430c-b426-366987c59f07"
+  }, {
+    "reference": "Observation/f5b13ad3-ca0b-4612-85d1-b83c86419ede"
+  }, {
+    "reference": "Observation/c52c8cfc-95ae-405b-bee8-b53455bb1036"
+  }, {
+    "reference": "Observation/6007b282-df88-4cf8-9900-9c2748704fe4"
+  }, {
+    "reference": "Observation/09e295f9-5988-4709-9c79-5582089eb310"
+  }, {
+    "reference": "Observation/a1477c06-eecc-4627-b124-a89dcfaa97db"
+  }, {
+    "reference": "Coverage/38451547-717b-41e1-8fdb-b06ba9026972"
+  }, {
+    "reference": "Organization/d1e41c5c-2731-43e3-a06d-0fc563b323e4"
+  } ]
+}

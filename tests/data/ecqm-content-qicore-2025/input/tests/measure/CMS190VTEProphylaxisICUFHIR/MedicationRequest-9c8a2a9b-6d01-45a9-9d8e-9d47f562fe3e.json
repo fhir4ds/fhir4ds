@@ -1,0 +1,38 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "9c8a2a9b-6d01-45a9-9d8e-9d47f562fe3e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+      "code": "inpatient"
+    } ]
+  } ],
+  "doNotPerform": false,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "855338"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/282ae3a0-a4fd-4fed-8ce9-bff3840c7ca9"
+  },
+  "authoredOn": "2026-11-01T08:00:00Z",
+  "requester": {
+    "reference": "Practitioner/123456"
+  },
+  "dosageInstruction": [ {
+    "timing": {
+      "repeat": {
+        "boundsPeriod": {
+          "start": "2026-11-03T09:00:00Z"
+        }
+      }
+    }
+  } ]
+}

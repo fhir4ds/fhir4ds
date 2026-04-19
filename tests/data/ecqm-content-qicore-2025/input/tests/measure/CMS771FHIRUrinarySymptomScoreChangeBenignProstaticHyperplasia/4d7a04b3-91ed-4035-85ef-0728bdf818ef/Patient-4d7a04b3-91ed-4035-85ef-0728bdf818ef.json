@@ -1,0 +1,50 @@
+{
+  "resourceType": "Patient",
+  "id": "4d7a04b3-91ed-4035-85ef-0728bdf818ef",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2028-9",
+        "display": "Asian"
+      }
+    }, {
+      "url": "text",
+      "valueString": "Asian"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2186-5",
+        "display": "Non Hispanic or Latino"
+      }
+    }, {
+      "url": "text",
+      "valueString": "Non Hispanic or Latino"
+    } ]
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://myGoodHealthCare.com/",
+    "value": "41654161684974312"
+  } ],
+  "name": [ {
+    "family": "IPPass",
+    "given": [ "BPHDxStatusInactive" ]
+  } ],
+  "gender": "male",
+  "birthDate": "1983-12-01"
+}

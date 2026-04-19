@@ -1,0 +1,300 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1634-20250125",
+  "meta": {
+    "versionId": "34",
+    "lastUpdated": "2025-01-25T01:09:35.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-01-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1634",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1634"
+  } ],
+  "version": "20250125",
+  "name": "ChoroidalDegenerations",
+  "title": "Choroidal Degenerations",
+  "status": "active",
+  "date": "2025-01-25T01:09:35-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of a diagnosis of choroidal degenerations.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of degenerations of the choroid, including choroid atrophy and dystrophy, angioid streaks, and choroideremia.),(Exclusion Criteria: Excludes concepts that represent a diagnosis for 'unspecified eye.')",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "1231678007",
+        "display": "Peripapillary choroidal dystrophy (disorder)"
+      }, {
+        "code": "15989831000119105",
+        "display": "Choroideremia of bilateral eyes (disorder)"
+      }, {
+        "code": "15989911000119106",
+        "display": "Angioid streaks of choroid of right eye (disorder)"
+      }, {
+        "code": "15989951000119107",
+        "display": "Angioid streaks of choroid of left eye (disorder)"
+      }, {
+        "code": "15989991000119102",
+        "display": "Angioid streaks of choroid of bilateral eyes (disorder)"
+      }, {
+        "code": "193463006",
+        "display": "Diffuse secondary choroid atrophy (disorder)"
+      }, {
+        "code": "193466003",
+        "display": "Partial circumpapillary choroid dystrophy (disorder)"
+      }, {
+        "code": "193468002",
+        "display": "Partial central choroid dystrophy (disorder)"
+      }, {
+        "code": "19871000",
+        "display": "Total generalized choroidal dystrophy (disorder)"
+      }, {
+        "code": "231996009",
+        "display": "Central areolar choroidal sclerosis (disorder)"
+      }, {
+        "code": "231997000",
+        "display": "Peripapillary choroidal sclerosis (disorder)"
+      }, {
+        "code": "247149008",
+        "display": "Macular choroidal sclerosis (disorder)"
+      }, {
+        "code": "24950005",
+        "display": "Partial generalized choroidal dystrophy (disorder)"
+      }, {
+        "code": "312918002",
+        "display": "Choroidal dystrophy (disorder)"
+      }, {
+        "code": "312927001",
+        "display": "Bietti's crystalline retinopathy (disorder)"
+      }, {
+        "code": "335401000119103",
+        "display": "Diffuse secondary atrophy of choroid of right eye (disorder)"
+      }, {
+        "code": "336081000119106",
+        "display": "Choroid degeneration of right eye (disorder)"
+      }, {
+        "code": "336491000119103",
+        "display": "Age-related atrophy of right choroid (disorder)"
+      }, {
+        "code": "341011000119108",
+        "display": "Diffuse secondary atrophy of choroid of left eye (disorder)"
+      }, {
+        "code": "341691000119108",
+        "display": "Choroid degeneration of left eye (disorder)"
+      }, {
+        "code": "342101000119104",
+        "display": "Age-related atrophy of left choroid (disorder)"
+      }, {
+        "code": "346281000119104",
+        "display": "Diffuse secondary atrophy of choroid of bilateral eyes (disorder)"
+      }, {
+        "code": "346911000119103",
+        "display": "Choroid degeneration of bilateral eyes (disorder)"
+      }, {
+        "code": "347261000119106",
+        "display": "Senile atrophy of choroid of bilateral eyes (disorder)"
+      }, {
+        "code": "38513001",
+        "display": "Senile atrophy of choroid (disorder)"
+      }, {
+        "code": "406446000",
+        "display": "Choroidal degeneration (disorder)"
+      }, {
+        "code": "41250005",
+        "display": "Diffuse choroidal sclerosis (disorder)"
+      }, {
+        "code": "59753003",
+        "display": "Total circumpapillary dystrophy of choroid (disorder)"
+      }, {
+        "code": "74469006",
+        "display": "Hereditary choroidal dystrophy (disorder)"
+      }, {
+        "code": "75241009",
+        "display": "Choroideremia (disorder)"
+      }, {
+        "code": "86103006",
+        "display": "Angioid streaks of choroid (disorder)"
+      }, {
+        "code": "92820007",
+        "display": "Circumpapillary dystrophy of choroid (disorder)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:9ac56e6d-f496-446a-a0b8-1cfba59af364",
+    "timestamp": "2025-06-20T16:55:41-04:00",
+    "total": 29,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1231678007",
+      "display": "Peripapillary choroidal dystrophy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "15989831000119105",
+      "display": "Choroideremia of bilateral eyes (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "15989911000119106",
+      "display": "Angioid streaks of choroid of right eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "15989951000119107",
+      "display": "Angioid streaks of choroid of left eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "15989991000119102",
+      "display": "Angioid streaks of choroid of bilateral eyes (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "193463006",
+      "display": "Diffuse secondary choroid atrophy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "193466003",
+      "display": "Partial circumpapillary choroid dystrophy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "193468002",
+      "display": "Partial central choroid dystrophy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "19871000",
+      "display": "Total generalized choroidal dystrophy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "231996009",
+      "display": "Central areolar choroidal sclerosis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "231997000",
+      "display": "Peripapillary choroidal sclerosis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "247149008",
+      "display": "Macular choroidal sclerosis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "24950005",
+      "display": "Partial generalized choroidal dystrophy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "312918002",
+      "display": "Choroidal dystrophy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "312927001",
+      "display": "Bietti's crystalline retinopathy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "336081000119106",
+      "display": "Choroid degeneration of right eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "336491000119103",
+      "display": "Age-related atrophy of right choroid (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "341691000119108",
+      "display": "Choroid degeneration of left eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "342101000119104",
+      "display": "Age-related atrophy of left choroid (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "346911000119103",
+      "display": "Choroid degeneration of bilateral eyes (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "347261000119106",
+      "display": "Senile atrophy of choroid of bilateral eyes (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "38513001",
+      "display": "Senile atrophy of choroid (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "406446000",
+      "display": "Choroidal degeneration (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "41250005",
+      "display": "Diffuse choroidal sclerosis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "59753003",
+      "display": "Total circumpapillary dystrophy of choroid (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "74469006",
+      "display": "Hereditary choroidal dystrophy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "75241009",
+      "display": "Choroideremia (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "86103006",
+      "display": "Angioid streaks of choroid (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "92820007",
+      "display": "Circumpapillary dystrophy of choroid (disorder)"
+    } ]
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1248.369",
+  "meta": {
+    "versionId": "7",
+    "lastUpdated": "2025-03-12T01:08:28.000-04:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2025-03-12"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2025-03-12"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.369",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1248.369"
+    }
+  ],
+  "version": "20250312",
+  "name": "UnavailabilityOfBacillusCalmetteGuerinForUrologyCare",
+  "title": "Unavailability of Bacillus Calmette Guerin for Urology Care",
+  "status": "active",
+  "date": "2025-03-12T01:08:28-04:00",
+  "publisher": "American Institutes for Research Steward",
+  "expansion": {
+    "identifier": "urn:uuid:eace65ee-22b8-4d2e-92cd-784e566a77fa",
+    "timestamp": "2026-03-13T12:47:11-04:00",
+    "total": 8,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "182856006",
+        "display": "Drug not available due to being out of stock (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "182857002",
+        "display": "Drug not available - off market (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "242990004",
+        "display": "Drug not available for administration (event)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "452631000124107",
+        "display": "Medication not available (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "452641000124102",
+        "display": "Medication not available from manufacturer (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "452651000124100",
+        "display": "Medication not available from pharmacy (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "452661000124103",
+        "display": "Medication not available from pharmacy supplier (finding)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "452671000124105",
+        "display": "Medication not available from wholesaler (finding)"
+      }
+    ]
+  }
+}

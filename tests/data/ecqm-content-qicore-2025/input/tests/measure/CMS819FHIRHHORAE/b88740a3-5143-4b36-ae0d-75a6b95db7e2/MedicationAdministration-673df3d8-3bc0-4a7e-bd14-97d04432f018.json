@@ -1,0 +1,31 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "673df3d8-3bc0-4a7e-bd14-97d04432f018",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1010600",
+      "display": "Opioids, All"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b88740a3-5143-4b36-ae0d-75a6b95db7e2"
+  },
+  "context": {
+    "reference": "Encounter/0c0287ba-89f4-432d-952d-b5bff2294697"
+  },
+  "effectiveDateTime": "2026-10-31T08:00:00.000+00:00",
+  "note": [ {
+    "text": "Administered opioid medication as prescribed."
+  } ],
+  "dosage": {
+    "rateQuantity": {
+      "value": 1,
+      "unit": "mg"
+    }
+  }
+}

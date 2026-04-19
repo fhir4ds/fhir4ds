@@ -1,0 +1,95 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "b888fd1d-290a-4cb5-9d57-770da13b9ca3",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "2e0af8f0-562a-42e0-86d6-cc159fc6a293-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "38fba18c-6026-4777-b99b-75996d5968e3"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#2e0af8f0-562a-42e0-86d6-cc159fc6a293-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient has Dementia Dx, 2 qualifying encounters and Patient Reason documented for not performing Assessment however documentation is done 1 day after end of encounter."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS149FHIRDementiaCognitiveAssessment",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/38fba18c-6026-4777-b99b-75996d5968e3"
+  }, {
+    "reference": "Encounter/6f23c6bb-15fc-4276-a213-83c55995c3ba"
+  }, {
+    "reference": "Condition/aff71d24-2de4-468b-9ed6-f82ef6ca0e37"
+  }, {
+    "reference": "Encounter/99691a03-458d-4b9e-a3c3-fa1457850999"
+  }, {
+    "reference": "Procedure/a457ae84-041a-4733-b181-a96c20ce2541"
+  }, {
+    "reference": "Observation/e9869c26-7e07-45aa-b294-bc5a060bb83f"
+  } ]
+}

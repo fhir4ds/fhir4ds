@@ -1,0 +1,42 @@
+{
+  "resourceType": "Condition",
+  "id": "4502b3fd-29fb-41cf-af32-0d4cd282cdd5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "109977009",
+      "display": "Peripheral T-cell lymphoma (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a860bf3e-dbc6-400f-b921-aa364db4dec4"
+  },
+  "onsetPeriod": {
+    "start": "2026-04-07T08:00:00.000+00:00"
+  }
+}

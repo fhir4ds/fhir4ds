@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "8a267bf2-2299-4791-b876-720f41993871",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-12-31T23:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "36192008",
+      "display": "Total abdominal colectomy with ileoproctostomy (procedure)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/27da60c8-3729-4b2a-9241-562e1a0aff30"
+  },
+  "performedPeriod": {
+    "start": "2026-12-31T23:00:00.000+00:00",
+    "end": "2026-12-31T23:59:00.000+00:00"
+  }
+}

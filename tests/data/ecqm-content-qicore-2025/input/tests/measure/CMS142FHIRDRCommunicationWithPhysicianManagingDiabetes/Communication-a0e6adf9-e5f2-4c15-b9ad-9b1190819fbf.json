@@ -1,0 +1,25 @@
+{
+  "resourceType": "Communication",
+  "id": "a0e6adf9-e5f2-4c15-b9ad-9b1190819fbf",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone" ]
+  },
+  "status": "not-done",
+  "statusReason": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "1296859006",
+      "display": "Procedure declined (situation)",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "312912001",
+      "display": "Macular edema due to diabetes mellitus (disorder)",
+      "userSelected": true
+    } ]
+  } ],
+  "sent": "2026-07-09T08:00:00.000+00:00"
+}

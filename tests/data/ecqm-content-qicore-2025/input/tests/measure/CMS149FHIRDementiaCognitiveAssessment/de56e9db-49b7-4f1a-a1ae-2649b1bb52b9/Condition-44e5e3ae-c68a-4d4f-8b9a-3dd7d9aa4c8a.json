@@ -1,0 +1,45 @@
+{
+  "resourceType": "Condition",
+  "id": "44e5e3ae-c68a-4d4f-8b9a-3dd7d9aa4c8a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "10532003",
+      "display": "Primary degenerative dementia of the Alzheimer type, presenile onset, with depression (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/de56e9db-49b7-4f1a-a1ae-2649b1bb52b9"
+  },
+  "onsetPeriod": {
+    "start": "2026-07-15T08:34:00.000+00:00"
+  }
+}

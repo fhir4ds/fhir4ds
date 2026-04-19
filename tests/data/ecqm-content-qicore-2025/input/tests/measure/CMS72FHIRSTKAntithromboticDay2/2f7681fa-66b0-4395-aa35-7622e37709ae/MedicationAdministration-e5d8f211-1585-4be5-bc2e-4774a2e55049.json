@@ -1,0 +1,31 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "e5d8f211-1585-4be5-bc2e-4774a2e55049",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministrationnotdone" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-10-10T09:00:00Z"
+  } ],
+  "status": "not-done",
+  "statusReason": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "443390004",
+      "display": "Refused"
+    } ]
+  } ],
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1037045"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/2f7681fa-66b0-4395-aa35-7622e37709ae"
+  },
+  "effectivePeriod": {
+    "start": "2026-10-10T09:00:00Z"
+  }
+}

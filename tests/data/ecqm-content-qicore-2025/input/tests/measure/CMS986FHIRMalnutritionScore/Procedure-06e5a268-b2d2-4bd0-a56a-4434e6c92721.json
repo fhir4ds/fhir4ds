@@ -1,0 +1,30 @@
+{
+  "resourceType": "Procedure",
+  "id": "06e5a268-b2d2-4bd0-a56a-4434e6c92721",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-07-02T08:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "306165000",
+      "display": "Referral to hospital-based dietetics service (procedure)"
+    } ],
+    "text": "Referral to hospital-based dietetics service (procedure)"
+  },
+  "subject": {
+    "reference": "Patient/31ed0db8-1972-40ed-be78-0653f2cd9a95"
+  },
+  "encounter": {
+    "reference": "Encounter/2Encounters1007522MSROBSPass4"
+  },
+  "performedPeriod": {
+    "start": "2026-07-02T08:00:00.000+00:00",
+    "end": "2026-07-02T08:01:00.000+00:00"
+  }
+}

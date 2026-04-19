@@ -1,0 +1,39 @@
+{
+  "resourceType": "Condition",
+  "id": "9b6f385e-4213-46e4-9ec8-26c70f787118",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "remission",
+      "display": "remission"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "271323007"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/be20e6d8-f2f2-49d9-abc1-39e93ba36a1c"
+  },
+  "onsetDateTime": "2025-12-21T13:30:00.000Z",
+  "abatementDateTime": "2025-12-30T14:15:00.000Z"
+}

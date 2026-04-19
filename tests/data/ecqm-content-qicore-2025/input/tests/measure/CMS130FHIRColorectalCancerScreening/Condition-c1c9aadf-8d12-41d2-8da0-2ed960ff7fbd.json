@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "c1c9aadf-8d12-41d2-8da0-2ed960ff7fbd",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "101421000119107",
+      "display": "Dementia due to Parkinson's disease (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/7822bd0a-ba96-46f0-8c57-204d37156184"
+  },
+  "onsetDateTime": "2024-12-31T23:59:00.000+00:00"
+}

@@ -1,0 +1,37 @@
+{
+  "resourceType": "Communication",
+  "id": "b92985da-3a50-4d55-a534-9f1c113bc511",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-07-09T08:00:00.000+00:00"
+  } ],
+  "status": "not-done",
+  "statusReason": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "183945002",
+      "display": "Procedure declined for religious reason (situation)"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "428341000124108",
+      "display": "Macular edema absent (situation)",
+      "userSelected": true
+    } ]
+  } ],
+  "sent": "2026-07-09T08:00:00.000+00:00",
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "428341000124108",
+      "display": "Macular edema absent (situation)"
+    } ]
+  } ]
+}

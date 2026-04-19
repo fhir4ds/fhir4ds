@@ -1,0 +1,30 @@
+{
+  "resourceType": "Procedure",
+  "id": "3403e08d-bc65-4110-8338-5f3db822252a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-07-02T11:30:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "386372009",
+      "display": "Nutrition management"
+    } ],
+    "text": "Nutrition management (regime/therapy)"
+  },
+  "subject": {
+    "reference": "Patient/95c5116d-15f0-4367-b467-dca152f6b43c"
+  },
+  "encounter": {
+    "reference": "Encounter/2Encountersat100752MSROBSPass4"
+  },
+  "performedPeriod": {
+    "start": "2026-07-01T11:30:00.000+00:00",
+    "end": "2026-07-07T08:15:00.000+00:00"
+  }
+}

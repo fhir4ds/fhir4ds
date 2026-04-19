@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "33c8c105-ae98-420d-8758-f2ff703df9fe",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-12-31T23:59:59.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "14693006",
+      "display": "Subcutaneous mammectomy of bilateral breasts (procedure)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/4cf81a94-81fb-4be2-b075-7d8f9ff02a6e"
+  },
+  "performedPeriod": {
+    "start": "2026-12-31T23:59:59.000+00:00",
+    "end": "2026-12-31T23:59:59.000+00:00"
+  }
+}

@@ -1,0 +1,344 @@
+{
+  "resourceType": "Bundle",
+  "id": "62f65a0f5efef5272905e705",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/41df0dbe-ae84-4496-b355-320ff8707a85",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "41df0dbe-ae84-4496-b355-320ff8707a85",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "62f65a0f5efef5272905e705"
+      } ],
+      "name": [ {
+        "family": "DENEXCEPPass",
+        "given": [ "AdultPatientReasonForNoDepressionScreenAge17" ]
+      } ],
+      "gender": "male",
+      "birthDate": "2009-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/41df0dbe-ae84-4496-b355-320ff8707a85"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/140be894-1451-4d45-a872-5701bf5292ff",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "140be894-1451-4d45-a872-5701bf5292ff",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "10197000",
+          "display": "Psychiatric interview and evaluation (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/41df0dbe-ae84-4496-b355-320ff8707a85"
+      },
+      "period": {
+        "start": "2026-01-01T08:00:00.000+00:00",
+        "end": "2026-01-01T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/140be894-1451-4d45-a872-5701bf5292ff"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/cca9d125-d8e0-4d88-a4c2-f96cb1331960",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "cca9d125-d8e0-4d88-a4c2-f96cb1331960",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observationcancelled" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneReason",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "code": "720834000",
+            "display": "Depression screening declined (situation)",
+            "userSelected": true
+          } ]
+        }
+      } ],
+      "status": "cancelled",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "procedure",
+          "display": "Procedure"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "73832-8",
+          "display": "Adult depression screening assessment",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/41df0dbe-ae84-4496-b355-320ff8707a85"
+      },
+      "issued": "2026-01-01T08:00:00.000+00:00",
+      "valueBoolean": true
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/cca9d125-d8e0-4d88-a4c2-f96cb1331960"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/a9e377d5-b2ca-422f-8410-fe95c32a761b",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "a9e377d5-b2ca-422f-8410-fe95c32a761b",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "subscriberId": "123456789",
+      "beneficiary": {
+        "reference": "Patient/41df0dbe-ae84-4496-b355-320ff8707a85"
+      },
+      "relationship": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+          "code": "self",
+          "display": "Self",
+          "userSelected": true
+        } ]
+      },
+      "payor": [ {
+        "reference": "Organization/0dce8cfd-d839-489e-8b60-2c2ea6a46401"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/a9e377d5-b2ca-422f-8410-fe95c32a761b"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/0dce8cfd-d839-489e-8b60-2c2ea6a46401",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "0dce8cfd-d839-489e-8b60-2c2ea6a46401",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/0dce8cfd-d839-489e-8b60-2c2ea6a46401"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/60aebce6-a032-4b1e-be5e-5f72d0d4b517",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "60aebce6-a032-4b1e-be5e-5f72d0d4b517",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "1234567893"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/60aebce6-a032-4b1e-be5e-5f72d0d4b517"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/6275461f-e544-4303-b54a-c44beebae90e",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "6275461f-e544-4303-b54a-c44beebae90e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "ba7f782c-7fd2-4acc-a93a-8158ce30c60a-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "41df0dbe-ae84-4496-b355-320ff8707a85"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#ba7f782c-7fd2-4acc-a93a-8158ce30c60a-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "17 yo male with patient reason for not screening for depression - 17 on first day MP"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS2FHIRPCSDepressionScreenAndFollowUp",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/41df0dbe-ae84-4496-b355-320ff8707a85"
+      }, {
+        "reference": "Encounter/140be894-1451-4d45-a872-5701bf5292ff"
+      }, {
+        "reference": "Observation/cca9d125-d8e0-4d88-a4c2-f96cb1331960"
+      }, {
+        "reference": "Coverage/a9e377d5-b2ca-422f-8410-fe95c32a761b"
+      }, {
+        "reference": "Organization/0dce8cfd-d839-489e-8b60-2c2ea6a46401"
+      }, {
+        "reference": "Practitioner/60aebce6-a032-4b1e-be5e-5f72d0d4b517"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/6275461f-e544-4303-b54a-c44beebae90e"
+    }
+  } ]
+}

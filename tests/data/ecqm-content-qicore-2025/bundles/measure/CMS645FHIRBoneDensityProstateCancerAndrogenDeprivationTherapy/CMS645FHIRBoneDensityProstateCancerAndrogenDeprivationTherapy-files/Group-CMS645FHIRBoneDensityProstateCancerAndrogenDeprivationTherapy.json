@@ -1,0 +1,502 @@
+{
+  "resourceType": "Group",
+  "id": "CMS645FHIRBoneDensityProstateCancerAndrogenDeprivationTherapy",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS645FHIRBoneDensityProstateCancerAndrogenDeprivationTherapy"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/7dada0a7-61dd-4375-9863-38d08bd6d676",
+      "display": "DEXAOrdered5YearsAfterADT NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7dada0a7-61dd-4375-9863-38d08bd6d676",
+      "display": "DEXAOrdered5YearsAfterADT NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4a7a2cf4-6073-47a0-9012-ea9b32e6e9db",
+      "display": "NoDEXAOrderInMP NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4a7a2cf4-6073-47a0-9012-ea9b32e6e9db",
+      "display": "NoDEXAOrderInMP NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/449eb3e6-3c46-439c-95cd-125aadd27e82",
+      "display": "DEXA1YearBeforeADT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/449eb3e6-3c46-439c-95cd-125aadd27e82",
+      "display": "DEXA1YearBeforeADT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8c41481d-f89e-4113-ba12-df7c53e93d80",
+      "display": "DEXANotPerformedPtRefusedEdge DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8c41481d-f89e-4113-ba12-df7c53e93d80",
+      "display": "DEXANotPerformedPtRefusedEdge DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/92e567b3-9d68-4c50-9be6-36e0ca7b96f5",
+      "display": "PtDeceasedInMP NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/92e567b3-9d68-4c50-9be6-36e0ca7b96f5",
+      "display": "PtDeceasedInMP NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/27fca7ba-ef00-44ec-8d97-919908f42495",
+      "display": "ADTConcurrentWithDx NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/27fca7ba-ef00-44ec-8d97-919908f42495",
+      "display": "ADTConcurrentWithDx NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7acbd566-b21e-46eb-a7ef-bfd023be8e9d",
+      "display": "ADTActiveWithWrongADTCode IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7acbd566-b21e-46eb-a7ef-bfd023be8e9d",
+      "display": "ADTActiveWithWrongADTCode IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/77b28b84-d0aa-4aa8-9a07-2922938394de",
+      "display": "DEXA3MonthsAfterADTEdge NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/77b28b84-d0aa-4aa8-9a07-2922938394de",
+      "display": "DEXA3MonthsAfterADTEdge NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d07cf359-d46c-4adf-b2d4-e02a2f43b78e",
+      "display": "DEXANotPerformedPtRefused DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d07cf359-d46c-4adf-b2d4-e02a2f43b78e",
+      "display": "DEXANotPerformedPtRefused DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b5663718-0277-4e04-8ddf-b70b07893b6d",
+      "display": "CancerDxUnconfirmed DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b5663718-0277-4e04-8ddf-b70b07893b6d",
+      "display": "CancerDxUnconfirmed DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0a4436ba-31a5-464f-9061-255f767ed3d9",
+      "display": "OnlyDemographics IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0a4436ba-31a5-464f-9061-255f767ed3d9",
+      "display": "OnlyDemographics IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9bff7002-9697-407d-a42b-9debdafc9695",
+      "display": "ADTMultipleOccurencesNoDexa DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9bff7002-9697-407d-a42b-9debdafc9695",
+      "display": "ADTMultipleOccurencesNoDexa DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3bbbeb07-97d4-4f25-936f-a0c1e81303e0",
+      "display": "MedReqBoundsADTDate DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3bbbeb07-97d4-4f25-936f-a0c1e81303e0",
+      "display": "MedReqBoundsADTDate DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a1b4a442-e924-4565-a942-42ad54d2b14f",
+      "display": "EncounterInMPNoDexa DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a1b4a442-e924-4565-a942-42ad54d2b14f",
+      "display": "EncounterInMPNoDexa DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f33f170c-53de-44a5-8f8e-d9097bf61854",
+      "display": "ADTOrderBeforeMP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f33f170c-53de-44a5-8f8e-d9097bf61854",
+      "display": "ADTOrderBeforeMP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f67164ab-356d-4fb6-afcb-169aaa7fe3f4",
+      "display": "DEXA3MonthsAfterADTEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f67164ab-356d-4fb6-afcb-169aaa7fe3f4",
+      "display": "DEXA3MonthsAfterADTEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/326c4d57-1c4e-498e-8975-ceb9913c28f8",
+      "display": "DEXAorderLessThan4MonthsAfterADT NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/326c4d57-1c4e-498e-8975-ceb9913c28f8",
+      "display": "DEXAorderLessThan4MonthsAfterADT NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2ac59cce-81b8-4060-9452-9a35fe580c6a",
+      "display": "DEXA6MonthsAfterADT NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2ac59cce-81b8-4060-9452-9a35fe580c6a",
+      "display": "DEXA6MonthsAfterADT NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1705b17e-46ff-4a4d-9783-1c30c65cd5d5",
+      "display": "PtGenderFemale IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1705b17e-46ff-4a4d-9783-1c30c65cd5d5",
+      "display": "PtGenderFemale IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/319cbdd5-a6ea-437b-8162-a7af346daa63",
+      "display": "MultiDoseEvent DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/319cbdd5-a6ea-437b-8162-a7af346daa63",
+      "display": "MultiDoseEvent DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/959743cc-af58-48ff-afa3-68428e69f0f5",
+      "display": "DexaDoNotPerformTrue NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/959743cc-af58-48ff-afa3-68428e69f0f5",
+      "display": "DexaDoNotPerformTrue NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9bb28ddd-6b34-407e-8891-ca415e894805",
+      "display": "PCaEnds1YrBeforeADT IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9bb28ddd-6b34-407e-8891-ca415e894805",
+      "display": "PCaEnds1YrBeforeADT IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/75a833a6-8cf4-4ab2-9da5-b650d7c4b8a5",
+      "display": "ADTOrderMoreThan3MonthsBeforeMP DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/75a833a6-8cf4-4ab2-9da5-b650d7c4b8a5",
+      "display": "ADTOrderMoreThan3MonthsBeforeMP DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b3d69ee8-375d-4039-9b92-c829cf29e154",
+      "display": "DEXA5YearsBeforeADT NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b3d69ee8-375d-4039-9b92-c829cf29e154",
+      "display": "DEXA5YearsBeforeADT NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c5bfac21-0dbf-4cf5-bc92-d7eff1d0a6c6",
+      "display": "NoDEXAOrderedDueToPatientRefusal DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c5bfac21-0dbf-4cf5-bc92-d7eff1d0a6c6",
+      "display": "NoDEXAOrderedDueToPatientRefusal DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b3cad3db-a17d-4eec-8852-851b438b7964",
+      "display": "PtRefusedDEXA DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b3cad3db-a17d-4eec-8852-851b438b7964",
+      "display": "PtRefusedDEXA DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9eb59f31-41dc-401b-9057-b8c8361f116c",
+      "display": "DEXA89DaysAfterADTEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9eb59f31-41dc-401b-9057-b8c8361f116c",
+      "display": "DEXA89DaysAfterADTEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5e4e034a-475f-476a-a8f7-cb0d361508ab",
+      "display": "ADTActiveAfterCancerDx DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5e4e034a-475f-476a-a8f7-cb0d361508ab",
+      "display": "ADTActiveAfterCancerDx DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2e85a096-f00c-48ce-8911-1691a916ab42",
+      "display": "NoADTInMP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2e85a096-f00c-48ce-8911-1691a916ab42",
+      "display": "NoADTInMP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/72a0fde9-7145-4b6c-ac08-75d41d04f910",
+      "display": "MedReqEventEndofMP DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/72a0fde9-7145-4b6c-ac08-75d41d04f910",
+      "display": "MedReqEventEndofMP DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8068a81d-feca-4719-aa75-cb45df5428e7",
+      "display": "PCaDxBeforeMP DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8068a81d-feca-4719-aa75-cb45df5428e7",
+      "display": "PCaDxBeforeMP DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ee053d16-adcb-4760-9305-6a553d789d9a",
+      "display": "MedReqBoundsPriorToPCa DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ee053d16-adcb-4760-9305-6a553d789d9a",
+      "display": "MedReqBoundsPriorToPCa DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/49ba8395-b407-4572-aa85-ebac88a617ee",
+      "display": "ADTActive1DayBeforePCaDx IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/49ba8395-b407-4572-aa85-ebac88a617ee",
+      "display": "ADTActive1DayBeforePCaDx IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a8091d75-0448-41e4-b666-56873228def3",
+      "display": "ADTMoreThan9MonthsAfterMP DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a8091d75-0448-41e4-b666-56873228def3",
+      "display": "ADTMoreThan9MonthsAfterMP DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7d6436cb-995e-4672-b5bb-04cb996b2949",
+      "display": "DEXAGreaterThan2YearsBeforeADT NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7d6436cb-995e-4672-b5bb-04cb996b2949",
+      "display": "DEXAGreaterThan2YearsBeforeADT NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6aa2d002-1279-4313-85c3-a4a28e17da81",
+      "display": "ADTWithoutPCa IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6aa2d002-1279-4313-85c3-a4a28e17da81",
+      "display": "ADTWithoutPCa IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/97b72f42-08ae-4f6e-a7c9-1aa42f33ca90",
+      "display": "DEXAPerformedPtRefused4MonthsAfter DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/97b72f42-08ae-4f6e-a7c9-1aa42f33ca90",
+      "display": "DEXAPerformedPtRefused4MonthsAfter DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b2fd08f5-6a75-4221-8b2d-eb28f45ed981",
+      "display": "ADT9MonthsAfterStartofMPEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b2fd08f5-6a75-4221-8b2d-eb28f45ed981",
+      "display": "ADT9MonthsAfterStartofMPEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a5307581-654f-415f-912f-cec5e9dc00dc",
+      "display": "MedReqBoundsEndofMP DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a5307581-654f-415f-912f-cec5e9dc00dc",
+      "display": "MedReqBoundsEndofMP DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2585c4a2-7b38-48e4-9317-19ddbbcfa107",
+      "display": "ADTandDEXA9MonthsAfterStartofMPEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2585c4a2-7b38-48e4-9317-19ddbbcfa107",
+      "display": "ADTandDEXA9MonthsAfterStartofMPEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/980aacce-6052-485f-add6-59bc79c352da",
+      "display": "EncounterBeforeMP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/980aacce-6052-485f-add6-59bc79c352da",
+      "display": "EncounterBeforeMP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/878aa680-2642-45b8-b103-5ef96188b5ea",
+      "display": "DEXA3MonthsAfterADTEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/878aa680-2642-45b8-b103-5ef96188b5ea",
+      "display": "DEXA3MonthsAfterADTEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/59743016-0222-4c22-bda3-48fa09e5ceb9",
+      "display": "ADT3MonthsBeforeStartofMPEdge NUMERPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/59743016-0222-4c22-bda3-48fa09e5ceb9",
+      "display": "ADT3MonthsBeforeStartofMPEdge NUMERPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2a1d8b51-131f-4552-90f7-59ca5a7979ce",
+      "display": "DEXA2YearsBeforeADT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2a1d8b51-131f-4552-90f7-59ca5a7979ce",
+      "display": "DEXA2YearsBeforeADT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/05afd17d-f9a0-4588-bb3a-ffefd2f6c271",
+      "display": "ADT3MonthsBeforeMP NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/05afd17d-f9a0-4588-bb3a-ffefd2f6c271",
+      "display": "ADT3MonthsBeforeMP NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e0997418-e22b-4aa9-805b-dde2c398787b",
+      "display": "DexaOrderInLast2YearsB4ADTOrder NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e0997418-e22b-4aa9-805b-dde2c398787b",
+      "display": "DexaOrderInLast2YearsB4ADTOrder NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1dc53422-497d-492a-8aa4-8a165264a14d",
+      "display": "DEXA3MonthsorLessAfterADT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1dc53422-497d-492a-8aa4-8a165264a14d",
+      "display": "DEXA3MonthsorLessAfterADT NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f3f9227e-50eb-4752-af8a-464072cc60c2",
+      "display": "ADT9MonthsAfterStartofMPEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f3f9227e-50eb-4752-af8a-464072cc60c2",
+      "display": "ADT9MonthsAfterStartofMPEdge NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4d648e0d-3d8c-4089-af65-ddcf3642b735",
+      "display": "EncounterInMPNotDone IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4d648e0d-3d8c-4089-af65-ddcf3642b735",
+      "display": "EncounterInMPNotDone IPPFail"
+    }
+  } ]
+}

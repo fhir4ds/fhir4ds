@@ -1,0 +1,150 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1640-20250125",
+  "meta": {
+    "versionId": "35",
+    "lastUpdated": "2025-01-25T01:09:35.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-01-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1640",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1640"
+  } ],
+  "version": "20250125",
+  "name": "ChoroidalHemorrhageAndRupture",
+  "title": "Choroidal Hemorrhage and Rupture",
+  "status": "active",
+  "date": "2025-01-25T01:09:35-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of a diagnosis of choroidal hemorrhage and/or rupture.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of choroidal hemorrhage and rupture.),(Exclusion Criteria: Excludes concepts that represent a diagnosis for 'unspecified eye.')",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "11623000",
+        "display": "Expulsive choroidal hemorrhage (disorder)"
+      }, {
+        "code": "122003",
+        "display": "Choroidal hemorrhage (disorder)"
+      }, {
+        "code": "193474002",
+        "display": "Choroidal hemorrhage and rupture (disorder)"
+      }, {
+        "code": "2532009",
+        "display": "Choroidal rupture (disorder)"
+      }, {
+        "code": "335201000119104",
+        "display": "Expulsive hemorrhage of choroid of right eye (disorder)"
+      }, {
+        "code": "336051000119104",
+        "display": "Rupture of choroid of right eye (disorder)"
+      }, {
+        "code": "336061000119102",
+        "display": "Hemorrhage of choroid of right eye (disorder)"
+      }, {
+        "code": "340811000119106",
+        "display": "Expulsive hemorrhage of choroid of left eye (disorder)"
+      }, {
+        "code": "341661000119101",
+        "display": "Rupture of choroid of left eye (disorder)"
+      }, {
+        "code": "341671000119107",
+        "display": "Hemorrhage of choroid of left eye (disorder)"
+      }, {
+        "code": "346891000119100",
+        "display": "Hemorrhage of choroid of bilateral eyes (disorder)"
+      }, {
+        "code": "419596007",
+        "display": "Suprachoroidal hemorrhage (disorder)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:312df757-a1c1-4397-911a-a4c2d06c11b4",
+    "timestamp": "2025-06-20T17:03:17-04:00",
+    "total": 11,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "11623000",
+      "display": "Expulsive choroidal hemorrhage (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "122003",
+      "display": "Choroidal hemorrhage (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "193474002",
+      "display": "Choroidal hemorrhage and rupture (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "2532009",
+      "display": "Choroidal rupture (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "335201000119104",
+      "display": "Expulsive hemorrhage of choroid of right eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "336051000119104",
+      "display": "Rupture of choroid of right eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "336061000119102",
+      "display": "Hemorrhage of choroid of right eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "340811000119106",
+      "display": "Expulsive hemorrhage of choroid of left eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "341661000119101",
+      "display": "Rupture of choroid of left eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "341671000119107",
+      "display": "Hemorrhage of choroid of left eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "419596007",
+      "display": "Suprachoroidal hemorrhage (disorder)"
+    } ]
+  }
+}

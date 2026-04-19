@@ -1,0 +1,43 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1391",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:01.920-06:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2014-03-31"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1391",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1391"
+  } ],
+  "version": "20130614",
+  "name": "Macular Edema Findings Absent",
+  "title": "Macular Edema Findings Absent",
+  "status": "active",
+  "date": "2013-06-12T19:16:25-04:00",
+  "publisher": "AMA-PCPI",
+  "expansion": {
+    "identifier": "urn:uuid:ffd2606e-0cbc-4a37-a52d-64e87c1779de",
+    "timestamp": "2025-06-20T16:58:03-04:00",
+    "total": 1,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "428341000124108",
+      "display": "Macular edema absent (situation)"
+    } ]
+  }
+}

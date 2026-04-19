@@ -1,0 +1,23 @@
+{
+  "resourceType": "Procedure",
+  "id": "d9e1019e-4144-44b9-9fd4-a71fd9be24e8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2013-12-07T13:35:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "133918004",
+      "display": "Comfort measures (regime/therapy)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f475cbfa-630a-4296-b083-9feda23892f4"
+  },
+  "performedDateTime": "2026-12-06T09:00:00.000+00:00"
+}

@@ -1,0 +1,329 @@
+{
+  "resourceType": "Bundle",
+  "id": "63ec096bccb3770120fea0ad",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/aefbac9c-42fc-45ba-baf9-e4f067c86361",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "aefbac9c-42fc-45ba-baf9-e4f067c86361",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "text": {
+        "status": "generated",
+        "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">NoResult <b>SODIUMFAIL </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>eb360e3679224871964d5b3575a59ceb3c2f6260372fb1be3ea61ac84d2937cf</td></tr><tr><td>Date of birth</td><td><span>15 June 1956</span></td></tr></tbody></table></div>"
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248153007"
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "63ec096bccb3770120fea0ad"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "OxygenSatPass",
+        "given": [ "OxygenAdminProcStartsPriorAndEndsOnArrivalToED" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1941-07-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/aefbac9c-42fc-45ba-baf9-e4f067c86361"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/8b7d53e4-51b7-4d92-ad06-a2faa54cc78a",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "8b7d53e4-51b7-4d92-ad06-a2faa54cc78a",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMR",
+        "display": "emergency",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "4525004",
+          "display": "Emergency department patient visit (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/aefbac9c-42fc-45ba-baf9-e4f067c86361"
+      },
+      "period": {
+        "start": "2026-07-01T12:01:00.000+00:00",
+        "end": "2026-07-01T14:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/8b7d53e4-51b7-4d92-ad06-a2faa54cc78a"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/d8f2e467-6549-4dd6-8beb-ae0d0defede3",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "d8f2e467-6549-4dd6-8beb-ae0d0defede3",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183452005"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/aefbac9c-42fc-45ba-baf9-e4f067c86361"
+      },
+      "period": {
+        "start": "2026-07-01T14:15:00.000+00:00",
+        "end": "2026-07-05T11:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/d8f2e467-6549-4dd6-8beb-ae0d0defede3"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/b872ac49-2ca2-40be-9481-c2dd1be0eefe",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "b872ac49-2ca2-40be-9481-c2dd1be0eefe",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-07-01T16:01:00.000+00:00"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "243136002"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/aefbac9c-42fc-45ba-baf9-e4f067c86361"
+      },
+      "performedPeriod": {
+        "start": "2026-07-01T09:01:00.000+00:00",
+        "end": "2026-07-01T12:01:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/b872ac49-2ca2-40be-9481-c2dd1be0eefe"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/ServiceRequest/2bc1a50e-e02f-4242-80fc-baa6b849532e",
+    "resource": {
+      "resourceType": "ServiceRequest",
+      "id": "2bc1a50e-e02f-4242-80fc-baa6b849532e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+      },
+      "status": "active",
+      "intent": "order",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2024-09",
+          "code": "371908008",
+          "display": "Oxygen administration by mask (procedure)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/aefbac9c-42fc-45ba-baf9-e4f067c86361"
+      },
+      "authoredOn": "2026-07-01T12:01:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "ServiceRequest/2bc1a50e-e02f-4242-80fc-baa6b849532e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/e70d3767-3e12-41bd-98b1-d6150eae919b",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "e70d3767-3e12-41bd-98b1-d6150eae919b",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "type": {
+        "coding": [ {
+          "system": "https://nahdo.org/sopt",
+          "version": "1.0.1",
+          "code": "1",
+          "display": "MEDICARE",
+          "userSelected": true
+        } ]
+      },
+      "subscriberId": "AB9876",
+      "beneficiary": {
+        "reference": "Patient/aefbac9c-42fc-45ba-baf9-e4f067c86361"
+      },
+      "relationship": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+          "code": "self"
+        } ]
+      },
+      "payor": [ {
+        "reference": "Organization/123456"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/e70d3767-3e12-41bd-98b1-d6150eae919b"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/491a9147-4621-49df-bab3-47452fc37527",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "491a9147-4621-49df-bab3-47452fc37527",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "0723660813"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/491a9147-4621-49df-bab3-47452fc37527"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/db4c122a-39ed-4bf3-9712-f37a11135d1f",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "db4c122a-39ed-4bf3-9712-f37a11135d1f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "6dec1149-17fd-45b7-acdb-5bcba0540c32-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "aefbac9c-42fc-45ba-baf9-e4f067c86361"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#6dec1149-17fd-45b7-acdb-5bcba0540c32-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Oxygen procedure interval begins prior to and ends on arrival to ED, admitted to inpatient.  Service request of oxygen administration on arrival to ED."
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMSFHIR844HybridHospitalWideMortality",
+      "period": {
+        "start": "2026-07-01",
+        "end": "2027-06-30"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/aefbac9c-42fc-45ba-baf9-e4f067c86361"
+      }, {
+        "reference": "Encounter/8b7d53e4-51b7-4d92-ad06-a2faa54cc78a"
+      }, {
+        "reference": "Encounter/d8f2e467-6549-4dd6-8beb-ae0d0defede3"
+      }, {
+        "reference": "Procedure/b872ac49-2ca2-40be-9481-c2dd1be0eefe"
+      }, {
+        "reference": "ServiceRequest/2bc1a50e-e02f-4242-80fc-baa6b849532e"
+      }, {
+        "reference": "Coverage/e70d3767-3e12-41bd-98b1-d6150eae919b"
+      }, {
+        "reference": "Practitioner/491a9147-4621-49df-bab3-47452fc37527"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/db4c122a-39ed-4bf3-9712-f37a11135d1f"
+    }
+  } ]
+}

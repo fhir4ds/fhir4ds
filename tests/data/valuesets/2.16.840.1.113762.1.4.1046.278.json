@@ -1,0 +1,111 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1046.278",
+  "meta": {
+    "versionId": "17",
+    "lastUpdated": "2025-02-12T01:07:44.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2025-02-12"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2025-02-12"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.278",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1046.278"
+    }
+  ],
+  "version": "20250212",
+  "name": "EmergencyDepartmentTreatmentLocation",
+  "title": "Emergency Department Treatment Location",
+  "status": "active",
+  "date": "2025-02-12T01:07:44-05:00",
+  "publisher": "Acumen OP Steward",
+  "expansion": {
+    "identifier": "urn:uuid:ede6b954-0b5c-4f30-83fe-e8d39f828d45",
+    "timestamp": "2026-03-13T13:02:22-04:00",
+    "total": 9,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+        "version": "2022",
+        "code": "1025-6",
+        "display": "Trauma Critical Care"
+      },
+      {
+        "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+        "version": "2022",
+        "code": "1027-2",
+        "display": "Medical Critical Care"
+      },
+      {
+        "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+        "version": "2022",
+        "code": "1029-8",
+        "display": "Medical-Surgical Critical Care"
+      },
+      {
+        "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+        "version": "2022",
+        "code": "1160-1",
+        "display": "Urgent Care Center"
+      },
+      {
+        "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+        "version": "2022",
+        "code": "1162-7",
+        "display": "24-Hour Observation Area"
+      },
+      {
+        "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+        "version": "2022",
+        "code": "1209-6",
+        "display": "Treatment Room"
+      },
+      {
+        "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+        "version": "2022",
+        "code": "1210-4",
+        "display": "Adult Mixed Acuity Unit"
+      },
+      {
+        "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+        "version": "2022",
+        "code": "1212-0",
+        "display": "Mixed Age Mixed Acuity Unit"
+      },
+      {
+        "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+        "version": "2022",
+        "code": "1272-4",
+        "display": "Onsite Overflow Critical Care"
+      }
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "resourceType": "Procedure",
+  "id": "05f40999-1554-40e7-a0ef-f925a8de1c0c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "133918004",
+      "display": "Comfort Measures"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/79283b75-4588-428b-b4e6-50ebb9b9acf6"
+  },
+  "performedDateTime": "2026-10-18T10:00:00+00:00"
+}

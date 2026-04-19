@@ -1,0 +1,41 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "78826425-ef07-4df5-992e-14545d7985a8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested" ]
+  },
+  "status": "completed",
+  "statusReason": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183932001",
+      "display": "Procedure contraindicated (situation)",
+      "userSelected": true
+    } ]
+  },
+  "intent": "order",
+  "doNotPerform": true,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "2022-06",
+      "code": "860221",
+      "display": "megestrol acetate 40 MG Oral Tablet",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a4a1ed63-89ff-4d27-8819-136873e13171"
+  },
+  "authoredOn": "2026-01-01T08:10:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/123456"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183932001",
+      "display": "Procedure contraindicated (situation)"
+    } ]
+  } ]
+}

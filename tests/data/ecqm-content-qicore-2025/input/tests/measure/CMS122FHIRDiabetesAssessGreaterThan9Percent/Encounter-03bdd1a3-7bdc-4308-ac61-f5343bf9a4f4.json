@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "03bdd1a3-7bdc-4308-ac61-f5343bf9a4f4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "code": "G0270",
+      "display": "Medical nutrition therapy; reassessment and subsequent intervention(s) following second referral in same year for change in diagnosis, medical condition or treatment regimen (including additional hours needed for renal disease), individual, face to face with the patient, each 15 minutes"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/5d692a54-a1d5-4a9c-80ba-fb6b20112484"
+  },
+  "period": {
+    "start": "2026-01-01T00:00:00Z",
+    "end": "2026-01-01T00:15:00Z"
+  }
+}

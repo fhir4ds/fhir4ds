@@ -1,0 +1,47 @@
+{
+  "resourceType": "Encounter",
+  "id": "977c8bb4-039c-42a4-9376-47ed23d9c109",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient encounter"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "112689000",
+      "display": "Hospital admission, elective, with complete pre-admission work-up"
+    } ],
+    "text": "Hospital admission, elective, with complete pre-admission work-up"
+  } ],
+  "priority": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "103390000"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/25a4e31a-832c-4337-9a8e-8a0a6dfb189d"
+  },
+  "period": {
+    "start": "2026-04-10T08:00:00.000+00:00",
+    "end": "2026-04-14T08:15:00.000+00:00"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "F01.C3",
+      "display": "Vascular dementia, severe, with mood disturbance"
+    } ]
+  } ],
+  "diagnosis": [ {
+    "condition": {
+      "reference": "Condition/a2210e47-dbd8-41f0-b9df-32c6a1602c55"
+    }
+  } ]
+}

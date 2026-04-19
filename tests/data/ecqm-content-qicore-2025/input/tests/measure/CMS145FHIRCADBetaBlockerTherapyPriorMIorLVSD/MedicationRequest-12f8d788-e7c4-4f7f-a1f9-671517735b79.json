@@ -1,0 +1,32 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "12f8d788-e7c4-4f7f-a1f9-671517735b79",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "200031",
+      "display": "carvedilol 6.25 MG Oral Tablet"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b19af44d-fb1c-4e78-a0dd-170c6b61718f"
+  },
+  "authoredOn": "2026-07-08T09:00:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/123456"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183932001",
+      "display": "Procedure contraindicated (situation)",
+      "userSelected": true
+    } ]
+  } ]
+}

@@ -1,0 +1,30 @@
+{
+  "resourceType": "Observation",
+  "id": "ec9e4d03-b789-41aa-a47e-69b732e31ecb",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "exam",
+      "display": "exam",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "18559007"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c58acff5-248b-49c9-b18d-69e4a84a08d9"
+  },
+  "effectiveDateTime": "2026-06-08T08:00:00.000+00:00",
+  "performer": [ {
+    "reference": "Organization/example1",
+    "display": "Hendricks Country Hospital"
+  } ]
+}

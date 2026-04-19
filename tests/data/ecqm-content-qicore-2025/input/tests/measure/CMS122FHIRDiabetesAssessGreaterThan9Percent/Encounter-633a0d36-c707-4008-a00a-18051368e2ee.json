@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "633a0d36-c707-4008-a00a-18051368e2ee",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "305336008",
+      "display": "Admission to hospice (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/88b67805-bfef-411c-a191-12382d2c3104"
+  },
+  "period": {
+    "start": "2026-01-02T01:00:00.000+00:00",
+    "end": "2026-01-02T01:15:00.000+00:00"
+  }
+}

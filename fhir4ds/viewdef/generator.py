@@ -87,10 +87,9 @@ class SQLGenerator:
     }
 
     # Post-UDF SQL type casts for proper SQL typing
+    # Note: date/dateTime/instant are kept as VARCHAR (from fhirpath_text)
+    # to preserve timezone offsets and precision that TIMESTAMP/DATE would lose.
     _TYPE_CAST = {
-        "date": "DATE",
-        "dateTime": "TIMESTAMP",
-        "instant": "TIMESTAMP",
         "integer": "INTEGER",
         "positiveInt": "INTEGER",
         "unsignedInt": "INTEGER",
@@ -613,6 +612,90 @@ class SQLGenerator:
                     _check(sel.unionAll, f"{path}[{i}].unionAll")
         _check(selects)
 
+    def _collect_branch_column_names(self, select: 'Select') -> List[str]:
+        """Collect column names produced by a unionAll branch (non-recursive into unionAll).
+
+        For branches that contain their own unionAll, take the columns from
+        the first nested unionAll branch (they must all match per the spec).
+        """
+        names: List[str] = []
+        for col in select.column:
+            names.append(col.name)
+        if select.select:
+            for nested in select.select:
+                names.extend(self._collect_branch_column_names(nested))
+        # If this branch itself has unionAll, its columns come from those branches
+        if select.unionAll and not names:
+            names = self._collect_branch_column_names(select.unionAll[0])
+        return names
+
+    def _validate_union_all_columns(self, selects: List['Select'], path: str = "select") -> None:
+        """Validate that unionAll branches have identical column names in the same order.
+
+        Per SQL-on-FHIR v2 spec, all branches of a unionAll must produce the
+        same columns in the same order.
+        """
+        for i, sel in enumerate(selects):
+            if sel.unionAll and len(sel.unionAll) > 1:
+                reference_names = self._collect_branch_column_names(sel.unionAll[0])
+                for j, branch in enumerate(sel.unionAll[1:], 1):
+                    branch_names = self._collect_branch_column_names(branch)
+                    if branch_names != reference_names:
+                        raise ValidationError(
+                            f"{path}[{i}].unionAll: Branch {j} column names "
+                            f"{branch_names} do not match branch 0 column names "
+                            f"{reference_names}. All unionAll branches must produce "
+                            f"identical columns in the same order."
+                        )
+            if sel.select:
+                self._validate_union_all_columns(sel.select, f"{path}[{i}].select")
+            if sel.unionAll:
+                self._validate_union_all_columns(sel.unionAll, f"{path}[{i}].unionAll")
+
+    def _validate_where_paths(self, view_definition: 'ViewDefinition') -> None:
+        """Validate that where clause paths can evaluate to boolean.
+
+        Per SQL-on-FHIR v2 spec, where paths must resolve to boolean values.
+        Paths that clearly resolve to non-boolean types (simple property paths
+        without comparison operators) should be rejected.
+        """
+        boolean_indicators = {'=', '!=', '<', '>', '<=', '>=', 'and', 'or', 'not',
+                              'contains', 'in', 'exists', 'empty', 'is', 'as',
+                              'matches', 'startsWith', 'endsWith', 'hasValue',
+                              'true', 'false', '~', '!~'}
+
+        def _check_where(selects: List['Select'], path: str = "select") -> None:
+            for i, sel in enumerate(selects):
+                if sel.where:
+                    for w in sel.where:
+                        wp = w.get("path", "") if isinstance(w, dict) else ""
+                        if wp:
+                            tokens = set(wp.split())
+                            # A path with no boolean indicators is likely non-boolean
+                            if not tokens & boolean_indicators and '(' not in wp:
+                                raise ValidationError(
+                                    f"{path}[{i}].where: Path '{wp}' does not appear "
+                                    f"to resolve to a boolean value"
+                                )
+                if sel.select:
+                    _check_where(sel.select, f"{path}[{i}].select")
+                if sel.unionAll:
+                    _check_where(sel.unionAll, f"{path}[{i}].unionAll")
+
+        # Check root-level where
+        if hasattr(view_definition, 'where') and view_definition.where:
+            for w in view_definition.where:
+                wp = w.get("path", "") if isinstance(w, dict) else ""
+                if wp:
+                    tokens = set(wp.split())
+                    if not tokens & boolean_indicators and '(' not in wp:
+                        raise ValidationError(
+                            f"Root where: Path '{wp}' does not appear "
+                            f"to resolve to a boolean value"
+                        )
+
+        _check_where(view_definition.select)
+
     def _next_alias(self, path: str) -> str:
         """Generate a unique SQL alias for a forEach/forEachOrNull unnested element."""
         base = path.replace("/", ".").split(".")[-1] if path else "elem"
@@ -884,6 +967,7 @@ class SQLGenerator:
         self._validate_collection_columns(view_definition)
         self._validate_unique_column_names(view_definition)
         self._validate_foreach_mutual_exclusion(view_definition.select)
+        self._validate_union_all_columns(view_definition.select)
         self._alias_counter = 0
         self._constant_resolver = ConstantResolver.from_view_definition(view_definition)
 

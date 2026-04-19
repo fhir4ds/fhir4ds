@@ -1,0 +1,371 @@
+{
+  "resourceType": "Bundle",
+  "id": "c5b2c76c-cc6a-11ed-894b-325096b39f47",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/2105cba2-6e61-487d-a737-3efe876028e8",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "2105cba2-6e61-487d-a737-3efe876028e8",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2106-3",
+            "display": "White"
+          }
+        }, {
+          "url": "text",
+          "valueString": "White"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://GoodHealthCare.com",
+        "value": "900082319426"
+      } ],
+      "name": [ {
+        "family": "DENEXFail",
+        "given": [ "MorbidObesityDxAbated" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1959-01-10"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/2105cba2-6e61-487d-a737-3efe876028e8"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/51fe9840-85ec-49b1-9d63-c3ee2e89165c",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "51fe9840-85ec-49b1-9d63-c3ee2e89165c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "439740005",
+          "display": "Postoperative follow-up visit (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/2105cba2-6e61-487d-a737-3efe876028e8"
+      },
+      "period": {
+        "start": "2026-05-01T08:00:00.000+00:00",
+        "end": "2026-05-01T08:30:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/51fe9840-85ec-49b1-9d63-c3ee2e89165c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/72fcd5b6-d676-4af5-903d-fdd3f52a89f8",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "72fcd5b6-d676-4af5-903d-fdd3f52a89f8",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active",
+          "userSelected": true
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "Confirmed",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "version": "2024",
+          "code": "N40.1",
+          "display": "Benign prostatic hyperplasia with lower urinary tract symptoms",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/2105cba2-6e61-487d-a737-3efe876028e8"
+      },
+      "onsetPeriod": {
+        "start": "2025-12-14T15:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/72fcd5b6-d676-4af5-903d-fdd3f52a89f8"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/2d4fc0ba-035d-4594-902f-284d8acf462e",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "2d4fc0ba-035d-4594-902f-284d8acf462e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "inactive",
+          "display": "Inactive",
+          "userSelected": true
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "Confirmed",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "238136002",
+          "display": "Morbid obesity (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/2105cba2-6e61-487d-a737-3efe876028e8"
+      },
+      "onsetPeriod": {
+        "start": "2025-12-01T08:15:00.000+00:00"
+      },
+      "abatementDateTime": "2026-12-01T08:15:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/2d4fc0ba-035d-4594-902f-284d8acf462e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/cfe85314-5f6b-43b2-802a-ad5e6de93378",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "cfe85314-5f6b-43b2-802a-ad5e6de93378",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey",
+          "display": "Survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "80976-4",
+          "display": "International Prostate Symptom Score [IPSS]",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/2105cba2-6e61-487d-a737-3efe876028e8"
+      },
+      "effectiveDateTime": "2026-01-02T08:15:00.000+00:00",
+      "valueInteger": 5
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/cfe85314-5f6b-43b2-802a-ad5e6de93378"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/f0514bc3-b9bc-4449-a03c-5c6145ea53b6",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "f0514bc3-b9bc-4449-a03c-5c6145ea53b6",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey",
+          "display": "Survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "80976-4",
+          "display": "International Prostate Symptom Score [IPSS]",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/2105cba2-6e61-487d-a737-3efe876028e8"
+      },
+      "effectiveDateTime": "2026-12-01T08:15:00.000+00:00",
+      "valueInteger": 5
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/f0514bc3-b9bc-4449-a03c-5c6145ea53b6"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/77c5b04a-e200-4936-a6db-8b56c936ec3c",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "77c5b04a-e200-4936-a6db-8b56c936ec3c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "638df750-e07d-49bf-8f6f-d4c616aed457-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "2105cba2-6e61-487d-a737-3efe876028e8"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#638df750-e07d-49bf-8f6f-d4c616aed457-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient meeting IP/Denominator critera fails denominator exclusion because morbid obesity diagnosis is abated."
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS771FHIRUrinarySymptomScoreChangeBenignProstaticHyperplasia",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/2105cba2-6e61-487d-a737-3efe876028e8"
+      }, {
+        "reference": "Encounter/51fe9840-85ec-49b1-9d63-c3ee2e89165c"
+      }, {
+        "reference": "Condition/72fcd5b6-d676-4af5-903d-fdd3f52a89f8"
+      }, {
+        "reference": "Condition/2d4fc0ba-035d-4594-902f-284d8acf462e"
+      }, {
+        "reference": "Observation/cfe85314-5f6b-43b2-802a-ad5e6de93378"
+      }, {
+        "reference": "Observation/f0514bc3-b9bc-4449-a03c-5c6145ea53b6"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/77c5b04a-e200-4936-a6db-8b56c936ec3c"
+    }
+  } ]
+}

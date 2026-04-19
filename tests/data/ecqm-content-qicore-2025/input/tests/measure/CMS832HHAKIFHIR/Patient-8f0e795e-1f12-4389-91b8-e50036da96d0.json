@@ -1,0 +1,63 @@
+{
+  "resourceType": "Patient",
+  "id": "8f0e795e-1f12-4389-91b8-e50036da96d0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "1002-5",
+        "display": "American Indian or Alaska Native",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "American Indian or Alaska Native"
+    }, {
+      "url": "detailed",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "1653-5",
+        "display": "Tohono O'Odham"
+      }
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Not Hispanic or Latino"
+    }, {
+      "url": "detailed",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2153-5",
+        "display": "Mexican American Indian"
+      }
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248153007"
+  } ],
+  "identifier": [ {
+    "system": "http://hospital.smarthealthit.org",
+    "value": "999999999"
+  } ],
+  "name": [ {
+    "family": "Example",
+    "given": [ "Patient" ]
+  } ],
+  "gender": "male",
+  "birthDate": "1975-01-01"
+}

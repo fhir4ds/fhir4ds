@@ -1,0 +1,46 @@
+{
+  "resourceType": "Condition",
+  "id": "da3d0df9-3a19-48b0-b5b4-dcb5ac9ff35d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "788876001",
+      "display": "Cachexia due to malignant neoplastic disease (finding)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a4d4b3e9-171d-456f-9282-3db4bb9852f6"
+  },
+  "onsetPeriod": {
+    "start": "2026-02-23T08:00:00.000+00:00"
+  },
+  "recordedDate": "2026-02-23T11:00:00.000+00:00"
+}

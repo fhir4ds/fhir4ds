@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "dba48bd2-fd95-42c5-9820-110387f6b6d6",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "75282-4",
+      "display": "Nutrition assessment panel",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/95c5116d-15f0-4367-b467-dca152f6b43c"
+  },
+  "effectiveDateTime": "2026-07-02T10:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "102636009",
+      "display": "Chronic nutritional deficiency (finding)",
+      "userSelected": true
+    } ]
+  }
+}

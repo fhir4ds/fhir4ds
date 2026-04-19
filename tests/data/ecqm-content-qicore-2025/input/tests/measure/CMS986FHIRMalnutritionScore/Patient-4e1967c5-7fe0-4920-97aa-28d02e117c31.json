@@ -1,0 +1,61 @@
+{
+  "resourceType": "Patient",
+  "id": "4e1967c5-7fe0-4920-97aa-28d02e117c31",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2076-8",
+        "display": "Native Hawaiian or Other Pacific Islander",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Native Hawaiian or Other Pacific Islander"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2186-5",
+        "display": "Not Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Not Hispanic or Latino"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248153007"
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://madie.cms.gov/",
+    "value": "2ScreNotatriAtriRefAsseModNodxNoCp"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "text": "2ScreNotatriAtriRefAsseModNodxNoCp",
+    "family": "MSROBSPass4",
+    "given": [ "2ScreNotatriAtriRefAsseModNodxNoCp" ]
+  } ],
+  "gender": "male",
+  "birthDate": "1953-01-01",
+  "address": [ {
+    "text": "2ScreNotatriAtriRefAsseModNodxNoCp, Screened Not at risk Assessed Severely Malnourished Diagnosed Care Plan, ID=2ScreNotatriAtriRefAsseModNodxNoCp, DOB: 01 Jan 1953"
+  } ]
+}

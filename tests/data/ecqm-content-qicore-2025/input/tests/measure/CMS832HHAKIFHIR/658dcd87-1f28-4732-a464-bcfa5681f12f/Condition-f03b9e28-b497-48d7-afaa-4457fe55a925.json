@@ -1,0 +1,35 @@
+{
+  "resourceType": "Condition",
+  "id": "f03b9e28-b497-48d7-afaa-4457fe55a925",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "S37.061A",
+      "display": "Major laceration of right kidney, initial encounter"
+    } ],
+    "text": "Major laceration of right kidney, initial encounter"
+  },
+  "subject": {
+    "reference": "Patient/658dcd87-1f28-4732-a464-bcfa5681f12f"
+  },
+  "encounter": {
+    "reference": "Encounter/d9912cd5-55b5-4129-bec0-cc7adfaa8272"
+  }
+}

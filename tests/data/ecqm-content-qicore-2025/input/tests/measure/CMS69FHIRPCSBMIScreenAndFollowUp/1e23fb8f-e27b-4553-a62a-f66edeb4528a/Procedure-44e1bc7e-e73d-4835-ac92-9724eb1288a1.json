@@ -1,0 +1,36 @@
+{
+  "resourceType": "Procedure",
+  "id": "44e1bc7e-e73d-4835-ac92-9724eb1288a1",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-01-01T00:30:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "182922004",
+      "display": "Dietary regime (regime/therapy)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1e23fb8f-e27b-4553-a62a-f66edeb4528a"
+  },
+  "performedPeriod": {
+    "start": "2026-01-01T00:30:00.000+00:00",
+    "end": "2026-01-01T00:32:00.000+00:00"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "E66.01",
+      "display": "Morbid (severe) obesity due to excess calories",
+      "userSelected": true
+    } ]
+  } ]
+}

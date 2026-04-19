@@ -1,0 +1,95 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "8a06c139-6840-4048-ab17-1c28766f4e25",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "b5d0a0c0-f00a-4fe2-9a3f-890a15714295-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "a62eecb7-4b38-42dd-b451-7810f6bb5abe"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#b5d0a0c0-f00a-4fe2-9a3f-890a15714295-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Male IP Encounter with an eGFR calculation of <60, based on SCr = 1.5. SCr is within first 24 hours. eGFR must be <60 so does meet denominator exclusion. "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS832HHAKIFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/a62eecb7-4b38-42dd-b451-7810f6bb5abe"
+  }, {
+    "reference": "Encounter/d0ee07a3-e9e5-4f37-a194-3c06b69d5ef0"
+  }, {
+    "reference": "Encounter/0aac1a74-e8ec-4981-b355-9155e0f2794e"
+  }, {
+    "reference": "Observation/5962df56-7316-453c-a6b7-472a0494d13c"
+  }, {
+    "reference": "Observation/5512b036-9e15-4023-82f1-c583d7384642"
+  }, {
+    "reference": "Observation/353740b5-99b9-420d-bf57-9925f56ad933"
+  } ]
+}

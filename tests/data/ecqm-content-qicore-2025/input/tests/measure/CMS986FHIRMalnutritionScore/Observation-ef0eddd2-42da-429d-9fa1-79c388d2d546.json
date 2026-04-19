@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "ef0eddd2-42da-429d-9fa1-79c388d2d546",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "98968-1",
+      "display": "Initial screening NRS_2002",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f7730b43-fab5-4fee-a1ba-34dd41279a20"
+  },
+  "effectiveDateTime": "2026-08-25T09:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "LA27538-0",
+      "display": "At risk for malnutrition",
+      "userSelected": true
+    } ]
+  }
+}

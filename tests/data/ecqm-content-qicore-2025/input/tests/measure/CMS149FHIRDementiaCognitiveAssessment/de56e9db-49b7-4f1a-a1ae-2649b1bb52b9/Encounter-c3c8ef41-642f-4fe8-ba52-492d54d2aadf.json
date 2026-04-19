@@ -1,0 +1,29 @@
+{
+  "resourceType": "Encounter",
+  "id": "c3c8ef41-642f-4fe8-ba52-492d54d2aadf",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient encounter",
+    "userSelected": true
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2023",
+      "code": "99221",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/de56e9db-49b7-4f1a-a1ae-2649b1bb52b9"
+  },
+  "period": {
+    "start": "2026-03-02T08:00:00.000+00:00",
+    "end": "2026-03-02T08:35:00.000+00:00"
+  }
+}

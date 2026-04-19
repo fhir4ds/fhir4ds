@@ -1,0 +1,33 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "5db422c3-6061-47d0-9f00-12c657efd399",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1115257",
+      "display": "1.5 ML leuprolide acetate 30 MG/ML Prefilled Syringe"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/8068a81d-feca-4719-aa75-cb45df5428e7"
+  },
+  "authoredOn": "2026-03-15T08:00:00.000+00:00",
+  "requester": {
+    "reference": "http://myGoodHealthcare.com/fhir/Practitioner/8348e6c7-4b4d-4c03-8815-8ca0f03beaa9"
+  },
+  "dosageInstruction": [ {
+    "timing": {
+      "repeat": {
+        "boundsPeriod": {
+          "start": "2026-03-15T08:00:00.000+00:00",
+          "end": "2026-04-15T08:15:00.000+00:00"
+        }
+      }
+    }
+  } ]
+}

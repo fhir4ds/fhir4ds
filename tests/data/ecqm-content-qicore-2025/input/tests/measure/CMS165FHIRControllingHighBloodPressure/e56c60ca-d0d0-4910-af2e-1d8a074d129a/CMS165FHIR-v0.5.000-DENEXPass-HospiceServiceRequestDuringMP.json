@@ -1,0 +1,264 @@
+{
+  "resourceType": "Bundle",
+  "id": "DENEXPass-HospiceServiceRequestDuringMP",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/e56c60ca-d0d0-4910-af2e-1d8a074d129a",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "e56c60ca-d0d0-4910-af2e-1d8a074d129a",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "DENEXPass",
+        "given": [ "HospiceServiceRequestDuringMP" ]
+      } ],
+      "gender": "female",
+      "birthDate": "2007-12-31"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/e56c60ca-d0d0-4910-af2e-1d8a074d129a"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/ba9db491-c526-4c01-ba0c-427ad5e5a553",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "ba9db491-c526-4c01-ba0c-427ad5e5a553",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "3391000175108",
+          "display": "Office visit for pediatric care and assessment (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/e56c60ca-d0d0-4910-af2e-1d8a074d129a"
+      },
+      "period": {
+        "start": "2026-01-01T00:00:00.000+00:00",
+        "end": "2026-01-01T01:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/ba9db491-c526-4c01-ba0c-427ad5e5a553"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/9c371ccf-3df5-4855-9321-6cd3af96553a",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "9c371ccf-3df5-4855-9321-6cd3af96553a",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "371125006",
+          "display": "Labile essential hypertension (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/e56c60ca-d0d0-4910-af2e-1d8a074d129a"
+      },
+      "onsetDateTime": "2026-06-30T23:59:59.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/9c371ccf-3df5-4855-9321-6cd3af96553a"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/ServiceRequest/119e9c4e-3d75-4711-8e5b-9e8df5e1face",
+    "resource": {
+      "resourceType": "ServiceRequest",
+      "id": "119e9c4e-3d75-4711-8e5b-9e8df5e1face",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+      },
+      "status": "completed",
+      "intent": "order",
+      "category": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "387713003",
+          "display": "Surgical procedure"
+        } ]
+      } ],
+      "priority": "routine",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "385763009",
+          "display": "Hospice care (regime/therapy)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/e56c60ca-d0d0-4910-af2e-1d8a074d129a"
+      },
+      "authoredOn": "2026-01-02T00:00:00.000+00:00",
+      "performerType": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "405279007",
+          "display": "Attending physician (occupation)"
+        } ]
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "ServiceRequest/119e9c4e-3d75-4711-8e5b-9e8df5e1face"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/6c9f75f1-669f-47ca-862b-ea737911964b",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "6c9f75f1-669f-47ca-862b-ea737911964b",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "4a040f6a-4299-4543-a3e6-afd784f89d78-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "e56c60ca-d0d0-4910-af2e-1d8a074d129a"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#4a040f6a-4299-4543-a3e6-afd784f89d78-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Hospice service request during MP"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS165FHIRControllingHighBloodPressure",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/e56c60ca-d0d0-4910-af2e-1d8a074d129a"
+      }, {
+        "reference": "Encounter/ba9db491-c526-4c01-ba0c-427ad5e5a553"
+      }, {
+        "reference": "Condition/9c371ccf-3df5-4855-9321-6cd3af96553a"
+      }, {
+        "reference": "ServiceRequest/119e9c4e-3d75-4711-8e5b-9e8df5e1face"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/6c9f75f1-669f-47ca-862b-ea737911964b"
+    }
+  } ]
+}

@@ -1,0 +1,22 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "fdc9242f-5bbf-4315-8f85-977c9565a4f2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2023-09",
+      "code": "183452005",
+      "display": "Emergency hospital admission (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/11703274-1218-440d-bb98-08502a794179"
+  },
+  "authoredOn": "2027-05-01T01:00:00.000+00:00"
+}

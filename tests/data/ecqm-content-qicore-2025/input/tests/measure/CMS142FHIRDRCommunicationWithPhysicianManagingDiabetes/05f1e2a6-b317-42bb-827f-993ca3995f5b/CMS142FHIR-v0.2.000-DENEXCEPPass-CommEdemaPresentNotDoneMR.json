@@ -1,0 +1,366 @@
+{
+  "resourceType": "Bundle",
+  "id": "61168b8798086b77ef9c5ecc",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/05f1e2a6-b317-42bb-827f-993ca3995f5b",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "05f1e2a6-b317-42bb-827f-993ca3995f5b",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248153007"
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://myGoodHealthcare.com/",
+        "value": "61168b8798086b77ef9c5ecc"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "DENEXCEPPass",
+        "given": [ "CommEdemaPresentNotDoneMR" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1980-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/05f1e2a6-b317-42bb-827f-993ca3995f5b"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Communication/52df0c61-4d46-4c51-b4ae-f2db6845ef4f",
+    "resource": {
+      "resourceType": "Communication",
+      "id": "52df0c61-4d46-4c51-b4ae-f2db6845ef4f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2014-07-02T15:00:00.000+00:00"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDone",
+        "valueBoolean": true
+      }, {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDone",
+        "valueBoolean": true
+      } ],
+      "status": "not-done",
+      "statusReason": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/202303",
+          "code": "183932001",
+          "display": "Procedure contraindicated (situation)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/05f1e2a6-b317-42bb-827f-993ca3995f5b"
+      },
+      "sent": "2026-07-09T08:00:00.000+00:00",
+      "reasonCode": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "428341000124108"
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Communication/52df0c61-4d46-4c51-b4ae-f2db6845ef4f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/a4c98ac6-cb4c-471b-a916-872dbd75a1d9",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "a4c98ac6-cb4c-471b-a916-872dbd75a1d9",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/202303",
+          "code": "193349004"
+        }, {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "version": "2023",
+          "code": "E08.311"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/05f1e2a6-b317-42bb-827f-993ca3995f5b"
+      },
+      "onsetDateTime": "2023-07-02T08:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/a4c98ac6-cb4c-471b-a916-872dbd75a1d9"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/b3ef478e-582f-4d39-83db-cb2a6fa60692",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "b3ef478e-582f-4d39-83db-cb2a6fa60692",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "vital-signs",
+          "display": "Vital Signs"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.73",
+          "code": "32451-7"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/05f1e2a6-b317-42bb-827f-993ca3995f5b"
+      },
+      "effectiveDateTime": "2026-07-09T08:00:00.000+00:00",
+      "valueBoolean": true
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/b3ef478e-582f-4d39-83db-cb2a6fa60692"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/cea36309-3c20-4bd9-a8c6-851e9b2e7b9e",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "cea36309-3c20-4bd9-a8c6-851e9b2e7b9e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "version": "2023",
+          "code": "99205"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/05f1e2a6-b317-42bb-827f-993ca3995f5b"
+      },
+      "period": {
+        "start": "2026-07-02T15:00:00.000+00:00",
+        "end": "2026-08-02T16:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/cea36309-3c20-4bd9-a8c6-851e9b2e7b9e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Communication/f7cbc629-3f08-476a-9652-073d62ff53f8",
+    "resource": {
+      "resourceType": "Communication",
+      "id": "f7cbc629-3f08-476a-9652-073d62ff53f8",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-07-09T08:00:00.000+00:00"
+      } ],
+      "status": "not-done",
+      "statusReason": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/202303",
+          "code": "183932001",
+          "display": "Procedure contraindicated (situation)",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "428341000124108",
+          "display": "Macular edema absent (situation)",
+          "userSelected": true
+        } ]
+      } ],
+      "sent": "2026-07-09T08:00:00.000+00:00",
+      "reasonCode": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20230301",
+          "code": "193387007",
+          "display": "Cystoid macular edema (disorder)"
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Communication/f7cbc629-3f08-476a-9652-073d62ff53f8"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/26c3fd1f-5c51-42b0-acba-a2c59e97a9c0",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "26c3fd1f-5c51-42b0-acba-a2c59e97a9c0",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "a771d619-749a-4685-82b0-faf12103105d-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "05f1e2a6-b317-42bb-827f-993ca3995f5b"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#a771d619-749a-4685-82b0-faf12103105d-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Communication of Edema Present Not performed for Medical Reason"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS142FHIRDRCommunicationWithPhysicianManagingDiabetes",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/05f1e2a6-b317-42bb-827f-993ca3995f5b"
+      }, {
+        "reference": "Communication/52df0c61-4d46-4c51-b4ae-f2db6845ef4f"
+      }, {
+        "reference": "Condition/a4c98ac6-cb4c-471b-a916-872dbd75a1d9"
+      }, {
+        "reference": "Observation/b3ef478e-582f-4d39-83db-cb2a6fa60692"
+      }, {
+        "reference": "Encounter/cea36309-3c20-4bd9-a8c6-851e9b2e7b9e"
+      }, {
+        "reference": "Communication/f7cbc629-3f08-476a-9652-073d62ff53f8"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/26c3fd1f-5c51-42b0-acba-a2c59e97a9c0"
+    }
+  } ]
+}

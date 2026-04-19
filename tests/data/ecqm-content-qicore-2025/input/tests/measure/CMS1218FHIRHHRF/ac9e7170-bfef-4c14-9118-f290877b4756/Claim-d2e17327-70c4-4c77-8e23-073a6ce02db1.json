@@ -1,0 +1,62 @@
+{
+  "resourceType": "Claim",
+  "id": "d2e17327-70c4-4c77-8e23-073a6ce02db1",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-claim" ]
+  },
+  "status": "active",
+  "type": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/claim-type",
+      "code": "professional"
+    } ]
+  },
+  "use": "claim",
+  "patient": {
+    "reference": "Patient/ac9e7170-bfef-4c14-9118-f290877b4756"
+  },
+  "created": "2026-05-16",
+  "priority": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/processpriority",
+      "code": "normal"
+    } ]
+  },
+  "diagnosis": [ {
+    "sequence": 1,
+    "diagnosisCodeableConcept": {
+      "coding": [ {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2024",
+        "code": "J95.822",
+        "display": "Acute and chronic postprocedural respiratory failure"
+      } ]
+    },
+    "type": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/ex-diagnosistype",
+        "code": "principal"
+      } ]
+    } ],
+    "onAdmission": {
+      "coding": [ {
+        "system": "https://www.cms.gov/Medicare/Medicare-Fee-for-Service-Payment/HospitalAcqCond/Coding",
+        "code": "Y"
+      } ]
+    }
+  } ],
+  "item": [ {
+    "sequence": 1,
+    "diagnosisSequence": [ 1, 5, 7 ],
+    "productOrService": {
+      "coding": [ {
+        "system": "http://example.org/fhir/CodeSystem/ex-professionalservice",
+        "code": "anesthesia"
+      } ]
+    },
+    "servicedDate": "2026-04-11",
+    "encounter": [ {
+      "reference": "Encounter/98ea600b-b935-4958-8260-5635c8140f51"
+    } ]
+  } ]
+}

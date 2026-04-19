@@ -1,0 +1,38 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.117.1.7.1.292",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:16.149-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "2.16.840.1.113883.3.117.1.7.1.292"
+  } ],
+  "version": "20210611",
+  "name": "EmergencyDepartmentVisit",
+  "title": "Emergency Department Visit",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:8a70866a-f030-4711-9cff-7b0c82edaf08",
+    "timestamp": "2025-06-20T16:57:32-04:00",
+    "total": 1,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "4525004",
+      "display": "Emergency department patient visit (procedure)"
+    } ]
+  }
+}

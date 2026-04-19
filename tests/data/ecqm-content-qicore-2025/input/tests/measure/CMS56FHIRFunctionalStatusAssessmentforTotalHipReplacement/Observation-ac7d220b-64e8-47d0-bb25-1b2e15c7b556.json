@@ -1,0 +1,29 @@
+{
+  "resourceType": "Observation",
+  "id": "ac7d220b-64e8-47d0-bb25-1b2e15c7b556",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "72096-1",
+      "display": "Symptoms score [HOOS]"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c19b82ba-741a-4125-8118-5558010a0016"
+  },
+  "effectivePeriod": {
+    "start": "2025-08-28T00:00:00.000Z",
+    "end": "2025-08-28T01:00:00.000Z"
+  },
+  "valueInteger": 60
+}

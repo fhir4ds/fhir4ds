@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "c044252b-b3bf-4c81-8e81-ea34f8112195",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "192711008",
+      "display": "Post diphtheria vaccination encephalitis (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a5ca4525-88bc-4b67-b880-ca1cf54daa88"
+  },
+  "onsetDateTime": "2025-01-02T00:00:00.000Z"
+}

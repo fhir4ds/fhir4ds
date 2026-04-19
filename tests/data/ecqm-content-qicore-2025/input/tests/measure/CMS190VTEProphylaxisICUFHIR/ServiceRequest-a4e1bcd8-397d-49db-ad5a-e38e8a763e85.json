@@ -1,0 +1,32 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "a4e1bcd8-397d-49db-ad5a-e38e8a763e85",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "443390004",
+        "display": "Refusal of treatment by patient (situation)"
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "428411000124104",
+      "display": "Intermittent pneumatic compression boot (physical object)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f4ff5419-ce35-4a19-9a6e-7e69977d51b8"
+  },
+  "authoredOn": "2026-11-03T11:00:00.000+00:00"
+}

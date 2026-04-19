@@ -1,0 +1,37 @@
+patient_id,Initial Population,Denominator,Numerator,Denominator Exclusions,Denominator Exceptions,Qualifying Encounters,Patient Expired,Has HIV Test Performed,expected_Initial Population,expected_Denominator,expected_Numerator,expected_Denominator Exclusions,expected_Denominator Exceptions,expected_Qualifying Encounters,expected_Patient Expired,expected_Has HIV Test Performed,match
+010e7c7c-3767-4d0c-8b1d-935c1e451ad0,True,True,False,False,False,['Encounter/5c41ddb1-27d8-40da-89da-996f90d5144d'],False,False,,,,,,,,,True
+050401cc-5f7b-432a-8194-11702adede21,False,False,False,False,False,[],False,False,,,,,,,,,True
+0dd2c81f-19b8-495b-acdf-196a2207b376,True,True,False,False,False,['Encounter/a1abacab-bbea-42ef-8e42-ff37175812f3'],False,False,,,,,,,,,True
+15d4c0f3-e862-4b06-9ed0-7a572b901aba,True,True,False,False,False,['Encounter/b88c97c0-fd52-4ddf-9cbd-bf6cd9b45547'],False,False,,,,,,,,,True
+161e8e14-fea4-47c4-b752-b90e047697ea,False,False,False,False,False,[],False,False,,,,,,,,,True
+18ad99cd-c0b1-48c9-ab0b-bb3ab66e1c18,True,True,False,False,True,['Encounter/560413b6-6810-48fb-98ae-f17be3b702ee'],True,False,,,,,,,,,True
+198a8ffe-cd3f-45f7-931b-897796c67247,True,True,False,False,False,['Encounter/6813c5cf-12fd-47bd-80ae-54d85082440a'],False,False,,,,,,,,,True
+1d082b9c-26b3-4f59-b7f9-6f206c594506,True,True,True,False,False,['Encounter/c628cd76-73c0-42a2-b89c-31b725d9b5dd'],False,True,,,,,,,,,True
+1d47538d-c090-48eb-8d0b-0ed7e86ebbfd,True,True,False,False,False,['Encounter/8288742a-8761-46b9-898f-d74ad87de499'],False,False,,,,,,,,,True
+243bc4d8-841e-4760-a65b-13013bf5204c,False,False,False,False,False,[],False,False,,,,,,,,,True
+2f132a6c-2ec6-4553-9d90-d3e7dc19de26,False,False,False,False,False,['Encounter/ab74cd2b-8630-47e5-9c6c-e48895e46070'],False,False,,,,,,,,,True
+35a14482-f089-4578-81ef-52dfebf9e77d,True,True,False,False,False,['Encounter/8c381390-fb4f-41b7-b3e2-c8a773c6f157'],False,False,,,,,,,,,True
+40677ab0-38af-4fe1-8cc0-bcd41c14d37d,True,True,True,False,False,['Encounter/1f7808c3-856e-47b1-83e5-80f62d062702'],False,True,,,,,,,,,True
+41abc473-f005-4664-aa67-773f9b2f77e7,True,True,False,False,False,"['Encounter/9d6f9fa1-64c9-461e-9c56-d99c3b7d0334', 'Encounter/dc9ff7ff-6f13-4fc6-8d9e-2edc13df702a']",False,False,,,,,,,,,True
+5e4b8bcc-7354-4513-8c9e-61c59bf7c2fc,True,True,True,False,False,['Encounter/8d337f62-1af9-49d7-8bfc-b00fc8eb58c8'],False,True,,,,,,,,,True
+64e863bc-02b5-46cc-8c27-57df7cebfcaf,True,True,False,False,False,['Encounter/ed0e1b97-8956-4727-8511-c351f8ff039a'],False,False,,,,,,,,,True
+720428de-44f9-48d8-86c9-262b6bd5fa46,True,True,False,False,False,['Encounter/1d954553-a753-43be-b78a-69f134d832bc'],False,False,,,,,,,,,True
+74e4451c-12d0-4e5b-8f99-c9410766c3c4,False,False,False,False,False,['Encounter/4323c635-aa41-4b3f-b318-e66121ff7c8e'],False,False,,,,,,,,,True
+7b9a4d0a-7465-45ac-932a-0aca2de75a3c,True,True,False,False,False,['Encounter/cfb2e4da-960c-43dd-84f0-e4ca563183ba'],False,False,,,,,,,,,True
+8a599e2b-f25b-4912-8369-cda93caaf351,False,False,False,False,False,[],False,False,,,,,,,,,True
+8b1bcbaa-01df-486d-b243-9399e7515074,True,True,False,False,False,['Encounter/d0fc35d1-eafe-4430-baa5-23f6d33cc7f1'],False,False,,,,,,,,,True
+8bc5cedd-f265-49c4-be8e-d6a0a12b3752,True,True,True,False,False,['Encounter/70701ac9-3ebf-4bc1-b807-c7ec0e436115'],False,True,,,,,,,,,True
+90346970-2f5c-43aa-81ab-30e4f5d74830,True,True,False,False,False,['Encounter/c25a0916-cc13-4720-93c6-b218f770fdb7'],False,False,,,,,,,,,True
+9b6c9156-c4b5-46a1-8d47-d2d4998f44d3,True,True,False,True,False,['Encounter/2984b1a9-eeb3-4632-9452-a6a879da68a3'],False,False,,,,,,,,,True
+a05a0ed5-b57d-4ce6-adc8-b4b9ec0403ae,False,False,False,False,False,[],False,False,,,,,,,,,True
+af6febab-8963-49ea-86e4-72345024dc0b,True,True,False,False,False,['Encounter/d4655111-fe47-48a6-9a70-aba21721bbca'],False,False,,,,,,,,,True
+b46e3e19-548e-481a-93a1-57973055ffad,True,True,False,True,False,['Encounter/498dd63c-2b0a-4ada-b8d1-1889bca4af74'],False,False,,,,,,,,,True
+b8161404-686d-4ce4-b291-e7a02ffe7b7e,True,True,False,True,False,['Encounter/eda811b1-8529-4c2d-baba-37941bee6c87'],False,False,,,,,,,,,True
+bd10b739-a303-497c-8b23-e673bee363f5,True,True,False,False,False,['Encounter/87107c8a-e382-44d2-8820-5a9b138d088f'],False,False,,,,,,,,,True
+df21795c-3269-4d4c-9173-0089d65a75d5,True,True,True,False,False,['Encounter/f55ba934-a4ec-4be3-b254-8c0434067e28'],False,True,,,,,,,,,True
+e2c3ca6d-c054-4245-b59c-12f83919cfaa,True,True,False,False,False,['Encounter/002402a5-b45d-41b2-8d42-34af74187256'],False,False,,,,,,,,,True
+e48db8cc-afd4-47ea-846c-ee4f3794e5ea,False,False,False,False,False,['Encounter/2b1a4a72-4f10-40b9-ad0c-f652aba9f4fb'],False,False,,,,,,,,,True
+e98529d7-5196-4523-bbc9-cbf48b5525d1,True,True,False,False,False,['Encounter/8ef1c0de-2169-4d12-8449-8f32efac475c'],False,False,,,,,,,,,True
+f24d0ae4-0daf-4f7e-85c8-679360f29219,True,True,False,False,False,['Encounter/9c60c621-de5b-40f6-9337-20d46be2cf45'],False,False,,,,,,,,,True
+f5a4440e-ff86-4d9a-807c-26dc21daad46,True,True,False,False,False,['Encounter/aae11749-3b9d-4116-92bc-061089265dcd'],False,False,,,,,,,,,True
+ffb7a0c4-fcef-46ff-9593-f3cebe574e21,True,True,True,False,False,['Encounter/8eabbfb5-4358-4862-885f-7f688d2fe884'],False,True,,,,,,,,,True

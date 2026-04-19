@@ -1,0 +1,33 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "3abc2c6e-09c6-489b-baac-be989d4c8779",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-mednotrequested" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "04032023",
+      "code": "200033",
+      "display": "carvedilol 25 MG Oral Tablet"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/d280cb74-871e-4191-b06a-4b700959a974"
+  },
+  "authoredOn": "2026-02-02T12:00:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/9ca6c6d0-7078-4103-a944-5b2cc0454905"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "406149000",
+      "display": "Medication declined (situation)"
+    } ]
+  } ]
+}

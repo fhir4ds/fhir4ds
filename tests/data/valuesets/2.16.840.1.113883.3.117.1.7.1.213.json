@@ -1,0 +1,88 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.117.1.7.1.213",
+  "meta": {
+    "versionId": "37",
+    "lastUpdated": "2026-02-06T11:02:39.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2021-02-20"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2021-02-20"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.213",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113883.3.117.1.7.1.213"
+    }
+  ],
+  "version": "20210220",
+  "name": "INR",
+  "title": "INR",
+  "status": "active",
+  "experimental": false,
+  "date": "2021-02-20T01:02:00-05:00",
+  "publisher": "Joint Commission",
+  "expansion": {
+    "identifier": "urn:uuid:629d9717-7a1c-4805-b825-05618846a5be",
+    "timestamp": "2026-03-13T12:47:15-04:00",
+    "total": 5,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "34714-6",
+        "display": "INR in Blood by Coagulation assay"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "38875-1",
+        "display": "INR in Platelet poor plasma or blood by Coagulation assay"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "46418-0",
+        "display": "INR in Capillary blood by Coagulation assay"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "52129-4",
+        "display": "INR in Platelet poor plasma by Coagulation assay --post heparin neutralization"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "6301-6",
+        "display": "INR in Platelet poor plasma by Coagulation assay"
+      }
+    ]
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "resourceType": "Encounter",
+  "id": "1260d7ac-8763-413b-b69e-c315e061f17e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "EMER",
+    "display": "emergency",
+    "userSelected": true
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "32485007",
+      "display": "Hospital admission (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/ae7150fa-283f-4689-abff-ca7f29101609"
+  },
+  "period": {
+    "start": "2026-08-12T05:00:00.000+00:00",
+    "end": "2026-08-19T12:00:00.000+00:00"
+  },
+  "hospitalization": {
+    "dischargeDisposition": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "428361000124107",
+        "display": "Discharge to home for hospice care (procedure)",
+        "userSelected": true
+      } ]
+    }
+  }
+}

@@ -626,6 +626,24 @@ class SQLLambda(SQLExpression):
 
 
 @dataclass
+class SQLLambda2(SQLExpression):
+    """
+    Represents a two-parameter lambda expression for list_reduce.
+
+    Examples:
+        (x, y) -> x + y
+        (acc, elem) -> acc * elem
+    """
+
+    params: List[str]
+    body: SQLExpression
+    precedence: int = PRECEDENCE["PRIMARY"]
+
+    def to_sql(self, parent_precedence: int = 0) -> str:
+        return f"({', '.join(self.params)}) -> {self.body.to_sql()}"
+
+
+@dataclass
 class SQLAlias(SQLExpression):
     """
     Represents an alias for an expression (expr AS alias).
@@ -1534,6 +1552,7 @@ SQLExpressionType = Union[
     SQLArray,
     SQLList,
     SQLLambda,
+    SQLLambda2,
     SQLInterval,
     SQLCast,
     SQLSelect,
@@ -1752,6 +1771,7 @@ __all__ = [
     "SQLArray",
     "SQLList",
     "SQLLambda",
+    "SQLLambda2",
     "SQLInterval",
     "SQLCast",
     "SQLAlias",

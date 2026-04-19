@@ -1,0 +1,29 @@
+{
+  "resourceType": "Observation",
+  "id": "f00f1f3d-ee9b-4609-bc62-dda681e8a3bb",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "72094-6",
+      "display": "Sport-recreation score [HOOS]"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+  },
+  "effectivePeriod": {
+    "start": "2024-11-02T00:00:00.000Z",
+    "end": "2024-11-02T01:00:00.000Z"
+  },
+  "valueInteger": 60
+}

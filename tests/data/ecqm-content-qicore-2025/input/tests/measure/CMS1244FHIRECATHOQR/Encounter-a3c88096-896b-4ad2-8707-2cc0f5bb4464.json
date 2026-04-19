@@ -1,0 +1,29 @@
+{
+  "resourceType": "Encounter",
+  "id": "a3c88096-896b-4ad2-8707-2cc0f5bb4464",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "EMER",
+    "display": "emergency"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2023-09",
+      "code": "225390008",
+      "display": "Triage (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/690efbf3-6087-4c90-a1c7-be572ca734e0"
+  },
+  "period": {
+    "start": "2027-05-01T08:00:00.000+00:00",
+    "end": "2027-05-01T13:15:00.000+00:00"
+  }
+}

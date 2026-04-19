@@ -1,0 +1,44 @@
+{
+  "resourceType": "Condition",
+  "id": "be75dcc3-27fb-49c1-9bfd-d26d75e953c6",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "unconfirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "severity": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "24484000",
+      "display": "Severe (severity modifier)"
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "Z92.82",
+      "display": "Status post administration of tPA (rtPA) in a different facility within the last 24 hours prior to admission to current facility"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/105e8f1d-67bc-4093-8953-7aaca6e1411b"
+  },
+  "onsetDateTime": "2026-11-12T08:30:00.000+00:00"
+}

@@ -1,0 +1,40 @@
+{
+  "resourceType": "Condition",
+  "id": "75862daf-d75c-4855-86ed-638f2af536e8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "remission"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "I26.09",
+      "display": "Other pulmonary embolism with acute cor pulmonale"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/7961993e-f025-4a12-9bb8-461c6ab3870e"
+  },
+  "onsetPeriod": {
+    "start": "2026-11-03T08:00:00.000+00:00",
+    "end": "2026-12-03T08:00:00.000+00:00"
+  }
+}

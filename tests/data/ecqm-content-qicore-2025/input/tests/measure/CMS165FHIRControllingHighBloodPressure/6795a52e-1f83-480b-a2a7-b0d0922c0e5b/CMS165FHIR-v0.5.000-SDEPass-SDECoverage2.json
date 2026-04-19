@@ -1,0 +1,292 @@
+{
+  "resourceType": "Bundle",
+  "id": "IPPPass-SDECoverage",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/6795a52e-1f83-480b-a2a7-b0d0922c0e5b",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "6795a52e-1f83-480b-a2a7-b0d0922c0e5b",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        }, {
+          "url": "detailed",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1653-5",
+            "display": "Tohono O'Odham"
+          }
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        }, {
+          "url": "detailed",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2180-8",
+            "display": "Puerto Rican"
+          }
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248152002"
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "SDE",
+        "given": [ "SDECoverage2" ]
+      } ],
+      "gender": "unknown",
+      "birthDate": "1956-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/6795a52e-1f83-480b-a2a7-b0d0922c0e5b"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/c1603a08-67a3-4a6c-8567-98c4c1eff997",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "c1603a08-67a3-4a6c-8567-98c4c1eff997",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "401267002",
+          "display": "Telephone triage encounter (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/6795a52e-1f83-480b-a2a7-b0d0922c0e5b"
+      },
+      "period": {
+        "start": "2026-01-01T00:00:00.000+00:00",
+        "end": "2026-01-01T01:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/c1603a08-67a3-4a6c-8567-98c4c1eff997"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/7b2ff9a9-15d2-4005-8e73-e20fc8e5b74c",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "7b2ff9a9-15d2-4005-8e73-e20fc8e5b74c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "identifier": [ {
+        "system": "http://benefitsinc.com/certificate",
+        "value": "12345"
+      } ],
+      "status": "active",
+      "type": {
+        "coding": [ {
+          "system": "https://nahdo.org/sopt",
+          "code": "59",
+          "display": "Other Private Insurance"
+        } ]
+      },
+      "policyHolder": {
+        "reference": "Patient/6795a52e-1f83-480b-a2a7-b0d0922c0e5b"
+      },
+      "subscriber": {
+        "reference": "Patient/6795a52e-1f83-480b-a2a7-b0d0922c0e5b"
+      },
+      "subscriberId": "12191",
+      "beneficiary": {
+        "reference": "Patient/6795a52e-1f83-480b-a2a7-b0d0922c0e5b"
+      },
+      "dependent": "0",
+      "relationship": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+          "code": "self"
+        } ]
+      },
+      "period": {
+        "start": "2023-01-01T06:00:00.000+00:00",
+        "end": "2023-01-01T11:06:01.000+00:00"
+      },
+      "payor": [ {
+        "reference": "Patient/6795a52e-1f83-480b-a2a7-b0d0922c0e5b"
+      } ],
+      "order": 9
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/7b2ff9a9-15d2-4005-8e73-e20fc8e5b74c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/eafcb0dd-65e3-4ba3-85e2-bdade7ee046e",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "eafcb0dd-65e3-4ba3-85e2-bdade7ee046e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "371125006",
+          "display": "Labile essential hypertension (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/6795a52e-1f83-480b-a2a7-b0d0922c0e5b"
+      },
+      "onsetDateTime": "2026-06-30T23:59:59.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/eafcb0dd-65e3-4ba3-85e2-bdade7ee046e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/ee6dfe28-4057-4326-ab82-a8da3f18f9f6",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "ee6dfe28-4057-4326-ab82-a8da3f18f9f6",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "30bd5ed6-a3ad-4a31-9d48-c1561a4ff61e-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "6795a52e-1f83-480b-a2a7-b0d0922c0e5b"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#30bd5ed6-a3ad-4a31-9d48-c1561a4ff61e-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "For meeting SDE 100% coverage - patient sex female"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS165FHIRControllingHighBloodPressure",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/6795a52e-1f83-480b-a2a7-b0d0922c0e5b"
+      }, {
+        "reference": "Encounter/c1603a08-67a3-4a6c-8567-98c4c1eff997"
+      }, {
+        "reference": "Coverage/7b2ff9a9-15d2-4005-8e73-e20fc8e5b74c"
+      }, {
+        "reference": "Condition/eafcb0dd-65e3-4ba3-85e2-bdade7ee046e"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/ee6dfe28-4057-4326-ab82-a8da3f18f9f6"
+    }
+  } ]
+}

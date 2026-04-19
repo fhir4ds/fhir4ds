@@ -1,0 +1,39 @@
+{
+  "resourceType": "Condition",
+  "id": "3f71b553-c1fd-4237-a96d-127578a30c96",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "recurrence",
+      "display": "recurrence",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/us/core/CodeSystem/condition-category",
+      "code": "health-concern",
+      "display": "Health Concern"
+    }, {
+      "system": "http://snomed.info/sct",
+      "code": "439401001",
+      "display": "Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "248342006",
+      "display": "Underweight (finding)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/8835a50b-0a0f-4e2f-94fa-7c180cd7f905"
+  },
+  "onsetDateTime": "2021-11-30T08:00:00.000+00:00"
+}

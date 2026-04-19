@@ -1,0 +1,97 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "c6bdf501-adb7-4efe-8ebb-c413cfc46f69",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "73c8ced1-bf3b-4753-a020-0f01cbc171d3-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "15b275f0-8540-4c32-8ab6-29e535dcea64"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#73c8ced1-bf3b-4753-a020-0f01cbc171d3-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient with communications done 1hr before start of encounter."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS142FHIRDRCommunicationWithPhysicianManagingDiabetes",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/15b275f0-8540-4c32-8ab6-29e535dcea64"
+  }, {
+    "reference": "Communication/44489370-f624-44cc-856a-9d8b5a186d5b"
+  }, {
+    "reference": "Condition/d3de52ad-4cc1-43c4-9862-f310fd73bfae"
+  }, {
+    "reference": "Observation/d7657c7c-2c67-46b9-a281-c5fa7a6d1958"
+  }, {
+    "reference": "Encounter/62bf1b33-86a9-467e-8ff8-e9f9f88c00f5"
+  }, {
+    "reference": "Coverage/f52db86a-46cb-4e45-a176-25c97e2e95d1"
+  }, {
+    "reference": "Organization/ed647efe-6108-4373-89d6-c3b60ed657c6"
+  } ]
+}

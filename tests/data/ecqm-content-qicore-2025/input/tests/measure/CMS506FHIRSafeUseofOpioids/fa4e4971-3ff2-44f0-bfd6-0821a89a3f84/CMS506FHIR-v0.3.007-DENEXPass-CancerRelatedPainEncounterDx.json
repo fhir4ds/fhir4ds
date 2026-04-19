@@ -1,0 +1,414 @@
+{
+  "resourceType": "Bundle",
+  "id": "63233350414ba67d4e1d1c2f",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/fa4e4971-3ff2-44f0-bfd6-0821a89a3f84",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "fa4e4971-3ff2-44f0-bfd6-0821a89a3f84",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999999"
+      } ],
+      "name": [ {
+        "family": "DENEXPass",
+        "given": [ "CancerRelatedPainEncounterDx" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1944-02-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/fa4e4971-3ff2-44f0-bfd6-0821a89a3f84"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/a5b57f7e-1c8a-4efa-9200-d2ce98423409",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "a5b57f7e-1c8a-4efa-9200-d2ce98423409",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183452005",
+          "display": "Emergency hospital admission (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/fa4e4971-3ff2-44f0-bfd6-0821a89a3f84"
+      },
+      "period": {
+        "start": "2026-01-01T11:45:00.000Z",
+        "end": "2026-01-03T11:59:00.000Z"
+      },
+      "reasonReference": [ {
+        "reference": "Condition/2a12d21d-3b89-4043-96c8-a023f5fe2817"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/a5b57f7e-1c8a-4efa-9200-d2ce98423409"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationRequest/b5ce4e62-84d9-462b-b3d2-05b75ddb9b0f",
+    "resource": {
+      "resourceType": "MedicationRequest",
+      "id": "b5ce4e62-84d9-462b-b3d2-05b75ddb9b0f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+      },
+      "status": "completed",
+      "intent": "order",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+          "code": "discharge",
+          "display": "Discharge",
+          "userSelected": true
+        } ]
+      } ],
+      "doNotPerform": false,
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "2103192",
+          "display": "sufentanil 0.03 MG Sublingual Tablet",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/fa4e4971-3ff2-44f0-bfd6-0821a89a3f84"
+      },
+      "authoredOn": "2026-01-03T11:59:00.000Z",
+      "requester": {
+        "reference": "Practitioner/6dd15d4d-0cd9-4ac2-8254-33b8640d9440"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationRequest/b5ce4e62-84d9-462b-b3d2-05b75ddb9b0f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/2a12d21d-3b89-4043-96c8-a023f5fe2817",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "2a12d21d-3b89-4043-96c8-a023f5fe2817",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/condition-assertedDate",
+        "valueDateTime": "2025-12-31T00:00:00.000Z"
+      } ],
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "Active",
+          "userSelected": true
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis"
+        } ]
+      } ],
+      "severity": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "24484000",
+          "display": "Severe (severity modifier)"
+        } ]
+      },
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "788891004",
+          "display": "Chronic pain after cancer treatment (finding)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/fa4e4971-3ff2-44f0-bfd6-0821a89a3f84"
+      },
+      "encounter": {
+        "reference": "Encounter/a5b57f7e-1c8a-4efa-9200-d2ce98423409"
+      },
+      "onsetDateTime": "2025-12-31T00:00:00.000Z"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/2a12d21d-3b89-4043-96c8-a023f5fe2817"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/d35741d3-f0be-44df-9c2d-fb0c8b61dc92",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "d35741d3-f0be-44df-9c2d-fb0c8b61dc92",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "subscriberId": "523435",
+      "beneficiary": {
+        "reference": "Patient/fa4e4971-3ff2-44f0-bfd6-0821a89a3f84"
+      },
+      "relationship": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+          "code": "self"
+        } ]
+      },
+      "payor": [ {
+        "reference": "Organization/87953ba9-a755-4098-83d5-2940e38f5bcf"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/d35741d3-f0be-44df-9c2d-fb0c8b61dc92"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/6dd15d4d-0cd9-4ac2-8254-33b8640d9440",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "6dd15d4d-0cd9-4ac2-8254-33b8640d9440",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "9999999896"
+      } ],
+      "active": true,
+      "name": [ {
+        "family": "Ramires",
+        "given": [ "Alma" ],
+        "prefix": [ "Dr" ]
+      } ],
+      "address": [ {
+        "use": "home",
+        "line": [ "534 Erewhon St" ],
+        "city": "Netherville",
+        "state": "IN",
+        "postalCode": "46131"
+      } ],
+      "qualification": [ {
+        "identifier": [ {
+          "system": "http://goodhealth.org/prIdentifier",
+          "value": "12345"
+        } ],
+        "code": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0360|2.7",
+            "code": "BS",
+            "display": "Bachelor of Science"
+          } ],
+          "text": "Bachelor of Science"
+        },
+        "period": {
+          "start": "1995"
+        },
+        "issuer": {
+          "display": "Example University"
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/6dd15d4d-0cd9-4ac2-8254-33b8640d9440"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/87953ba9-a755-4098-83d5-2940e38f5bcf",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "87953ba9-a755-4098-83d5-2940e38f5bcf",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/87953ba9-a755-4098-83d5-2940e38f5bcf"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/88aebb2f-5142-4daa-a89c-4befdbe27c16",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "88aebb2f-5142-4daa-a89c-4befdbe27c16",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "dc201236-845f-4e1f-a009-d51b44ae02a8-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "fa4e4971-3ff2-44f0-bfd6-0821a89a3f84"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#dc201236-845f-4e1f-a009-d51b44ae02a8-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Encounter 1/1 - 1/3, 1 opioid completed at dc, has cancer that started last day of prior year\n\nEncounterDx using reasonReference"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS506FHIRSafeUseofOpioids",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/fa4e4971-3ff2-44f0-bfd6-0821a89a3f84"
+      }, {
+        "reference": "Encounter/a5b57f7e-1c8a-4efa-9200-d2ce98423409"
+      }, {
+        "reference": "MedicationRequest/b5ce4e62-84d9-462b-b3d2-05b75ddb9b0f"
+      }, {
+        "reference": "Condition/2a12d21d-3b89-4043-96c8-a023f5fe2817"
+      }, {
+        "reference": "Coverage/d35741d3-f0be-44df-9c2d-fb0c8b61dc92"
+      }, {
+        "reference": "Practitioner/6dd15d4d-0cd9-4ac2-8254-33b8640d9440"
+      }, {
+        "reference": "Organization/87953ba9-a755-4098-83d5-2940e38f5bcf"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/88aebb2f-5142-4daa-a89c-4befdbe27c16"
+    }
+  } ]
+}

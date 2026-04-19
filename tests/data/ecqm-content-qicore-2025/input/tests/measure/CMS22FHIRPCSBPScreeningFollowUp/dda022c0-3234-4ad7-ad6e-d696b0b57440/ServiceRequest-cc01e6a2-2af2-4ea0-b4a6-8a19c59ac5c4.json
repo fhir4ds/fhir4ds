@@ -1,0 +1,35 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "cc01e6a2-2af2-4ea0-b4a6-8a19c59ac5c4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "version": "2022-03",
+        "code": "183945002",
+        "display": "Procedure declined for religious reason (situation)",
+        "userSelected": true
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "134403003",
+      "display": "Urgent referral (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/dda022c0-3234-4ad7-ad6e-d696b0b57440"
+  },
+  "authoredOn": "2026-01-01T08:25:00.000+00:00"
+}

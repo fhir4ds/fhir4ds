@@ -1,0 +1,21 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "0c288443-9c47-40e9-85d0-cd4227a0544f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "401640004",
+      "display": "Compression hosiery class II thigh length stocking circular knit made to measure (physical object)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/4724cb2f-b5bd-4c50-85cc-4a5ba25f04ca"
+  },
+  "authoredOn": "2026-11-03T11:00:00"
+}

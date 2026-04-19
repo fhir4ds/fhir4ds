@@ -1,0 +1,23 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "10f47116-e5c0-4a37-8c15-6068695fd83f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "04012024",
+      "code": "1653484",
+      "display": "BCG, live, Tice strain 50 MG/ML Topical Suspension"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/ab48e0c0-6543-4537-8f00-bfcdcba7a81b"
+  },
+  "effectivePeriod": {
+    "start": "2026-04-02T08:00:00.000+00:00",
+    "end": "2026-04-02T08:15:00.000+00:00"
+  }
+}

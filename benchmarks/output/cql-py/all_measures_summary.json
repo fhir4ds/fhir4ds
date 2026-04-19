@@ -1,0 +1,471 @@
+{
+  "total_measures": 46,
+  "successful": 46,
+  "failed": 0,
+  "skipped": 0,
+  "perfect": 42,
+  "known_failures": 4,
+  "regressions": 0,
+  "measures": [
+    {
+      "id": "CMS0334",
+      "name": "CMS0334FHIRPCCesareanBirth",
+      "status": "success",
+      "patient_count": 135,
+      "accuracy_pct": 100.0,
+      "total_ms": 13453.400341997622,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS1017",
+      "name": "CMS1017FHIRHHFI",
+      "status": "success",
+      "patient_count": 42,
+      "accuracy_pct": 92.85714285714286,
+      "total_ms": 3087.629144982202,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS1056",
+      "name": "CMS1056CTClinicalFHIR",
+      "status": "success",
+      "patient_count": 10,
+      "accuracy_pct": 100.0,
+      "total_ms": 94817.30647897348,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS117",
+      "name": "CMS117FHIRChildhoodImmunizationStatus",
+      "status": "success",
+      "patient_count": 10,
+      "accuracy_pct": 100.0,
+      "total_ms": 3296.7974340135697,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS122",
+      "name": "CMS122FHIRDiabetesAssessGreaterThan9Percent",
+      "status": "success",
+      "patient_count": 56,
+      "accuracy_pct": 100.0,
+      "total_ms": 4443.561847001547,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS1244",
+      "name": "CMS1244FHIRECATHOQR",
+      "status": "success",
+      "patient_count": 65,
+      "accuracy_pct": 100.0,
+      "total_ms": 1954.0741439850535,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS124",
+      "name": "CMS124FHIRCervicalCancerScreening",
+      "status": "success",
+      "patient_count": 33,
+      "accuracy_pct": 100.0,
+      "total_ms": 2851.456096977927,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS125",
+      "name": "CMS125FHIRBreastCancerScreening",
+      "status": "success",
+      "patient_count": 66,
+      "accuracy_pct": 100.0,
+      "total_ms": 5172.096076974412,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS1264",
+      "name": "CMS1264FHIRECATREHQR",
+      "status": "success",
+      "patient_count": 53,
+      "accuracy_pct": 100.0,
+      "total_ms": 1938.7589870020747,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS128",
+      "name": "CMS128FHIRAntidepressantMedManagement",
+      "status": "success",
+      "patient_count": 10,
+      "accuracy_pct": 100.0,
+      "total_ms": 4479.30711999652,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS130",
+      "name": "CMS130FHIRColorectalCancerScreening",
+      "status": "success",
+      "patient_count": 64,
+      "accuracy_pct": 100.0,
+      "total_ms": 5190.052433987148,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS133",
+      "name": "CMS133FHIRCataracts2040BCVAwithin90Days",
+      "status": "success",
+      "patient_count": 73,
+      "accuracy_pct": 100.0,
+      "total_ms": 1347.759032039903,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS135",
+      "name": "CMS135FHIRHFACEIorARBorARNIforLVSD",
+      "status": "success",
+      "patient_count": 41,
+      "accuracy_pct": 91.42857142857143,
+      "total_ms": 1924.6221219946165,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS142",
+      "name": "CMS142FHIRDRCommunicationWithPhysicianManagingDiabetes",
+      "status": "success",
+      "patient_count": 32,
+      "accuracy_pct": 100.0,
+      "total_ms": 1316.14777300274,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS143",
+      "name": "CMS143FHIRPOAGOpticNerveEvaluation",
+      "status": "success",
+      "patient_count": 31,
+      "accuracy_pct": 100.0,
+      "total_ms": 1231.288390001282,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS144",
+      "name": "CMS144FHIRHFBetaBlockerTherapyforLVSD",
+      "status": "success",
+      "patient_count": 51,
+      "accuracy_pct": 100.0,
+      "total_ms": 2008.1108969752677,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS145",
+      "name": "CMS145FHIRCADBetaBlockerTherapyPriorMIorLVSD",
+      "status": "success",
+      "patient_count": 69,
+      "accuracy_pct": 96.07843137254902,
+      "total_ms": 2128.7767170288134,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS146",
+      "name": "CMS146FHIRAppropriateTestingforPharyngitis",
+      "status": "success",
+      "patient_count": 10,
+      "accuracy_pct": 100.0,
+      "total_ms": 3891.7694490228314,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS149",
+      "name": "CMS149FHIRDementiaCognitiveAssessment",
+      "status": "success",
+      "patient_count": 32,
+      "accuracy_pct": 100.0,
+      "total_ms": 1202.5770430045668,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS155",
+      "name": "CMS155FHIRWeightAssessandCounselforKids",
+      "status": "success",
+      "patient_count": 10,
+      "accuracy_pct": 100.0,
+      "total_ms": 2460.392992972629,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS157",
+      "name": "CMS157OncologyPainIntensityQuantifiedFHIR",
+      "status": "success",
+      "patient_count": 10,
+      "accuracy_pct": 70.0,
+      "total_ms": 1754.5246029621921,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS159",
+      "name": "CMS159FHIRDepressionRemissionatTwelveMonths",
+      "status": "success",
+      "patient_count": 67,
+      "accuracy_pct": 100.0,
+      "total_ms": 1392.9524419945665,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS165",
+      "name": "CMS165FHIRControllingHighBloodPressure",
+      "status": "success",
+      "patient_count": 68,
+      "accuracy_pct": 100.0,
+      "total_ms": 5175.957853993168,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS190",
+      "name": "CMS190VTEProphylaxisICUFHIR",
+      "status": "success",
+      "patient_count": 125,
+      "accuracy_pct": 100.0,
+      "total_ms": 4122.549779043766,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS22",
+      "name": "CMS22FHIRPCSBPScreeningFollowUp",
+      "status": "success",
+      "patient_count": 43,
+      "accuracy_pct": 100.0,
+      "total_ms": 1743.6675340286456,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS2",
+      "name": "CMS2FHIRPCSDepressionScreenAndFollowUp",
+      "status": "success",
+      "patient_count": 36,
+      "accuracy_pct": 100.0,
+      "total_ms": 3223.7547370023094,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS349",
+      "name": "CMS349FHIRHIVScreening",
+      "status": "success",
+      "patient_count": 36,
+      "accuracy_pct": 100.0,
+      "total_ms": 1871.6883870074525,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS506",
+      "name": "CMS506FHIRSafeUseofOpioids",
+      "status": "success",
+      "patient_count": 38,
+      "accuracy_pct": 100.0,
+      "total_ms": 1986.1626230122056,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS50",
+      "name": "CMS50FHIRCRLReceiptofSpecialistReport",
+      "status": "success",
+      "patient_count": 33,
+      "accuracy_pct": 100.0,
+      "total_ms": 1666.4769880007952,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS56",
+      "name": "CMS56FHIRFunctionalStatusAssessmentforTotalHipReplacement",
+      "status": "success",
+      "patient_count": 58,
+      "accuracy_pct": 100.0,
+      "total_ms": 2851.695468998514,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS645",
+      "name": "CMS645FHIRBoneDensityProstateCancerAndrogenDeprivationTherapy",
+      "status": "success",
+      "patient_count": 49,
+      "accuracy_pct": 100.0,
+      "total_ms": 1369.5442500174977,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS646",
+      "name": "CMS646FHIRIntravesicalBacillusCalmetteGuerinForBladderCancer",
+      "status": "success",
+      "patient_count": 37,
+      "accuracy_pct": 100.0,
+      "total_ms": 1304.7828880371526,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS68",
+      "name": "CMS68FHIRDocumentationofCurrentMedications",
+      "status": "success",
+      "patient_count": 19,
+      "accuracy_pct": 100.0,
+      "total_ms": 1149.3031500431243,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS69",
+      "name": "CMS69FHIRPCSBMIScreenAndFollowUp",
+      "status": "success",
+      "patient_count": 62,
+      "accuracy_pct": 100.0,
+      "total_ms": 3015.3230059950147,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS71",
+      "name": "CMS71FHIRSTKAnticoagAFFlutter",
+      "status": "success",
+      "patient_count": 83,
+      "accuracy_pct": 100.0,
+      "total_ms": 2897.1190769807436,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS72",
+      "name": "CMS72FHIRSTKAntithromboticDay2",
+      "status": "success",
+      "patient_count": 159,
+      "accuracy_pct": 100.0,
+      "total_ms": 2980.0220179895405,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS74",
+      "name": "CMS74FHIRPrimaryCariesPreventionasOfferedbyDentists",
+      "status": "success",
+      "patient_count": 20,
+      "accuracy_pct": 100.0,
+      "total_ms": 2412.4700870306697,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS75",
+      "name": "CMS75FHIRChildrenWhoHaveDentalDecayOrCavities",
+      "status": "success",
+      "patient_count": 20,
+      "accuracy_pct": 100.0,
+      "total_ms": 2392.9322329931892,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS771",
+      "name": "CMS771FHIRUrinarySymptomScoreChangeBenignProstaticHyperplasia",
+      "status": "success",
+      "patient_count": 31,
+      "accuracy_pct": 100.0,
+      "total_ms": 1216.1403140053153,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS816",
+      "name": "CMS816FHIRHHHypo",
+      "status": "success",
+      "patient_count": 27,
+      "accuracy_pct": 100.0,
+      "total_ms": 1798.7909429939464,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS819",
+      "name": "CMS819FHIRHHORAE",
+      "status": "success",
+      "patient_count": 18,
+      "accuracy_pct": 100.0,
+      "total_ms": 1832.0552780060098,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS826",
+      "name": "CMS826FHIRHHPI",
+      "status": "success",
+      "patient_count": 9,
+      "accuracy_pct": 100.0,
+      "total_ms": 1791.0472129879054,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS832",
+      "name": "CMS832HHAKIFHIR",
+      "status": "success",
+      "patient_count": 34,
+      "accuracy_pct": 100.0,
+      "total_ms": 99713.94136999152,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS871",
+      "name": "CMS871HHHyperFHIR",
+      "status": "success",
+      "patient_count": 10,
+      "accuracy_pct": 100.0,
+      "total_ms": 2847.0102819846943,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS986",
+      "name": "CMS986FHIRMalnutritionScore",
+      "status": "success",
+      "patient_count": 143,
+      "accuracy_pct": 100.0,
+      "total_ms": 1975.7004840066656,
+      "audit_fallback": false,
+      "audit_tier": null
+    },
+    {
+      "id": "CMS996",
+      "name": "CMS996FHIRAptTxforSTEMI",
+      "status": "success",
+      "patient_count": 112,
+      "accuracy_pct": 100.0,
+      "total_ms": 2376.325472985627,
+      "audit_fallback": false,
+      "audit_tier": null
+    }
+  ]
+}

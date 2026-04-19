@@ -1,0 +1,28 @@
+{
+  "resourceType": "Encounter",
+  "id": "dad4447e-ae5d-4b5f-b43d-7fb539de2d35",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "VR",
+    "display": "virtual"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "185463005",
+      "display": "Visit out of hours (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/8b5ba7de-6762-4bf2-a2b3-fba46594f026"
+  },
+  "period": {
+    "start": "2026-02-02T08:00:00.000+00:00",
+    "end": "2026-02-02T09:15:00.000+00:00"
+  }
+}

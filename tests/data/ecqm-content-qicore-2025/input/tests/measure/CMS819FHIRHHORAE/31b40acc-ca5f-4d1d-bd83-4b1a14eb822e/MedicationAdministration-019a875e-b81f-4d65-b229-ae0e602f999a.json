@@ -1,0 +1,28 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "019a875e-b81f-4d65-b229-ae0e602f999a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1725059",
+      "display": "Naloxone (opioid antagonist)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/31b40acc-ca5f-4d1d-bd83-4b1a14eb822e"
+  },
+  "effectiveDateTime": "2026-07-13T09:05:00.000+00:00",
+  "dosage": {
+    "route": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "47625008",
+        "display": "Subcutaneous route"
+      } ]
+    }
+  }
+}

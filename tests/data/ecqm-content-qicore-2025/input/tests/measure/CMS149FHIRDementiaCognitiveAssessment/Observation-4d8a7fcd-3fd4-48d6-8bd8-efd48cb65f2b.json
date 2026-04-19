@@ -1,0 +1,41 @@
+{
+  "resourceType": "Observation",
+  "id": "4d8a7fcd-3fd4-48d6-8bd8-efd48cb65f2b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observationcancelled" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20230301",
+        "code": "275936005",
+        "display": "Patient noncompliance - general (situation)"
+      } ]
+    }
+  } ],
+  "status": "cancelled",
+  "category": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "113024001",
+      "display": "Assessment and interpretation of higher cerebral function, cognitive testing (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "113024001",
+      "display": "Assessment and interpretation of higher cerebral function, cognitive testing (procedure)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a3867482-15a8-42fd-8d78-dff5db0d40f4"
+  },
+  "effectiveDateTime": "2026-05-06T08:00:00.000+00:00",
+  "issued": "2026-08-06T08:59:00.000+00:00"
+}

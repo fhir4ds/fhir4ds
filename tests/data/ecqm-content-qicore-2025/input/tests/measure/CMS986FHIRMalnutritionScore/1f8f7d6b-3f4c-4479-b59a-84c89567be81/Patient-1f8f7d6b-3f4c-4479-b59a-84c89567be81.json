@@ -1,0 +1,61 @@
+{
+  "resourceType": "Patient",
+  "id": "1f8f7d6b-3f4c-4479-b59a-84c89567be81",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2106-3",
+        "display": "White",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "White"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2186-5",
+        "display": "Not Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Not Hispanic or Latino"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248153007"
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://madie.cms.gov/",
+    "value": "NoscreRefNoasseNodxNocp"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "text": "NoscreRefNoasseNodxNocp",
+    "family": "MSROBSPass2",
+    "given": [ "NoscreRefNoasseNodxNocp" ]
+  } ],
+  "gender": "male",
+  "birthDate": "1959-11-21",
+  "address": [ {
+    "text": "NoscreRefNoasseNodxNocp, Not Screened, Referral, Not Assessed, No Diagnosis, Care Plan, ID=NoscreRefNoasseNodxNocp, DOB: 14 May 1950"
+  } ]
+}

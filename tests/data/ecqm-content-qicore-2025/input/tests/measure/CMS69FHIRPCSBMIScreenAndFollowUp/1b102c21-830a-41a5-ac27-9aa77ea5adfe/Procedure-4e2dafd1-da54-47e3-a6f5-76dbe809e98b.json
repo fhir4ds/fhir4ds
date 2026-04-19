@@ -1,0 +1,25 @@
+{
+  "resourceType": "Procedure",
+  "id": "4e2dafd1-da54-47e3-a6f5-76dbe809e98b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-01-01T00:30:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "170935008",
+      "display": "Full care by hospice (finding)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1b102c21-830a-41a5-ac27-9aa77ea5adfe"
+  },
+  "performedDateTime": "2026-12-31T20:00:00.000+00:00"
+}

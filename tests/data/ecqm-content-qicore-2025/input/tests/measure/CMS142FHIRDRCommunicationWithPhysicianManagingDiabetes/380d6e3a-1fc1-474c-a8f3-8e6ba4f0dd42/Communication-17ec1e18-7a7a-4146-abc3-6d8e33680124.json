@@ -1,0 +1,32 @@
+{
+  "resourceType": "Communication",
+  "id": "17ec1e18-7a7a-4146-abc3-6d8e33680124",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communication" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-12-21T16:15:00.000+00:00"
+  } ],
+  "status": "completed",
+  "category": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "193350004",
+      "display": "Advanced maculopathy due to diabetes mellitus (disorder)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/380d6e3a-1fc1-474c-a8f3-8e6ba4f0dd42"
+  },
+  "sent": "2026-12-21T08:00:00.000+00:00",
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "428341000124108"
+    } ]
+  } ]
+}

@@ -1,0 +1,38 @@
+{
+  "resourceType": "Encounter",
+  "id": "70403442-adab-48f2-8347-3ebd71ebef01",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient encounter"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "8715000"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/09b062ec-b061-4f7c-be0f-d4f1423b352e"
+  },
+  "period": {
+    "start": "2025-12-01T08:00:00.000+00:00",
+    "end": "2025-12-31T08:00:00.000+00:00"
+  },
+  "diagnosis": [ {
+    "condition": {
+      "reference": "Condition/Condition-2"
+    },
+    "use": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "169826009",
+        "display": "Single live birth from singleton pregnancy (finding)"
+      } ]
+    }
+  } ]
+}

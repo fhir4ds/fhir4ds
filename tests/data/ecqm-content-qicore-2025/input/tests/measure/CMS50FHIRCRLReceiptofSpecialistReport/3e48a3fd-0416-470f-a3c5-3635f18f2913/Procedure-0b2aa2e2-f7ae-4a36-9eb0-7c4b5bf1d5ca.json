@@ -1,0 +1,25 @@
+{
+  "resourceType": "Procedure",
+  "id": "0b2aa2e2-f7ae-4a36-9eb0-7c4b5bf1d5ca",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-01-01T00:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2021",
+      "code": "96138",
+      "display": "Psychological or neuropsychological test administration and scoring by technician, two or more tests, any method; first 30 minutes",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/3e48a3fd-0416-470f-a3c5-3635f18f2913"
+  },
+  "performedDateTime": "2026-01-01T00:00:00.000+00:00"
+}

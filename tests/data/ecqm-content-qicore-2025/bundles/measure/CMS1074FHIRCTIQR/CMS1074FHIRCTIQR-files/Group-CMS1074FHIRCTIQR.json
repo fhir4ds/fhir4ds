@@ -1,0 +1,62 @@
+{
+  "resourceType": "Group",
+  "id": "CMS1074FHIRCTIQR",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS1074FHIRCTIQR"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/8eca8e58-b539-430c-ac25-093fb4fac477",
+      "display": "DENOMFail NoUnits"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e189d3ab-c593-44f2-940d-50d7f08eb847",
+      "display": "IPPFail ScanOutsideMP"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/719d9b3b-583a-4743-8250-9e2496e65f21",
+      "display": "NUMERPass HighDose"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/55186dde-5259-4cf4-a80b-b1fd2b734c61",
+      "display": "NUMERPass HighNoise"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3de5781f-f272-4d5c-855e-9628290d7ed5",
+      "display": "DENOMPass AllScans"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/52944dc7-4bb2-429f-846f-69189c4faad6",
+      "display": "NUMERPass TwoScans"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2990a82a-f129-47e0-8ffe-6fd96132b9d8",
+      "display": "DENEXPass FullBody"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b39185cc-754c-4c8e-85bc-497c2e6a37aa",
+      "display": "IPPFail NotDuringEncounter"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f702444c-4d8c-43f3-a9d7-f420e10d6c4d",
+      "display": "DENOMFail InvalidUnits"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/07f3be61-8e8b-4f95-94a3-4ca0b7969f79",
+      "display": "DENOMFail MissingResults"
+    }
+  } ]
+}

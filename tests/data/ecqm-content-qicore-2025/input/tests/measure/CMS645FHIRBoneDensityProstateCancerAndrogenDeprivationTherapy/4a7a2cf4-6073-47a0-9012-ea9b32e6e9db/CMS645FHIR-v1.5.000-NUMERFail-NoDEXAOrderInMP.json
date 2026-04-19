@@ -1,0 +1,363 @@
+{
+  "resourceType": "Bundle",
+  "id": "60abda28bf0a01003e3f76bd",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/4a7a2cf4-6073-47a0-9012-ea9b32e6e9db",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "4a7a2cf4-6073-47a0-9012-ea9b32e6e9db",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2054-5",
+            "display": "Black or African American"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Black or African American"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "463131313187656"
+      } ],
+      "name": [ {
+        "family": "NUMERFail",
+        "given": [ "NoDEXAOrderInMP" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1940-06-15"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/4a7a2cf4-6073-47a0-9012-ea9b32e6e9db"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/52820f22-cdfa-4496-8fcc-8302f90834f3",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "52820f22-cdfa-4496-8fcc-8302f90834f3",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "185463005",
+          "display": "Visit out of hours (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/4a7a2cf4-6073-47a0-9012-ea9b32e6e9db"
+      },
+      "period": {
+        "start": "2026-02-04T08:00:00.000+00:00",
+        "end": "2026-02-04T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/52820f22-cdfa-4496-8fcc-8302f90834f3"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/435732b9-fd9e-44e3-af74-551c3872899a",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "435732b9-fd9e-44e3-af74-551c3872899a",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "Active",
+          "userSelected": true
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "254900004",
+          "display": "Carcinoma of prostate (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/4a7a2cf4-6073-47a0-9012-ea9b32e6e9db"
+      },
+      "onsetPeriod": {
+        "start": "2026-02-04T08:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/435732b9-fd9e-44e3-af74-551c3872899a"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/eef7a316-7d5d-4b33-844f-f1ed88465b4d",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "eef7a316-7d5d-4b33-844f-f1ed88465b4d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.336",
+        "value": "Practitioner-23"
+      } ],
+      "active": true,
+      "name": [ {
+        "family": "Careful",
+        "given": [ "Adam" ],
+        "prefix": [ "Dr" ]
+      } ],
+      "address": [ {
+        "use": "home",
+        "line": [ "534 Erewhon St" ],
+        "city": "PleasantVille",
+        "state": "UT",
+        "postalCode": "84414"
+      } ],
+      "qualification": [ {
+        "identifier": [ {
+          "system": "http://example.org/UniversityIdentifier",
+          "value": "12345"
+        } ],
+        "code": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0360|2.7",
+            "code": "BS",
+            "display": "Bachelor of Science"
+          } ],
+          "text": "Bachelor of Science"
+        },
+        "period": {
+          "start": "1996"
+        },
+        "issuer": {
+          "display": "Example University"
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/eef7a316-7d5d-4b33-844f-f1ed88465b4d"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationRequest/e7a70334-2d84-40c8-a382-595a815e8280",
+    "resource": {
+      "resourceType": "MedicationRequest",
+      "id": "e7a70334-2d84-40c8-a382-595a815e8280",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+      },
+      "status": "active",
+      "intent": "order",
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "version": "04012024",
+          "code": "1115257",
+          "display": "1.5 ML leuprolide acetate 30 MG/ML Prefilled Syringe"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/4a7a2cf4-6073-47a0-9012-ea9b32e6e9db"
+      },
+      "authoredOn": "2026-02-04T08:00:00.000+00:00",
+      "requester": {
+        "reference": "http://myGoodHealthcare.com/fhir/Practitioner/eef7a316-7d5d-4b33-844f-f1ed88465b4d"
+      },
+      "dosageInstruction": [ {
+        "timing": {
+          "repeat": {
+            "boundsPeriod": {
+              "start": "2026-02-04T08:00:00.000+00:00",
+              "end": "2026-03-04T08:00:00.000+00:00"
+            }
+          }
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationRequest/e7a70334-2d84-40c8-a382-595a815e8280"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/ServiceRequest/b189c04e-0dec-4047-acf9-ad625dfd5367",
+    "resource": {
+      "resourceType": "ServiceRequest",
+      "id": "b189c04e-0dec-4047-acf9-ad625dfd5367",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+      },
+      "status": "active",
+      "intent": "order",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "456381000124102",
+          "display": "Injection of leuprolide acetate for twelve month period (regime/therapy)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/4a7a2cf4-6073-47a0-9012-ea9b32e6e9db"
+      },
+      "authoredOn": "2026-02-04T08:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "ServiceRequest/b189c04e-0dec-4047-acf9-ad625dfd5367"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/a583d9d8-a75c-409b-b0f9-a4c22b693e38",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "a583d9d8-a75c-409b-b0f9-a4c22b693e38",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "47d43989-8962-4879-9079-d6d573fe39f0-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "4a7a2cf4-6073-47a0-9012-ea9b32e6e9db"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#47d43989-8962-4879-9079-d6d573fe39f0-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Dx of Prostate Cancer with qualifying encounter(s) in MP. No DEXA ordered or done. Fails NUMER Criteria"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS645FHIRBoneDensityProstateCancerAndrogenDeprivationTherapy",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/4a7a2cf4-6073-47a0-9012-ea9b32e6e9db"
+      }, {
+        "reference": "Encounter/52820f22-cdfa-4496-8fcc-8302f90834f3"
+      }, {
+        "reference": "Condition/435732b9-fd9e-44e3-af74-551c3872899a"
+      }, {
+        "reference": "Practitioner/eef7a316-7d5d-4b33-844f-f1ed88465b4d"
+      }, {
+        "reference": "MedicationRequest/e7a70334-2d84-40c8-a382-595a815e8280"
+      }, {
+        "reference": "ServiceRequest/b189c04e-0dec-4047-acf9-ad625dfd5367"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/a583d9d8-a75c-409b-b0f9-a4c22b693e38"
+    }
+  } ]
+}

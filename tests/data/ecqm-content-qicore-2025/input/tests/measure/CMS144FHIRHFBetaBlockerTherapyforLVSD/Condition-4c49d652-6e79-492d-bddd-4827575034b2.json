@@ -1,0 +1,42 @@
+{
+  "resourceType": "Condition",
+  "id": "4c49d652-6e79-492d-bddd-4827575034b2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "293970004",
+      "display": "Allergy to metoprolol (finding)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a6c8dee0-0110-4814-ae0d-37a2a03b2f72"
+  },
+  "onsetPeriod": {
+    "start": "2026-01-20T14:32:00.000+00:00"
+  }
+}

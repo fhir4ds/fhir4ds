@@ -73,26 +73,22 @@ This repository has been reorganized into a unified `fhir4ds` namespace. All Pyt
 
 ## Official Compliance Testing
 
-### FHIRPath R4 Compliance
+The project maintains a unified conformance suite for validating against official standards.
+
 ```bash
-python3 scripts/run_compliance.py --test-dir fhir4ds/fhirpath/tests/compliance/r4
+# Run all conformance tests (FHIRPath, CQL, ViewDef, DQM)
+python3 conformance/scripts/run_all.py
 ```
 
-### CQL Compliance
-```bash
-pytest fhir4ds/cql/tests/official/test_cql_compliance.py
-```
-
-### SQL-on-FHIR v2 Compliance
-```bash
-pytest fhir4ds/viewdef/tests/test_spec_compliance.py
-```
+Reports are generated in `conformance/reports/`.
 
 ---
 
 ## Development Workflow
+...
+- **Benchmarks:** `benchmarks/`
+- **Official Tests:** `tests/data/` (Heavy datasets and submodules)
 
-### Adding a New FHIRPath Function
 1. Implementation: `fhir4ds/fhirpath/engine/invocations/`
 2. Tests: `fhir4ds/fhirpath/tests/unit/`
 3. DuckDB Registration: `fhir4ds/fhirpath/duckdb/udf.py`

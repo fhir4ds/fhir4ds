@@ -1,0 +1,298 @@
+{
+  "resourceType": "Bundle",
+  "id": "tests-NUMERPass-DTI-not-POA-bundle",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Claim/5a2d7562-1dad-4183-8ad7-d1d24e84b2fc",
+    "resource": {
+      "resourceType": "Claim",
+      "id": "5a2d7562-1dad-4183-8ad7-d1d24e84b2fc",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-claim" ]
+      },
+      "status": "active",
+      "type": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/claim-type",
+          "code": "professional"
+        } ]
+      },
+      "use": "claim",
+      "patient": {
+        "reference": "Patient/6e5ce204-2257-40d5-a356-13614de68783"
+      },
+      "created": "2026-05-16",
+      "priority": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/processpriority",
+          "code": "normal"
+        } ]
+      },
+      "diagnosis": [ {
+        "sequence": 1,
+        "diagnosisCodeableConcept": {
+          "coding": [ {
+            "system": "http://hl7.org/fhir/sid/icd-10-cm",
+            "code": "L89.006",
+            "display": "Pressure-induced deep tissue damage of unspecified elbow"
+          } ]
+        },
+        "type": [ {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/ex-diagnosistype",
+            "code": "principal"
+          } ]
+        } ],
+        "onAdmission": {
+          "coding": [ {
+            "system": "https://www.cms.gov/Medicare/Medicare-Fee-for-Service-Payment/HospitalAcqCond/Coding",
+            "code": "N"
+          } ]
+        }
+      } ],
+      "item": [ {
+        "sequence": 1,
+        "diagnosisSequence": [ 1, 5, 7 ],
+        "productOrService": {
+          "coding": [ {
+            "system": "http://example.org/fhir/CodeSystem/ex-professionalservice",
+            "code": "anesthesia"
+          } ]
+        },
+        "servicedDate": "2026-04-11",
+        "encounter": [ {
+          "reference": "Encounter/d1cdbfba-4609-4d19-8255-58e6970f487d"
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Claim/5a2d7562-1dad-4183-8ad7-d1d24e84b2fc"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Patient/6e5ce204-2257-40d5-a356-13614de68783",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "6e5ce204-2257-40d5-a356-13614de68783",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "647f51ab5e6d159b6e36ee31"
+      } ],
+      "name": [ {
+        "family": "NUMERPass",
+        "given": [ "IPEncounterWithNewUnstageableNotPOAIndicator" ]
+      } ],
+      "gender": "other",
+      "birthDate": "2006-02-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/6e5ce204-2257-40d5-a356-13614de68783"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/d1cdbfba-4609-4d19-8255-58e6970f487d",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "d1cdbfba-4609-4d19-8255-58e6970f487d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-09",
+          "code": "183452005",
+          "display": "Emergency hospital admission (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/6e5ce204-2257-40d5-a356-13614de68783"
+      },
+      "period": {
+        "start": "2026-02-01T08:30:00.000+00:00",
+        "end": "2026-02-06T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/d1cdbfba-4609-4d19-8255-58e6970f487d"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/802a829a-34ca-4036-9755-98e080e2d356",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "802a829a-34ca-4036-9755-98e080e2d356",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMER",
+        "display": "emergency"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-09",
+          "code": "4525004",
+          "display": "Emergency department patient visit (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/6e5ce204-2257-40d5-a356-13614de68783"
+      },
+      "period": {
+        "start": "2026-01-31T08:00:00.000+00:00",
+        "end": "2026-02-01T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/802a829a-34ca-4036-9755-98e080e2d356"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/fd1b3564-a2df-4170-956c-d17c749eca6e",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "fd1b3564-a2df-4170-956c-d17c749eca6e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "6f54f9b3-f0ab-4250-b5a2-b2f91f0f9023-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "6e5ce204-2257-40d5-a356-13614de68783"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#6f54f9b3-f0ab-4250-b5a2-b2f91f0f9023-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Inpatient encounter during MP. DTI present on Admission = N, NUMER pass"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS826FHIRHHPI",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Claim/5a2d7562-1dad-4183-8ad7-d1d24e84b2fc"
+      }, {
+        "reference": "Patient/6e5ce204-2257-40d5-a356-13614de68783"
+      }, {
+        "reference": "Encounter/d1cdbfba-4609-4d19-8255-58e6970f487d"
+      }, {
+        "reference": "Encounter/802a829a-34ca-4036-9755-98e080e2d356"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/fd1b3564-a2df-4170-956c-d17c749eca6e"
+    }
+  } ]
+}

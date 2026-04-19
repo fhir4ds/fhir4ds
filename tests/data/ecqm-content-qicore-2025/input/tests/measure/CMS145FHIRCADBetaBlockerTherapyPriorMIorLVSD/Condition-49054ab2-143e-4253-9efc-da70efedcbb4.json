@@ -1,0 +1,40 @@
+{
+  "resourceType": "Condition",
+  "id": "49054ab2-143e-4253-9efc-da70efedcbb4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "102451000119107",
+      "display": "Complete atrioventricular block as complication of atrioventricular nodal ablation (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/68c4dacc-cb3c-423b-9fde-899dfd05b5f6"
+  },
+  "onsetDateTime": "2026-07-07T10:00:00.000+00:00"
+}

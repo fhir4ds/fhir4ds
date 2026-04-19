@@ -16,6 +16,7 @@ from ...translator.types import (
     SQLIntervalLiteral,
     SQLLiteral,
     SQLNull,
+    SQLUnaryOp,
 )
 
 if TYPE_CHECKING:
@@ -155,31 +156,55 @@ class TemporalComparisonMixin:
         """
         Translate on or before operators to SQL.
 
-        Handles:
-        - on or before -> x <= y
-        - on or before day of -> DATE(x) <= DATE(y)
+        CQL §19.18:
+        - T on or before Interval<T>: T <= start of Interval
+        - Interval<T> on or before T: end of Interval <= T
+        - Interval<T> on or before Interval<T>: end of X <= start of Y
         """
         precisions = ["year", "month", "week", "day", "hour", "minute", "second", "millisecond"]
 
         for precision in precisions:
             pattern = f"on or before {precision} of"
             if operator == pattern:
+                left_is_interval = self._is_fhir_interval_expression(left)
+                right_is_interval = self._is_fhir_interval_expression(right)
+                if left_is_interval or right_is_interval:
+                    # For date/datetime intervals, extract bound + truncate.
+                    # For time/quantity/numeric, delegate to UDF (bounds aren't
+                    # castable to TIMESTAMP).
+                    if self._is_time_or_quantity_literal(left) or self._is_time_or_quantity_literal(right):
+                        l = left if left_is_interval else self._point_as_interval(left)
+                        r = right if right_is_interval else self._point_as_interval(right)
+                        return SQLFunctionCall(name="intervalOnOrBefore", args=[l, r])
+                    left_bound = SQLCast(
+                        expression=SQLFunctionCall(name="intervalEnd", args=[left]),
+                        target_type="TIMESTAMP",
+                    ) if left_is_interval else left
+                    right_bound = SQLCast(
+                        expression=SQLFunctionCall(name="intervalStart", args=[right]),
+                        target_type="TIMESTAMP",
+                    ) if right_is_interval else right
+                    left_val = self._truncate_to_precision(left_bound, precision)
+                    right_val = self._truncate_to_precision(right_bound, precision)
+                    return SQLBinaryOp(operator="<=", left=left_val, right=right_val)
                 left_truncated = self._truncate_to_precision(left, precision)
                 right_truncated = self._truncate_to_precision(right, precision)
-                # Gap 18: If right is an exclusive boundary, use < instead of <=
                 op = "<" if getattr(right, 'is_exclusive_boundary', False) else "<="
                 return SQLBinaryOp(operator=op, left=left_truncated, right=right_truncated)
 
-        # Default on or before
-        # Gap 18: If right is an exclusive boundary, use < instead of <=
+        left_is_interval = self._is_fhir_interval_expression(left)
+        right_is_interval = self._is_fhir_interval_expression(right)
+        if left_is_interval or right_is_interval:
+            l = self._unwrap_precision_wrapper(left) if left_is_interval else self._point_as_interval(left)
+            r = self._unwrap_precision_wrapper(right) if right_is_interval else self._point_as_interval(right)
+            return SQLFunctionCall(name="intervalOnOrBefore", args=[l, r])
+
         op = "<" if getattr(right, 'is_exclusive_boundary', False) else "<="
-        # Use TIMESTAMP to preserve time-of-day precision.  DuckDB promotes
-        # plain Date values to midnight TIMESTAMP, so this is safe for both
-        # Date and DateTime operands.
+        cast_type = self._infer_cast_type_for_comparison(left, right)
         return SQLBinaryOp(
             operator=op,
-            left=self._ensure_date_cast(left, "TIMESTAMP"),
-            right=self._ensure_date_cast(right, "TIMESTAMP"),
+            left=self._ensure_date_cast(left, cast_type),
+            right=self._ensure_date_cast(right, cast_type),
         )
 
     def _translate_on_or_after_operator(
@@ -188,25 +213,50 @@ class TemporalComparisonMixin:
         """
         Translate on or after operators to SQL.
 
-        Handles:
-        - on or after -> x >= y
-        - on or after day of -> DATE(x) >= DATE(y)
+        CQL §19.17:
+        - T on or after Interval<T>: T >= end of Interval
+        - Interval<T> on or after T: start of Interval >= T
+        - Interval<T> on or after Interval<T>: start of X >= end of Y
         """
         precisions = ["year", "month", "week", "day", "hour", "minute", "second", "millisecond"]
 
         for precision in precisions:
             pattern = f"on or after {precision} of"
             if operator == pattern:
+                left_is_interval = self._is_fhir_interval_expression(left)
+                right_is_interval = self._is_fhir_interval_expression(right)
+                if left_is_interval or right_is_interval:
+                    if self._is_time_or_quantity_literal(left) or self._is_time_or_quantity_literal(right):
+                        l = left if left_is_interval else self._point_as_interval(left)
+                        r = right if right_is_interval else self._point_as_interval(right)
+                        return SQLFunctionCall(name="intervalOnOrAfter", args=[l, r])
+                    left_bound = SQLCast(
+                        expression=SQLFunctionCall(name="intervalStart", args=[left]),
+                        target_type="TIMESTAMP",
+                    ) if left_is_interval else left
+                    right_bound = SQLCast(
+                        expression=SQLFunctionCall(name="intervalEnd", args=[right]),
+                        target_type="TIMESTAMP",
+                    ) if right_is_interval else right
+                    left_val = self._truncate_to_precision(left_bound, precision)
+                    right_val = self._truncate_to_precision(right_bound, precision)
+                    return SQLBinaryOp(operator=">=", left=left_val, right=right_val)
                 left_truncated = self._truncate_to_precision(left, precision)
                 right_truncated = self._truncate_to_precision(right, precision)
                 return SQLBinaryOp(operator=">=", left=left_truncated, right=right_truncated)
 
-        # Default on or after
-        # Use TIMESTAMP to preserve time-of-day precision.
+        left_is_interval = self._is_fhir_interval_expression(left)
+        right_is_interval = self._is_fhir_interval_expression(right)
+        if left_is_interval or right_is_interval:
+            l = self._unwrap_precision_wrapper(left) if left_is_interval else self._point_as_interval(left)
+            r = self._unwrap_precision_wrapper(right) if right_is_interval else self._point_as_interval(right)
+            return SQLFunctionCall(name="intervalOnOrAfter", args=[l, r])
+
+        cast_type = self._infer_cast_type_for_comparison(left, right)
         return SQLBinaryOp(
             operator=">=",
-            left=self._ensure_date_cast(left, "TIMESTAMP"),
-            right=self._ensure_date_cast(right, "TIMESTAMP"),
+            left=self._ensure_date_cast(left, cast_type),
+            right=self._ensure_date_cast(right, cast_type),
         )
 
     def _translate_simple_starts_ends_temporal(

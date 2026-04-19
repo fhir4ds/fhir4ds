@@ -1,0 +1,112 @@
+{
+  "resourceType": "Group",
+  "id": "CMS117FHIRChildhoodImmunizationStatus",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS117FHIRChildhoodImmunizationStatus"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/1e7dc519-5d75-4c07-b23f-ae9421a12943",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1e7dc519-5d75-4c07-b23f-ae9421a12943",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aeb0266c-a8ec-4262-a4bc-6bc343a85230",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aeb0266c-a8ec-4262-a4bc-6bc343a85230",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9e57c539-0442-415a-a187-87adc7acdd8a",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9e57c539-0442-415a-a187-87adc7acdd8a",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6b9e1f1b-90db-42f2-8591-f1a1858ca27a",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6b9e1f1b-90db-42f2-8591-f1a1858ca27a",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a5ca4525-88bc-4b67-b880-ca1cf54daa88",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a5ca4525-88bc-4b67-b880-ca1cf54daa88",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dd1e534c-aa60-4ff3-a955-109f034b408f",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dd1e534c-aa60-4ff3-a955-109f034b408f",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/15067a1f-bfa9-4dbc-b622-b2da823bea79",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/15067a1f-bfa9-4dbc-b622-b2da823bea79",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/104ee6b1-c36f-420c-bedd-0a2064f748d8",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/104ee6b1-c36f-420c-bedd-0a2064f748d8",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/92ed2664-a594-4cac-9001-3044b14a02f7",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/92ed2664-a594-4cac-9001-3044b14a02f7",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b5f9f533-30c2-4fbe-b06e-3f8dccc8792c",
+      "display": "Betty Bertha"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b5f9f533-30c2-4fbe-b06e-3f8dccc8792c",
+      "display": "Betty Bertha"
+    }
+  } ]
+}

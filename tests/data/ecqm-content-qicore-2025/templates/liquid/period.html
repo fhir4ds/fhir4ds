@@ -1,0 +1,12 @@
+{% if include.period.exists() %}
+  {% if include.period.extension.where(url = 'http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-effectivePeriodAnchor').exists() 
+    and include.period.extension.where(url = 'http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-effectivePeriodDuration').exists() %}
+    {%assign anchor = include.period.extension.where(url = 'http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-effectivePeriodAnchor').value %}
+    {%assign duration = include.period.extension.where(url = 'http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-effectivePeriodDuration').value %}
+    {%assign pcontent = anchor.toString() + (anchor + duration).toString() %}
+    {%include default.html header=include.header content=pcontent %}
+  {% else %}
+    {%assign period = include.period.start.toString() + ' through ' + include.period.end.toString() %}
+    {%include default.html header=include.header content=period %}
+  {% endif %}
+{% endif %}

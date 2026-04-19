@@ -1,0 +1,42 @@
+{
+  "resourceType": "Condition",
+  "id": "be089263-ceb4-4bd2-af1e-1ef78e8afa9c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "17366009",
+      "display": "Atrial arrhythmia (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/66ef197c-3807-41cf-acd0-f188836e2762"
+  },
+  "onsetPeriod": {
+    "start": "2026-10-20T14:32:00.000+00:00"
+  }
+}

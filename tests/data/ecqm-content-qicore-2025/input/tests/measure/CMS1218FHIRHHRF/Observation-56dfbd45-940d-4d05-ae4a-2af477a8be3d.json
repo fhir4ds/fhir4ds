@@ -1,0 +1,37 @@
+{
+  "resourceType": "Observation",
+  "id": "56dfbd45-940d-4d05-ae4a-2af477a8be3d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "laboratory",
+      "display": "Laboratory"
+    } ],
+    "text": "Laboratory"
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "11065-0",
+      "display": "Urea nitrogen [Mass/volume] in Serum or Plasma --pre dialysis"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f9b65091-3a37-4f02-8e20-96f3d7b9f838"
+  },
+  "encounter": {
+    "reference": "Encounter/0c7e397b-f52f-4c28-ae61-12bfcb92e47f"
+  },
+  "effectiveDateTime": "2026-04-11T08:00:00.000+00:00",
+  "valueQuantity": {
+    "value": 12,
+    "unit": "mg/dL",
+    "system": "http://unitsofmeasure.org",
+    "code": "mg/dL"
+  }
+}

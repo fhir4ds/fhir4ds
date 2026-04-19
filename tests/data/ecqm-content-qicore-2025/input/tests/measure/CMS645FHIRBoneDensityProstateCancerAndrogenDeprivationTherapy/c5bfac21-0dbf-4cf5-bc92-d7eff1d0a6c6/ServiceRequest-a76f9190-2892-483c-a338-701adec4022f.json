@@ -1,0 +1,33 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "a76f9190-2892-483c-a338-701adec4022f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "105480006",
+        "display": "Refusal of treatment by patient (situation)"
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.71",
+      "code": "38265-5",
+      "display": "DXA Radius and Ulna [T-score] Bone density",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c5bfac21-0dbf-4cf5-bc92-d7eff1d0a6c6"
+  },
+  "authoredOn": "2026-07-25T08:00:00.000+00:00"
+}

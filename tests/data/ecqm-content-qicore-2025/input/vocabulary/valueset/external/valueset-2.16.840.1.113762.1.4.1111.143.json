@@ -1,0 +1,38 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1111.143",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:16.149-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "2.16.840.1.113762.1.4.1111.143"
+  } ],
+  "version": "20210611",
+  "name": "ObservationServices",
+  "title": "Observation Services",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:7e7b2361-a23b-408d-b41b-1149c8f85c9c",
+    "timestamp": "2025-06-20T17:00:30-04:00",
+    "total": 1,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "448951000124107",
+      "display": "Admission to observation unit (procedure)"
+    } ]
+  }
+}

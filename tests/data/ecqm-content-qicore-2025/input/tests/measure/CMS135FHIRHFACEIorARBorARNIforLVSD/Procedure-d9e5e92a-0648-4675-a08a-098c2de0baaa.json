@@ -1,0 +1,27 @@
+{
+  "resourceType": "Procedure",
+  "id": "d9e5e92a-0648-4675-a08a-098c2de0baaa",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-09-25T13:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2024",
+      "code": "33976",
+      "display": "Insertion of ventricular assist device; extracorporeal, biventricular"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b7d36e19-a42e-4b09-a83f-4525cd7de100"
+  },
+  "performedPeriod": {
+    "start": "2025-09-25T11:00:00.000+00:00",
+    "end": "2025-09-25T12:00:00.000+00:00"
+  }
+}

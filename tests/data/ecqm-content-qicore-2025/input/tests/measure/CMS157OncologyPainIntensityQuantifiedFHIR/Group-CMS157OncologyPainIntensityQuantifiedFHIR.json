@@ -1,0 +1,112 @@
+{
+  "resourceType": "Group",
+  "id": "CMS157OncologyPainIntensityQuantifiedFHIR",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS157OncologyPainIntensityQuantifiedFHIR"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/fe6ef07d-bff1-4e0e-9bf4-b0424a1d0ab4",
+      "display": "ChemoSameDayofEncAnd30DaysB4Enc IPPPassPop1"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fe6ef07d-bff1-4e0e-9bf4-b0424a1d0ab4",
+      "display": "ChemoSameDayofEncAnd30DaysB4Enc IPPPassPop1"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4bf7c1f5-8c25-4cd9-9ca8-d67e9f1283cb",
+      "display": "OneChemoAdministered IPPFailPop1"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4bf7c1f5-8c25-4cd9-9ca8-d67e9f1283cb",
+      "display": "OneChemoAdministered IPPFailPop1"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ba6d787f-d15f-4e22-8ee4-30c12d53aa37",
+      "display": "NoEncChemoOrRadTx IPPFailPop1And2"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ba6d787f-d15f-4e22-8ee4-30c12d53aa37",
+      "display": "NoEncChemoOrRadTx IPPFailPop1And2"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bbdccaa6-f3a0-426d-8e77-eff43095cfc9",
+      "display": "PainAssessPriorRadTx NUMERFailPop2"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bbdccaa6-f3a0-426d-8e77-eff43095cfc9",
+      "display": "PainAssessPriorRadTx NUMERFailPop2"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6c1a8557-73be-4026-9ec6-f0699bfcbfda",
+      "display": "CancerDxStartsAfterEncAndChemo IPPFailPop1"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6c1a8557-73be-4026-9ec6-f0699bfcbfda",
+      "display": "CancerDxStartsAfterEncAndChemo IPPFailPop1"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/18a871b4-b7d2-4fca-bd04-155b44965f4e",
+      "display": "PainAssessDuringOVEncNotRadTx NUMERFailPop2"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/18a871b4-b7d2-4fca-bd04-155b44965f4e",
+      "display": "PainAssessDuringOVEncNotRadTx NUMERFailPop2"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/be20e6d8-f2f2-49d9-abc1-39e93ba36a1c",
+      "display": "EncAfterMP IPPFailPop1"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/be20e6d8-f2f2-49d9-abc1-39e93ba36a1c",
+      "display": "EncAfterMP IPPFailPop1"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/91ebcd41-a1a5-45e0-95fd-e2a2799f4459",
+      "display": "EncPriorMP IPPFailPop1"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/91ebcd41-a1a5-45e0-95fd-e2a2799f4459",
+      "display": "EncPriorMP IPPFailPop1"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f0f73fe9-f8ae-4994-911f-1745e5efbce3",
+      "display": "CancerDxEndsPriorEnc IPPFailPop1"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f0f73fe9-f8ae-4994-911f-1745e5efbce3",
+      "display": "CancerDxEndsPriorEnc IPPFailPop1"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ea08cba3-e556-496e-8aab-3b1e6f58fda0",
+      "display": "NoChemoPriorEnc IPPFailPop1"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ea08cba3-e556-496e-8aab-3b1e6f58fda0",
+      "display": "NoChemoPriorEnc IPPFailPop1"
+    }
+  } ]
+}

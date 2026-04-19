@@ -1,0 +1,29 @@
+{
+  "resourceType": "Observation",
+  "id": "870a4422-83fa-47d7-8268-5678943922ae",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "72093-8",
+      "display": "Quality of life score [HOOS]"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a950ed29-6107-44eb-aaaf-cb814560108f"
+  },
+  "effectivePeriod": {
+    "start": "2024-11-02T00:00:00.000Z",
+    "end": "2024-11-02T01:00:00.000Z"
+  },
+  "valueInteger": 60
+}

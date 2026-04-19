@@ -1,0 +1,43 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.3.1334",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:03.149-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1334",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "2.16.840.1.113883.3.526.3.1334"
+  } ],
+  "version": "20210209",
+  "name": "OpticDiscExamforStructuralAbnormalities",
+  "title": "Optic Disc Exam for Structural Abnormalities",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:cca77599-b3bb-48ba-80f3-9994f1eb7750",
+    "timestamp": "2025-06-20T16:58:34-04:00",
+    "total": 2,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "71486-5",
+      "display": "Left eye Optic disc or retinal nerve fiber layer structural abnormalities by Ophthalmoscopy"
+    }, {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "71487-3",
+      "display": "Right eye Optic disc or retinal nerve fiber layer structural abnormalities by Ophthalmoscopy"
+    } ]
+  }
+}

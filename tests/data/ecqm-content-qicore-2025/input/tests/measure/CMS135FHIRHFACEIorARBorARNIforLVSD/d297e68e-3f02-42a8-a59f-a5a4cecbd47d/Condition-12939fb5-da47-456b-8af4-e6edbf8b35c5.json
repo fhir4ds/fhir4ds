@@ -1,0 +1,43 @@
+{
+  "resourceType": "Condition",
+  "id": "12939fb5-da47-456b-8af4-e6edbf8b35c5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "10091002",
+      "display": "High output heart failure (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/d297e68e-3f02-42a8-a59f-a5a4cecbd47d"
+  },
+  "onsetPeriod": {
+    "start": "2026-02-03T08:00:00.000+00:00",
+    "end": "2026-02-03T08:15:00.000+00:00"
+  }
+}

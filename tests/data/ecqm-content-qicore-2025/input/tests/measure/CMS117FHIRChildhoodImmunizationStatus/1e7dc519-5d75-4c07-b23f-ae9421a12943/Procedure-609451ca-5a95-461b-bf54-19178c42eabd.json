@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "609451ca-5a95-461b-bf54-19178c42eabd",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-01-02T00:00:00.000Z"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "90697",
+      "display": "Diphtheria, tetanus toxoids, acellular pertussis vaccine, inactivated poliovirus vaccine, Haemophilus influenzae type b PRP-OMP conjugate vaccine, and hepatitis B vaccine (DTaP-IPV-Hib-HepB), for intramuscular use"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1e7dc519-5d75-4c07-b23f-ae9421a12943"
+  },
+  "performedPeriod": {
+    "start": "2025-01-02T00:00:00.000Z",
+    "end": "2025-01-02T23:59:59.000Z"
+  }
+}

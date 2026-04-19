@@ -71,12 +71,9 @@ def substring(ctx, coll, start, length=None):
 
     start = int(start)
     if start < 0:
-        # FHIRPath §5.7.3: negative start → start=0, length reduced by |start|
-        if length is not None and length != []:
-            length = int(length) + start  # start is negative, so this reduces length
-            if length <= 0:
-                return []
-        start = 0
+        # FHIRPath §5.6.3: "If start lies outside the length of the string,
+        # the function returns an empty collection."
+        return []
     if start >= len(string):
         return []
 

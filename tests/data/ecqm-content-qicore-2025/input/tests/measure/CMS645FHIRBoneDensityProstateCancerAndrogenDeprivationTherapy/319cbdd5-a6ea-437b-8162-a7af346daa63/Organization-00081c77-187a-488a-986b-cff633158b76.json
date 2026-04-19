@@ -1,0 +1,25 @@
+{
+  "resourceType": "Organization",
+  "id": "00081c77-187a-488a-986b-cff633158b76",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+  },
+  "identifier": [ {
+    "use": "temp",
+    "system": "http://hl7.org/fhir/sid/us-npi",
+    "value": "BCBST-NPI"
+  } ],
+  "active": true,
+  "name": "Blue Cross Blue Shield Tennessee",
+  "telecom": [ {
+    "system": "phone",
+    "value": "(+1) 800-468-9698"
+  } ],
+  "address": [ {
+    "line": [ "1 Cameron Hill Circle, Suite 0002" ],
+    "city": "Chattanooga",
+    "state": "TN",
+    "postalCode": "37402-0002",
+    "country": "USA"
+  } ]
+}

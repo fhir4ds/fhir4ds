@@ -1,0 +1,29 @@
+{
+  "resourceType": "Observation",
+  "id": "9185b88b-bb14-47f4-81eb-ffb291363772",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "71971-6",
+      "display": "PROMIS-10 Global Physical Health (GPH) score T-score"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/faeabeab-c8ca-4e6f-91c8-83edc69a464a"
+  },
+  "effectivePeriod": {
+    "start": "2025-08-28T00:00:00.000Z",
+    "end": "2025-08-28T01:00:00.000Z"
+  },
+  "valueInteger": 60
+}

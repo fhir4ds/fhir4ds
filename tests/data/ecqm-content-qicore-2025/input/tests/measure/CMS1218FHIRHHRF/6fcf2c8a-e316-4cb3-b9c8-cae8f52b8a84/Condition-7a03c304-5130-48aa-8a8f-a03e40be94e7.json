@@ -1,0 +1,47 @@
+{
+  "resourceType": "Condition",
+  "id": "7a03c304-5130-48aa-8a8f-a03e40be94e7",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2023",
+      "code": "J95.821",
+      "display": "Acute postprocedural respiratory failure",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/6fcf2c8a-e316-4cb3-b9c8-cae8f52b8a84"
+  },
+  "onsetPeriod": {
+    "start": "2026-04-10T08:00:00.000+00:00"
+  },
+  "recordedDate": "2026-04-10T08:05:00.000+00:00"
+}

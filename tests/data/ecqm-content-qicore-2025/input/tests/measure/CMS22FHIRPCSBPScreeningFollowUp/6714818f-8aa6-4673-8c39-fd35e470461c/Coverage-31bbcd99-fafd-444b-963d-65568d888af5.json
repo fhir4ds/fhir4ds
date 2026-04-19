@@ -1,0 +1,14 @@
+{
+  "resourceType": "Coverage",
+  "id": "31bbcd99-fafd-444b-963d-65568d888af5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+  },
+  "status": "active",
+  "beneficiary": {
+    "reference": "Patient/6714818f-8aa6-4673-8c39-fd35e470461c"
+  },
+  "payor": [ {
+    "reference": "Organization/16574a17-8c6e-40d2-be58-36b01d7e1a00"
+  } ]
+}

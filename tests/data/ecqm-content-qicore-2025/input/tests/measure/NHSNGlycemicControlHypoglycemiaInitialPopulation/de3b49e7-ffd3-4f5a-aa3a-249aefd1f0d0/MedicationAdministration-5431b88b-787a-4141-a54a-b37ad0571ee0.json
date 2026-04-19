@@ -1,0 +1,22 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "5431b88b-787a-4141-a54a-b37ad0571ee0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1007184",
+      "display": "insulin aspart protamine, human / insulin aspart, human"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/de3b49e7-ffd3-4f5a-aa3a-249aefd1f0d0"
+  },
+  "effectivePeriod": {
+    "start": "2026-01-01T08:00:00Z",
+    "end": "2026-01-01T08:15:00Z"
+  }
+}

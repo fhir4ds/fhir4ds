@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "de03724e-6eb0-4ad3-9ca5-5bc453b1182f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "75303-8",
+      "display": "Nutrition assessment narrative",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/4f90847d-e626-4ebb-8382-ae1c05079579"
+  },
+  "effectiveDateTime": "2026-08-25T10:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "248324001",
+      "display": "Well nourished (finding)",
+      "userSelected": true
+    } ]
+  }
+}

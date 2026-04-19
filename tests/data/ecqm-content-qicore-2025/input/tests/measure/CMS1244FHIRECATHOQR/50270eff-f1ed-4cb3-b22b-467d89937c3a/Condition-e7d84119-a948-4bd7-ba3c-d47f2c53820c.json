@@ -1,0 +1,27 @@
+{
+  "resourceType": "Condition",
+  "id": "e7d84119-a948-4bd7-ba3c-d47f2c53820c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2023-09",
+      "code": "10674711000119105",
+      "display": "Acute severe exacerbation of asthma co-occurrent with allergic rhinitis (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/50270eff-f1ed-4cb3-b22b-467d89937c3a"
+  },
+  "recordedDate": "2027-05-01T08:00:00.000+00:00"
+}

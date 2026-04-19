@@ -1,0 +1,113 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "4c2256d1-c557-4e84-af02-26f505c85569",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "f2344ff3-a74c-4368-a965-79518b3eba5c-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "98fca12d-7318-4ed9-9267-4a8604553ed4"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#f2344ff3-a74c-4368-a965-79518b3eba5c-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Testing do not perform coverage"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS72FHIRSTKAntithromboticDay2",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/98fca12d-7318-4ed9-9267-4a8604553ed4"
+  }, {
+    "reference": "Condition/1ebd546a-07bb-4344-a529-9c0ac8fa6d46"
+  }, {
+    "reference": "Encounter/124376d8-2c05-49c7-8a39-49fa9c090c3b"
+  }, {
+    "reference": "Encounter/78bab105-4ea9-4351-ad78-634a42813763"
+  }, {
+    "reference": "ServiceRequest/3bbe998d-5820-4694-82b3-0e40882cf4c6"
+  }, {
+    "reference": "Coverage/c5d8aebe-f6b6-409c-91b2-25f73f6fac6b"
+  }, {
+    "reference": "Condition/56dbfd11-87d7-44ed-bce1-9670d7e3f69f"
+  }, {
+    "reference": "Claim/5ca62962b8484628b8de1ec5"
+  }, {
+    "reference": "Organization/33750943-13ef-4de9-b888-1f506135b241"
+  }, {
+    "reference": "Practitioner/8101920a-93ee-4869-aa75-f2ce62fc32d3"
+  } ]
+}

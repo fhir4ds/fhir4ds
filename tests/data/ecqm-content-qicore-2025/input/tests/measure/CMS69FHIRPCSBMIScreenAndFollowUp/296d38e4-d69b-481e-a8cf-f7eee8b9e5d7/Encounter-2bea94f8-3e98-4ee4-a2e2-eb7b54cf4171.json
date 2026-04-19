@@ -1,0 +1,29 @@
+{
+  "resourceType": "Encounter",
+  "id": "2bea94f8-3e98-4ee4-a2e2-eb7b54cf4171",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "108224003",
+      "display": "Preventive patient evaluation (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/296d38e4-d69b-481e-a8cf-f7eee8b9e5d7"
+  },
+  "period": {
+    "start": "2026-12-31T08:01:00.000+00:00",
+    "end": "2026-12-31T08:15:00.000+00:00"
+  }
+}

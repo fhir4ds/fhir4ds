@@ -1,0 +1,244 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1703-20250125",
+  "meta": {
+    "versionId": "38",
+    "lastUpdated": "2025-01-25T01:09:35.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-01-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1703",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1703"
+  } ],
+  "version": "20250125",
+  "name": "OtherEndophthalmitis",
+  "title": "Other Endophthalmitis",
+  "status": "active",
+  "date": "2025-01-25T01:09:35-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of a diagnosis of other endophthalmitis.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of ophthalmia nodosa, parasitic cyst or endophthalmitis, panuveitis, sympathetic uveitis, or other endophthalmitis diagnoses.),(Exclusion Criteria: Excludes concepts that represent a diagnosis for 'unspecified eye.')",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "1176990003",
+        "display": "Panuveitis caused by Fungi (disorder)"
+      }, {
+        "code": "1177028005",
+        "display": "Panuveitis caused by Bacteria (disorder)"
+      }, {
+        "code": "1231680001",
+        "display": "Panuveitis due to sarcoidosis (disorder)"
+      }, {
+        "code": "12371008",
+        "display": "Ophthalmia nodosa (disorder)"
+      }, {
+        "code": "231992006",
+        "display": "Onchocerca chorioretinitis (disorder)"
+      }, {
+        "code": "240842000",
+        "display": "Ocular onchocerciasis (disorder)"
+      }, {
+        "code": "333391000119101",
+        "display": "Panuveitis of right eye (disorder)"
+      }, {
+        "code": "333581000119106",
+        "display": "Ophthalmia nodosa of right eye (disorder)"
+      }, {
+        "code": "339001000119107",
+        "display": "Panuveitis of left eye (disorder)"
+      }, {
+        "code": "339191000119100",
+        "display": "Ophthalmia nodosa of left eye (disorder)"
+      }, {
+        "code": "344751000119109",
+        "display": "Panuveitis of bilateral eyes (disorder)"
+      }, {
+        "code": "344941000119105",
+        "display": "Ophthalmia nodosa of bilateral eyes (disorder)"
+      }, {
+        "code": "415737009",
+        "display": "Toxocara endophthalmitis (disorder)"
+      }, {
+        "code": "57100005",
+        "display": "Parasitic endophthalmitis (disorder)"
+      }, {
+        "code": "733337008",
+        "display": "Noninfectious panuveitis (disorder)"
+      }, {
+        "code": "75315001",
+        "display": "Sympathetic uveitis (disorder)"
+      }, {
+        "code": "75614007",
+        "display": "Panuveitis (disorder)"
+      }, {
+        "code": "766933000",
+        "display": "Idiopathic panuveitis (disorder)"
+      }, {
+        "code": "789116000",
+        "display": "Panuveitis due to infectious disease (disorder)"
+      }, {
+        "code": "870329005",
+        "display": "Panuveitis caused by virus (disorder)"
+      }, {
+        "code": "870330000",
+        "display": "Panuveitis caused by parasite (disorder)"
+      }, {
+        "code": "870331001",
+        "display": "Panuveitis caused by Treponema pallidum (disorder)"
+      }, {
+        "code": "870332008",
+        "display": "Panuveitis caused by Herpesvirus (disorder)"
+      }, {
+        "code": "870333003",
+        "display": "Panuveitis caused by Mycobacterium tuberculosis (disorder)"
+      }, {
+        "code": "870335005",
+        "display": "Panuveitis caused by Borrelia burgdorferi (disorder)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:0ea94367-dfb6-4a2d-95d7-6d895d53290d",
+    "timestamp": "2025-06-20T16:55:01-04:00",
+    "total": 22,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1176990003",
+      "display": "Panuveitis caused by kingdom Fungi (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1177028005",
+      "display": "Panuveitis caused by Domain Bacteria (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1231680001",
+      "display": "Panuveitis due to sarcoidosis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "12371008",
+      "display": "Ophthalmia nodosa (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "231992006",
+      "display": "Onchocerca chorioretinitis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "240842000",
+      "display": "Ocular onchocerciasis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "333391000119101",
+      "display": "Panuveitis of right eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "339001000119107",
+      "display": "Panuveitis of left eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "344751000119109",
+      "display": "Panuveitis of bilateral eyes (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "415737009",
+      "display": "Toxocara endophthalmitis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "57100005",
+      "display": "Parasitic endophthalmitis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "733337008",
+      "display": "Noninfectious panuveitis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "75315001",
+      "display": "Sympathetic uveitis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "75614007",
+      "display": "Panuveitis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "766933000",
+      "display": "Idiopathic panuveitis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "789116000",
+      "display": "Panuveitis due to infectious disease (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "870329005",
+      "display": "Panuveitis caused by virus (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "870330000",
+      "display": "Panuveitis caused by parasite (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "870331001",
+      "display": "Panuveitis caused by Treponema pallidum (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "870332008",
+      "display": "Panuveitis caused by Herpesvirus (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "870333003",
+      "display": "Panuveitis caused by Mycobacterium tuberculosis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "870335005",
+      "display": "Panuveitis caused by Borrelia burgdorferi (disorder)"
+    } ]
+  }
+}

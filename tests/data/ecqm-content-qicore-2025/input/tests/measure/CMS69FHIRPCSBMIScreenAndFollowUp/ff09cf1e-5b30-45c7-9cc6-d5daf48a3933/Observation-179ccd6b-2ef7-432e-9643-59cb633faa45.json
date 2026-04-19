@@ -1,0 +1,42 @@
+{
+  "resourceType": "Observation",
+  "id": "179ccd6b-2ef7-432e-9643-59cb633faa45",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observationcancelled" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "183932001",
+        "display": "Procedure contraindicated (situation)",
+        "userSelected": true
+      } ]
+    }
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDone",
+    "valueBoolean": true
+  } ],
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "procedure",
+      "display": "Procedure"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "39156-5",
+      "display": "Body mass index (BMI) [Ratio]",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/ff09cf1e-5b30-45c7-9cc6-d5daf48a3933"
+  },
+  "effectiveDateTime": "2026-01-02T00:29:00.000+00:00"
+}

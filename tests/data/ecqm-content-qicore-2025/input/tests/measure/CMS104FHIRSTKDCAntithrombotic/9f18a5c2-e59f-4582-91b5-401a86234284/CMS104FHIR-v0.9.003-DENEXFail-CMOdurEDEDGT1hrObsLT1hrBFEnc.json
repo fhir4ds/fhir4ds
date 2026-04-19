@@ -1,0 +1,510 @@
+{
+  "resourceType": "Bundle",
+  "id": "6129135002c62a011f2e72bc",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/9f18a5c2-e59f-4582-91b5-401a86234284",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "9f18a5c2-e59f-4582-91b5-401a86234284",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "text": {
+        "status": "generated",
+        "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">CMOdurED_ED&gt;1hrObs&lt;1hrBFEnc <b>DENEXFAIL </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>2006756a27174f92dee13bbc481e8a65c6ccb0b0b47df780aff7bd6f91c33990</td></tr><tr><td>Date of birth</td><td><span>21 August 1994</span></td></tr></tbody></table></div>"
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "6129135002c62a011f2e72bc"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "DENEXFail",
+        "given": [ "CMOdurED_ED>1hrObs<1hrBFEnc" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1995-08-21"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/9f18a5c2-e59f-4582-91b5-401a86234284"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/b9907aa2-62dc-4805-b650-b4505424ba08",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "b9907aa2-62dc-4805-b650-b4505424ba08",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMER",
+        "display": "emergency",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "4525004"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/9f18a5c2-e59f-4582-91b5-401a86234284"
+      },
+      "period": {
+        "start": "2026-10-10T10:28:00Z",
+        "end": "2026-10-10T10:30:00.000+00:00"
+      },
+      "length": {
+        "value": 0,
+        "unit": "days"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/b9907aa2-62dc-4805-b650-b4505424ba08"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/5abc39f5-b1a1-4fa1-9d04-b7d37e74d213",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "5abc39f5-b1a1-4fa1-9d04-b7d37e74d213",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "OBSENC",
+        "display": "observation encounter",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "448851000124103"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/9f18a5c2-e59f-4582-91b5-401a86234284"
+      },
+      "period": {
+        "start": "2026-10-10T11:31:00Z",
+        "end": "2026-10-10T11:35:00.000+00:00"
+      },
+      "length": {
+        "value": 0,
+        "unit": "days"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/5abc39f5-b1a1-4fa1-9d04-b7d37e74d213"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/66d4b064-b573-40ed-abfd-2abac7b80a57",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "66d4b064-b573-40ed-abfd-2abac7b80a57",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "32485007"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/9f18a5c2-e59f-4582-91b5-401a86234284"
+      },
+      "period": {
+        "start": "2026-10-10T11:36:00Z",
+        "end": "2026-10-12T11:30:00.000+00:00"
+      },
+      "length": {
+        "value": 2,
+        "unit": "days"
+      },
+      "diagnosis": [ {
+        "condition": {
+          "reference": "Condition/67cb0a9b-3d62-4ecd-809b-6671d60eefd9"
+        },
+        "use": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/diagnosis-role",
+            "code": "billing",
+            "display": "Billing"
+          } ]
+        },
+        "rank": 1
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/66d4b064-b573-40ed-abfd-2abac7b80a57"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/ServiceRequest/7609c65d-7b5a-4f5d-a1a1-f23476f00671",
+    "resource": {
+      "resourceType": "ServiceRequest",
+      "id": "7609c65d-7b5a-4f5d-a1a1-f23476f00671",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+      },
+      "status": "active",
+      "intent": "order",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "133918004"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/9f18a5c2-e59f-4582-91b5-401a86234284"
+      },
+      "authoredOn": "2026-10-10T10:30:00Z"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "ServiceRequest/7609c65d-7b5a-4f5d-a1a1-f23476f00671"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/67cb0a9b-3d62-4ecd-809b-6671d60eefd9",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "67cb0a9b-3d62-4ecd-809b-6671d60eefd9",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active"
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2020-09",
+          "code": "111297002",
+          "display": "Nonparalytic stroke (disorder)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/9f18a5c2-e59f-4582-91b5-401a86234284"
+      },
+      "recordedDate": "2026-07-14T08:00:00Z"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/67cb0a9b-3d62-4ecd-809b-6671d60eefd9"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/claim/5ca62962b8484628b8de1ec5",
+    "resource": {
+      "resourceType": "Claim",
+      "id": "5ca62962b8484628b8de1ec5",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-claim" ]
+      },
+      "status": "active",
+      "type": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/claim-type",
+          "code": "institutional"
+        } ]
+      },
+      "use": "claim",
+      "patient": {
+        "reference": "Patient/d170a0a8-b5ad-4303-b6df-e304dd5f92ad"
+      },
+      "created": "2026-12-01",
+      "provider": {
+        "reference": "Practitioner/practitioner-123456"
+      },
+      "priority": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/processpriority",
+          "code": "normal"
+        } ]
+      },
+      "diagnosis": [ {
+        "sequence": 1,
+        "diagnosisCodeableConcept": {
+          "coding": [ {
+            "system": "http://hl7.org/fhir/sid/icd-10-cm",
+            "code": "I63.00"
+          } ]
+        },
+        "type": [ {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/ex-diagnosistype",
+            "code": "principal"
+          } ]
+        } ]
+      } ],
+      "insurance": [ {
+        "sequence": 1,
+        "focal": true,
+        "coverage": {
+          "reference": "Coverage/5fa041661c76ba66d9959367"
+        }
+      } ],
+      "item": [ {
+        "sequence": 1,
+        "diagnosisSequence": [ 1 ],
+        "productOrService": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/ex-USCLS",
+            "code": "99555"
+          } ]
+        },
+        "encounter": [ {
+          "reference": "Encounter/66d4b064-b573-40ed-abfd-2abac7b80a57"
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Claim/5ca62962b8484628b8de1ec5"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/cd6e7b22-3ab8-4f02-b467-734a4dfc8c50",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "cd6e7b22-3ab8-4f02-b467-734a4dfc8c50",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/9f18a5c2-e59f-4582-91b5-401a86234284"
+      },
+      "payor": [ {
+        "reference": "Organization/55bd5ba6-7a6c-4feb-ae07-ee6a6b43005c"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/cd6e7b22-3ab8-4f02-b467-734a4dfc8c50"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/55bd5ba6-7a6c-4feb-ae07-ee6a6b43005c",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "55bd5ba6-7a6c-4feb-ae07-ee6a6b43005c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/55bd5ba6-7a6c-4feb-ae07-ee6a6b43005c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/2968bc46-c5f6-4024-9d9a-b879a43a6f79",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "2968bc46-c5f6-4024-9d9a-b879a43a6f79",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "cd91bab9-a81d-4f2c-8a8d-4997420a8c07-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "9f18a5c2-e59f-4582-91b5-401a86234284"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#cd91bab9-a81d-4f2c-8a8d-4997420a8c07-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient receives CMO during ED. ED ends 61 minute before obs. Obs ends 1 min before inpatient encounter start.Testing day of operator with HospitalizationWithObservation function."
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS104FHIRSTKDCAntithrombotic",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/9f18a5c2-e59f-4582-91b5-401a86234284"
+      }, {
+        "reference": "Encounter/b9907aa2-62dc-4805-b650-b4505424ba08"
+      }, {
+        "reference": "Encounter/5abc39f5-b1a1-4fa1-9d04-b7d37e74d213"
+      }, {
+        "reference": "Encounter/66d4b064-b573-40ed-abfd-2abac7b80a57"
+      }, {
+        "reference": "ServiceRequest/7609c65d-7b5a-4f5d-a1a1-f23476f00671"
+      }, {
+        "reference": "Condition/67cb0a9b-3d62-4ecd-809b-6671d60eefd9"
+      }, {
+        "reference": "Claim/5ca62962b8484628b8de1ec5"
+      }, {
+        "reference": "Coverage/cd6e7b22-3ab8-4f02-b467-734a4dfc8c50"
+      }, {
+        "reference": "Organization/55bd5ba6-7a6c-4feb-ae07-ee6a6b43005c"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/2968bc46-c5f6-4024-9d9a-b879a43a6f79"
+    }
+  } ]
+}

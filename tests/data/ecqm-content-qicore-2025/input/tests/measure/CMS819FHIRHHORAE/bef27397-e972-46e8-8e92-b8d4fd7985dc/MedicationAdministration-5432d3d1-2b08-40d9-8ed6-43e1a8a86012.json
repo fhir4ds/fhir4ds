@@ -1,0 +1,28 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "5432d3d1-2b08-40d9-8ed6-43e1a8a86012",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1659929",
+      "display": "Naloxone (opioid antagonist)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/bef27397-e972-46e8-8e92-b8d4fd7985dc"
+  },
+  "effectiveDateTime": "2025-12-31T09:00:00.000+00:00",
+  "dosage": {
+    "route": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "34206005",
+        "display": "Intravenous"
+      } ]
+    }
+  }
+}

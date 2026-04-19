@@ -22,6 +22,7 @@ from ...translator.placeholder import (
 )
 from ...translator.types import (
     SQLAlias,
+    SQLArray,
     SQLBinaryOp,
     SQLCase,
     SQLCast,
@@ -31,6 +32,7 @@ from ...translator.types import (
     SQLIdentifier,
     SQLJoin,
     SQLLambda,
+    SQLLambda2,
     SQLLiteral,
     SQLNull,
     SQLQualifiedIdentifier,
@@ -1168,27 +1170,90 @@ class QueryMixin:
             "Long", "long", "Decimal", "decimal", "instant",
         }
         if bare_type in _PRIMITIVE_TYPES:
-            # Primitive values are bare strings, not JSON objects.
-            # Guard: starts_with(LTRIM(x), '{') is false for primitives.
+            # Quick check: if the left operand is a CQL literal with a known type
+            # that doesn't match the target, return false immediately.
+            # CQL `is` is a type check: '5' is Integer → false (String ≠ Integer).
+            from ...parser.ast_nodes import Literal as _ASTLiteral
+            if isinstance(expr.left, _ASTLiteral):
+                _lit_type = getattr(expr.left, 'type', None)
+                if _lit_type:
+                    _lit_type_lower = _lit_type.lower()
+                    _bare_lower = bare_type.lower()
+                    _LIT_TYPE_MAP = {
+                        'string': {'string'},
+                        'integer': {'integer', 'long'},
+                        'long': {'integer', 'long'},
+                        'decimal': {'decimal'},
+                        'boolean': {'boolean'},
+                    }
+                    _lit_types = _LIT_TYPE_MAP.get(_lit_type_lower)
+                    if _lit_types is not None and _bare_lower not in _lit_types:
+                        return SQLLiteral(value=False)
+
+            # CQL `is` checks the *type* of the value, not just its format.
+            # When the SQL value has a concrete type (INTEGER, DOUBLE, BOOLEAN, DATE, TIMESTAMP),
+            # check typeof() against the expected CQL type. When the value is VARCHAR (FHIR JSON
+            # extraction), fall back to the not-JSON-object format check.
+            _CQL_TYPE_TO_SQL_TYPES = {
+                "Integer": ("INTEGER", "BIGINT", "SMALLINT", "TINYINT", "HUGEINT"),
+                "integer": ("INTEGER", "BIGINT", "SMALLINT", "TINYINT", "HUGEINT"),
+                "Long": ("INTEGER", "BIGINT", "SMALLINT", "TINYINT", "HUGEINT"),
+                "long": ("INTEGER", "BIGINT", "SMALLINT", "TINYINT", "HUGEINT"),
+                "Decimal": ("DOUBLE", "FLOAT", "DECIMAL"),
+                "decimal": ("DOUBLE", "FLOAT", "DECIMAL"),
+                "Boolean": ("BOOLEAN",),
+                "boolean": ("BOOLEAN",),
+                "Date": ("DATE",),
+                "date": ("DATE",),
+                "DateTime": ("TIMESTAMP", "TIMESTAMP WITH TIME ZONE"),
+                "dateTime": ("TIMESTAMP", "TIMESTAMP WITH TIME ZONE"),
+                "instant": ("TIMESTAMP", "TIMESTAMP WITH TIME ZONE"),
+                "String": ("VARCHAR",),
+                "string": ("VARCHAR",),
+            }
+            expected_sql_types = _CQL_TYPE_TO_SQL_TYPES.get(bare_type)
+            cast_expr = SQLCast(expression=resource_expr, target_type="VARCHAR")
             is_not_json = SQLUnaryOp(
                 operator="NOT",
                 operand=SQLFunctionCall(
                     name="starts_with",
                     args=[
-                        SQLFunctionCall(name="LTRIM", args=[resource_expr]),
+                        SQLFunctionCall(name="LTRIM", args=[cast_expr]),
                         SQLLiteral(value="{"),
                     ],
                 ),
             )
-            return SQLBinaryOp(
-                operator="AND",
-                left=SQLBinaryOp(
-                    operator="IS NOT",
-                    left=resource_expr,
-                    right=SQLNull(),
-                ),
-                right=is_not_json,
+            not_null = SQLBinaryOp(
+                operator="IS NOT",
+                left=resource_expr,
+                right=SQLNull(),
             )
+            if expected_sql_types and bare_type not in ("String", "string", "Time", "time"):
+                # Build typeof-based check: when typeof(x) is a concrete non-VARCHAR type,
+                # check it matches. When VARCHAR, use not-JSON format check (FHIR fallback).
+                type_checks = [SQLBinaryOp(
+                    operator="=",
+                    left=SQLFunctionCall(name="typeof", args=[resource_expr]),
+                    right=SQLLiteral(value=t),
+                ) for t in expected_sql_types]
+                type_match = type_checks[0]
+                for tc in type_checks[1:]:
+                    type_match = SQLBinaryOp(operator="OR", left=type_match, right=tc)
+                # For VARCHAR values (FHIR polymorphic), use the not-JSON heuristic
+                is_varchar = SQLBinaryOp(
+                    operator="=",
+                    left=SQLFunctionCall(name="typeof", args=[resource_expr]),
+                    right=SQLLiteral(value="VARCHAR"),
+                )
+                combined = SQLBinaryOp(
+                    operator="OR",
+                    left=type_match,
+                    right=SQLBinaryOp(operator="AND", left=is_varchar, right=is_not_json),
+                )
+                return SQLBinaryOp(operator="AND", left=not_null, right=combined)
+            else:
+                # String/Time types: not-JSON check is sufficient
+                return SQLBinaryOp(operator="AND", left=not_null, right=is_not_json)
 
         # --- Strategy 1b: Interval types (Interval<DateTime>, Interval<Quantity>) ---
         # CQL `is Interval<DateTime>` checks if the value is a Period JSON
@@ -1547,6 +1612,7 @@ class QueryMixin:
                     QuerySource as _QS,
                     Query as _CQLQuery,
                     WhereClause as _WC,
+                    ListExpression as _ListExpr,
                 )
 
                 def _unwrap_source(src):
@@ -1585,6 +1651,12 @@ class QueryMixin:
                     self.context.add_alias(alias, table_alias=alias, cte_name=cte_name)
                 else:
                     source_expr = self.translate(_pi_expr, usage=ExprUsage.SCALAR)
+                    # List literals / array expressions must be unnested for FROM clause
+                    if isinstance(source_expr, SQLArray) or (
+                        isinstance(source_expr, SQLFunctionCall)
+                        and _is_list_returning_sql(source_expr)
+                    ):
+                        source_expr = SQLFunctionCall(name="unnest", args=[source_expr])
                     if alias:
                         self.context.add_alias(alias, table_alias=alias)
 
@@ -1595,7 +1667,7 @@ class QueryMixin:
                 # visible to the WHERE clause.
                 _multi_return_alias = None
                 _multi_return_ast = None  # Non-alias return expression AST node
-                _sec_infos: list = []  # (alias, from_sql, cte_name)
+                _sec_infos: list = []  # (alias, from_sql, cte_name, ast_expr)
 
                 for _sec in node.source[1:]:
                     _sec_alias, _sec_expr_node = _unwrap_source(_sec)
@@ -1610,8 +1682,14 @@ class QueryMixin:
                     else:
                         _sec_from_sql = self.translate(_sec_expr_node, usage=ExprUsage.LIST)
                         _sec_cte_name = None
+                        # List literals / array expressions must be unnested for FROM clause
+                        if isinstance(_sec_from_sql, SQLArray) or (
+                            isinstance(_sec_from_sql, SQLFunctionCall)
+                            and _is_list_returning_sql(_sec_from_sql)
+                        ):
+                            _sec_from_sql = SQLFunctionCall(name="unnest", args=[_sec_from_sql])
 
-                    _sec_infos.append((_sec_alias, _sec_from_sql, _sec_cte_name))
+                    _sec_infos.append((_sec_alias, _sec_from_sql, _sec_cte_name, _sec_expr_node))
 
                 # Capture RETURN expression from the outer from-query node
                 if node.return_clause:
@@ -1632,7 +1710,7 @@ class QueryMixin:
                     _saved_ra = self.context.resource_alias
                     _multi_return_sql = None
                     try:
-                        for _sa, _, _scn in _sec_infos:
+                        for _sa, _, _scn, _ in _sec_infos:
                             self.context.add_alias(
                                 _sa, table_alias=_sa, cte_name=_scn,
                             )
@@ -1674,29 +1752,37 @@ class QueryMixin:
 
                     # Build FROM clause: first secondary, then CROSS JOINs
                     _outer_alias = alias or self.context.resource_alias or "p"
-                    _first_alias, _first_from, _ = _sec_infos[0]
+                    _first_alias, _first_from, _, _ = _sec_infos[0]
                     _from_clause = SQLAlias(expr=_first_from, alias=_first_alias)
                     _joins: list = []
-                    for _sa, _sf, _ in _sec_infos[1:]:
+                    for _sa, _sf, _, _ in _sec_infos[1:]:
                         _joins.append(SQLJoin(
                             join_type="CROSS JOIN",
                             table=SQLAlias(expr=_sf, alias=_sa),
                             on_condition=None,
                         ))
 
-                    # Patient-id correlations for every secondary alias
+                    # Patient-id correlations — skip for list literal sources
+                    _all_list_sources = isinstance(_pi_expr, _ListExpr) and all(
+                        isinstance(info[3], _ListExpr) for info in _sec_infos
+                    )
                     _conds: list = []
                     if _sec_where_sql and not isinstance(_sec_where_sql, SQLLiteral):
                         _conds.append(_sec_where_sql)
-                    for _sa, _, _ in _sec_infos:
-                        _conds.append(SQLBinaryOp(
-                            left=SQLQualifiedIdentifier(parts=[_sa, "patient_id"]),
-                            operator="=",
-                            right=SQLQualifiedIdentifier(parts=[_outer_alias, "patient_id"]),
-                        ))
-                    _full_cond = _conds[0]
-                    for _c in _conds[1:]:
-                        _full_cond = SQLBinaryOp(left=_full_cond, operator="AND", right=_c)
+                    if not _all_list_sources:
+                        for _sa, _, _, _ast_expr in _sec_infos:
+                            if not isinstance(_ast_expr, _ListExpr):
+                                _conds.append(SQLBinaryOp(
+                                    left=SQLQualifiedIdentifier(parts=[_sa, "patient_id"]),
+                                    operator="=",
+                                    right=SQLQualifiedIdentifier(parts=[_outer_alias, "patient_id"]),
+                                ))
+                    if _conds:
+                        _full_cond = _conds[0]
+                        for _c in _conds[1:]:
+                            _full_cond = SQLBinaryOp(left=_full_cond, operator="AND", right=_c)
+                    else:
+                        _full_cond = None
 
                     if _multi_return_sql is not None or _multi_return_alias is not None:
                         # Computed or alias return: CROSS JOIN all sources and project the return expression
@@ -1716,7 +1802,7 @@ class QueryMixin:
                                 _ret_col = self._get_definition_value_column(_pi_expr.name)
                             else:
                                 # Check secondary sources
-                                for _sa, _, _scn in _sec_infos:
+                                for _sa, _, _scn, _ in _sec_infos:
                                     if _sa == _multi_return_alias and _scn:
                                         _ret_col = self._get_definition_value_column(_scn)
                                         break
@@ -1739,14 +1825,19 @@ class QueryMixin:
                         _all_joins.extend(_joins)
 
                         # Combine primary WHERE with secondary conditions
-                        if _prim_where:
+                        if _prim_where and _full_cond:
                             _full_cond = SQLBinaryOp(left=_prim_where, operator="AND", right=_full_cond)
+                        elif _prim_where:
+                            _full_cond = _prim_where
+
+                        _columns = [
+                            SQLAlias(expr=SQLCast(expression=_multi_return_sql, target_type="VARCHAR"), alias="resource"),
+                        ]
+                        if not _all_list_sources:
+                            _columns.insert(0, SQLQualifiedIdentifier(parts=[_outer_alias, "patient_id"]))
 
                         source_expr = SQLSelect(
-                            columns=[
-                                SQLQualifiedIdentifier(parts=[_outer_alias, "patient_id"]),
-                                SQLAlias(expr=SQLCast(expression=_multi_return_sql, target_type="VARCHAR"), alias="resource"),
-                            ],
+                            columns=_columns,
                             from_clause=_prim_from,
                             where=_full_cond,
                             joins=_all_joins if _all_joins else None,
@@ -2794,20 +2885,114 @@ class QueryMixin:
                     args=[_early_lt_source, SQLLambda(param=_early_lt_param, body=_lt_body)]
                 )
 
-        # Apply SORT clause if present
-        if node.sort:
-            # Handle sort by clause
-            sort_expr = node.sort
-            if hasattr(sort_expr, 'direction'):
-                direction = getattr(sort_expr, 'direction', 'asc').upper()
-                sort_by = self.translate(sort_expr, usage=ExprUsage.SCALAR)
-                if isinstance(result, SQLSelect):
-                    result = SQLSelect(
-                        columns=result.columns,
-                        from_clause=result.from_clause,
-                        where=result.where,
-                        order_by=[(sort_by, direction)],
-                    )
+        # Apply SORT clause if present (CQL §19.29)
+        if node.sort and node.sort.by:
+            sort_item = node.sort.by[0]
+            direction = (getattr(sort_item, 'direction', None) or 'asc').upper()
+            sort_order = 'ASC' if direction in ('ASC', 'ASCENDING') else 'DESC'
+            nulls = 'NULLS LAST' if sort_order == 'ASC' else 'NULLS FIRST'
+
+            if isinstance(result, SQLSelect):
+                # Row-producing query: add ORDER BY
+                if sort_item.expression:
+                    # If the sort expression is a simple identifier matching an
+                    # output column alias, reference the column directly instead
+                    # of re-translating (which may resolve let-bindings that
+                    # reference out-of-scope query aliases).
+                    _sort_ident_name = getattr(sort_item.expression, 'name', None) if isinstance(sort_item.expression, Identifier) else None
+                    _col_aliases = {c.alias for c in result.columns if isinstance(c, SQLAlias)} if result.columns else set()
+                    sort_by = None
+                    if _sort_ident_name and _sort_ident_name in _col_aliases:
+                        sort_by = SQLIdentifier(name=_sort_ident_name)
+                    elif not _sort_ident_name:
+                        # Complex expression (e.g. effective.earliest()) — translate
+                        sort_by = self.translate(sort_item.expression, usage=ExprUsage.SCALAR)
+                    # else: identifier doesn't match any output column — skip sort
+                    # to avoid referencing out-of-scope query aliases
+                    if sort_by is not None:
+                        result = SQLSelect(
+                            columns=result.columns,
+                            from_clause=result.from_clause,
+                            where=result.where,
+                            order_by=[(sort_by, f"{sort_order} {nulls}")],
+                        )
+                else:
+                    # Sort by first/only column
+                    if result.columns:
+                        col = result.columns[0]
+                        if isinstance(col, SQLAlias):
+                            sort_col = SQLIdentifier(name=col.alias)
+                        else:
+                            sort_col = col
+                        result = SQLSelect(
+                            columns=result.columns,
+                            from_clause=result.from_clause,
+                            where=result.where,
+                            order_by=[(sort_col, f"{sort_order} {nulls}")],
+                        )
+            elif isinstance(result, SQLArray):
+                # Literal array: use DuckDB list_sort directly
+                result = SQLFunctionCall(
+                    name="list_sort",
+                    args=[result, SQLLiteral(value=sort_order), SQLLiteral(value=nulls)],
+                )
+            # else: non-array, non-SELECT expression — sort not applicable
+            # (DQM queries produce VARCHAR results from FHIRPath; sorting is
+            #  handled at a different layer for those.)
+
+        # Apply AGGREGATE clause if present (CQL §19.27)
+        # aggregate <accumulator> [starting <init>]: <expression>
+        # This is a fold/reduce over the list.
+        if hasattr(node, 'aggregate') and node.aggregate:
+            agg = node.aggregate
+            accum_name = agg.identifier   # accumulator variable name (e.g., "Result")
+            source_list = result
+
+            # Apply distinct/all modifiers
+            if agg.distinct:
+                source_list = SQLFunctionCall(name="list_distinct", args=[source_list])
+
+            # Translate the starting value
+            starting_sql = None
+            if agg.starting is not None:
+                starting_sql = self.translate(agg.starting, usage=ExprUsage.SCALAR)
+
+            # Translate the aggregation expression as a lambda body
+            # The body references both the accumulator and the iteration alias
+            _agg_lambda_x = f"_agg_x"  # accumulator param
+            _agg_lambda_y = f"_agg_y"  # element param
+
+            self.context.push_scope()
+            try:
+                self.context.add_alias(accum_name, ast_expr=SQLIdentifier(name=_agg_lambda_x))
+                if alias:
+                    self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_agg_lambda_y))
+                agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
+            finally:
+                self.context.pop_scope()
+
+            # Build list_reduce call
+            if starting_sql is not None:
+                # Prepend starting value so list_reduce uses it as initial accumulator
+                source_with_start = SQLFunctionCall(
+                    name="list_prepend",
+                    args=[starting_sql, source_list],
+                )
+                result = SQLFunctionCall(
+                    name="list_reduce",
+                    args=[source_with_start, SQLLambda2(params=[_agg_lambda_x, _agg_lambda_y], body=agg_body)],
+                )
+            else:
+                # No starting value — per CQL §19.27, accumulator is initialized to null.
+                # Prepend NULL as initial value for list_reduce.
+                source_with_null = SQLFunctionCall(
+                    name="list_prepend",
+                    args=[SQLNull(), source_list],
+                )
+                result = SQLFunctionCall(
+                    name="list_reduce",
+                    args=[source_with_null, SQLLambda2(params=[_agg_lambda_x, _agg_lambda_y], body=agg_body)],
+                )
 
         # For boolean context, check if result exists
         if usage == ExprUsage.BOOLEAN:

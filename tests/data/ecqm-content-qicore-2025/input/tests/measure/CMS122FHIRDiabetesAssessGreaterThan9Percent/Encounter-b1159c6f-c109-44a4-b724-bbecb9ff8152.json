@@ -1,0 +1,32 @@
+{
+  "resourceType": "Encounter",
+  "id": "b1159c6f-c109-44a4-b724-bbecb9ff8152",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183450002",
+      "display": "Admission to burn unit (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/85b60f52-7b08-46f3-946b-cb317b28acf5"
+  },
+  "period": {
+    "start": "2026-05-01T00:00:00.000+00:00",
+    "end": "2026-05-01T01:00:00.000+00:00"
+  },
+  "diagnosis": [ {
+    "condition": {
+      "reference": "Condition/7f2ba7d7-993e-411b-b860-9d03cf88e609"
+    }
+  } ]
+}

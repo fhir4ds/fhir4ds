@@ -1,0 +1,21 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "78e542b3-b20c-4f37-a838-cd8f16294690",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "5751000175101",
+      "display": "Patient bed assigned (finding)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/11703274-1218-440d-bb98-08502a794179"
+  },
+  "authoredOn": "2027-05-01T01:00:00.000+00:00"
+}

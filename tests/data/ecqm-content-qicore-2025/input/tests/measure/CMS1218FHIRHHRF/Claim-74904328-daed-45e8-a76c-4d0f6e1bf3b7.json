@@ -1,0 +1,57 @@
+{
+  "resourceType": "Claim",
+  "id": "74904328-daed-45e8-a76c-4d0f6e1bf3b7",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-claim" ]
+  },
+  "status": "active",
+  "type": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/claim-type",
+      "code": "professional"
+    } ]
+  },
+  "use": "claim",
+  "patient": {
+    "reference": "Patient/6fcf2c8a-e316-4cb3-b9c8-cae8f52b8a84"
+  },
+  "created": "2026-05-16",
+  "priority": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/processpriority",
+      "code": "normal"
+    } ]
+  },
+  "diagnosis": [ {
+    "sequence": 1,
+    "diagnosisCodeableConcept": {
+      "coding": [ {
+        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+        "version": "2023",
+        "code": "J95.821",
+        "display": "Acute postprocedural respiratory failure",
+        "userSelected": true
+      } ]
+    },
+    "type": [ {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/ex-diagnosistype",
+        "code": "principal"
+      } ]
+    } ]
+  } ],
+  "item": [ {
+    "sequence": 1,
+    "diagnosisSequence": [ 1, 5, 7 ],
+    "productOrService": {
+      "coding": [ {
+        "system": "http://example.org/fhir/CodeSystem/ex-professionalservice",
+        "code": "anesthesia"
+      } ]
+    },
+    "servicedDate": "2026-04-11",
+    "encounter": [ {
+      "reference": "Encounter/e3f27bd3-2608-49ec-ad0c-ec7080b01e5a"
+    } ]
+  } ]
+}

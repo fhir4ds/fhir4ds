@@ -1,0 +1,19 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "d78314b6-c5d4-4443-a3dd-d586a69d3f7f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "doNotPerform": true,
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "306354000",
+      "display": "Referral to hospital-based dietitian (procedure)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/64aff06b-abb4-4ff1-8254-071ba36225df"
+  },
+  "authoredOn": "2026-02-02T08:00:00Z"
+}

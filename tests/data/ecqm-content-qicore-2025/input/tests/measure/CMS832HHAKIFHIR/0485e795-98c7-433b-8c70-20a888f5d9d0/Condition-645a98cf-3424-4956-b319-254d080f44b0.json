@@ -1,0 +1,46 @@
+{
+  "resourceType": "Condition",
+  "id": "645a98cf-3424-4956-b319-254d080f44b0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "E08.01",
+      "display": "Diabetes mellitus due to underlying condition with hyperosmolarity with coma",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/0485e795-98c7-433b-8c70-20a888f5d9d0"
+  },
+  "onsetPeriod": {
+    "start": "2026-09-29T06:00:00.000+00:00"
+  },
+  "recordedDate": "2026-09-29T08:25:00.000+00:00"
+}

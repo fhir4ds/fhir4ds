@@ -1,0 +1,38 @@
+{
+  "resourceType": "Condition",
+  "id": "cc531fb8-06de-45c0-ab79-a43cb831a478",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "I20.1",
+      "display": "Angina pectoris with documented spasm",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/172cf64c-b5a3-4245-bd62-d7cd7473eb94"
+  },
+  "onsetPeriod": {
+    "start": "2026-10-08T05:00:00.000+00:00",
+    "end": "2026-10-22T12:00:00.000+00:00"
+  }
+}

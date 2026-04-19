@@ -1,0 +1,63 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.3.1492",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:10.125-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1492",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "2.16.840.1.113883.3.526.3.1492"
+  } ],
+  "version": "20190315",
+  "name": "PsychVisitDiagnosticEvaluation",
+  "title": "Psych Visit Diagnostic Evaluation",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:4ba783ef-0d4c-4af2-a89c-82f543a521fd",
+    "timestamp": "2025-06-20T16:59:28-04:00",
+    "total": 6,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "10197000",
+      "display": "Psychiatric interview and evaluation (procedure)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "165172002",
+      "display": "Diagnostic psychiatric interview (procedure)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "68338001",
+      "display": "Interactive medical psychiatric diagnostic interview (procedure)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "79094001",
+      "display": "Initial psychiatric interview with mental status and evaluation (procedure)"
+    }, {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2024",
+      "code": "90791",
+      "display": "Psychiatric diagnostic evaluation"
+    }, {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2024",
+      "code": "90792",
+      "display": "Psychiatric diagnostic evaluation with medical services"
+    } ]
+  }
+}

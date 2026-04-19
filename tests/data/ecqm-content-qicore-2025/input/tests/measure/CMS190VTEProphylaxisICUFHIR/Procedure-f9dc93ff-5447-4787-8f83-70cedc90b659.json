@@ -1,0 +1,21 @@
+{
+  "resourceType": "Procedure",
+  "id": "f9dc93ff-5447-4787-8f83-70cedc90b659",
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.icd10data.com/icd10pcs",
+      "code": "3E030FZ"
+    }, {
+      "system": "http://snomed.info/sct",
+      "code": "18946005"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f7ffeb68-1928-4860-8b3e-767f128b23d3"
+  },
+  "performedPeriod": {
+    "start": "2026-12-04T11:00:00.000+00:00",
+    "end": "2026-12-06T11:15:00.000+00:00"
+  }
+}

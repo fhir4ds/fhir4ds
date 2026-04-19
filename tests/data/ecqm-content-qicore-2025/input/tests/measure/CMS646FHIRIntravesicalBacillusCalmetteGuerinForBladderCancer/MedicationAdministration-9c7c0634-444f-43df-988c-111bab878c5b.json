@@ -1,0 +1,27 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "9c7c0634-444f-43df-988c-111bab878c5b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2014-02-02T08:00:00.000+00:00"
+  } ],
+  "status": "in-progress",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "1653484",
+      "display": "BCG, Tice strain 50 MG for Intravesical Suspension"
+    } ]
+  },
+  "subject": {
+    "reference": "http://GoodHealthcare.com/fhir/Patient/46464646"
+  },
+  "effectivePeriod": {
+    "start": "2026-04-06T08:00:00.000+00:00",
+    "end": "2026-04-06T08:15:00.000+00:00"
+  }
+}

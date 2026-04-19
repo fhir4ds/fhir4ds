@@ -1,0 +1,221 @@
+{
+  "resourceType": "Bundle",
+  "id": "IPPFail-HypertensionOnsetsAfterFirst6Months",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/642ef7f9-f9c2-45dc-ab7d-41a000b56d9c",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "642ef7f9-f9c2-45dc-ab7d-41a000b56d9c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "IPFail",
+        "given": [ "HypertensionOnsetsAfterFirst6Months" ]
+      } ],
+      "gender": "female",
+      "birthDate": "2007-12-31"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/642ef7f9-f9c2-45dc-ab7d-41a000b56d9c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/4df75e21-2f86-4d8b-8b65-48dc895f6c1c",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "4df75e21-2f86-4d8b-8b65-48dc895f6c1c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "3391000175108",
+          "display": "Office visit for pediatric care and assessment (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/642ef7f9-f9c2-45dc-ab7d-41a000b56d9c"
+      },
+      "period": {
+        "start": "2026-01-01T00:00:00.000+00:00",
+        "end": "2026-01-01T01:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/4df75e21-2f86-4d8b-8b65-48dc895f6c1c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/6cd901d8-5122-402b-badc-c5416c3db4da",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "6cd901d8-5122-402b-badc-c5416c3db4da",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "371125006",
+          "display": "Labile essential hypertension (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/642ef7f9-f9c2-45dc-ab7d-41a000b56d9c"
+      },
+      "onsetDateTime": "2026-07-01T00:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/6cd901d8-5122-402b-badc-c5416c3db4da"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/f3facae8-5978-4f25-8f4a-d9e88cc17ec9",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "f3facae8-5978-4f25-8f4a-d9e88cc17ec9",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "80d4cc98-b516-460c-a917-4f827233caf2-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "642ef7f9-f9c2-45dc-ab7d-41a000b56d9c"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#80d4cc98-b516-460c-a917-4f827233caf2-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Hypertension onsets on July 1 of the MP"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS165FHIRControllingHighBloodPressure",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/642ef7f9-f9c2-45dc-ab7d-41a000b56d9c"
+      }, {
+        "reference": "Encounter/4df75e21-2f86-4d8b-8b65-48dc895f6c1c"
+      }, {
+        "reference": "Condition/6cd901d8-5122-402b-badc-c5416c3db4da"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/f3facae8-5978-4f25-8f4a-d9e88cc17ec9"
+    }
+  } ]
+}

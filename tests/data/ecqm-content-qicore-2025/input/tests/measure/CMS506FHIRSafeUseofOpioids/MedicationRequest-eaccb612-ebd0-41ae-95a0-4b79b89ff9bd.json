@@ -1,0 +1,33 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "eaccb612-ebd0-41ae-95a0-4b79b89ff9bd",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+      "code": "discharge",
+      "display": "Discharge",
+      "userSelected": true
+    } ]
+  } ],
+  "doNotPerform": false,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1551393",
+      "display": "2 ML midazolam 5 MG/ML Prefilled Syringe",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c9d33132-11ce-455c-9fda-92c433d8c499"
+  },
+  "authoredOn": "2026-01-05T12:29:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/e945c0c9-2781-42bd-9106-af571c43dbb6"
+  }
+}

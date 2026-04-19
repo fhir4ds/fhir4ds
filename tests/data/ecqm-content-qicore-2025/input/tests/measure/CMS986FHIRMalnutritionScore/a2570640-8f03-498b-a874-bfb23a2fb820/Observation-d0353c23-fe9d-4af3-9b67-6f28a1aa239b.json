@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "d0353c23-fe9d-4af3-9b67-6f28a1aa239b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "75304-6",
+      "display": "Nutrition status observation panel",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/a2570640-8f03-498b-a874-bfb23a2fb820"
+  },
+  "effectiveDateTime": "2026-02-01T10:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "102635008",
+      "display": "Acute nutritional deficiency (finding)",
+      "userSelected": true
+    } ]
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "resourceType": "Patient",
+  "id": "0ae60eb8-3b74-46bb-9cde-1b4684891bf9",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2054-5",
+        "display": "Black or African American",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Black"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Hispanic or Latino"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248152002"
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://madie.cms.gov/",
+    "value": "ScreAtriNorefNoasseDxCp"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "text": "ScreAtriNorefNoasseDxCp",
+    "family": "IPPFAIL",
+    "given": [ "ScreAtriNorefNoasseDxCp" ]
+  } ],
+  "gender": "female",
+  "birthDate": "1987-01-01",
+  "address": [ {
+    "text": "ScreAtriNorefNoasseDxCp, Screened Not at risk No referral No Assessment Diagnosed Care Plan, ID=ScreAtriNorefNoasseDxCp, DOB: 01 Jan 1987"
+  } ]
+}

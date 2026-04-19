@@ -1,0 +1,28 @@
+{
+  "resourceType": "Observation",
+  "id": "15a158e3-6ddf-4aae-8acc-eda9de8307c7",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "80976-4",
+      "display": "International Prostate Symptom Score [IPSS]"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/6f3d7b20-08da-459f-9d12-db2f6caa2177"
+  },
+  "effectiveDateTime": "2025-12-12T08:01:00.000+00:00",
+  "valueInteger": 5
+}

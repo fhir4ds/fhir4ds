@@ -1,0 +1,38 @@
+{
+  "resourceType": "Communication",
+  "id": "50f976a8-da81-4bda-8c8d-7f55b42c5508",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-07-09T08:00:00.000+00:00"
+  } ],
+  "status": "not-done",
+  "statusReason": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "183932001",
+      "display": "Procedure contraindicated (situation)",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "59276001",
+      "display": "Proliferative retinopathy due to diabetes mellitus (disorder)",
+      "userSelected": true
+    } ]
+  } ],
+  "sent": "2026-07-09T08:00:00.000+00:00",
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "59276001",
+      "display": "Proliferative retinopathy due to diabetes mellitus (disorder)"
+    } ]
+  } ]
+}

@@ -1,0 +1,107 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "3bb6eaa9-ab9b-4933-b929-4d0f065273e5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "c02a5acf-88f4-4324-8a86-705106632d02-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "c43150be-5974-4986-b428-6fcb6aa43472"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#c02a5acf-88f4-4324-8a86-705106632d02-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient has aortic dissection (exclusion diagnosis) that starts during and ends during the ED encounter - not active status"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS996FHIRAptTxforSTEMI",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/c43150be-5974-4986-b428-6fcb6aa43472"
+  }, {
+    "reference": "Encounter/a304d649-d16a-4205-a803-53b49b535730"
+  }, {
+    "reference": "Condition/7ed54e44-3bc9-4ad1-a3f4-57e84de57311"
+  }, {
+    "reference": "Condition/62837e18-db30-4e19-a17a-cab91bd71d71"
+  }, {
+    "reference": "Coverage/98e912f7-5a68-4087-b888-27dfeb745def"
+  }, {
+    "reference": "Organization/8ba966ac-3cae-4326-a3df-19fdba3b37bc"
+  }, {
+    "reference": "Practitioner/6f251019-ee93-4e80-a69c-c849fa721c88"
+  } ]
+}

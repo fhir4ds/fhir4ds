@@ -1,0 +1,11 @@
+{% for stratifier in include.group.stratifier %}
+  {% if stratifier.criteria.exists() %}
+    {% if stratifier.criteria.language.startsWith('text/cql') %}
+        {% for extension in include.contained.extension.where(url = 'http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-logicDefinition' or url = 'http://hl7.org/fhir/StructureDefinition/cqf-logicDefinition') %}
+          {% if extension.extension.where(url = 'name').value = stratifier.criteria.expression %}
+            {%include logic-definition-primary.html extension=extension header='Stratifier' %}
+          {% endif %}
+        {% endfor %}
+    {% endif %}
+  {% endif %}
+{% endfor %}

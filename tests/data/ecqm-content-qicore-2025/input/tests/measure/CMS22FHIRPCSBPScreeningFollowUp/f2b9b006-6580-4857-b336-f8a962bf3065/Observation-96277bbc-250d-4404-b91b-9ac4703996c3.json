@@ -1,0 +1,44 @@
+{
+  "resourceType": "Observation",
+  "id": "96277bbc-250d-4404-b91b-9ac4703996c3",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observationcancelled" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "413311005",
+        "display": "Patient non-compliant - declined intervention / support (situation)",
+        "userSelected": true
+      } ]
+    }
+  } ],
+  "modifierExtension": [ {
+    "url": "http://Hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDone",
+    "valueBoolean": true
+  } ],
+  "status": "cancelled",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "procedure",
+      "display": "Procedure"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "8462-4",
+      "display": "Diastolic blood pressure",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f2b9b006-6580-4857-b336-f8a962bf3065"
+  },
+  "effectiveDateTime": "2026-01-01T08:10:00.000+00:00",
+  "issued": "2026-01-01T08:05:00.000+00:00",
+  "valueBoolean": true
+}

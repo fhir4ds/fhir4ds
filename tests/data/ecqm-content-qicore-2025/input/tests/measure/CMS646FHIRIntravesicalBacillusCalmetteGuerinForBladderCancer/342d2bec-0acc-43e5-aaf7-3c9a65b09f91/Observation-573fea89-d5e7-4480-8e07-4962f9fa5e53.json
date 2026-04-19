@@ -1,0 +1,39 @@
+{
+  "resourceType": "Observation",
+  "id": "573fea89-d5e7-4480-8e07-4962f9fa5e53",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+  },
+  "partOf": [ {
+    "reference": "Procedure/8d59208d-b7db-4e5f-8c8c-cddc00078aa1"
+  } ],
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "procedure",
+      "display": "Procedure"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "21902-2",
+      "display": "Stage group.pathology Cancer"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/342d2bec-0acc-43e5-aaf7-3c9a65b09f91"
+  },
+  "effectiveDateTime": "2026-04-06T08:00:00.000+00:00",
+  "issued": "2026-04-06T08:10:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "1228884006",
+      "display": "American Joint Committee on Cancer cTis (qualifier value)"
+    } ]
+  }
+}

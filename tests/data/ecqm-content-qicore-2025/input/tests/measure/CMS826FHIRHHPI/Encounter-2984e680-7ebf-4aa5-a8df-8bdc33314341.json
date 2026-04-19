@@ -1,0 +1,29 @@
+{
+  "resourceType": "Encounter",
+  "id": "2984e680-7ebf-4aa5-a8df-8bdc33314341",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient encounter"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-09",
+      "code": "183452005",
+      "display": "Emergency hospital admission (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/865b3218-9d2a-4512-b76e-ed70c25324e6"
+  },
+  "period": {
+    "start": "2026-02-01T08:30:00.000+00:00",
+    "end": "2026-02-06T08:15:00.000+00:00"
+  }
+}

@@ -1,0 +1,842 @@
+{
+  "resourceType": "Group",
+  "id": "CMS71FHIRSTKAnticoagAFFlutter",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS71FHIRSTKAnticoagAFFlutter"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/d9dc15b7-bf03-4b72-8dd5-3e4db21f052d",
+      "display": "CMOdurObsED1hrObs1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d9dc15b7-bf03-4b72-8dd5-3e4db21f052d",
+      "display": "CMOdurObsED1hrObs1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a2365453-d868-4111-b1dc-aad2e81d55fd",
+      "display": "CMOdurED_ED<1hrObs>1hrBFEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a2365453-d868-4111-b1dc-aad2e81d55fd",
+      "display": "CMOdurED_ED<1hrObs>1hrBFEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ccfddeae-a86e-4e43-adca-2ceef716970e",
+      "display": "MedDCAnticoaStartTmEQEncAdmTm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ccfddeae-a86e-4e43-adca-2ceef716970e",
+      "display": "MedDCAnticoaStartTmEQEncAdmTm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cec2b099-7f6d-4260-a2f8-bc0ed0b9c3e5",
+      "display": "NoDCstatus DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cec2b099-7f6d-4260-a2f8-bc0ed0b9c3e5",
+      "display": "NoDCstatus DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5704cb0f-a88b-4df3-b3d3-5438d3de4f6d",
+      "display": "CMOdurObs_ED<1hrObs>1hrBFEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5704cb0f-a88b-4df3-b3d3-5438d3de4f6d",
+      "display": "CMOdurObs_ED<1hrObs>1hrBFEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e20b4e76-8523-43ab-abc2-a4f4137a84bb",
+      "display": "MedRsnStartTmEQEncAdmTm DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e20b4e76-8523-43ab-abc2-a4f4137a84bb",
+      "display": "MedRsnStartTmEQEncAdmTm DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/928c8cab-5c42-4b56-bdf4-72d402eb6a61",
+      "display": "NonEleInpEncounter_AgeGT18LOSLT120Ethnicity IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/928c8cab-5c42-4b56-bdf4-72d402eb6a61",
+      "display": "NonEleInpEncounter_AgeGT18LOSLT120Ethnicity IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fd13e14c-cd97-4e81-9a69-e638b0a1fa58",
+      "display": "MultipleIPEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fd13e14c-cd97-4e81-9a69-e638b0a1fa58",
+      "display": "MultipleIPEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e8df70c5-74a8-4a26-871c-0301bcf9fd45",
+      "display": "DENEXPass CMOdurEncEDlt1hrNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e8df70c5-74a8-4a26-871c-0301bcf9fd45",
+      "display": "DENEXPass CMOdurEncEDlt1hrNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dbe7efdb-fd75-4da4-a998-ae7e04051bd1",
+      "display": "CMOdurED_ED=1hrNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dbe7efdb-fd75-4da4-a998-ae7e04051bd1",
+      "display": "CMOdurED_ED=1hrNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0fc5a0c1-02c0-4427-87d8-2e58f4be7b07",
+      "display": "Age<18 IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0fc5a0c1-02c0-4427-87d8-2e58f4be7b07",
+      "display": "Age<18 IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0daf2fdb-6abc-4b7c-9417-3972c4813295",
+      "display": "AtrialAblAfterEncStartDateTime DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0daf2fdb-6abc-4b7c-9417-3972c4813295",
+      "display": "AtrialAblAfterEncStartDateTime DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e75d7e1c-df18-487e-a8f0-0b140e120581",
+      "display": "EncPrinDx=IschStk_EncDx=Afib/flutter DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e75d7e1c-df18-487e-a8f0-0b140e120581",
+      "display": "EncPrinDx=IschStk_EncDx=Afib/flutter DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cc42fc09-d5ed-4ac5-980e-f16279cf0499",
+      "display": "CMOdurED_ED>1hrObs<1hrBFEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cc42fc09-d5ed-4ac5-980e-f16279cf0499",
+      "display": "CMOdurED_ED>1hrObs<1hrBFEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9a72ea26-595f-4442-8b00-fc52ed228aa6",
+      "display": "MedDCPatRefDuringEncInp DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9a72ea26-595f-4442-8b00-fc52ed228aa6",
+      "display": "MedDCPatRefDuringEncInp DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5dd3cb00-eb9b-42ba-9af5-9cafa1475528",
+      "display": "AtrialAblStartTM=EncStartTM DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5dd3cb00-eb9b-42ba-9af5-9cafa1475528",
+      "display": "AtrialAblStartTM=EncStartTM DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a998e27f-e0a9-475d-80e8-0e9344591294",
+      "display": "CMOdurEDEDEQ1hrNoObsBFEncdoNotPerform DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a998e27f-e0a9-475d-80e8-0e9344591294",
+      "display": "CMOdurEDEDEQ1hrNoObsBFEncdoNotPerform DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b29204ac-96ce-4be0-90ad-ae8ecfa4f245",
+      "display": "MedDCMedReason DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b29204ac-96ce-4be0-90ad-ae8ecfa4f245",
+      "display": "MedDCMedReason DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d5991213-5237-4eb3-a6e9-61404f836d3b",
+      "display": "EncPrinDx=Afib/Flutter Rank2 IPPFail "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d5991213-5237-4eb3-a6e9-61404f836d3b",
+      "display": "EncPrinDx=Afib/Flutter Rank2 IPPFail "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/81386d2f-e6d7-4433-b477-314e658f8cfe",
+      "display": "MedDCAnticoaStartTmEQEncAdmTm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/81386d2f-e6d7-4433-b477-314e658f8cfe",
+      "display": "MedDCAnticoaStartTmEQEncAdmTm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3b8d6a18-b4a3-4369-b33c-6a6daa6b5b4c",
+      "display": "MedDCAnticoaStartTmEQEncDischTm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3b8d6a18-b4a3-4369-b33c-6a6daa6b5b4c",
+      "display": "MedDCAnticoaStartTmEQEncDischTm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ed947b5-9aba-4bed-aa72-f96b6f3f5082",
+      "display": "CMOdurEncTMEDEndTMObsTMObsEndTM=EncTM DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ed947b5-9aba-4bed-aa72-f96b6f3f5082",
+      "display": "CMOdurEncTMEDEndTMObsTMObsEndTM=EncTM DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c640ff8f-5b2a-448e-85a2-e739af7a8dc4",
+      "display": "MedDCMedReason DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c640ff8f-5b2a-448e-85a2-e739af7a8dc4",
+      "display": "MedDCMedReason DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/31d1dbd5-28cf-49d0-a38d-0c84497c8457",
+      "display": "NoIPEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/31d1dbd5-28cf-49d0-a38d-0c84497c8457",
+      "display": "NoIPEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c6b15880-138d-42cd-8350-8a16968c246b",
+      "display": "CMPdurEnc_NoEDNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c6b15880-138d-42cd-8350-8a16968c246b",
+      "display": "CMPdurEnc_NoEDNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/63e42e45-fb2a-4a44-8354-79ea81b5d041",
+      "display": "CMOdurObs_NoEDObs<1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/63e42e45-fb2a-4a44-8354-79ea81b5d041",
+      "display": "CMOdurObs_NoEDObs<1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/93e2d9e6-00b4-4dfc-a404-f0bd5e73fa7b",
+      "display": "CMOdurEncNoEDNoObsBFEncDayOf DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/93e2d9e6-00b4-4dfc-a404-f0bd5e73fa7b",
+      "display": "CMOdurEncNoEDNoObsBFEncDayOf DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/acdea97f-8a2e-4aa3-b51f-768c5ad5ead8",
+      "display": "DCtoICU DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/acdea97f-8a2e-4aa3-b51f-768c5ad5ead8",
+      "display": "DCtoICU DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/93ddd5ec-1cd5-4894-afbb-65826d86f41e",
+      "display": "Dx=Afib/flutterStart<EncEnd DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/93ddd5ec-1cd5-4894-afbb-65826d86f41e",
+      "display": "Dx=Afib/flutterStart<EncEnd DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e73d1055-c564-4663-9af0-d3ccabeb49c8",
+      "display": "CMOdurED_ED=1hrObs=1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e73d1055-c564-4663-9af0-d3ccabeb49c8",
+      "display": "CMOdurED_ED=1hrObs=1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/24ffee3e-9b5b-491e-8490-006d306e5f8a",
+      "display": "EncEndsB4MP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/24ffee3e-9b5b-491e-8490-006d306e5f8a",
+      "display": "EncEndsB4MP IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1dbcccc2-895d-46a7-b28a-bf936fc7978a",
+      "display": "ProcAtrialAblEncStartRelePer DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1dbcccc2-895d-46a7-b28a-bf936fc7978a",
+      "display": "ProcAtrialAblEncStartRelePer DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b1d0c606-661d-44e8-a25f-4e7ca8131f2a",
+      "display": "CMOdurEnc_ED>1hrObs>1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b1d0c606-661d-44e8-a25f-4e7ca8131f2a",
+      "display": "CMOdurEnc_ED>1hrObs>1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/12f5363d-fa3f-4a61-aad9-defc8583ca12",
+      "display": "CMOdurEDED1hrNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/12f5363d-fa3f-4a61-aad9-defc8583ca12",
+      "display": "CMOdurEDED1hrNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/56ae006d-ab1b-428d-8614-2ccd5d962650",
+      "display": "DCANTIcoagHXofABlat NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/56ae006d-ab1b-428d-8614-2ccd5d962650",
+      "display": "DCANTIcoagHXofABlat NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4151585a-f621-4de5-91df-4e4227e2165e",
+      "display": "CustomCode NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4151585a-f621-4de5-91df-4e4227e2165e",
+      "display": "CustomCode NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d4ee0f25-8c45-4db4-8795-b7dbdbbc1ecd",
+      "display": "CMOdurEncNoEDObsLT1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d4ee0f25-8c45-4db4-8795-b7dbdbbc1ecd",
+      "display": "CMOdurEncNoEDObsLT1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c7da5140-b9ed-4122-a159-914963fe387f",
+      "display": "CMOdurED_ED>1hrNoObsBFEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c7da5140-b9ed-4122-a159-914963fe387f",
+      "display": "CMOdurED_ED>1hrNoObsBFEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f0de258a-3358-4f1d-a91d-e1c57a2cb61a",
+      "display": "DxAfibflutterENC DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f0de258a-3358-4f1d-a91d-e1c57a2cb61a",
+      "display": "DxAfibflutterENC DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bfa4b097-4c27-4046-a036-d97267e94113",
+      "display": "CMOdurED_ED<1hrNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bfa4b097-4c27-4046-a036-d97267e94113",
+      "display": "CMOdurED_ED<1hrNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/29fd4e9e-7f7c-4356-8d72-7eabc8060963",
+      "display": "Dx=Afib/flutterStart>EncEnd DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/29fd4e9e-7f7c-4356-8d72-7eabc8060963",
+      "display": "Dx=Afib/flutterStart>EncEnd DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/43d04e08-768c-4e5e-a7eb-44219c5e94b1",
+      "display": "DxAfibAtEncEndTime DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/43d04e08-768c-4e5e-a7eb-44219c5e94b1",
+      "display": "DxAfibAtEncEndTime DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/de03a32b-a1f7-461c-9853-00c2e5586e99",
+      "display": "AMA DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/de03a32b-a1f7-461c-9853-00c2e5586e99",
+      "display": "AMA DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0c90d2ea-5034-4465-8e4a-4d0d4e17cd5a",
+      "display": "CMOdurED_ED>1hrObs>1hrBFEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0c90d2ea-5034-4465-8e4a-4d0d4e17cd5a",
+      "display": "CMOdurED_ED>1hrObs>1hrBFEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a0d01348-6938-4d7b-8f26-d4643658de9e",
+      "display": "MedReasonAfterEncEnds DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a0d01348-6938-4d7b-8f26-d4643658de9e",
+      "display": "MedReasonAfterEncEnds DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f7838ae4-6846-4bc0-a1e9-2002d5f5b357",
+      "display": "DischargeHomeHospice DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f7838ae4-6846-4bc0-a1e9-2002d5f5b357",
+      "display": "DischargeHomeHospice DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0f3f1ce7-9c34-4082-a635-f09ddcf53ac1",
+      "display": "CMOdurEncED1hrNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0f3f1ce7-9c34-4082-a635-f09ddcf53ac1",
+      "display": "CMOdurEncED1hrNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e73134ce-ad08-430e-b85e-d61e2d28d709",
+      "display": "MedDCAnticoaStartsGT_EncEnd NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e73134ce-ad08-430e-b85e-d61e2d28d709",
+      "display": "MedDCAnticoaStartsGT_EncEnd NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1a19c21b-41f3-4376-9516-529ad9fb466f",
+      "display": "MedDCAnticoaStartTmEQEncDischTm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1a19c21b-41f3-4376-9516-529ad9fb466f",
+      "display": "MedDCAnticoaStartTmEQEncDischTm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/856d71be-a360-47b3-a038-5cb3037bf1f2",
+      "display": "NoStrokeDx IPPFAIL"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/856d71be-a360-47b3-a038-5cb3037bf1f2",
+      "display": "NoStrokeDx IPPFAIL"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0035424c-e3be-4dc2-919a-fd1c665893f6",
+      "display": "Dx=Afib/flutterStart=EncEnd  DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0035424c-e3be-4dc2-919a-fd1c665893f6",
+      "display": "Dx=Afib/flutterStart=EncEnd  DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a8856231-e110-4811-ac95-3f65c3d440fa",
+      "display": "CMOdurED_ED<1hrObs<1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a8856231-e110-4811-ac95-3f65c3d440fa",
+      "display": "CMOdurED_ED<1hrObs<1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/96b57130-dda8-481b-b96b-c0d48068384e",
+      "display": "CMOdurEnc_ED<1hrObs<1hrBFEnc DENEXPass "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/96b57130-dda8-481b-b96b-c0d48068384e",
+      "display": "CMOdurEnc_ED<1hrObs<1hrBFEnc DENEXPass "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f0d3eb0e-a93c-4caf-8233-499a105906de",
+      "display": "DischargeFacilityHospice DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f0d3eb0e-a93c-4caf-8233-499a105906de",
+      "display": "DischargeFacilityHospice DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/86d68293-66ae-425b-bc4a-9ce429f4621e",
+      "display": "CMPdurEnc_NoEDNoObsBFEnc_DateTime DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/86d68293-66ae-425b-bc4a-9ce429f4621e",
+      "display": "CMPdurEnc_NoEDNoObsBFEnc_DateTime DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/017a2267-f463-47a6-8b8b-dc91465e0869",
+      "display": "MedDCMedReasonfDuringEncInpTask Reject DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/017a2267-f463-47a6-8b8b-dc91465e0869",
+      "display": "MedDCMedReasonfDuringEncInpTask Reject DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8646b35e-68e3-4932-ae69-0bd7fb4e7a27",
+      "display": "MedDCAnticoaStartsLT_EncStart NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8646b35e-68e3-4932-ae69-0bd7fb4e7a27",
+      "display": "MedDCAnticoaStartsLT_EncStart NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/541c6790-5a21-41ca-8e4e-49da54a28b9b",
+      "display": "CMOdurEncNoEDObsLT1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/541c6790-5a21-41ca-8e4e-49da54a28b9b",
+      "display": "CMOdurEncNoEDObsLT1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3023ca44-3a4f-4be3-931b-784e9c9c46e9",
+      "display": "CMOdurObs_ED>1hrObs>1hrBFEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3023ca44-3a4f-4be3-931b-784e9c9c46e9",
+      "display": "CMOdurObs_ED>1hrObs>1hrBFEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c5eb810c-2abd-41ac-9838-81ab77532845",
+      "display": "AnticoagDCTestOccurance NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c5eb810c-2abd-41ac-9838-81ab77532845",
+      "display": "AnticoagDCTestOccurance NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5370c25e-ca3c-4575-95c2-e23c783ff4c6",
+      "display": "ProcAtrialAblB4EncRelePer DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5370c25e-ca3c-4575-95c2-e23c783ff4c6",
+      "display": "ProcAtrialAblB4EncRelePer DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2d694619-fb6d-43e5-8f56-4eb95752c7a7",
+      "display": "CMOdurEDED1hObs1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2d694619-fb6d-43e5-8f56-4eb95752c7a7",
+      "display": "CMOdurEDED1hObs1hrBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/85774da1-da62-45f3-9bf8-12223f13d82a",
+      "display": "DxAfibAtEncStart DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/85774da1-da62-45f3-9bf8-12223f13d82a",
+      "display": "DxAfibAtEncStart DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/52951a0c-ccd4-4e47-9133-16ff3984ef12",
+      "display": "PatientExpired DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/52951a0c-ccd4-4e47-9133-16ff3984ef12",
+      "display": "PatientExpired DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/de0b5b09-c285-4e02-b82c-ad23eb00febf",
+      "display": "Ageeq18 IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/de0b5b09-c285-4e02-b82c-ad23eb00febf",
+      "display": "Ageeq18 IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f07b7d1a-b0da-4d44-acc6-eb2a6dfa0da3",
+      "display": "Anticoag@DC NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f07b7d1a-b0da-4d44-acc6-eb2a6dfa0da3",
+      "display": "Anticoag@DC NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e695d66d-1f4e-4b69-acad-0861f1222d44",
+      "display": "ProcAtrialAblB4EncDateTime DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e695d66d-1f4e-4b69-acad-0861f1222d44",
+      "display": "ProcAtrialAblB4EncDateTime DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fb49e13d-3b13-46ae-8862-59033137e1b8",
+      "display": "MedRsnStartTmLTEncAdmTm DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fb49e13d-3b13-46ae-8862-59033137e1b8",
+      "display": "MedRsnStartTmLTEncAdmTm DENEXCEPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1f5b2ed3-23d6-4ffc-be6b-852117f506be",
+      "display": "EncPrinDx=IschStk_EncDx=Afib/flutter DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1f5b2ed3-23d6-4ffc-be6b-852117f506be",
+      "display": "EncPrinDx=IschStk_EncDx=Afib/flutter DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/18912918-19e8-4d17-8160-71849eaede4b",
+      "display": "EncPrinDxEQAfibOrFlutter IPPFail "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/18912918-19e8-4d17-8160-71849eaede4b",
+      "display": "EncPrinDxEQAfibOrFlutter IPPFail "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ed792352-3bb4-435d-896a-d221df866142",
+      "display": "AtrialAblAfterEncStartRelePer DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ed792352-3bb4-435d-896a-d221df866142",
+      "display": "AtrialAblAfterEncStartRelePer DENOMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4543f40b-6f71-47e7-8930-0340eede9145",
+      "display": "EncEndsAfterMP  IPPFail "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4543f40b-6f71-47e7-8930-0340eede9145",
+      "display": "EncEndsAfterMP  IPPFail "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b3bcdbbc-3b69-4e22-b993-b04d87f225a8",
+      "display": "CMOdurEnc_ED>1hrNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b3bcdbbc-3b69-4e22-b993-b04d87f225a8",
+      "display": "CMOdurEnc_ED>1hrNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2c1e6f23-20a1-44c3-8c2a-0bec67c3d2f5",
+      "display": "EncPrinDx=IschemicStroke IPPPass "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2c1e6f23-20a1-44c3-8c2a-0bec67c3d2f5",
+      "display": "EncPrinDx=IschemicStroke IPPPass "
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/595ebfd1-fe6a-4b4b-96a1-23a72f6a70da",
+      "display": "MedDCPatRefDuringEncInp DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/595ebfd1-fe6a-4b4b-96a1-23a72f6a70da",
+      "display": "MedDCPatRefDuringEncInp DENEXCEPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/02ee41e8-26d8-4575-a999-32ee2204d745",
+      "display": "AMA DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/02ee41e8-26d8-4575-a999-32ee2204d745",
+      "display": "AMA DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4580e833-7432-4f02-8742-8beceaac18e8",
+      "display": "AnticoagatDischDONOTPERForm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4580e833-7432-4f02-8742-8beceaac18e8",
+      "display": "AnticoagatDischDONOTPERForm NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/971fefaa-cfa2-4e36-80d6-319f748d4b5f",
+      "display": "AMA DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/971fefaa-cfa2-4e36-80d6-319f748d4b5f",
+      "display": "AMA DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2ed389dd-10d2-49b1-966b-f8bada7df530",
+      "display": "CMOdurEnc_ED=1hrNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2ed389dd-10d2-49b1-966b-f8bada7df530",
+      "display": "CMOdurEnc_ED=1hrNoObsBFEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ad014d1d-6043-4b40-9fd3-0abc1f308a04",
+      "display": "EncDx=IschemicStroke  IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ad014d1d-6043-4b40-9fd3-0abc1f308a04",
+      "display": "EncDx=IschemicStroke  IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/60216757-e9a7-4e33-90f4-d0b1212bdea9",
+      "display": "DxAfibAtEncEndTimeRelePer DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/60216757-e9a7-4e33-90f4-d0b1212bdea9",
+      "display": "DxAfibAtEncEndTimeRelePer DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aedf9576-e1ce-4777-8e3a-5089076b50f4",
+      "display": "Age=18ondayOfEnc IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aedf9576-e1ce-4777-8e3a-5089076b50f4",
+      "display": "Age=18ondayOfEnc IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f916d085-e8dc-4e8d-97ae-07952c1062b9",
+      "display": "DischargeACF DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f916d085-e8dc-4e8d-97ae-07952c1062b9",
+      "display": "DischargeACF DENEXPass"
+    }
+  } ]
+}

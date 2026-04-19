@@ -1,0 +1,31 @@
+{
+  "resourceType": "Observation",
+  "id": "cba077c9-35de-4942-90d5-a06d5f2b86e2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "imaging",
+      "display": "Imaging"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.69",
+      "code": "38265-5",
+      "display": "DXA Radius and Ulna [T-score] Bone density",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/449eb3e6-3c46-439c-95cd-125aadd27e82"
+  },
+  "effectivePeriod": {
+    "start": "2025-09-01T10:00:00.000+00:00",
+    "end": "2025-09-01T11:00:00.000+00:00"
+  }
+}

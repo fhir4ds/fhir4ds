@@ -1,0 +1,742 @@
+{
+  "resourceType": "Group",
+  "id": "CMS133FHIRCataracts2040BCVAwithin90Days",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS133FHIRCataracts2040BCVAwithin90Days"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/b765067f-d81a-4d58-87c1-3cad1044e007",
+      "display": "DisordersOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b765067f-d81a-4d58-87c1-3cad1044e007",
+      "display": "DisordersOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7895aa7a-497f-45aa-bd57-4189cb14f222",
+      "display": "RetinalDetachmentWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7895aa7a-497f-45aa-bd57-4189cb14f222",
+      "display": "RetinalDetachmentWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/631703fb-7ae8-4f63-84bb-e39692bbd261",
+      "display": "DisseminatedChorioretinitisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/631703fb-7ae8-4f63-84bb-e39692bbd261",
+      "display": "DisseminatedChorioretinitisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2739e533-471c-4ded-b5e5-9e0715d6371d",
+      "display": "DENEXPassAmblyopiaOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2739e533-471c-4ded-b5e5-9e0715d6371d",
+      "display": "DENEXPassAmblyopiaOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/03f3c1fb-3646-4449-b5dd-d2de3153234b",
+      "display": "ChoroidDetachWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/03f3c1fb-3646-4449-b5dd-d2de3153234b",
+      "display": "ChoroidDetachWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/26e0ce01-b80d-40a0-b22b-cadcbfa3127f",
+      "display": "DegenerationofMaculaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/26e0ce01-b80d-40a0-b22b-cadcbfa3127f",
+      "display": "DegenerationofMaculaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/87cd6dfd-1fad-4008-8e0e-36b20ee28e8f",
+      "display": "InjurytoOpticNerveWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/87cd6dfd-1fad-4008-8e0e-36b20ee28e8f",
+      "display": "InjurytoOpticNerveWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b324e9b4-7d8f-4a92-b576-71c9a2ff263c",
+      "display": "CataractPosteriorPolarOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b324e9b4-7d8f-4a92-b576-71c9a2ff263c",
+      "display": "CataractPosteriorPolarOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/984c2198-6977-4343-95d8-0405065bd01a",
+      "display": "OtherEndophthalmitisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/984c2198-6977-4343-95d8-0405065bd01a",
+      "display": "OtherEndophthalmitisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c1d89d7f-dff7-4bd8-ba7f-5657f92090d4",
+      "display": "CataractCongenitalWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c1d89d7f-dff7-4bd8-ba7f-5657f92090d4",
+      "display": "CataractCongenitalWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9ee4773e-75ac-468f-8c38-82e9af379e0e",
+      "display": "UveitisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9ee4773e-75ac-468f-8c38-82e9af379e0e",
+      "display": "UveitisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b64785e4-be49-40d1-8110-7c4c036128bf",
+      "display": "CataractCongenitalWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b64785e4-be49-40d1-8110-7c4c036128bf",
+      "display": "CataractCongenitalWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/32a253b0-79d4-4bd8-a591-5557984392c6",
+      "display": "Age18Jan1 IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/32a253b0-79d4-4bd8-a591-5557984392c6",
+      "display": "Age18Jan1 IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c4e0b756-c07b-49f6-80cc-23bb28d4b5f6",
+      "display": "DiabeticMacularEdemaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c4e0b756-c07b-49f6-80cc-23bb28d4b5f6",
+      "display": "DiabeticMacularEdemaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e2d33ab6-b181-4943-a652-aeb8220c2ba1",
+      "display": "CornealEdemaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e2d33ab6-b181-4943-a652-aeb8220c2ba1",
+      "display": "CornealEdemaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/57758f6c-7ed9-44f8-ba2a-5361746c4257",
+      "display": "DisseminatedChorioretinitisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/57758f6c-7ed9-44f8-ba2a-5361746c4257",
+      "display": "DisseminatedChorioretinitisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/25d3565a-4bf6-4082-9ea6-62a0bed23a9c",
+      "display": "OtherBackgroundRetinopathyWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/25d3565a-4bf6-4082-9ea6-62a0bed23a9c",
+      "display": "OtherBackgroundRetinopathyWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/474db000-fed4-4679-b8de-be967e146299",
+      "display": "FailAcuteSubacuteIridocyclitisAfterCatSurg DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/474db000-fed4-4679-b8de-be967e146299",
+      "display": "FailAcuteSubacuteIridocyclitisAfterCatSurg DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b0e366ce-b13b-454d-ac58-ffc9005a8336",
+      "display": "CornealEdemaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b0e366ce-b13b-454d-ac58-ffc9005a8336",
+      "display": "CornealEdemaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d3b7d697-069b-47d2-82d3-ed3e375c9aff",
+      "display": "AclridocyclitisOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d3b7d697-069b-47d2-82d3-ed3e375c9aff",
+      "display": "AclridocyclitisOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/736df249-2ed8-43a8-afa5-c177a12cea82",
+      "display": "HereditaryRetinalDystrophiesWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/736df249-2ed8-43a8-afa5-c177a12cea82",
+      "display": "HereditaryRetinalDystrophiesWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cd97bd33-8e19-409c-ae92-b3c665cf3282",
+      "display": "CataractPosteriorPolarOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cd97bd33-8e19-409c-ae92-b3c665cf3282",
+      "display": "CataractPosteriorPolarOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1b854323-2f47-4bdb-88ee-d34e6d28ba63",
+      "display": "VisAcuity20/40=90DaysAfter NUMPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1b854323-2f47-4bdb-88ee-d34e6d28ba63",
+      "display": "VisAcuity20/40=90DaysAfter NUMPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/10948d40-4024-4a78-873a-0e4d106d5761",
+      "display": "CataractCongenitalWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/10948d40-4024-4a78-873a-0e4d106d5761",
+      "display": "CataractCongenitalWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d8a4576a-abf4-4ef5-878b-44b6333e13b5",
+      "display": "InjurytoOpticNerveWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d8a4576a-abf4-4ef5-878b-44b6333e13b5",
+      "display": "InjurytoOpticNerveWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f3eea646-c6ef-404d-8ee9-0626a6153906",
+      "display": "DisordersofOpticWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f3eea646-c6ef-404d-8ee9-0626a6153906",
+      "display": "DisordersofOpticWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3d233a38-583f-40bc-a7b9-110d420277ff",
+      "display": "PriorPenetratingKeratoplastyWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3d233a38-583f-40bc-a7b9-110d420277ff",
+      "display": "PriorPenetratingKeratoplastyWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1232c53b-a54c-43f2-9f31-5453ce2507fc",
+      "display": "PathologicMyopiaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1232c53b-a54c-43f2-9f31-5453ce2507fc",
+      "display": "PathologicMyopiaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c3d3aba5-f483-4e18-8492-48cc60d8fdb4",
+      "display": "OtherEndophthalmitisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c3d3aba5-f483-4e18-8492-48cc60d8fdb4",
+      "display": "OtherEndophthalmitisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/58ffc94d-dd15-4bf4-899e-5574b47f4615",
+      "display": "VisAcuity20/40=90DaysAfterEdge NUMPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/58ffc94d-dd15-4bf4-899e-5574b47f4615",
+      "display": "VisAcuity20/40=90DaysAfterEdge NUMPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4174257f-b236-41d3-b818-9b2b6527e59f",
+      "display": "DisordersOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4174257f-b236-41d3-b818-9b2b6527e59f",
+      "display": "DisordersOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8bab0696-02d1-4e8f-a719-a91621cce9e0",
+      "display": "DisordersOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8bab0696-02d1-4e8f-a719-a91621cce9e0",
+      "display": "DisordersOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d0ff4cc2-6235-4270-bf4c-4637fe7ccc17",
+      "display": "DegenerationofMaculaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d0ff4cc2-6235-4270-bf4c-4637fe7ccc17",
+      "display": "DegenerationofMaculaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/47aedda0-a4d6-4967-866b-21b9a45bcbca",
+      "display": "OtherBackgroundRetinopathyWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/47aedda0-a4d6-4967-866b-21b9a45bcbca",
+      "display": "OtherBackgroundRetinopathyWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8677cbf1-30b5-4a75-b7d9-b5651757a2b7",
+      "display": "RetrolentalFibroplasiasWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8677cbf1-30b5-4a75-b7d9-b5651757a2b7",
+      "display": "RetrolentalFibroplasiasWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e4f0c8b6-6004-4565-93d6-9df005b8061f",
+      "display": "UveitisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e4f0c8b6-6004-4565-93d6-9df005b8061f",
+      "display": "UveitisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5486a02e-4f72-4515-b483-bf28611b885f",
+      "display": "MorgagnianCataractWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5486a02e-4f72-4515-b483-bf28611b885f",
+      "display": "MorgagnianCataractWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f0babb79-c62b-44ef-88e4-c3f47caefab2",
+      "display": "OpenWoundofEyeballWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f0babb79-c62b-44ef-88e4-c3f47caefab2",
+      "display": "OpenWoundofEyeballWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5177b27f-59bc-460e-ae96-88a0baa325d5",
+      "display": "BurnsOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5177b27f-59bc-460e-ae96-88a0baa325d5",
+      "display": "BurnsOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4788274e-9b09-45fa-a9a7-d97237a40f58",
+      "display": "ScleritisAfterCatSurg DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4788274e-9b09-45fa-a9a7-d97237a40f58",
+      "display": "ScleritisAfterCatSurg DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4dd85cf1-18a3-44ed-8a72-096694776335",
+      "display": "VisualAcuityExamPerformedinDec NUMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4dd85cf1-18a3-44ed-8a72-096694776335",
+      "display": "VisualAcuityExamPerformedinDec NUMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c289d40d-13ed-45a9-abcc-8bf6ab1f2926",
+      "display": "OpticNeuritisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c289d40d-13ed-45a9-abcc-8bf6ab1f2926",
+      "display": "OpticNeuritisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2e4a70e8-5331-4f90-ad15-a11e75e7c163",
+      "display": "OpticNeuritisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2e4a70e8-5331-4f90-ad15-a11e75e7c163",
+      "display": "OpticNeuritisWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/34a7b6cd-b70b-4983-8d12-d13862ced1bf",
+      "display": "Age18Jan1 IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/34a7b6cd-b70b-4983-8d12-d13862ced1bf",
+      "display": "Age18Jan1 IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aa9ec890-0dca-4b77-b488-f1dda2f32cbc",
+      "display": "DisordersOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/aa9ec890-0dca-4b77-b488-f1dda2f32cbc",
+      "display": "DisordersOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b571d5a3-8e6f-4d4e-a5c7-cb5276882da3",
+      "display": "ScleritisEndB4CatSurg DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b571d5a3-8e6f-4d4e-a5c7-cb5276882da3",
+      "display": "ScleritisEndB4CatSurg DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/67e718ff-c59c-46a9-832c-d3b51247874e",
+      "display": "ChoroidDetachWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/67e718ff-c59c-46a9-832c-d3b51247874e",
+      "display": "ChoroidDetachWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c7378293-1ceb-4e42-928a-e9800053b335",
+      "display": "PriorPenetratingKeratoplastyWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c7378293-1ceb-4e42-928a-e9800053b335",
+      "display": "PriorPenetratingKeratoplastyWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3f9e96d8-a941-46c5-8e97-35f9498e82c3",
+      "display": "CatSurgAfterMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3f9e96d8-a941-46c5-8e97-35f9498e82c3",
+      "display": "CatSurgAfterMP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e02c58ed-14fe-4c27-9a02-d4816dd97e09",
+      "display": "DiabeticMacularEdemaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e02c58ed-14fe-4c27-9a02-d4816dd97e09",
+      "display": "DiabeticMacularEdemaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/61b582fe-c745-41cb-94a2-f0cf547f3455",
+      "display": "PathologicMyopiaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/61b582fe-c745-41cb-94a2-f0cf547f3455",
+      "display": "PathologicMyopiaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6f8ca86b-372b-4f16-b22b-f1bcc2053878",
+      "display": "GlaucomaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6f8ca86b-372b-4f16-b22b-f1bcc2053878",
+      "display": "GlaucomaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a408e883-7952-457e-a895-a4fcc055ab0f",
+      "display": "GlaucomaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a408e883-7952-457e-a895-a4fcc055ab0f",
+      "display": "GlaucomaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e064bc2f-965a-4493-a9fb-31ebc09b9009",
+      "display": "MorgagnianCataractWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e064bc2f-965a-4493-a9fb-31ebc09b9009",
+      "display": "MorgagnianCataractWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/216ed2eb-6d8c-4f08-8769-120e03d60611",
+      "display": "RetinalDetachmentWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/216ed2eb-6d8c-4f08-8769-120e03d60611",
+      "display": "RetinalDetachmentWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a06352f7-fddc-4b37-a037-dbbbf107f66d",
+      "display": "CertainTypeIridOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a06352f7-fddc-4b37-a037-dbbbf107f66d",
+      "display": "CertainTypeIridOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d4d830c6-ddf5-4506-b24b-0b7fb6ba9c3b",
+      "display": "DisordersofOpticWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d4d830c6-ddf5-4506-b24b-0b7fb6ba9c3b",
+      "display": "DisordersofOpticWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d0a1cf17-fcdc-40f5-98b6-2b47ef2ae3cb",
+      "display": "DisordersOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d0a1cf17-fcdc-40f5-98b6-2b47ef2ae3cb",
+      "display": "DisordersOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8a17d53d-d7c9-4d0f-944a-7ae057e1cf78",
+      "display": "CornealEdemaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8a17d53d-d7c9-4d0f-944a-7ae057e1cf78",
+      "display": "CornealEdemaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/94ddaee0-1b05-44aa-8298-9fd53c8e8144",
+      "display": "LessThan18 IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/94ddaee0-1b05-44aa-8298-9fd53c8e8144",
+      "display": "LessThan18 IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/39013200-2f18-4d0e-90d0-93ab94f0cf87",
+      "display": "CataractCongenitalWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/39013200-2f18-4d0e-90d0-93ab94f0cf87",
+      "display": "CataractCongenitalWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/edcca964-8fb0-4672-85cb-8e64495d3077",
+      "display": "VisAcuity20/40 NUMPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/edcca964-8fb0-4672-85cb-8e64495d3077",
+      "display": "VisAcuity20/40 NUMPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2838d082-1c2e-4e5e-a812-c45aabc9a367",
+      "display": "BurnsOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2838d082-1c2e-4e5e-a812-c45aabc9a367",
+      "display": "BurnsOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e7d855b5-fb38-4449-8c02-54088d561a18",
+      "display": "RetrolentalFibroplasiasWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e7d855b5-fb38-4449-8c02-54088d561a18",
+      "display": "RetrolentalFibroplasiasWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/97e4b701-3f87-4155-8497-b60f1fef37dd",
+      "display": "CataractCongenitalWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/97e4b701-3f87-4155-8497-b60f1fef37dd",
+      "display": "CataractCongenitalWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/61ca9664-580e-4f01-8015-8cb3bcf00a01",
+      "display": "ScleritisEndB4CatSurg DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/61ca9664-580e-4f01-8015-8cb3bcf00a01",
+      "display": "ScleritisEndB4CatSurg DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e8772fb9-e5b2-4960-aa20-40fdde26f2c0",
+      "display": "VisAcuity20/40>90DAfterCatSurg NUMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e8772fb9-e5b2-4960-aa20-40fdde26f2c0",
+      "display": "VisAcuity20/40>90DAfterCatSurg NUMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cce515b3-72e3-4ce8-88e4-626a46d5578f",
+      "display": "VisAcuityLessThan2040 NUMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cce515b3-72e3-4ce8-88e4-626a46d5578f",
+      "display": "VisAcuityLessThan2040 NUMFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a329e073-6577-4a43-95ed-ef09e8d5d1d1",
+      "display": "DisordersOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a329e073-6577-4a43-95ed-ef09e8d5d1d1",
+      "display": "DisordersOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f3b179c7-0d24-444c-9986-5a63951a733a",
+      "display": "CornealEdemaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f3b179c7-0d24-444c-9986-5a63951a733a",
+      "display": "CornealEdemaWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f68e8f1d-8c06-4ce8-a541-af39083a984c",
+      "display": "OpenWoundofEyeballWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f68e8f1d-8c06-4ce8-a541-af39083a984c",
+      "display": "OpenWoundofEyeballWithCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7a0adf5f-8671-4bd8-97dc-e82f2f25d214",
+      "display": "DENEXPassAmblyopiaOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7a0adf5f-8671-4bd8-97dc-e82f2f25d214",
+      "display": "DENEXPassAmblyopiaOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cb570eec-4de5-4dd7-bd0a-9ee00bbeeb48",
+      "display": "CertainTypeIridOverlapsCatSurg DENEXPASS"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cb570eec-4de5-4dd7-bd0a-9ee00bbeeb48",
+      "display": "CertainTypeIridOverlapsCatSurg DENEXPASS"
+    }
+  } ]
+}

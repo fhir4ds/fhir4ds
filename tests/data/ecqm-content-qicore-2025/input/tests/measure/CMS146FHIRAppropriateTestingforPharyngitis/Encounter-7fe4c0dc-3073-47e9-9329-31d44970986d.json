@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "7fe4c0dc-3073-47e9-9329-31d44970986d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "99457",
+      "display": "Remote physiologic monitoring treatment management services, clinical staff/physician/other qualified health care professional time in a calendar month requiring interactive communication with the patient/caregiver during the month; first 20 minutes"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/51cf228c-64f1-465b-9eb0-58d986a27cb7"
+  },
+  "period": {
+    "start": "2026-10-11T00:00:00.000Z",
+    "end": "2026-10-11T23:59:59.000Z"
+  }
+}

@@ -1,0 +1,247 @@
+{
+  "resourceType": "Bundle",
+  "id": "610965b998086b538055c163",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/af6febab-8963-49ea-86e4-72345024dc0b",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "af6febab-8963-49ea-86e4-72345024dc0b",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "text": {
+        "status": "generated",
+        "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">HIVDxJan2duringMP <b>DENEXFAIL </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Date of birth</td><td><span>04 January 1992</span></td></tr></tbody></table></div>"
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2054-5",
+            "display": "Black or African American",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Black or African American"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "610965b998086b538055c163"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "DENEXFail",
+        "given": [ "HIVDxJan2duringMP" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1994-01-04"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/af6febab-8963-49ea-86e4-72345024dc0b"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/2a2830df-3122-4ae7-b599-02fcec9ed8e6",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "2a2830df-3122-4ae7-b599-02fcec9ed8e6",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "Active",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-9-cm",
+          "code": "042"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/af6febab-8963-49ea-86e4-72345024dc0b"
+      },
+      "onsetDateTime": "2026-01-02T08:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/2a2830df-3122-4ae7-b599-02fcec9ed8e6"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/d4655111-fe47-48a6-9a70-aba21721bbca",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "d4655111-fe47-48a6-9a70-aba21721bbca",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "code": "99393"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/af6febab-8963-49ea-86e4-72345024dc0b"
+      },
+      "period": {
+        "start": "2026-04-15T09:00:00.000+00:00",
+        "end": "2026-04-15T10:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/d4655111-fe47-48a6-9a70-aba21721bbca"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/557700dd-e1af-4ad5-befa-67694525047d",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "557700dd-e1af-4ad5-befa-67694525047d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "d4cf7d37-6b3f-4033-a3bc-be8b2562a86d-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "af6febab-8963-49ea-86e4-72345024dc0b"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#d4cf7d37-6b3f-4033-a3bc-be8b2562a86d-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient is 31 with a diagnosis of HIV on January 2nd of MP."
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS349FHIRHIVScreening",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/af6febab-8963-49ea-86e4-72345024dc0b"
+      }, {
+        "reference": "Condition/2a2830df-3122-4ae7-b599-02fcec9ed8e6"
+      }, {
+        "reference": "Encounter/d4655111-fe47-48a6-9a70-aba21721bbca"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/557700dd-e1af-4ad5-befa-67694525047d"
+    }
+  } ]
+}

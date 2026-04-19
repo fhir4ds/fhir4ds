@@ -1,0 +1,33 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "7ece652c-5cbd-4ec5-af6b-d21378607e60",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministrationnotdone" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-12-03T07:00:00.000+00:00"
+  } ],
+  "status": "not-done",
+  "statusReason": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183932001",
+      "display": "Procedure contraindicated (situation)",
+      "userSelected": true
+    } ]
+  } ],
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "2588062",
+      "display": "rivaroxaban 1 MG/ML Oral Suspension"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/2ccdf3cd-9f94-4d9c-ab2a-e78a4dd46876"
+  },
+  "effectivePeriod": {
+    "start": "2026-12-03T00:00:00.000+00:00"
+  }
+}

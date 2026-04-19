@@ -972,12 +972,16 @@ class PropertyMixin:
 
     @staticmethod
     def _is_tuple_json_source(sql: SQLExpression) -> bool:
-        """Check if an SQL expression produces a CQL tuple (to_json(struct_pack(...))).
+        """Check if an SQL expression produces a CQL tuple (json_object(...) or to_json(struct_pack(...))).
 
         CQL tuples are NOT FHIR resources, so fhirpath_text cannot evaluate
         on them.  Property access on tuples must use json_extract_string instead.
         """
-        # Direct: to_json(struct_pack(...))
+        # Direct: json_object(...) — new tuple translation
+        if (isinstance(sql, SQLFunctionCall) and sql.name == "json_object"):
+            return True
+
+        # Direct: to_json(struct_pack(...)) — legacy tuple translation
         if (isinstance(sql, SQLFunctionCall)
                 and sql.name == "to_json"
                 and sql.args
@@ -985,7 +989,7 @@ class PropertyMixin:
                 and sql.args[0].name == "struct_pack"):
             return True
 
-        # Subquery wrapping a tuple: (SELECT to_json(struct_pack(...)) FROM ...)
+        # Subquery wrapping a tuple: (SELECT json_object/to_json(struct_pack(...)) FROM ...)
         inner = None
         if isinstance(sql, SQLSubquery) and isinstance(sql.query, SQLSelect):
             inner = sql.query
@@ -996,6 +1000,8 @@ class PropertyMixin:
             col = inner.columns[0]
             if isinstance(col, SQLAlias):
                 col = col.expr
+            if isinstance(col, SQLFunctionCall) and col.name == "json_object":
+                return True
             if (isinstance(col, SQLFunctionCall)
                     and col.name == "to_json"
                     and col.args

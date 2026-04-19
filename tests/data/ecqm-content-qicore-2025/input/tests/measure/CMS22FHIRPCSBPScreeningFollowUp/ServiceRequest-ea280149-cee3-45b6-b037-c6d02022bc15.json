@@ -1,0 +1,22 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "ea280149-cee3-45b6-b037-c6d02022bc15",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "281090004",
+      "display": "Recommendation to exercise (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/6714818f-8aa6-4673-8c39-fd35e470461c"
+  },
+  "authoredOn": "2026-12-31T09:25:00.000+00:00"
+}

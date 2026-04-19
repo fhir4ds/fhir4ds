@@ -1,0 +1,83 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "066ca04b-ca16-4bda-b76b-74b9cbd7b69f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "2d4a8313-c2bb-4df3-b1b8-8face84c1c5d-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "6bc18290-1925-4239-81d7-0118bd062225"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#2d4a8313-c2bb-4df3-b1b8-8face84c1c5d-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Encounter, meds administered, lab test 1 = 35, lab 2  exactly 5 minutes after with result = 81 so does not meet Numerator. Timing is based on rel datetime of first test to second test."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS816FHIRHHHypo",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Encounter/3399f6e8-5c14-421d-9d8e-7d37af6e7d93"
+  }, {
+    "reference": "MedicationAdministration/fbf2ef79-07ed-4fa4-b0ee-cde9b964638b"
+  }, {
+    "reference": "Observation/aedd1001-e3e7-459c-9ffe-99ef7f2ae1be"
+  }, {
+    "reference": "Observation/5d0557b7-cc5a-4c02-9b66-26e6e59911ea"
+  }, {
+    "reference": "Patient/6bc18290-1925-4239-81d7-0118bd062225"
+  } ]
+}

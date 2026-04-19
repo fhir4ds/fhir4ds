@@ -1,0 +1,31 @@
+{
+  "resourceType": "Observation",
+  "id": "9c024d7b-616b-41be-a86f-d23535c79708",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "corrected",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "113024001",
+      "display": "Assessment and interpretation of higher cerebral function, cognitive testing (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/8a182f57-a9c7-4feb-a887-0de5975301a3"
+  },
+  "effectiveDateTime": "2026-08-31T08:34:00.000+00:00",
+  "issued": "2026-08-31T08:34:00.000+00:00",
+  "valueInteger": 26
+}

@@ -1,0 +1,17 @@
+{
+  "resourceType": "Group",
+  "id": "CMS506FHIR",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS506FHIR"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/fa4e4971-3ff2-44f0-bfd6-0821a89a3f84",
+      "display": "CancerRelatedPainEncounterDx DENEXPass"
+    }
+  } ]
+}

@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "4c4b5bd3-aecb-420c-ba8d-9481433d5195",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-01-02T00:00:00.000Z"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "90713",
+      "display": "Poliovirus vaccine, inactivated (IPV), for subcutaneous or intramuscular use"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1e7dc519-5d75-4c07-b23f-ae9421a12943"
+  },
+  "performedPeriod": {
+    "start": "2025-01-02T00:00:00.000Z",
+    "end": "2025-01-02T23:59:59.000Z"
+  }
+}

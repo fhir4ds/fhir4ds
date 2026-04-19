@@ -1,0 +1,421 @@
+{
+  "resourceType": "Bundle",
+  "id": "62bc69333e113102f8cedca6",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/02d9a61a-6315-45e9-b45b-c08d4b55d39e",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "02d9a61a-6315-45e9-b45b-c08d4b55d39e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native"
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "62bc69333e113102f8cedca6"
+      } ],
+      "name": [ {
+        "family": "DENEXFail",
+        "given": [ "RadiationAfterStaging" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1947-02-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/02d9a61a-6315-45e9-b45b-c08d4b55d39e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/da88c823-97b6-486f-b8a2-1fd3dd77a11e",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "da88c823-97b6-486f-b8a2-1fd3dd77a11e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "185463005",
+          "display": "Visit out of hours (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/02d9a61a-6315-45e9-b45b-c08d4b55d39e"
+      },
+      "period": {
+        "start": "2026-06-30T08:00:00.000+00:00",
+        "end": "2026-06-30T09:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/da88c823-97b6-486f-b8a2-1fd3dd77a11e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/8cf65ea2-81df-4695-bb81-7f19b72164b8",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "8cf65ea2-81df-4695-bb81-7f19b72164b8",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-08-30T08:00:00.000+00:00"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "169331000",
+          "display": "Combined radiotherapy (procedure)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/02d9a61a-6315-45e9-b45b-c08d4b55d39e"
+      },
+      "performedPeriod": {
+        "start": "2026-08-30T08:00:00.000+00:00",
+        "end": "2026-08-30T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/8cf65ea2-81df-4695-bb81-7f19b72164b8"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/4d50a36c-f80d-411e-982e-6f19f8d65942",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "4d50a36c-f80d-411e-982e-6f19f8d65942",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "Active"
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "Confirmed"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "version": "2024",
+          "code": "C67.3",
+          "display": "Malignant neoplasm of anterior wall of bladder"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/02d9a61a-6315-45e9-b45b-c08d4b55d39e"
+      },
+      "onsetDateTime": "2026-06-30T08:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/4d50a36c-f80d-411e-982e-6f19f8d65942"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/233e8dc2-9d32-4522-8253-1beb9a793c27",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "233e8dc2-9d32-4522-8253-1beb9a793c27",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+      },
+      "partOf": [ {
+        "reference": "Procedure/8cf65ea2-81df-4695-bb81-7f19b72164b8"
+      } ],
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "procedure",
+          "display": "Procedure"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "21902-2",
+          "display": "Stage group.pathology Cancer"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/02d9a61a-6315-45e9-b45b-c08d4b55d39e"
+      },
+      "effectivePeriod": {
+        "start": "2026-06-30T08:00:00.000+00:00",
+        "end": "2026-06-30T08:15:00.000+00:00"
+      },
+      "issued": "2026-06-30T08:15:00.000+00:00",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "1228884006",
+          "display": "American Joint Committee on Cancer cTis (qualifier value)"
+        } ]
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/233e8dc2-9d32-4522-8253-1beb9a793c27"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/2e7ee418-18d5-45d0-a8b6-f81f2466c2b8",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "2e7ee418-18d5-45d0-a8b6-f81f2466c2b8",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.336",
+        "value": "Practitioner-23"
+      } ],
+      "active": true,
+      "name": [ {
+        "family": "Careful",
+        "given": [ "Adam" ],
+        "prefix": [ "Dr" ]
+      } ],
+      "address": [ {
+        "use": "home",
+        "line": [ "534 Erewhon St" ],
+        "city": "PleasantVille",
+        "state": "UT",
+        "postalCode": "84414"
+      } ],
+      "qualification": [ {
+        "identifier": [ {
+          "system": "http://example.org/UniversityIdentifier",
+          "value": "12345"
+        } ],
+        "code": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0360",
+            "code": "BS",
+            "display": "Bachelor of Science"
+          } ],
+          "text": "Bachelor of Science"
+        },
+        "period": {
+          "start": "1996"
+        },
+        "issuer": {
+          "display": "Example University"
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/2e7ee418-18d5-45d0-a8b6-f81f2466c2b8"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/3da7435c-2b14-4193-a023-1fe07008c592",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "3da7435c-2b14-4193-a023-1fe07008c592",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-06-30T08:00:00.000+00:00"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "254292007",
+          "display": "Tumor staging"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/02d9a61a-6315-45e9-b45b-c08d4b55d39e"
+      },
+      "performedPeriod": {
+        "start": "2026-06-30T08:00:00.000+00:00",
+        "end": "2026-06-30T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/3da7435c-2b14-4193-a023-1fe07008c592"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/e5534b8e-c91c-4c60-98ca-51bf3e1cff3e",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "e5534b8e-c91c-4c60-98ca-51bf3e1cff3e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "1835b30a-ee1e-4ea7-a637-5476c7dfea98-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "02d9a61a-6315-45e9-b45b-c08d4b55d39e"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#1835b30a-ee1e-4ea7-a637-5476c7dfea98-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient with OV in MP. Bladder cancer diagnosis and cancer staging in MP.  Pt had radiation 2 months after bladder cancer staging and should not be excluded. "
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS646FHIRIntravesicalBacillusCalmetteGuerinForBladderCancer",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/02d9a61a-6315-45e9-b45b-c08d4b55d39e"
+      }, {
+        "reference": "Encounter/da88c823-97b6-486f-b8a2-1fd3dd77a11e"
+      }, {
+        "reference": "Procedure/8cf65ea2-81df-4695-bb81-7f19b72164b8"
+      }, {
+        "reference": "Condition/4d50a36c-f80d-411e-982e-6f19f8d65942"
+      }, {
+        "reference": "Observation/233e8dc2-9d32-4522-8253-1beb9a793c27"
+      }, {
+        "reference": "Practitioner/2e7ee418-18d5-45d0-a8b6-f81f2466c2b8"
+      }, {
+        "reference": "Procedure/3da7435c-2b14-4193-a023-1fe07008c592"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/e5534b8e-c91c-4c60-98ca-51bf3e1cff3e"
+    }
+  } ]
+}

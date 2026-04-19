@@ -1,0 +1,74 @@
+{
+  "resourceType": "Encounter",
+  "id": "0e552b8f-6b73-414a-bd1d-36f47e15d3d1",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "EMER",
+    "display": "emergency"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2023-09",
+      "code": "4525004",
+      "display": "Emergency department patient visit (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/690efbf3-6087-4c90-a1c7-be572ca734e0"
+  },
+  "period": {
+    "start": "2027-05-01T08:00:00.000+00:00",
+    "end": "2027-05-01T12:15:00.000+00:00"
+  },
+  "diagnosis": [ {
+    "condition": {
+      "reference": "Condition/0cc1be24-b2ce-4df6-8fb0-1af071e66249"
+    },
+    "use": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/diagnosis-role",
+        "code": "billing"
+      } ]
+    },
+    "rank": 1
+  } ],
+  "location": [ {
+    "location": {
+      "reference": "Location/ee51d8c4-8856-427b-b73d-95a7b741c4b9"
+    },
+    "period": {
+      "start": "2027-05-01T07:45:00.000+00:00",
+      "end": "2027-05-01T16:31:00.000+00:00"
+    }
+  }, {
+    "location": {
+      "reference": "Location/a88f97d3-05c0-4cd2-b5d1-af90b8da793e"
+    },
+    "period": {
+      "start": "2027-05-01T09:31:00.000+00:00",
+      "end": "2027-05-01T12:15:00.000+00:00"
+    }
+  }, {
+    "location": {
+      "reference": "Location/e7a5c2c6-d294-4255-9f05-7f185d8a34b9"
+    },
+    "period": {
+      "start": "2027-05-01T08:40:00.000+00:00",
+      "end": "2027-05-01T12:15:00.000+00:00"
+    }
+  }, {
+    "location": {
+      "reference": "Location/4ff8ccc4-f761-4899-9c15-1670963f74f6"
+    },
+    "period": {
+      "start": "2027-05-01T08:30:00.000+00:00",
+      "end": "2027-05-01T15:46:00.000+00:00"
+    }
+  } ]
+}

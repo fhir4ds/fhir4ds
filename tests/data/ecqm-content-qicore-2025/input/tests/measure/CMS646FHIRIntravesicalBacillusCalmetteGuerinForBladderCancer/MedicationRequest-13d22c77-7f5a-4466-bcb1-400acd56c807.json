@@ -1,0 +1,34 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "13d22c77-7f5a-4466-bcb1-400acd56c807",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "04012024",
+      "code": "1001405",
+      "display": "docetaxel 20 MG/ML Injectable Solution"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/5762f5c0-fe63-42fc-84ea-afadee165895"
+  },
+  "authoredOn": "2026-01-01T08:00:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/7e4a6298-db7a-4534-93f1-452508c1ff63"
+  },
+  "dosageInstruction": [ {
+    "timing": {
+      "repeat": {
+        "boundsPeriod": {
+          "start": "2026-01-01T08:00:00.000+00:00",
+          "end": "2026-01-01T08:15:00.000+00:00"
+        }
+      }
+    }
+  } ]
+}

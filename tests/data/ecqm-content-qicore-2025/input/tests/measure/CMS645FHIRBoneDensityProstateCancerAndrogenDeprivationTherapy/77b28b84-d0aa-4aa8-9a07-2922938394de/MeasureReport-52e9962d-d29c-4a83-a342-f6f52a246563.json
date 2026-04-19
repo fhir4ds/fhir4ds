@@ -1,0 +1,97 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "52e9962d-d29c-4a83-a342-f6f52a246563",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "2c830d4d-f957-4259-a849-fd77a7a910cd-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "77b28b84-d0aa-4aa8-9a07-2922938394de"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#2c830d4d-f957-4259-a849-fd77a7a910cd-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Dx of Prostate Cancer. DEXA is within 3 month period, but uses Invalid Code.  Fails NUMER criteria."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS645FHIRBoneDensityProstateCancerAndrogenDeprivationTherapy",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/77b28b84-d0aa-4aa8-9a07-2922938394de"
+  }, {
+    "reference": "Encounter/c2864158-01ee-44f0-a8f5-5d53bdcbaa78"
+  }, {
+    "reference": "Condition/63b5effa-f138-44a0-a35d-f9e0b7422fdb"
+  }, {
+    "reference": "Observation/ab1a4818-ab46-4361-936a-7ddbe159bc83"
+  }, {
+    "reference": "Practitioner/d1483d7c-cf35-48f4-ae43-4019580c1df4"
+  }, {
+    "reference": "MedicationRequest/bc8a761d-fb2f-435b-83e7-764c35439f4e"
+  }, {
+    "reference": "ServiceRequest/958c80bb-2736-4441-89f6-4a9de9bd1b3b"
+  } ]
+}

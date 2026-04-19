@@ -47,63 +47,63 @@ def logicalImplies(a: bool | None, b: bool | None) -> bool | None:
 
 
 def logicalAllTrue(values: List[bool | None] | None) -> bool | None:
-    """CQL AllTrue(list) - true if all are true (vacuous truth for empty)."""
-    if values is None:
-        return None
-    if len(values) == 0:
+    """CQL AllTrue(list) — true iff no non-null element is false.
+
+    Per CQL §22.1: nulls are ignored. If all non-null elements are true
+    (or there are no non-null elements), returns true.
+    Null argument is treated as empty list → true.
+    """
+    if values is None or len(values) == 0:
         return True
-    has_null = False
     for v in values:
         if v is False:
             return False
-        if v is None:
-            has_null = True
-    return None if has_null else True
+    return True
 
 
 def logicalAnyTrue(values: List[bool | None] | None) -> bool | None:
-    """CQL AnyTrue(list) - true if any is true (false for empty)."""
-    if values is None:
-        return None
-    if len(values) == 0:
+    """CQL AnyTrue(list) — true iff any non-null element is true.
+
+    Per CQL §22.2: nulls are ignored. If any non-null element is true,
+    returns true. If no non-null elements, returns false.
+    Null argument is treated as empty list → false.
+    """
+    if values is None or len(values) == 0:
         return False
-    has_null = False
     for v in values:
         if v is True:
             return True
-        if v is None:
-            has_null = True
-    return None if has_null else False
+    return False
 
 
 def logicalAllFalse(values: List[bool | None] | None) -> bool | None:
-    """CQL AllFalse(list) - true if all are false (vacuous truth for empty)."""
-    if values is None:
-        return None
-    if len(values) == 0:
+    """CQL AllFalse(list) — true iff no non-null element is true.
+
+    Per CQL §22.3: nulls are ignored. If all non-null elements are false
+    (or there are no non-null elements), returns true.
+    Null argument is treated as empty list → true.
+    """
+    if values is None or len(values) == 0:
         return True
-    has_null = False
     for v in values:
         if v is True:
             return False
-        if v is None:
-            has_null = True
-    return None if has_null else True
+    return True
 
 
 def logicalAnyFalse(values: List[bool | None] | None) -> bool | None:
-    """CQL AnyFalse(list) - true if any is false (false for empty)."""
-    if values is None:
-        return None
-    if len(values) == 0:
+    """CQL AnyFalse(list) — true iff any non-null element is false.
+
+    Per CQL §22.4: nulls are ignored. If any non-null element is false,
+    returns true. If no non-null elements, returns false.
+    Null argument is treated as empty list → false.
+    """
+    if values is None or len(values) == 0:
         return False
-    has_null = False
     for v in values:
         if v is False:
             return True
-        if v is None:
-            has_null = True
-    return None if has_null else False
+    return False
 
 
 def registerLogicalUdfs(con: "duckdb.DuckDBPyConnection") -> None:

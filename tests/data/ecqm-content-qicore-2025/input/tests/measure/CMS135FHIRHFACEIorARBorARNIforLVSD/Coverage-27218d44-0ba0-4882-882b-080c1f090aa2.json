@@ -1,0 +1,24 @@
+{
+  "resourceType": "Coverage",
+  "id": "27218d44-0ba0-4882-882b-080c1f090aa2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+  },
+  "status": "active",
+  "type": {
+    "coding": [ {
+      "system": "https://nahdo.org/sopt",
+      "code": "59",
+      "display": "Other Private Insurance"
+    } ]
+  },
+  "beneficiary": {
+    "reference": "Patient/c095195c-8893-4bf1-aa7d-ad2bfd9bafa5"
+  },
+  "period": {
+    "start": "2025-01-01T08:00:00.000+00:00"
+  },
+  "payor": [ {
+    "reference": "Organization/d370dd88-97a6-4c7f-a92e-32b7e26f361c"
+  } ]
+}

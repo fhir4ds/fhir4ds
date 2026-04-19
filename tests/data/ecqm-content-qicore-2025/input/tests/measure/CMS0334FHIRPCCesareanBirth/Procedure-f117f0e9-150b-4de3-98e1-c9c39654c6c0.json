@@ -1,0 +1,25 @@
+{
+  "resourceType": "Procedure",
+  "id": "f117f0e9-150b-4de3-98e1-c9c39654c6c0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2014-04-05T13:35:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-09",
+      "code": "10745001",
+      "display": "Delivery of transverse presentation (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/8f2a5cf4-2468-47cd-8efb-cbb1b95f78fe"
+  },
+  "performedDateTime": "2026-11-30T08:16:00.000+00:00"
+}

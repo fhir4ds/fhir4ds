@@ -1,0 +1,142 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.17.4077.2.2038",
+  "meta": {
+    "versionId": "22",
+    "lastUpdated": "2023-12-21T17:43:03.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2020-07-17"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2020-07-17"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.17.4077.2.2038",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113883.17.4077.2.2038"
+    }
+  ],
+  "version": "20200717",
+  "name": "GlomerularFiltrationRate",
+  "title": "Glomerular Filtration Rate",
+  "status": "retired",
+  "experimental": false,
+  "date": "2020-07-17T01:00:32-04:00",
+  "publisher": "ACEP/AMA-PCPI Steward",
+  "expansion": {
+    "identifier": "urn:uuid:04fbb884-0186-4949-b2f4-46b5cd9bb350",
+    "timestamp": "2026-03-13T13:03:37-04:00",
+    "total": 14,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "33914-3",
+        "display": "Glomerular filtration rate [Volume Rate/Area] in Serum or Plasma by Creatinine-based formula (MDRD)/1.73 sq M"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "45066-8",
+        "display": "Creatinine and Glomerular filtration rate.predicted panel - Serum, Plasma or Blood"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "48642-3",
+        "display": "Glomerular filtration rate [Volume Rate/Area] in Serum, Plasma or Blood by Creatinine-based formula (MDRD)/1.73 sq M among non black population"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "48643-1",
+        "display": "Glomerular filtration rate [Volume Rate/Area] in Serum, Plasma or Blood by Creatinine-based formula (MDRD)/1.73 sq M among black population"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "50044-7",
+        "display": "Glomerular filtration rate [Volume Rate/Area] in Serum, Plasma or Blood by Creatinine-based formula (MDRD)/1.73 sq M among female population"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "50210-4",
+        "display": "Glomerular filtration rate [Volume Rate/Area] in Serum, Plasma or Blood by Cystatin C-based formula/1.73 sq M"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "50384-7",
+        "display": "Glomerular filtration rate [Volume Rate/Area] in Serum, Plasma or Blood by Creatinine-based formula (Schwartz)/1.73 sq M"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "62238-1",
+        "display": "Glomerular filtration rate [Volume Rate/Area] in Serum, Plasma or Blood by Creatinine-based formula (CKD-EPI)/1.73 sq M"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "69405-9",
+        "display": "Glomerular filtration rate [Volume Rate/Area] in Serum, Plasma or Blood by based on 1.73 sq M"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "70969-1",
+        "display": "Glomerular filtration rate [Volume Rate/Area] in Serum, Plasma or Blood by Creatinine-based formula (MDRD)/1.73 sq M among male population"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "76633-7",
+        "display": "Glomerular filtration rate/1.73 sq M.predicted by Creatinine-based formula (MDRD) in Blood"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "77147-7",
+        "display": "Glomerular filtration rate [Volume Rate/Area] in Serum, Plasma or Blood by Creatinine-based formula (MDRD)/1.73 sq M"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "88293-6",
+        "display": "Glomerular filtration rate [Volume Rate/Area] in Serum, Plasma or Blood by Creatinine-based formula (CKD-EPI)/1.73 sq M among black population"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "88294-4",
+        "display": "Glomerular filtration rate [Volume Rate/Area] in Serum, Plasma or Blood by Creatinine-based formula (CKD-EPI)/1.73 sq M among non black population"
+      }
+    ]
+  }
+}

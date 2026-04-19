@@ -1,0 +1,111 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "ecda96ad-ac3f-4bf2-a8db-69d635cad3db",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "a5838fce-292d-46ed-a1fc-44d15e562a5b-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "a2563ca7-fda7-4cfd-a5cf-a688225749e2"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#a5838fce-292d-46ed-a1fc-44d15e562a5b-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "oral factor Xa administered after Proc, Proc is 1 day after First ICU\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS190VTEProphylaxisICUFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/a2563ca7-fda7-4cfd-a5cf-a688225749e2"
+  }, {
+    "reference": "Encounter/177afa82-8d54-4048-bac1-a6a1df9fa20a"
+  }, {
+    "reference": "Coverage/913bc9a9-bcfe-4b93-a1d9-1fdb55351ba4"
+  }, {
+    "reference": "MedicationAdministration/a1530203-e581-47d5-ba44-f683dfc0285e"
+  }, {
+    "reference": "Procedure/1c14d640-3288-4bf3-9809-10a06010280a"
+  }, {
+    "reference": "Location/c33e0f13-5c97-4fea-8db4-029c1b73ecd6"
+  }, {
+    "reference": "Condition/62aaee2c-9b8b-4947-8b1b-f4a1b52e817a"
+  }, {
+    "reference": "Organization/46de5e8a-4393-422a-9f5d-15601eefb0a9"
+  }, {
+    "reference": "Practitioner/a0f37606-5d4f-4afd-a333-c91b88fd51a3"
+  } ]
+}

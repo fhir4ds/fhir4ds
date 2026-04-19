@@ -1,0 +1,14 @@
+{
+  "urn:ietf:bcp:13|null" : null,
+  "http://hl7.org/fhir/fhir-types|null" : null,
+  "https://madie.cms.gov/login" : null,
+  "http://unstats.un.org/unsd/methods/m49/m49.htm|null" : null,
+  "http://hl7.org/fhir/us/core/CodeSystem/condition-category" : {
+    "server" : "http://tx.fhir.org/r4",
+    "filename" : "cs-de130af7-019e-44e8-af83-26952a245b50.json"
+  },
+  "https://madie.cms.gov/measure/shortName" : null,
+  "https://madie.cms.gov/measure/cbeId" : null,
+  "https://madie.cms.gov/measure/cmsId" : null,
+  "http://hl7.org/fhir/us/core/CodeSystem/condition-category|null" : null
+}

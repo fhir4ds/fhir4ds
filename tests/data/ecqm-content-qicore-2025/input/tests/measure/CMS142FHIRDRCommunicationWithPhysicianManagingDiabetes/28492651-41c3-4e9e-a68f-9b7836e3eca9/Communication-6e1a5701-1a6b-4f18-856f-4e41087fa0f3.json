@@ -1,0 +1,39 @@
+{
+  "resourceType": "Communication",
+  "id": "6e1a5701-1a6b-4f18-856f-4e41087fa0f3",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communication" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2014-07-02T15:00:00.000+00:00"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDone",
+    "valueBoolean": true
+  }, {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDone",
+    "valueBoolean": true
+  } ],
+  "status": "completed",
+  "statusReason": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "183932001",
+      "display": "Procedure contraindicated (situation)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/28492651-41c3-4e9e-a68f-9b7836e3eca9"
+  },
+  "sent": "2026-07-09T08:00:00.000+00:00",
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "428341000124108"
+    } ]
+  } ]
+}

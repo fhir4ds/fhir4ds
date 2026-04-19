@@ -1,0 +1,111 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "be293845-cf29-46d9-abee-eb941819952e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "2f115e5c-b0ba-46a1-9b3e-80ae90c6abcb-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "11bcf672-9a14-4e4f-9238-39007fc6a00b"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#2f115e5c-b0ba-46a1-9b3e-80ae90c6abcb-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Oral Factor Xa Inhibitor administered after neuraxial anesthesia. Knee Fx not principal\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS190VTEProphylaxisICUFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/11bcf672-9a14-4e4f-9238-39007fc6a00b"
+  }, {
+    "reference": "Encounter/8fe44496-6017-4e5e-9391-c3e9d4e51ea5"
+  }, {
+    "reference": "Coverage/8b710aef-5c4d-40f1-8822-431a9a0d2f7b"
+  }, {
+    "reference": "MedicationAdministration/3f45b5a1-b981-4d27-9ca7-9fe2e09f504b"
+  }, {
+    "reference": "Procedure/b1b6dd67-d059-4313-9e6b-ce8ec0a8cd2d"
+  }, {
+    "reference": "Procedure/50bb6cd6-1e5e-478c-b310-dffc69856e4b"
+  }, {
+    "reference": "Location/e4eba872-ff47-471e-ade6-faa1ec684838"
+  }, {
+    "reference": "Organization/7f0ad94c-96aa-403a-a8fb-976d426af84a"
+  }, {
+    "reference": "Practitioner/74805f3a-57cb-4224-8e03-e0622018d6bd"
+  } ]
+}

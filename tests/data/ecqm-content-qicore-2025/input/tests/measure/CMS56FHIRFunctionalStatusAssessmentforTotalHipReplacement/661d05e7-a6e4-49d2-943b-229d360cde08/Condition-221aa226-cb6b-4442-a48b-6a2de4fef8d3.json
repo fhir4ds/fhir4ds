@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "221aa226-cb6b-4442-a48b-6a2de4fef8d3",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "702956004",
+      "display": "Severe cognitive impairment (finding)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/661d05e7-a6e4-49d2-943b-229d360cde08"
+  },
+  "onsetDateTime": "2027-01-01T00:00:00.000Z"
+}

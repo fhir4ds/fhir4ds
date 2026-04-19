@@ -1,0 +1,255 @@
+{
+  "resourceType": "Bundle",
+  "id": "DENEXPass-LBFracture24HrsB4THAProc",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/e51b8a65-eb94-4390-8c5e-e15b8978f95b",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "e51b8a65-eb94-4390-8c5e-e15b8978f95b",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "Bertha",
+        "given": [ "Betty" ]
+      } ],
+      "gender": "female",
+      "birthDate": "2007-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/e51b8a65-eb94-4390-8c5e-e15b8978f95b"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/ae4390c9-aa90-4770-bd67-bd055d4b4121",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "ae4390c9-aa90-4770-bd67-bd055d4b4121",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-11-01T00:00:00.000Z"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+          "code": "0SR9019",
+          "display": "Replacement of Right Hip Joint with Metal Synthetic Substitute, Cemented, Open Approach"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/e51b8a65-eb94-4390-8c5e-e15b8978f95b"
+      },
+      "performedPeriod": {
+        "start": "2024-11-01T00:00:00.000Z",
+        "end": "2024-11-01T01:00:00.000Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/ae4390c9-aa90-4770-bd67-bd055d4b4121"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/7fd7d084-6017-454f-abbf-ac0df505e1ee",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "7fd7d084-6017-454f-abbf-ac0df505e1ee",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "281036007",
+          "display": "Follow-up consultation (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/e51b8a65-eb94-4390-8c5e-e15b8978f95b"
+      },
+      "period": {
+        "start": "2025-11-01T00:00:00.000Z",
+        "end": "2025-11-01T01:15:00.000Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/7fd7d084-6017-454f-abbf-ac0df505e1ee"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/9fae9658-8268-48bc-91d3-5503cb9b3a80",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "9fae9658-8268-48bc-91d3-5503cb9b3a80",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "10624611000119102",
+          "display": "Stress fracture of lateral condyle of right femur (disorder)”) "
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/e51b8a65-eb94-4390-8c5e-e15b8978f95b"
+      },
+      "onsetDateTime": "2024-10-31T00:00:00.000Z"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/9fae9658-8268-48bc-91d3-5503cb9b3a80"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/ca127a7d-c5ff-4705-939a-012200b588ce",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "ca127a7d-c5ff-4705-939a-012200b588ce",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "76527229-1b99-48f3-ae1f-e28b99dd4506-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "e51b8a65-eb94-4390-8c5e-e15b8978f95b"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#76527229-1b99-48f3-ae1f-e28b99dd4506-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient has Dx of 1 or ore Lower Body Fractures 24 hrs or less on or before start of THA Procedure"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS56FHIRFunctionalStatusAssessmentforTotalHipReplacement",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/e51b8a65-eb94-4390-8c5e-e15b8978f95b"
+      }, {
+        "reference": "Procedure/ae4390c9-aa90-4770-bd67-bd055d4b4121"
+      }, {
+        "reference": "Encounter/7fd7d084-6017-454f-abbf-ac0df505e1ee"
+      }, {
+        "reference": "Condition/9fae9658-8268-48bc-91d3-5503cb9b3a80"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/ca127a7d-c5ff-4705-939a-012200b588ce"
+    }
+  } ]
+}

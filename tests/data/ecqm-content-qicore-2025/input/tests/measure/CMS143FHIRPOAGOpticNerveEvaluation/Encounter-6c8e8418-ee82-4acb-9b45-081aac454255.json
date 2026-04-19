@@ -1,0 +1,33 @@
+{
+  "resourceType": "Encounter",
+  "id": "6c8e8418-ee82-4acb-9b45-081aac454255",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory",
+    "userSelected": true
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "66902005",
+      "display": "Ophthalmic examination and evaluation, follow-up (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/2cca67ad-d05c-4bd2-aa74-d5ba553b9afc"
+  },
+  "period": {
+    "start": "2026-06-01T09:00:00.000+00:00",
+    "end": "2026-06-01T09:45:00.000+00:00"
+  },
+  "length": {
+    "value": 0,
+    "unit": "days"
+  }
+}

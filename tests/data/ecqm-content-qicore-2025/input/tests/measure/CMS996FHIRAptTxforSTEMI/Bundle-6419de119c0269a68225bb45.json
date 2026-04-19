@@ -1,0 +1,420 @@
+{
+  "resourceType": "Bundle",
+  "id": "6419de119c0269a68225bb45",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/00845eb5-a7ef-4edd-a566-813ed3ca749a",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "00845eb5-a7ef-4edd-a566-813ed3ca749a",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2076-8",
+            "display": "Native Hawaiian or Other Pacific Islander",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Native Hawaiian or Other Pacific Islander"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248152002"
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "6419de119c0269a68225bb45"
+      } ],
+      "name": [ {
+        "family": "DenExcl4Fail",
+        "given": [ "DxStartsDuringEDNoEnd" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1985-12-02"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/00845eb5-a7ef-4edd-a566-813ed3ca749a"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/6ad624de-d8d5-4e4e-9e86-03f742ffca61",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "6ad624de-d8d5-4e4e-9e86-03f742ffca61",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMER",
+        "display": "emergency",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2020-09",
+          "code": "4525004",
+          "display": "Emergency department patient visit (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/00845eb5-a7ef-4edd-a566-813ed3ca749a"
+      },
+      "period": {
+        "start": "2026-10-09T08:05:00.000+00:00",
+        "end": "2026-10-10T07:15:00.000+00:00"
+      },
+      "reasonCode": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2020-09",
+          "code": "703253007",
+          "display": "Acute ST segment elevation myocardial infarction of inferior wall involving right ventricle (disorder)",
+          "userSelected": true
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/6ad624de-d8d5-4e4e-9e86-03f742ffca61"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/8c320f56-7966-4bec-82b6-496a06705a17",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "8c320f56-7966-4bec-82b6-496a06705a17",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active",
+          "userSelected": true
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "Confirmed",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2020-09",
+          "code": "401303003",
+          "display": "Acute ST segment elevation myocardial infarction (disorder)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/00845eb5-a7ef-4edd-a566-813ed3ca749a"
+      },
+      "onsetDateTime": "2026-10-09T08:30:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/8c320f56-7966-4bec-82b6-496a06705a17"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/93a2fc74-540e-448e-a25a-c1230efeff31",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "93a2fc74-540e-448e-a25a-c1230efeff31",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "Active",
+          "userSelected": true
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "Confirmed",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2020-09",
+          "code": "295108008",
+          "display": "Allergy to streptokinase (finding)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/00845eb5-a7ef-4edd-a566-813ed3ca749a"
+      },
+      "onsetDateTime": "2026-10-09T10:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/93a2fc74-540e-448e-a25a-c1230efeff31"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/79a95002-d2e5-4dc5-ae3c-9af88d1b6de8",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "79a95002-d2e5-4dc5-ae3c-9af88d1b6de8",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MB"
+          } ]
+        }
+      } ],
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/00845eb5-a7ef-4edd-a566-813ed3ca749a"
+      },
+      "relationship": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+          "code": "self"
+        } ]
+      },
+      "payor": [ {
+        "reference": "Organization/db0a6ba0-e200-4097-846a-bc3daa52b138"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/79a95002-d2e5-4dc5-ae3c-9af88d1b6de8"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/db0a6ba0-e200-4097-846a-bc3daa52b138",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "db0a6ba0-e200-4097-846a-bc3daa52b138",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/db0a6ba0-e200-4097-846a-bc3daa52b138"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/912ff6af-bd92-4b18-aedc-b50979a2c265",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "912ff6af-bd92-4b18-aedc-b50979a2c265",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "9999999896"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/912ff6af-bd92-4b18-aedc-b50979a2c265"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/47d3a2fe-fd9d-4c16-a78f-2fc5874ab09a",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "47d3a2fe-fd9d-4c16-a78f-2fc5874ab09a",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "d0d77808-8e53-4c8e-a7a6-c5e270e150c5-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "00845eb5-a7ef-4edd-a566-813ed3ca749a"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#d0d77808-8e53-4c8e-a7a6-c5e270e150c5-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient has allergy to thrombolytics (exclusion dx) starts during ED and no end"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS996FHIRAptTxforSTEMI",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/00845eb5-a7ef-4edd-a566-813ed3ca749a"
+      }, {
+        "reference": "Encounter/6ad624de-d8d5-4e4e-9e86-03f742ffca61"
+      }, {
+        "reference": "Condition/8c320f56-7966-4bec-82b6-496a06705a17"
+      }, {
+        "reference": "Condition/93a2fc74-540e-448e-a25a-c1230efeff31"
+      }, {
+        "reference": "Coverage/79a95002-d2e5-4dc5-ae3c-9af88d1b6de8"
+      }, {
+        "reference": "Organization/db0a6ba0-e200-4097-846a-bc3daa52b138"
+      }, {
+        "reference": "Practitioner/912ff6af-bd92-4b18-aedc-b50979a2c265"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/47d3a2fe-fd9d-4c16-a78f-2fc5874ab09a"
+    }
+  } ]
+}

@@ -1,0 +1,115 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.464.1003.196.11.1216-20250409",
+  "meta": {
+    "versionId": "30",
+    "lastUpdated": "2025-04-09T01:09:28.000-04:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "NCQA PHEMUR Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-04-09"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-04-09"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.196.11.1216",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.464.1003.196.11.1216"
+  } ],
+  "version": "20250409",
+  "name": "HepatitisBVaccine",
+  "title": "Hepatitis B Vaccine",
+  "status": "active",
+  "date": "2025-04-09T01:09:28-04:00",
+  "publisher": "NCQA PHEMUR",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts for immunizations with Hepatitis B vaccines.),(Data Element Scope: This value set may use a model element related to Immunization.),(Inclusion Criteria: Includes concepts that represent a Hepatitis B vaccine.),(Exclusion Criteria: No exclusions.)",
+  "compose": {
+    "include": [ {
+      "system": "http://hl7.org/fhir/sid/cvx",
+      "concept": [ {
+        "code": "08",
+        "display": "hepatitis B vaccine, pediatric or pediatric/adolescent dosage"
+      }, {
+        "code": "110",
+        "display": "DTaP-hepatitis B and poliovirus vaccine"
+      }, {
+        "code": "146",
+        "display": "Diphtheria and Tetanus Toxoids and Acellular Pertussis Adsorbed, Inactivated Poliovirus, Haemophilus b Conjugate (Meningococcal Protein Conjugate), and Hepatitis B (Recombinant) Vaccine."
+      }, {
+        "code": "198",
+        "display": "Diphtheria, pertussis, tetanus, hepatitis B, Haemophilus Influenza Type b, (Pentavalent)"
+      }, {
+        "code": "44",
+        "display": "hepatitis B vaccine, dialysis patient dosage"
+      }, {
+        "code": "45",
+        "display": "hepatitis B vaccine, unspecified formulation"
+      }, {
+        "code": "51",
+        "display": "Haemophilus influenzae type b conjugate and Hepatitis B vaccine"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:6c9b7e04-b61d-4b1f-bf1a-4f126f2a3e05",
+    "timestamp": "2025-06-20T17:03:35-04:00",
+    "total": 7,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://hl7.org/fhir/sid/cvx",
+      "version": "20231102",
+      "code": "08",
+      "display": "hepatitis B vaccine, pediatric or pediatric/adolescent dosage"
+    }, {
+      "system": "http://hl7.org/fhir/sid/cvx",
+      "version": "20231102",
+      "code": "110",
+      "display": "DTaP-hepatitis B and poliovirus vaccine"
+    }, {
+      "system": "http://hl7.org/fhir/sid/cvx",
+      "version": "20231102",
+      "code": "146",
+      "display": "Diphtheria and Tetanus Toxoids and Acellular Pertussis Adsorbed, Inactivated Poliovirus, Haemophilus b Conjugate (Meningococcal Protein Conjugate), and Hepatitis B (Recombinant) Vaccine."
+    }, {
+      "system": "http://hl7.org/fhir/sid/cvx",
+      "version": "20231102",
+      "code": "198",
+      "display": "Diphtheria, pertussis, tetanus, hepatitis B, Haemophilus Influenza Type b, (Pentavalent)"
+    }, {
+      "system": "http://hl7.org/fhir/sid/cvx",
+      "version": "20231102",
+      "code": "44",
+      "display": "hepatitis B vaccine, dialysis patient dosage"
+    }, {
+      "system": "http://hl7.org/fhir/sid/cvx",
+      "version": "20231102",
+      "code": "45",
+      "display": "hepatitis B vaccine, unspecified formulation"
+    }, {
+      "system": "http://hl7.org/fhir/sid/cvx",
+      "version": "20231102",
+      "code": "51",
+      "display": "Haemophilus influenzae type b conjugate and Hepatitis B vaccine"
+    } ]
+  }
+}

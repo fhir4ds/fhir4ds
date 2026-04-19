@@ -1,0 +1,44 @@
+{
+  "resourceType": "Practitioner",
+  "id": "93a7346e-616d-4ef6-a235-973cbe935b92",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+  },
+  "identifier": [ {
+    "system": "http://hl7.org/fhir/sid/us-npi",
+    "value": "9999999896"
+  } ],
+  "active": true,
+  "name": [ {
+    "family": "Ramires",
+    "given": [ "Alma" ],
+    "prefix": [ "Dr" ]
+  } ],
+  "address": [ {
+    "use": "home",
+    "line": [ "534 Erewhon St" ],
+    "city": "Netherville",
+    "state": "IN",
+    "postalCode": "46131"
+  } ],
+  "qualification": [ {
+    "identifier": [ {
+      "system": "http://goodhealth.org/prIdentifier",
+      "value": "12345"
+    } ],
+    "code": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0360|2.7",
+        "code": "BS",
+        "display": "Bachelor of Science"
+      } ],
+      "text": "Bachelor of Science"
+    },
+    "period": {
+      "start": "1995"
+    },
+    "issuer": {
+      "display": "Example University"
+    }
+  } ]
+}

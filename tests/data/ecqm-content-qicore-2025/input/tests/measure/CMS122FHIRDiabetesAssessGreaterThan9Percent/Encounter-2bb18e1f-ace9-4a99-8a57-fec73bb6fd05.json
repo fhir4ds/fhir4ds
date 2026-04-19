@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "2bb18e1f-ace9-4a99-8a57-fec73bb6fd05",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "97803",
+      "display": "Medical nutrition therapy; re-assessment and intervention, individual, face-to-face with the patient, each 15 minutes"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/abe87c54-c0b1-4f86-94ca-360a228e9aa3"
+  },
+  "period": {
+    "start": "2026-01-01T00:00:00Z",
+    "end": "2026-01-01T00:15:00Z"
+  }
+}

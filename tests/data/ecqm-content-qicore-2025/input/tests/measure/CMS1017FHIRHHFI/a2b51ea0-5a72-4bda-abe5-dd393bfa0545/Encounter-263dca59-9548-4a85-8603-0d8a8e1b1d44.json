@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "263dca59-9548-4a85-8603-0d8a8e1b1d44",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "EMER",
+    "display": "emergency encounter"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "4525004",
+      "display": "Emergency Department Visit"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/a2b51ea0-5a72-4bda-abe5-dd393bfa0545"
+  },
+  "period": {
+    "start": "2026-10-18T09:15:00.000+00:00",
+    "end": "2026-10-19T08:15:00.000+00:00"
+  }
+}

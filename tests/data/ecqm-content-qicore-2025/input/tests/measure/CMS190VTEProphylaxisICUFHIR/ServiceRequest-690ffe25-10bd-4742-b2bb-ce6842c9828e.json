@@ -1,0 +1,21 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "690ffe25-10bd-4742-b2bb-ce6842c9828e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "442023007",
+      "display": "Venous foot pump, device (physical object)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f981eba4-4aac-45ce-8c52-f0bc02c9a0dc"
+  },
+  "authoredOn": "2026-11-03T11:00:00"
+}

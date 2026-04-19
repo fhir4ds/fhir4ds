@@ -1,0 +1,97 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "a8c0d0b5-f31f-4c12-90b0-524b3f670ebd",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "dc33b52f-3367-4f0b-a674-64341b83344f-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "2cca67ad-d05c-4bd2-aa74-d5ba553b9afc"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#dc33b52f-3367-4f0b-a674-64341b83344f-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient with POAG dx, Ophthalmological Vist and with Cup to Disc Ratio and Optic Disc exam and Optic Disc exam performed outside of Encounter period."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS143FHIRPOAGOpticNerveEvaluation",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/2cca67ad-d05c-4bd2-aa74-d5ba553b9afc"
+  }, {
+    "reference": "Condition/e4d00494-f72f-4c1a-9657-c348d1c810db"
+  }, {
+    "reference": "Observation/08011b99-ba03-4956-93d5-c3e4112f712e"
+  }, {
+    "reference": "Observation/e5a2e26d-5665-4531-a9a9-107422e9636b"
+  }, {
+    "reference": "Encounter/6c8e8418-ee82-4acb-9b45-081aac454255"
+  }, {
+    "reference": "Coverage/5b44343f-0907-488d-a008-97738c054b66"
+  }, {
+    "reference": "Organization/8ac1b8b3-4ca6-473f-b8af-3c1534c95eba"
+  } ]
+}

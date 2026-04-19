@@ -1,0 +1,22 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "88fb1c87-6dc0-4d21-bf8a-b6f9dc727baa",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1599543",
+      "display": "edoxaban 15 MG Oral Tablet"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/926d2075-8536-4e61-9154-934460890b9b"
+  },
+  "effectivePeriod": {
+    "start": "2026-12-06T11:30:00.000+00:00",
+    "end": "2026-12-06T11:35:00.000+00:00"
+  }
+}

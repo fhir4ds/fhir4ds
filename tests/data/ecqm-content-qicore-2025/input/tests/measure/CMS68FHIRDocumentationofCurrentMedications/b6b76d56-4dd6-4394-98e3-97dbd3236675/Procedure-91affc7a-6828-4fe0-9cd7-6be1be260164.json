@@ -1,0 +1,24 @@
+{
+  "resourceType": "Procedure",
+  "id": "91affc7a-6828-4fe0-9cd7-6be1be260164",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-02-01T09:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "428191000124101",
+      "display": "Documentation of current medications (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b6b76d56-4dd6-4394-98e3-97dbd3236675"
+  },
+  "performedDateTime": "2026-12-31T23:59:00.000+00:00"
+}

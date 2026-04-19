@@ -1,0 +1,27 @@
+{
+  "resourceType": "Procedure",
+  "id": "e3eeb581-567e-4c43-8e43-20d1eb827134",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-05-15T13:20:30.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "1258985005",
+      "display": "Invasive Mechanical Ventilation"
+    } ],
+    "text": "Invasive Mechanical Ventilation"
+  },
+  "subject": {
+    "reference": "Patient/23191b54-f639-47a2-88ad-dc7fabaec98a"
+  },
+  "performedPeriod": {
+    "start": "2026-05-15T13:04:00.000+00:00",
+    "end": "2026-05-15T13:19:00.000+00:00"
+  }
+}

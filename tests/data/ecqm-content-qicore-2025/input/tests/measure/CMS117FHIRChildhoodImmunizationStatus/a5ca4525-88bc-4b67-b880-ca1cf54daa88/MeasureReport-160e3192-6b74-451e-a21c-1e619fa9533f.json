@@ -1,0 +1,107 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "160e3192-6b74-451e-a21c-1e619fa9533f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "90578bf8-fdd6-4b14-932b-ae11bbe3826e-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "a5ca4525-88bc-4b67-b880-ca1cf54daa88"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#90578bf8-fdd6-4b14-932b-ae11bbe3826e-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "All anaphylaxis or conditions in lieu"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/ChildhoodImmunizationStatusFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/a5ca4525-88bc-4b67-b880-ca1cf54daa88"
+  }, {
+    "reference": "Encounter/bd55b35a-6aa5-4013-bb97-caea93c68932"
+  }, {
+    "reference": "Condition/c044252b-b3bf-4c81-8e81-ea34f8112195"
+  }, {
+    "reference": "Condition/dbc5db6c-0522-4156-a4b8-da22299aa687"
+  }, {
+    "reference": "Condition/e05f332f-58bc-4b56-806d-b8b152712d50"
+  }, {
+    "reference": "Condition/18edb50d-b1ed-419e-a0de-de5cf5f868a6"
+  }, {
+    "reference": "Condition/96202b4d-6272-4711-ab55-6dbdef60db53"
+  }, {
+    "reference": "Condition/756b1586-6120-488f-94f3-9c9f6e751da4"
+  }, {
+    "reference": "Condition/9526ce85-7913-4434-ba49-809e32e1a45d"
+  }, {
+    "reference": "Condition/5e02836f-f7d0-4dc8-82be-38669fff14cb"
+  }, {
+    "reference": "Condition/72218e72-8743-4561-8f8a-0f22d12cf995"
+  }, {
+    "reference": "Condition/c044252b-b3bf-4c81-8e81-ea34f81121950"
+  } ]
+}

@@ -1,0 +1,66 @@
+{
+  "resourceType": "Condition",
+  "id": "214834b2-c17d-4545-baec-6580b92484a4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "active",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "active",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "H31.301",
+      "userSelected": true
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "H55.00",
+      "userSelected": true
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "H47.20",
+      "userSelected": true
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "Q12.8",
+      "userSelected": true
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "H26.101",
+      "userSelected": true
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "H53.482",
+      "userSelected": true
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "H30.001",
+      "userSelected": true
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "H31.011",
+      "userSelected": true
+    }, {
+      "system": "http://snomed.info/sct",
+      "code": "128329001",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/8bab0696-02d1-4e8f-a719-a91621cce9e0"
+  },
+  "onsetDateTime": "2024-11-01T08:00:00.000+00:00"
+}

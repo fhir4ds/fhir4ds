@@ -1,0 +1,27 @@
+{
+  "resourceType": "Communication",
+  "id": "758b4b0f-a740-4599-a25e-ac60768c2ef7",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communication" ]
+  },
+  "status": "completed",
+  "statusReason": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "183932001",
+      "display": "Procedure contraindicated (situation)",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "428341000124108",
+      "display": "Macular edema absent (situation)",
+      "userSelected": true
+    } ]
+  } ],
+  "sent": "2026-07-09T08:00:00.000+00:00"
+}

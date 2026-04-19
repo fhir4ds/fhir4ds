@@ -1,0 +1,37 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "08a3f77a-92e1-4fe9-b3a5-2f590390608e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+      "code": "community"
+    } ]
+  } ],
+  "doNotPerform": true,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "855288"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/88086c39-a440-43ae-b015-f399190c9589"
+  },
+  "authoredOn": "2026-11-01T07:00:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/123456"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "443390004",
+      "display": "Refusal of treatment by patient (situation)",
+      "userSelected": true
+    } ]
+  } ]
+}

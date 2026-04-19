@@ -1,0 +1,26 @@
+{
+  "resourceType": "Encounter",
+  "id": "742ce243-00db-44c3-85b7-eeb876b7d5e2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient encounter"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "4525004"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/814eb904-2889-4c31-9dfe-5b682eb473a4"
+  },
+  "period": {
+    "start": "2026-11-09T08:00:00.000+00:00",
+    "end": "2026-11-09T10:15:00.000+00:00"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "resourceType": "Procedure",
+  "id": "62f1e3c2-bb4b-4a8a-8658-bd91d57e5ecc",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-04-13T11:10:30.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "243141005",
+      "display": "Mechanically assisted spontaneous ventilation"
+    } ],
+    "text": "Mechanically assisted spontaneous ventilation"
+  },
+  "subject": {
+    "reference": "Patient/223bc449-fc6b-4636-b392-3613761ee5c8"
+  },
+  "performedDateTime": "2026-04-13T11:00:00.000+00:00"
+}

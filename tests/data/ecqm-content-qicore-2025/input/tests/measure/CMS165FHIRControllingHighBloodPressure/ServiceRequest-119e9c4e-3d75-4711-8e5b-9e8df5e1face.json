@@ -1,0 +1,35 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "119e9c4e-3d75-4711-8e5b-9e8df5e1face",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "category": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "387713003",
+      "display": "Surgical procedure"
+    } ]
+  } ],
+  "priority": "routine",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "385763009",
+      "display": "Hospice care (regime/therapy)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/e56c60ca-d0d0-4910-af2e-1d8a074d129a"
+  },
+  "authoredOn": "2026-01-02T00:00:00.000+00:00",
+  "performerType": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "405279007",
+      "display": "Attending physician (occupation)"
+    } ]
+  }
+}

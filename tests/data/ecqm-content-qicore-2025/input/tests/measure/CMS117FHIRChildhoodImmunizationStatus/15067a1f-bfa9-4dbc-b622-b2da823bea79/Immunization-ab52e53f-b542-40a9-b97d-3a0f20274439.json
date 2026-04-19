@@ -1,0 +1,21 @@
+{
+  "resourceType": "Immunization",
+  "id": "ab52e53f-b542-40a9-b97d-3a0f20274439",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ]
+  },
+  "status": "completed",
+  "vaccineCode": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/cvx",
+      "code": "153",
+      "display": "\tInfluenza, injectable, Madin Darby Canine Kidney, preservative free"
+    } ]
+  },
+  "patient": {
+    "reference": "Patient/15067a1f-bfa9-4dbc-b622-b2da823bea79"
+  },
+  "occurrenceDateTime": "2025-01-02T00:00:00.000Z",
+  "recorded": "2025-01-02T00:00:00.000Z",
+  "primarySource": true
+}

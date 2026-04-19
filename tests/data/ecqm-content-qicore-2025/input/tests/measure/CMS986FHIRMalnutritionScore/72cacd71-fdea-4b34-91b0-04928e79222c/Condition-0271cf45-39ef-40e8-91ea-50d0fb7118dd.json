@@ -1,0 +1,43 @@
+{
+  "resourceType": "Condition",
+  "id": "0271cf45-39ef-40e8-91ea-50d0fb7118dd",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "resolved",
+      "display": "resolved",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "E43",
+      "display": "Unspecified severe protein-calorie malnutrition",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/72cacd71-fdea-4b34-91b0-04928e79222c"
+  },
+  "recordedDate": "2026-08-05T11:00:00.000+00:00"
+}

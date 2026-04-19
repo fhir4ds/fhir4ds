@@ -33,10 +33,13 @@ def _is_list_returning_sql(node) -> bool:
     """Return True if *node* is an SQL expression that returns a list/array.
 
     Detects patterns like ``list_transform(...)``, ``list(...)``,
-    ``(SELECT list(...) FROM ...)``, or ``from_json(..., '["VARCHAR"]')``.
+    ``(SELECT list(...) FROM ...)``, ``from_json(..., '["VARCHAR"]')``,
+    or ``SQLArray`` literals.
     """
     if node is None:
         return False
+    if isinstance(node, SQLArray):
+        return True
     if isinstance(node, SQLFunctionCall):
         if node.name in ("list_transform", "list_filter", "list", "list_sort",
                          "list_distinct", "list_concat"):

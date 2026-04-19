@@ -1,0 +1,107 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "51d54310-cbfd-48fb-9ea9-cdc8a4cabd9e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "c1e6f7b5-8d10-4ca6-b9e3-7e9f05fbd327-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "a800d0dd-2ded-404b-9489-43ecafbe8529"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#c1e6f7b5-8d10-4ca6-b9e3-7e9f05fbd327-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Female with OV in MP. Has Bladder Cancer and Bladder Cancer staging with  Active TB ends 1 day before bladder Ca staging ends.. TB prevalencePeriod ends before staging and DENEX should fail."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS646FHIRIntravesicalBacillusCalmetteGuerinForBladderCancer",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/a800d0dd-2ded-404b-9489-43ecafbe8529"
+  }, {
+    "reference": "Encounter/a1cd0fa0-ae9e-4486-95ba-9f723208f238"
+  }, {
+    "reference": "Condition/0cace68e-4b40-4060-af0b-7efff4c935d7"
+  }, {
+    "reference": "Condition/36d67139-03e9-4ecc-94ea-c28226a04305"
+  }, {
+    "reference": "Condition/36d67139-03e9-4ecc-94ea-c28226a04305"
+  }, {
+    "reference": "Procedure/9dd85246-608d-4b39-94cc-693fb2ba49b0"
+  }, {
+    "reference": "Observation/22410d9e-09b9-41e0-a3a2-42d027b4fdd9"
+  } ]
+}

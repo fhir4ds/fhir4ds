@@ -1,0 +1,95 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "3f53ec32-f81d-40c2-b739-4e8583c39593",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "f311f976-e2a6-4b6d-9af9-10792cb9f294-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "3835c33d-b335-44d7-a7b6-c8a0d5420290"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#f311f976-e2a6-4b6d-9af9-10792cb9f294-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient with both communications, macular edema present after start of encounter. "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS142FHIRDRCommunicationWithPhysicianManagingDiabetes",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/3835c33d-b335-44d7-a7b6-c8a0d5420290"
+  }, {
+    "reference": "Communication/c046f70b-1526-4194-8347-deca75772099"
+  }, {
+    "reference": "Communication/b5761bb0-9bab-4dfb-8924-06a65ed75b14"
+  }, {
+    "reference": "Condition/6952e0f9-f380-4150-a650-a636d8b72d4f"
+  }, {
+    "reference": "Observation/3bb6a35e-07ea-48b2-ac05-8b2178b316ec"
+  }, {
+    "reference": "Encounter/c0e50b2a-a27b-4cbb-9b2c-70b796faf374"
+  } ]
+}

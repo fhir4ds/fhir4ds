@@ -1,0 +1,22 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "636b6cda-159a-46ce-8720-89fb98a0b933",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1010600",
+      "display": "Opioids"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/bef27397-e972-46e8-8e92-b8d4fd7985dc"
+  },
+  "effectivePeriod": {
+    "start": "2025-12-31T08:00:00.000+00:00",
+    "end": "2025-12-31T08:15:00.000+00:00"
+  }
+}

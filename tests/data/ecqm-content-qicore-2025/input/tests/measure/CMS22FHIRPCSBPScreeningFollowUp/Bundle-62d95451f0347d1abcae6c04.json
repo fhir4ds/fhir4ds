@@ -1,0 +1,601 @@
+{
+  "resourceType": "Bundle",
+  "id": "62d95451f0347d1abcae6c04",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/86618b52-e0cc-4e90-b48c-cd64bbae8973",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "86618b52-e0cc-4e90-b48c-cd64bbae8973",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2076-8",
+            "display": "Native Hawaiian or Other Pacific Islander",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Native Hawaiian or Other Pacific Islander"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "62d95451f0347d1abcae6c04"
+      } ],
+      "name": [ {
+        "family": "NUMERandDENEXCEPPass",
+        "given": [ "2EncsSecondDeclined" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1977-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/86618b52-e0cc-4e90-b48c-cd64bbae8973"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/b10e0edd-7161-44a0-bce8-cca558be669b",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "b10e0edd-7161-44a0-bce8-cca558be669b",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "103705002",
+          "display": "Patient status observation (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/86618b52-e0cc-4e90-b48c-cd64bbae8973"
+      },
+      "period": {
+        "start": "2026-01-01T08:00:00.000+00:00",
+        "end": "2026-01-01T08:45:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/b10e0edd-7161-44a0-bce8-cca558be669b"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/55d31c5d-d7de-4daf-ad04-e9f1725731ce",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "55d31c5d-d7de-4daf-ad04-e9f1725731ce",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-blood-pressure" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "vital-signs",
+          "display": "Vital Signs"
+        } ],
+        "text": "Vital Signs"
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "85354-9",
+          "display": "Blood pressure panel"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/86618b52-e0cc-4e90-b48c-cd64bbae8973"
+      },
+      "effectiveDateTime": "2026-01-01T08:01:00.000+00:00",
+      "component": [ {
+        "code": {
+          "coding": [ {
+            "system": "http://loinc.org",
+            "code": "8480-6",
+            "display": "Systolic blood pressure"
+          } ]
+        },
+        "valueQuantity": {
+          "value": 130,
+          "unit": "mmHg",
+          "system": "http://unitsofmeasure.org",
+          "code": "mm[Hg]"
+        }
+      }, {
+        "code": {
+          "coding": [ {
+            "system": "http://loinc.org",
+            "code": "8462-4",
+            "display": "Diastolic blood pressure"
+          } ]
+        },
+        "valueQuantity": {
+          "value": 80,
+          "unit": "mmHg",
+          "system": "http://unitsofmeasure.org",
+          "code": "mm[Hg]"
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/55d31c5d-d7de-4daf-ad04-e9f1725731ce"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/ServiceRequest/cc21890c-4e39-4487-bd98-a5a86c7fc02c",
+    "resource": {
+      "resourceType": "ServiceRequest",
+      "id": "cc21890c-4e39-4487-bd98-a5a86c7fc02c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+      },
+      "status": "active",
+      "intent": "order",
+      "doNotPerform": true,
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "20093000",
+          "display": "Alcohol rehabilitation and detoxification (regime/therapy)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/86618b52-e0cc-4e90-b48c-cd64bbae8973"
+      },
+      "authoredOn": "2026-01-01T08:30:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "ServiceRequest/cc21890c-4e39-4487-bd98-a5a86c7fc02c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/ServiceRequest/b5d0e548-7628-46dd-9100-3314908effa6",
+    "resource": {
+      "resourceType": "ServiceRequest",
+      "id": "b5d0e548-7628-46dd-9100-3314908effa6",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+      },
+      "status": "active",
+      "intent": "order",
+      "doNotPerform": true,
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "183617005",
+          "display": "Follow-up 1 day (finding)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/86618b52-e0cc-4e90-b48c-cd64bbae8973"
+      },
+      "authoredOn": "2026-01-01T08:30:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "ServiceRequest/b5d0e548-7628-46dd-9100-3314908effa6"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/998cfa49-46c5-4d4c-a404-ebd0cb7fb14d",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "998cfa49-46c5-4d4c-a404-ebd0cb7fb14d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "103705002",
+          "display": "Patient status observation (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/86618b52-e0cc-4e90-b48c-cd64bbae8973"
+      },
+      "period": {
+        "start": "2026-12-31T10:00:00.000+00:00",
+        "end": "2026-12-31T10:45:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/998cfa49-46c5-4d4c-a404-ebd0cb7fb14d"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/55792440-7275-4f2b-8da4-7c9c59cfd023",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "55792440-7275-4f2b-8da4-7c9c59cfd023",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-blood-pressure" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "vital-signs",
+          "display": "Vital Signs"
+        } ],
+        "text": "Vital Signs"
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "85354-9",
+          "display": "Blood pressure panel"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/86618b52-e0cc-4e90-b48c-cd64bbae8973"
+      },
+      "effectiveDateTime": "2026-12-31T10:01:00.000+00:00",
+      "component": [ {
+        "code": {
+          "coding": [ {
+            "system": "http://loinc.org",
+            "code": "8480-6",
+            "display": "Systolic blood pressure"
+          } ]
+        },
+        "valueQuantity": {
+          "value": 160,
+          "unit": "mmHg",
+          "system": "http://unitsofmeasure.org",
+          "code": "mm[Hg]"
+        }
+      }, {
+        "code": {
+          "coding": [ {
+            "system": "http://loinc.org",
+            "code": "8462-4",
+            "display": "Diastolic blood pressure"
+          } ]
+        },
+        "valueQuantity": {
+          "value": 90,
+          "unit": "mmHg",
+          "system": "http://unitsofmeasure.org",
+          "code": "mm[Hg]"
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/55792440-7275-4f2b-8da4-7c9c59cfd023"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/ServiceRequest/7a98cf1f-63e6-452b-b9ea-c65cd4fc0188",
+    "resource": {
+      "resourceType": "ServiceRequest",
+      "id": "7a98cf1f-63e6-452b-b9ea-c65cd4fc0188",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "version": "2022-03",
+            "code": "183945002",
+            "display": "Procedure declined for religious reason (situation)",
+            "userSelected": true
+          } ]
+        }
+      } ],
+      "status": "completed",
+      "intent": "order",
+      "doNotPerform": true,
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "20093000",
+          "display": "Alcohol rehabilitation and detoxification (regime/therapy)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/86618b52-e0cc-4e90-b48c-cd64bbae8973"
+      },
+      "authoredOn": "2026-12-31T10:44:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "ServiceRequest/7a98cf1f-63e6-452b-b9ea-c65cd4fc0188"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/ServiceRequest/a8668265-3c8e-4cdf-980c-578dd9e76b3f",
+    "resource": {
+      "resourceType": "ServiceRequest",
+      "id": "a8668265-3c8e-4cdf-980c-578dd9e76b3f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "code": "105480006",
+            "display": "Procedure declined by patient (situation)",
+            "userSelected": true
+          } ]
+        }
+      } ],
+      "status": "completed",
+      "intent": "order",
+      "doNotPerform": true,
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "134403003",
+          "display": "Urgent referral (procedure)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/86618b52-e0cc-4e90-b48c-cd64bbae8973"
+      },
+      "authoredOn": "2026-12-31T10:20:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "ServiceRequest/a8668265-3c8e-4cdf-980c-578dd9e76b3f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/5496078d-88ae-4a2b-b9f5-60e80f306ce7",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "5496078d-88ae-4a2b-b9f5-60e80f306ce7",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/86618b52-e0cc-4e90-b48c-cd64bbae8973"
+      },
+      "payor": [ {
+        "reference": "Organization/ab0804fb-8815-4bce-b5ec-cd75656ad4d5"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/5496078d-88ae-4a2b-b9f5-60e80f306ce7"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/ab0804fb-8815-4bce-b5ec-cd75656ad4d5",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "ab0804fb-8815-4bce-b5ec-cd75656ad4d5",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/ab0804fb-8815-4bce-b5ec-cd75656ad4d5"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/5884b637-51f9-4685-81a9-8b4542f43e8f",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "5884b637-51f9-4685-81a9-8b4542f43e8f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "123456"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/5884b637-51f9-4685-81a9-8b4542f43e8f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/180850ae-9e9d-450e-92a9-23e06206a613",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "180850ae-9e9d-450e-92a9-23e06206a613",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "94611280-6ade-4f2b-8f03-eefa614002ca-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "86618b52-e0cc-4e90-b48c-cd64bbae8973"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#94611280-6ade-4f2b-8f03-eefa614002ca-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "1st Enc. 01/01 0800-0845 during MP with BP readings 130/80, follow up within 4 wks. referral to detox - passes numer\n2nd Enc. 12/31 1000-1045 during MP, BP 160/90, pt. declined referral and detox. pass denexcep"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS22FHIRPCSBPScreeningFollowUp",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 2
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 2
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/86618b52-e0cc-4e90-b48c-cd64bbae8973"
+      }, {
+        "reference": "Encounter/b10e0edd-7161-44a0-bce8-cca558be669b"
+      }, {
+        "reference": "Observation/55d31c5d-d7de-4daf-ad04-e9f1725731ce"
+      }, {
+        "reference": "ServiceRequest/cc21890c-4e39-4487-bd98-a5a86c7fc02c"
+      }, {
+        "reference": "ServiceRequest/b5d0e548-7628-46dd-9100-3314908effa6"
+      }, {
+        "reference": "Encounter/998cfa49-46c5-4d4c-a404-ebd0cb7fb14d"
+      }, {
+        "reference": "Observation/55792440-7275-4f2b-8da4-7c9c59cfd023"
+      }, {
+        "reference": "ServiceRequest/7a98cf1f-63e6-452b-b9ea-c65cd4fc0188"
+      }, {
+        "reference": "ServiceRequest/a8668265-3c8e-4cdf-980c-578dd9e76b3f"
+      }, {
+        "reference": "Coverage/5496078d-88ae-4a2b-b9f5-60e80f306ce7"
+      }, {
+        "reference": "Organization/ab0804fb-8815-4bce-b5ec-cd75656ad4d5"
+      }, {
+        "reference": "Practitioner/5884b637-51f9-4685-81a9-8b4542f43e8f"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/180850ae-9e9d-450e-92a9-23e06206a613"
+    }
+  } ]
+}

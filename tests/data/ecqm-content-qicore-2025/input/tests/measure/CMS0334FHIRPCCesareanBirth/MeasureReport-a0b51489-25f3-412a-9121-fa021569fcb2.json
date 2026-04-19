@@ -1,0 +1,95 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "a0b51489-25f3-412a-9121-fa021569fcb2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "2f27f594-94dc-4c3e-b0d9-3164c7b1ee1d-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "5580cb1d-0ac8-459b-9460-85ad6fe489dc"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#2f27f594-94dc-4c3e-b0d9-3164c7b1ee1d-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Fail IP, Non-delivery procedure (hip replacement)\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS0334FHIRPCCesareanBirth",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/5580cb1d-0ac8-459b-9460-85ad6fe489dc"
+  }, {
+    "reference": "Encounter/5e5bc4bb-d034-4081-bc5a-c607774d439d"
+  }, {
+    "reference": "Procedure/cb2a1af5-8e0d-4a13-a4e1-a58e7f6cfdbe"
+  }, {
+    "reference": "Coverage/494fd0fd-c448-4c28-9215-14392d0a2bc9"
+  }, {
+    "reference": "Organization/0054c7a1-6574-48e6-858d-19eb023857b4"
+  }, {
+    "reference": "Practitioner/82493ef5-82e8-49a1-a71b-becb3f4377df"
+  } ]
+}

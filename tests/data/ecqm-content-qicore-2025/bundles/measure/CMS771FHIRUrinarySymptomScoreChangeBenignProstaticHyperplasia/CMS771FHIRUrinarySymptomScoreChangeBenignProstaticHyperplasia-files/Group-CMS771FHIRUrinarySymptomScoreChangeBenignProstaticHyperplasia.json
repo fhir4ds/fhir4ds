@@ -1,0 +1,322 @@
+{
+  "resourceType": "Group",
+  "id": "CMS771FHIRUrinarySymptomScoreChangeBenignProstaticHyperplasia",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS771FHIRUrinarySymptomScoreChangeBenignProstaticHyperplasia"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/bf0200ab-3e37-4e90-8517-ffb351f2e563",
+      "display": "HasBMILT40 DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bf0200ab-3e37-4e90-8517-ffb351f2e563",
+      "display": "HasBMILT40 DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ae8b8236-bf9b-47f9-9c71-4655bca14aba",
+      "display": "BPHDxDuringHospitalizationEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ae8b8236-bf9b-47f9-9c71-4655bca14aba",
+      "display": "BPHDxDuringHospitalizationEnc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/228562c7-76c5-42e1-b4b6-0b952faa75c4",
+      "display": "BPHDx6MomthsBeforeStartMP IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/228562c7-76c5-42e1-b4b6-0b952faa75c4",
+      "display": "BPHDx6MomthsBeforeStartMP IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9b637e49-9b8a-48c1-8304-ec5984bc47fa",
+      "display": "2ndUSS1minBefore12monthEdge IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9b637e49-9b8a-48c1-8304-ec5984bc47fa",
+      "display": "2ndUSS1minBefore12monthEdge IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/623a7f40-c265-4e42-a5c5-6f54e20b19df",
+      "display": "UrinaryRetentionDxUnconfirmed DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/623a7f40-c265-4e42-a5c5-6f54e20b19df",
+      "display": "UrinaryRetentionDxUnconfirmed DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6552cc29-c4e2-441f-9ae5-41d3a2f5aea4",
+      "display": "BPHDxInHospitalEncGT30DaysAfterEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6552cc29-c4e2-441f-9ae5-41d3a2f5aea4",
+      "display": "BPHDxInHospitalEncGT30DaysAfterEnc DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bf0f8968-c2c0-4416-88db-11ea3e3da968",
+      "display": "USSMultipleIn1DayImprovement10 NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bf0f8968-c2c0-4416-88db-11ea3e3da968",
+      "display": "USSMultipleIn1DayImprovement10 NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4d7a04b3-91ed-4035-85ef-0728bdf818ef",
+      "display": "BPHDxStatusInactive IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4d7a04b3-91ed-4035-85ef-0728bdf818ef",
+      "display": "BPHDxStatusInactive IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bc79e5bc-237e-44be-b5fc-c5c4efb50286",
+      "display": "BMIGreaterThan40After2ndUSS DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bc79e5bc-237e-44be-b5fc-c5c4efb50286",
+      "display": "BMIGreaterThan40After2ndUSS DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fe0276a2-44c2-4c7b-9773-3d8189631604",
+      "display": "OVHasNoStartDtP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fe0276a2-44c2-4c7b-9773-3d8189631604",
+      "display": "OVHasNoStartDtP IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f1ccd667-ada1-4ca8-b4dc-fe4a9674d81a",
+      "display": "1stand2ndUSSEqual NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f1ccd667-ada1-4ca8-b4dc-fe4a9674d81a",
+      "display": "1stand2ndUSSEqual NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d2b4a14a-a53d-44e8-aacf-baadd8865f63",
+      "display": "OV1MinAfterMPEnd IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d2b4a14a-a53d-44e8-aacf-baadd8865f63",
+      "display": "OV1MinAfterMPEnd IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9be591a0-517b-4be2-b652-a29be0c75c15",
+      "display": "1stUSS1moAfterBPHDx NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9be591a0-517b-4be2-b652-a29be0c75c15",
+      "display": "1stUSS1moAfterBPHDx NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5339dd62-76a1-43b3-9965-d8b61478236a",
+      "display": "BMI44SameDayAs1stUSSNormalizedIntervalrelevantDatetime DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5339dd62-76a1-43b3-9965-d8b61478236a",
+      "display": "BMI44SameDayAs1stUSSNormalizedIntervalrelevantDatetime DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c0fd6874-9560-436e-9115-63970d859c34",
+      "display": "1stAnd2ndAUASIWithNoQOL IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c0fd6874-9560-436e-9115-63970d859c34",
+      "display": "1stAnd2ndAUASIWithNoQOL IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6f3d7b20-08da-459f-9d12-db2f6caa2177",
+      "display": "2ndUSS1MinAfter12MonthBPHDx IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6f3d7b20-08da-459f-9d12-db2f6caa2177",
+      "display": "2ndUSS1MinAfter12MonthBPHDx IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/051c5977-9f2c-4e8b-8e02-ac3ec0c718d6",
+      "display": "LastQOL IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/051c5977-9f2c-4e8b-8e02-ac3ec0c718d6",
+      "display": "LastQOL IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7f62a1c0-a39c-41b7-98b6-5877db9755b0",
+      "display": "USSImprovementof2 NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7f62a1c0-a39c-41b7-98b6-5877db9755b0",
+      "display": "USSImprovementof2 NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8a541116-96f0-4e25-a059-5bea9d244fa9",
+      "display": "isFemale IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8a541116-96f0-4e25-a059-5bea9d244fa9",
+      "display": "isFemale IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/71846c52-343b-4e31-95e1-b1f44cca0128",
+      "display": "UrinaryRetentionDXWithin1YrBPHDx DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/71846c52-343b-4e31-95e1-b1f44cca0128",
+      "display": "UrinaryRetentionDXWithin1YrBPHDx DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ab3ac1d-9b5e-4087-8862-dcb2562fb90f",
+      "display": "ResolvedUrinaryRetentionDx DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ab3ac1d-9b5e-4087-8862-dcb2562fb90f",
+      "display": "ResolvedUrinaryRetentionDx DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8bb45bbf-4685-45ed-ab5d-004f87214748",
+      "display": "MorbidObesityDxOnSameDayAs2ndUSS DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8bb45bbf-4685-45ed-ab5d-004f87214748",
+      "display": "MorbidObesityDxOnSameDayAs2ndUSS DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e90d90a7-3071-44de-8089-ad7b6f5f3e5d",
+      "display": "MorbidObesityDx1After2ndUSS DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e90d90a7-3071-44de-8089-ad7b6f5f3e5d",
+      "display": "MorbidObesityDx1After2ndUSS DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dfe54ab6-e271-47e0-b8eb-5f74a8d08dce",
+      "display": "OV1DayBeforeMPEdge IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/dfe54ab6-e271-47e0-b8eb-5f74a8d08dce",
+      "display": "OV1DayBeforeMPEdge IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2105cba2-6e61-487d-a737-3efe876028e8",
+      "display": "MorbidObesityDxAbated DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2105cba2-6e61-487d-a737-3efe876028e8",
+      "display": "MorbidObesityDxAbated DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4c234ec0-3f89-4d55-b767-219d1130f634",
+      "display": "USSImprovementof4AndMorbidObesityDxBeforeMPEdge  NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4c234ec0-3f89-4d55-b767-219d1130f634",
+      "display": "USSImprovementof4AndMorbidObesityDxBeforeMPEdge  NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ff1c0120-5339-4ec2-8a7e-8c03fb63fd3c",
+      "display": "NoUSSAfterDx IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ff1c0120-5339-4ec2-8a7e-8c03fb63fd3c",
+      "display": "NoUSSAfterDx IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/844dab9e-f34d-41dc-bd89-1440551471a6",
+      "display": "BPHdxGT6MoB4StartofMP IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/844dab9e-f34d-41dc-bd89-1440551471a6",
+      "display": "BPHdxGT6MoB4StartofMP IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/836cdd6c-bc29-4752-9beb-c336d26f0ed2",
+      "display": "MorbidObesityDxRefuted DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/836cdd6c-bc29-4752-9beb-c336d26f0ed2",
+      "display": "MorbidObesityDxRefuted DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7bdb16f0-8b33-4a95-b990-8a96f9d4ab53",
+      "display": "OVHasNoStartDt IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7bdb16f0-8b33-4a95-b990-8a96f9d4ab53",
+      "display": "OVHasNoStartDt IPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cb9497a6-968f-4034-b85c-d254c07e34e5",
+      "display": "OV1MinAfterMPStart IPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cb9497a6-968f-4034-b85c-d254c07e34e5",
+      "display": "OV1MinAfterMPStart IPPass"
+    }
+  } ]
+}

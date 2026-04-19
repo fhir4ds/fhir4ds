@@ -1,0 +1,36 @@
+{
+  "resourceType": "Observation",
+  "id": "6195458a-d911-42a1-b4ff-3c40e5f2b1b6",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "laboratory",
+      "display": "Laboratory"
+    } ],
+    "text": "Laboratory"
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "14627-4",
+      "display": "Bicarbonate [Moles/volume] in Venous blood"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/RiskVarPassFirstBicarbonate"
+  },
+  "encounter": {
+    "reference": "Encounter/e2706f0b-cf51-4efc-85c3-02c020b57866"
+  },
+  "effectiveDateTime": "2026-04-11T09:00:00.000+00:00",
+  "valueQuantity": {
+    "value": 32.1,
+    "unit": "[IU]/L",
+    "system": "http://unitsofmeasure.org",
+    "code": "[IU]/L"
+  }
+}

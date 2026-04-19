@@ -1,0 +1,112 @@
+{
+  "resourceType": "Group",
+  "id": "CMS1056CTClinicalFHIR",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS1056CTClinicalFHIR"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/93a345b0-259a-4c1d-8c85-280a6e78a006",
+      "display": "DENOMFail MissingResults"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/93a345b0-259a-4c1d-8c85-280a6e78a006",
+      "display": "DENOMFail MissingResults"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/87e15976-6935-4de9-b594-6169b4dbda7a",
+      "display": "NUMERPass HighDose"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/87e15976-6935-4de9-b594-6169b4dbda7a",
+      "display": "NUMERPass HighDose"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d735a266-abd3-4392-b9f4-7eb953ea9529",
+      "display": "DENOMPass AllScans"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d735a266-abd3-4392-b9f4-7eb953ea9529",
+      "display": "DENOMPass AllScans"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8852a08d-a245-4549-a661-6afdf2c79d2c",
+      "display": "DENOMFail NoUnits"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8852a08d-a245-4549-a661-6afdf2c79d2c",
+      "display": "DENOMFail NoUnits"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a9545a75-1461-4bf0-a105-d60ba84772a5",
+      "display": "NUMERPass TwoScans"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a9545a75-1461-4bf0-a105-d60ba84772a5",
+      "display": "NUMERPass TwoScans"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1d5593d0-f513-46f6-8c2d-538685a61185",
+      "display": "IPPFail ScanOutsideMP"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1d5593d0-f513-46f6-8c2d-538685a61185",
+      "display": "IPPFail ScanOutsideMP"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/03da9890-9eda-480c-99c8-d04a4e2f4204",
+      "display": "DENOMPass AbdopelrtGood"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/03da9890-9eda-480c-99c8-d04a4e2f4204",
+      "display": "DENOMPass AbdopelrtGood"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/405bb76e-a162-49ad-8b52-9f6f745efb64",
+      "display": "IPPFail Under18"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/405bb76e-a162-49ad-8b52-9f6f745efb64",
+      "display": "IPPFail Under18"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e80a2dd2-d2e8-4888-86e6-8bf2b6516e79",
+      "display": "NUMERPass HighNoise"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e80a2dd2-d2e8-4888-86e6-8bf2b6516e79",
+      "display": "NUMERPass HighNoise"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/15f7e535-9af3-4fdf-b3b3-8fa6b9d6ca76",
+      "display": "IPPPass Age18"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/15f7e535-9af3-4fdf-b3b3-8fa6b9d6ca76",
+      "display": "IPPPass Age18"
+    }
+  } ]
+}

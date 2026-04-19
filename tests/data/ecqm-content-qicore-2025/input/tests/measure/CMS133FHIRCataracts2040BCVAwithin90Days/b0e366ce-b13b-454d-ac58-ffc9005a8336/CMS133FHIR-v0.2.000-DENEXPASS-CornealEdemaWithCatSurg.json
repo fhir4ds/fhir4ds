@@ -1,0 +1,364 @@
+{
+  "resourceType": "Bundle",
+  "id": "61095b0998086b53805591a5",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/b0e366ce-b13b-454d-ac58-ffc9005a8336",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "b0e366ce-b13b-454d-ac58-ffc9005a8336",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "text": {
+        "status": "generated",
+        "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">Age@18 <b>DENOMPASS </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>67f3e33acf17bcb386e754d726ed064ccd48ba21ff0ffb2eb678740a684398be</td></tr><tr><td>Date of birth</td><td><span>01 January 1994</span></td></tr></tbody></table></div>"
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "61095b0998086b53805591a5"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "DENEXPASS",
+        "given": [ "CornealEdemaWithCatSurg" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1996-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/b0e366ce-b13b-454d-ac58-ffc9005a8336"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/bbd9ad66-b892-48fb-9b6a-fca28b65e460",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "bbd9ad66-b892-48fb-9b6a-fca28b65e460",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "exam",
+          "display": "exam"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "419775003"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/b0e366ce-b13b-454d-ac58-ffc9005a8336"
+      },
+      "effectivePeriod": {
+        "start": "2026-03-13T09:00:00+00:00",
+        "end": "2026-03-13T09:30:00+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/bbd9ad66-b892-48fb-9b6a-fca28b65e460"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/0bf89554-d755-4dea-a402-74f3db944312",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "0bf89554-d755-4dea-a402-74f3db944312",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-03-05T09:35:00-04:00"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "84149000"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/b0e366ce-b13b-454d-ac58-ffc9005a8336"
+      },
+      "performedPeriod": {
+        "start": "2026-03-05T09:20:00-04:00",
+        "end": "2026-04-05T10:30:00-04:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/0bf89554-d755-4dea-a402-74f3db944312"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/81a24ca4-8553-4a01-b4c1-030b3c98035f",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "81a24ca4-8553-4a01-b4c1-030b3c98035f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "code": "H18.43",
+          "userSelected": true
+        }, {
+          "system": "http://snomed.info/sct",
+          "code": "1794009",
+          "display": "Corneal Edema",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/b0e366ce-b13b-454d-ac58-ffc9005a8336"
+      },
+      "onsetDateTime": "2024-11-01T08:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/81a24ca4-8553-4a01-b4c1-030b3c98035f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/f2a80849-f6a0-4de9-964d-a7ee5ec62957",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "f2a80849-f6a0-4de9-964d-a7ee5ec62957",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/b0e366ce-b13b-454d-ac58-ffc9005a8336"
+      },
+      "payor": [ {
+        "reference": "Organization/5ed56f97-72df-446c-8af9-e1252a7a002d"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/f2a80849-f6a0-4de9-964d-a7ee5ec62957"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/5ed56f97-72df-446c-8af9-e1252a7a002d",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "5ed56f97-72df-446c-8af9-e1252a7a002d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/5ed56f97-72df-446c-8af9-e1252a7a002d"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/47f47a3c-885c-41ef-8c8f-586c3319673f",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "47f47a3c-885c-41ef-8c8f-586c3319673f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "123456"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/47f47a3c-885c-41ef-8c8f-586c3319673f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/52f903e4-cd3c-4458-a17c-864694b83363",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "52f903e4-cd3c-4458-a17c-864694b83363",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "d68a22d3-b695-4e71-aa10-bf77bcc5f121-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "b0e366ce-b13b-454d-ac58-ffc9005a8336"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#d68a22d3-b695-4e71-aa10-bf77bcc5f121-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient with corneal edema with cataract surgery. "
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS133FHIRCataracts2040BCVAwithin90Days",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/b0e366ce-b13b-454d-ac58-ffc9005a8336"
+      }, {
+        "reference": "Observation/bbd9ad66-b892-48fb-9b6a-fca28b65e460"
+      }, {
+        "reference": "Procedure/0bf89554-d755-4dea-a402-74f3db944312"
+      }, {
+        "reference": "Condition/81a24ca4-8553-4a01-b4c1-030b3c98035f"
+      }, {
+        "reference": "Coverage/f2a80849-f6a0-4de9-964d-a7ee5ec62957"
+      }, {
+        "reference": "Organization/5ed56f97-72df-446c-8af9-e1252a7a002d"
+      }, {
+        "reference": "Practitioner/47f47a3c-885c-41ef-8c8f-586c3319673f"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/52f903e4-cd3c-4458-a17c-864694b83363"
+    }
+  } ]
+}

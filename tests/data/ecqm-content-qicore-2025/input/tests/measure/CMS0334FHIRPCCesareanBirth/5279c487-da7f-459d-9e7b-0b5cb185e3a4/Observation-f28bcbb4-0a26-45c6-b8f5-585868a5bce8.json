@@ -1,0 +1,26 @@
+{
+  "resourceType": "Observation",
+  "id": "f28bcbb4-0a26-45c6-b8f5-585868a5bce8",
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "exam",
+      "display": "exam",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-09",
+      "code": "18559007",
+      "display": "Frank breech presentation (finding)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/5279c487-da7f-459d-9e7b-0b5cb185e3a4"
+  },
+  "effectiveDateTime": "2026-06-08T20:01:00.000+00:00"
+}

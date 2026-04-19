@@ -1,0 +1,183 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1045.152",
+  "meta": {
+    "versionId": "41",
+    "lastUpdated": "2025-02-20T01:12:38.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2025-02-20"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2025-02-20"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.152",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1045.152"
+    }
+  ],
+  "version": "20250220",
+  "name": "BodyTemperature",
+  "title": "Body Temperature",
+  "status": "active",
+  "date": "2025-02-20T01:12:38-05:00",
+  "publisher": "Yale",
+  "expansion": {
+    "identifier": "urn:uuid:5048a167-b5fc-4ff5-b4ba-4099c5613b2e",
+    "timestamp": "2026-03-13T13:02:12-04:00",
+    "total": 21,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "104063-3",
+        "display": "Body temperature - Groin"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "11289-6",
+        "display": "Body temperature at First encounter"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "60830-7",
+        "display": "Finger temperature"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "60833-1",
+        "display": "Toe temperature"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "60836-4",
+        "display": "Esophageal temperature"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "60838-0",
+        "display": "Nasopharyngeal temperature"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "61008-9",
+        "display": "Body surface temperature"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "75539-7",
+        "display": "Body temperature - Temporal artery"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "76010-8",
+        "display": "Nasal temperature"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "76011-6",
+        "display": "Ear temperature"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "8310-5",
+        "display": "Body temperature"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "8328-7",
+        "display": "Axillary temperature"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "8329-5",
+        "display": "Body temperature - Core"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "8330-3",
+        "display": "Body temperature - Intravascular"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "8331-1",
+        "display": "Oral temperature"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "8332-9",
+        "display": "Rectal temperature"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "8333-7",
+        "display": "Tympanic membrane temperature"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "8334-5",
+        "display": "Body temperature - Urinary bladder"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "91371-5",
+        "display": "Body temperature - Brain"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "98657-0",
+        "display": "Body temperature - Hand surface"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "98663-8",
+        "display": "Body temperature - Foot surface"
+      }
+    ]
+  }
+}

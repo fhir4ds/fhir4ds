@@ -1,0 +1,36 @@
+{
+  "resourceType": "Observation",
+  "id": "30af4659-aec9-4169-97d0-764694e8a62e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-body-temperature" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "vital-signs",
+      "display": "Vital Signs"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "8310-5",
+      "display": "Body temperature"
+    } ],
+    "text": "Body temperature"
+  },
+  "subject": {
+    "reference": "Patient/97f045d5-0c9e-40c5-9f46-7adf4c049598"
+  },
+  "encounter": {
+    "reference": "Encounter/90e149df-706c-417a-81ee-956e14cc1963"
+  },
+  "effectiveDateTime": "2026-04-11T08:00:00.000+00:00",
+  "valueQuantity": {
+    "value": 37,
+    "unit": "Cel",
+    "system": "http://unitsofmeasure.org",
+    "code": "Cel"
+  }
+}

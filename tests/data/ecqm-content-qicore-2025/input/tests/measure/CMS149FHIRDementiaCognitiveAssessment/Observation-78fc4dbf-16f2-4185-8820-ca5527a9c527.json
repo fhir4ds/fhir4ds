@@ -1,0 +1,19 @@
+{
+  "resourceType": "Observation",
+  "id": "78fc4dbf-16f2-4185-8820-ca5527a9c527",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDone",
+    "valueBoolean": true
+  } ],
+  "status": "cancelled",
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.69",
+      "code": "58151-2",
+      "display": "Prior assessment Brief Interview for Mental Status (BIMS) summary score [MDSv3]",
+      "userSelected": true
+    } ]
+  },
+  "issued": "2026-08-05T07:00:00.000+00:00"
+}

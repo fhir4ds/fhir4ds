@@ -1,0 +1,28 @@
+{
+  "resourceType": "Encounter",
+  "id": "f57e8d01-add0-40f0-b706-b1871703a8c3",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory encounter"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "185467006",
+      "display": "Home visit for acute condition (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/b05ea6cd-9b35-4798-b15d-edc8593c2d33"
+  },
+  "period": {
+    "start": "2026-07-08T09:00:00.000+00:00",
+    "end": "2026-07-08T09:00:00.000+00:00"
+  }
+}

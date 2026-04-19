@@ -1,0 +1,35 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "37d36fe0-54d9-4eff-a496-f793d13613cf",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "doNotPerform": false,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "2025-01",
+      "code": "314008",
+      "display": "goserelin 10.8 MG Drug Implant"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/ee053d16-adcb-4760-9305-6a553d789d9a"
+  },
+  "authoredOn": "2025-11-01T08:00:00.000+00:00",
+  "requester": {
+    "reference": "http://myGoodHealthcare.com/fhir/Practitioner/ff83cc78-5993-44bd-a2d8-1b4140c17f03"
+  },
+  "dosageInstruction": [ {
+    "timing": {
+      "repeat": {
+        "boundsPeriod": {
+          "start": "2025-11-03T08:00:00.000+00:00",
+          "end": "2025-11-03T09:00:00.000+00:00"
+        }
+      }
+    }
+  } ]
+}

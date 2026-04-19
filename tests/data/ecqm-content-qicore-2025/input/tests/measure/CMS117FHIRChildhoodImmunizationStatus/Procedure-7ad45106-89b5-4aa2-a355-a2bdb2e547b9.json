@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "7ad45106-89b5-4aa2-a355-a2bdb2e547b9",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-01-10T00:00:00.000Z"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "90689",
+      "display": "Influenza virus vaccine, quadrivalent (IIV4), inactivated, adjuvanted, preservative free, 0.25 mL dosage, for intramuscular use"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1e7dc519-5d75-4c07-b23f-ae9421a12943"
+  },
+  "performedPeriod": {
+    "start": "2025-01-10T00:00:00.000Z",
+    "end": "2025-01-10T23:59:59.000Z"
+  }
+}

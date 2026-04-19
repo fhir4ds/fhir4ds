@@ -1,0 +1,427 @@
+{
+  "resourceType": "Bundle",
+  "id": "254649834656724524545",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/5762f5c0-fe63-42fc-84ea-afadee165895",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "5762f5c0-fe63-42fc-84ea-afadee165895",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native"
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "41651646464313135131"
+      } ],
+      "name": [ {
+        "family": "DENEXPass",
+        "given": [ "ChemoAgents6MonthsBeforeStagingEdge" ]
+      } ],
+      "gender": "unknown",
+      "birthDate": "1947-02-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/5762f5c0-fe63-42fc-84ea-afadee165895"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/ec5ddfe2-374f-4b2a-8efc-fefff69fdb13",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "ec5ddfe2-374f-4b2a-8efc-fefff69fdb13",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "185463005",
+          "display": "Visit out of hours (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/5762f5c0-fe63-42fc-84ea-afadee165895"
+      },
+      "period": {
+        "start": "2026-06-30T08:00:00.000+00:00",
+        "end": "2026-06-30T09:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/ec5ddfe2-374f-4b2a-8efc-fefff69fdb13"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationRequest/13d22c77-7f5a-4466-bcb1-400acd56c807",
+    "resource": {
+      "resourceType": "MedicationRequest",
+      "id": "13d22c77-7f5a-4466-bcb1-400acd56c807",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+      },
+      "status": "active",
+      "intent": "order",
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "version": "04012024",
+          "code": "1001405",
+          "display": "docetaxel 20 MG/ML Injectable Solution"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/5762f5c0-fe63-42fc-84ea-afadee165895"
+      },
+      "authoredOn": "2026-01-01T08:00:00.000+00:00",
+      "requester": {
+        "reference": "Practitioner/7e4a6298-db7a-4534-93f1-452508c1ff63"
+      },
+      "dosageInstruction": [ {
+        "timing": {
+          "repeat": {
+            "boundsPeriod": {
+              "start": "2026-01-01T08:00:00.000+00:00",
+              "end": "2026-01-01T08:15:00.000+00:00"
+            }
+          }
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationRequest/13d22c77-7f5a-4466-bcb1-400acd56c807"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/8e8b581a-0861-47de-9708-ea11291a0ed4",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "8e8b581a-0861-47de-9708-ea11291a0ed4",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "Active"
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "Confirmed"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "version": "2024",
+          "code": "C67.3",
+          "display": "Malignant neoplasm of anterior wall of bladder"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/5762f5c0-fe63-42fc-84ea-afadee165895"
+      },
+      "onsetDateTime": "2026-06-30T08:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/8e8b581a-0861-47de-9708-ea11291a0ed4"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/093dc2ab-66ed-4bc0-9e9d-334044581126",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "093dc2ab-66ed-4bc0-9e9d-334044581126",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+      },
+      "partOf": [ {
+        "reference": "Procedure/fa06db3f-ea20-43f9-8254-0825502c55d3"
+      } ],
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "procedure",
+          "display": "Procedure"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "21902-2",
+          "display": "Stage group.pathology Cancer"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/5762f5c0-fe63-42fc-84ea-afadee165895"
+      },
+      "effectivePeriod": {
+        "start": "2026-06-30T08:00:00.000+00:00",
+        "end": "2026-06-30T08:15:00.000+00:00"
+      },
+      "issued": "2026-06-30T08:15:00.000+00:00",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "1228883000",
+          "display": "American Joint Committee on Cancer cTa (qualifier value)"
+        } ]
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/093dc2ab-66ed-4bc0-9e9d-334044581126"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/7e4a6298-db7a-4534-93f1-452508c1ff63",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "7e4a6298-db7a-4534-93f1-452508c1ff63",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.336",
+        "value": "Practitioner-23"
+      } ],
+      "active": true,
+      "name": [ {
+        "family": "Careful",
+        "given": [ "Adam" ],
+        "prefix": [ "Dr" ]
+      } ],
+      "address": [ {
+        "use": "home",
+        "line": [ "534 Erewhon St" ],
+        "city": "PleasantVille",
+        "state": "UT",
+        "postalCode": "84414"
+      } ],
+      "qualification": [ {
+        "identifier": [ {
+          "system": "http://example.org/UniversityIdentifier",
+          "value": "12345"
+        } ],
+        "code": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0360|2.7",
+            "code": "BS",
+            "display": "Bachelor of Science"
+          } ],
+          "text": "Bachelor of Science"
+        },
+        "period": {
+          "start": "1996"
+        },
+        "issuer": {
+          "display": "Example University"
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/7e4a6298-db7a-4534-93f1-452508c1ff63"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/fa06db3f-ea20-43f9-8254-0825502c55d3",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "fa06db3f-ea20-43f9-8254-0825502c55d3",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-06-30T08:00:00.000+00:00"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "http://snomed.info/sct/731000124108/version/20240301",
+          "code": "254292007",
+          "display": "Tumor staging"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/5762f5c0-fe63-42fc-84ea-afadee165895"
+      },
+      "performedPeriod": {
+        "start": "2026-06-30T08:00:00.000+00:00",
+        "end": "2026-06-30T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/fa06db3f-ea20-43f9-8254-0825502c55d3"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/e68a7bc8-6a74-42da-b7db-dd916b339002",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "e68a7bc8-6a74-42da-b7db-dd916b339002",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "0138350b-6292-4ea1-ab07-3bd3d65ef74e-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "5762f5c0-fe63-42fc-84ea-afadee165895"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#0138350b-6292-4ea1-ab07-3bd3d65ef74e-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient with OV in MP. Bladder cancer diagnosis and cancer staging in MP.  Pt had chemotherapy agent 6 months prior to bladder cancer staging and should be excluded. Gender unknown."
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS646FHIRIntravesicalBacillusCalmetteGuerinForBladderCancer",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/5762f5c0-fe63-42fc-84ea-afadee165895"
+      }, {
+        "reference": "Encounter/ec5ddfe2-374f-4b2a-8efc-fefff69fdb13"
+      }, {
+        "reference": "MedicationRequest/13d22c77-7f5a-4466-bcb1-400acd56c807"
+      }, {
+        "reference": "Condition/8e8b581a-0861-47de-9708-ea11291a0ed4"
+      }, {
+        "reference": "Observation/093dc2ab-66ed-4bc0-9e9d-334044581126"
+      }, {
+        "reference": "Practitioner/7e4a6298-db7a-4534-93f1-452508c1ff63"
+      }, {
+        "reference": "Procedure/fa06db3f-ea20-43f9-8254-0825502c55d3"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/e68a7bc8-6a74-42da-b7db-dd916b339002"
+    }
+  } ]
+}

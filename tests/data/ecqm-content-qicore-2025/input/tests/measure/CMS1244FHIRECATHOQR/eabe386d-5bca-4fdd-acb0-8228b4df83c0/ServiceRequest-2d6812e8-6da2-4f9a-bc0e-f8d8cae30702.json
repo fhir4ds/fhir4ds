@@ -1,0 +1,22 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "2d6812e8-6da2-4f9a-bc0e-f8d8cae30702",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "plan",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2023-09",
+      "code": "19951005",
+      "display": "Hospital admission, emergency, from emergency room, medical nature (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/eabe386d-5bca-4fdd-acb0-8228b4df83c0"
+  },
+  "authoredOn": "2027-05-01T19:58:00.000+00:00"
+}

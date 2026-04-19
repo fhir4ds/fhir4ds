@@ -1,0 +1,35 @@
+{
+  "resourceType": "Condition",
+  "id": "e4d00494-f72f-4c1a-9657-c348d1c810db",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "active",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "problem-list-item",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "1306287007",
+      "display": "Primary open angle glaucoma of left eye (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/2cca67ad-d05c-4bd2-aa74-d5ba553b9afc"
+  },
+  "onsetDateTime": "2023-07-27T10:30:00+00:00"
+}

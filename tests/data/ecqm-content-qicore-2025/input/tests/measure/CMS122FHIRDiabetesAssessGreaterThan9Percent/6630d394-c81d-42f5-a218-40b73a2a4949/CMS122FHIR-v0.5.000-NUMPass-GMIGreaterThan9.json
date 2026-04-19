@@ -1,0 +1,271 @@
+{
+  "resourceType": "Bundle",
+  "id": "Patient-41-NUMPass-GMIGreaterThan9",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/6630d394-c81d-42f5-a218-40b73a2a4949",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "6630d394-c81d-42f5-a218-40b73a2a4949",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "Bertha",
+        "given": [ "Betty" ]
+      } ],
+      "gender": "female",
+      "birthDate": "2007-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/6630d394-c81d-42f5-a218-40b73a2a4949"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/91fb7341-3b44-429a-a52b-936581799265",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "91fb7341-3b44-429a-a52b-936581799265",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "185460008",
+          "display": "Home visit request by patient (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/6630d394-c81d-42f5-a218-40b73a2a4949"
+      },
+      "period": {
+        "start": "2026-01-01T00:00:00Z",
+        "end": "2026-01-01T00:15:00Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/91fb7341-3b44-429a-a52b-936581799265"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/9f5d8562-6e8c-4371-ac93-d6ead916df84",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "9f5d8562-6e8c-4371-ac93-d6ead916df84",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "102781000119107",
+          "display": "Sensory neuropathy due to type 1 diabetes mellitus (disorder)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/6630d394-c81d-42f5-a218-40b73a2a4949"
+      },
+      "onsetDateTime": "2026-01-01T23:59:00Z"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/9f5d8562-6e8c-4371-ac93-d6ead916df84"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/602c6be8-4e4d-46ab-a9e1-bfe18c14f2df",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "602c6be8-4e4d-46ab-a9e1-bfe18c14f2df",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+      },
+      "status": "corrected",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "laboratory"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "97506-0",
+          "display": "Glucose management indicator"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/6630d394-c81d-42f5-a218-40b73a2a4949"
+      },
+      "effectivePeriod": {
+        "start": "2026-01-02T00:00:00Z",
+        "end": "2026-01-03T00:00:00Z"
+      },
+      "valueQuantity": {
+        "value": 9.1,
+        "unit": "%",
+        "system": "http://unitsofmeasure.org",
+        "code": "%"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/602c6be8-4e4d-46ab-a9e1-bfe18c14f2df"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/9fff07b8-2df3-4e35-80fd-07e4c87556b3",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "9fff07b8-2df3-4e35-80fd-07e4c87556b3",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "6fedfe6d-f6f7-420a-980c-29884134167f-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "6630d394-c81d-42f5-a218-40b73a2a4949"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#6fedfe6d-f6f7-420a-980c-29884134167f-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Glucose management indicator is greater than 9%"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS122FHIRDiabetesAssessGreaterThan9Percent",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/6630d394-c81d-42f5-a218-40b73a2a4949"
+      }, {
+        "reference": "Encounter/91fb7341-3b44-429a-a52b-936581799265"
+      }, {
+        "reference": "Condition/9f5d8562-6e8c-4371-ac93-d6ead916df84"
+      }, {
+        "reference": "Observation/602c6be8-4e4d-46ab-a9e1-bfe18c14f2df"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/9fff07b8-2df3-4e35-80fd-07e4c87556b3"
+    }
+  } ]
+}

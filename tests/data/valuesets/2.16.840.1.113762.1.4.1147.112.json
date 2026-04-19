@@ -1,0 +1,135 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1147.112",
+  "meta": {
+    "versionId": "25",
+    "lastUpdated": "2024-02-22T15:51:00.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2024-01-12"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2024-01-12"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1147.112",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1147.112"
+    }
+  ],
+  "version": "20240112",
+  "name": "PressureInjuryDeepTissue",
+  "title": "Pressure Injury Deep Tissue",
+  "status": "active",
+  "date": "2024-01-12T01:09:53-05:00",
+  "publisher": "Mathematica PSI Steward",
+  "expansion": {
+    "identifier": "urn:uuid:0fc71b96-bbee-4549-8a68-1851124386c2",
+    "timestamp": "2026-03-13T13:03:03-04:00",
+    "total": 13,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "139566261000119101",
+        "display": "Deep tissue pressure injury of left heel (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "282236291000119109",
+        "display": "Pressure injury of deep tissue of right buttock (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "324946811000119102",
+        "display": "Pressure injury of deep tissue of right ankle (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "392913311000119107",
+        "display": "Pressure injury of deep tissue of left hip (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "450728161000119104",
+        "display": "Pressure injury of deep tissue of left ankle (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "468409941000119108",
+        "display": "Pressure injury of deep tissue of sacral region of back (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "480837841000119108",
+        "display": "Pressure injury of deep tissue of left elbow (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "561885931000119106",
+        "display": "Deep tissue pressure injury of right heel (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "585603201000119101",
+        "display": "Pressure injury of deep tissue of right elbow (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "705220971000119104",
+        "display": "Pressure injury of deep tissue of right hip (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "723071003",
+        "display": "Pressure injury of deep tissue (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "82479641000119102",
+        "display": "Pressure injury of deep tissue of head (disorder)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "959201281000119107",
+        "display": "Pressure injury of deep tissue of left buttock (disorder)"
+      }
+    ]
+  }
+}

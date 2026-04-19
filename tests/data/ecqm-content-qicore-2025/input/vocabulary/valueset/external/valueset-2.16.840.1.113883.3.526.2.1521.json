@@ -1,0 +1,553 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1521-20250125",
+  "meta": {
+    "versionId": "35",
+    "lastUpdated": "2025-01-25T01:09:35.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-01-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1521",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1521"
+  } ],
+  "version": "20250125",
+  "name": "BurnConfinedToEyeAndAdnexa",
+  "title": "Burn Confined to Eye and Adnexa",
+  "status": "active",
+  "date": "2025-01-25T01:09:35-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts for diagnoses of a burn of the eye and/or adnexa.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of burns of various parts of the eye, or eye corrosion.),(Exclusion Criteria: Excludes concepts that represent a diagnosis for 'unspecified eye.')",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "110170006",
+        "display": "Burn of periorbital region (disorder)"
+      }, {
+        "code": "110171005",
+        "display": "Epidermal burn of periorbital region (disorder)"
+      }, {
+        "code": "110172003",
+        "display": "Partial thickness burn of periorbital region (disorder)"
+      }, {
+        "code": "110173008",
+        "display": "Full thickness burn of periorbital region (disorder)"
+      }, {
+        "code": "12081251000119109",
+        "display": "Chemical burn of left conjunctival sac (disorder)"
+      }, {
+        "code": "12081291000119104",
+        "display": "Chemical burn of right conjunctival sac (disorder)"
+      }, {
+        "code": "12081411000119109",
+        "display": "Chemical burn of left cornea (disorder)"
+      }, {
+        "code": "12081451000119105",
+        "display": "Chemical burn of right cornea (disorder)"
+      }, {
+        "code": "12081491000119100",
+        "display": "Burn of cornea of left eye (disorder)"
+      }, {
+        "code": "12081531000119100",
+        "display": "Burn of cornea of right eye (disorder)"
+      }, {
+        "code": "12081651000119107",
+        "display": "Burn of conjunctival sac of left eye (disorder)"
+      }, {
+        "code": "12081691000119102",
+        "display": "Burn of conjunctival sac of right eye (disorder)"
+      }, {
+        "code": "12081931000119106",
+        "display": "Burn of left eye region (disorder)"
+      }, {
+        "code": "12081971000119109",
+        "display": "Burn of right eye region (disorder)"
+      }, {
+        "code": "12114081000119101",
+        "display": "Chemical burn of left eye (disorder)"
+      }, {
+        "code": "12115361000119108",
+        "display": "Chemical burn of right eye (disorder)"
+      }, {
+        "code": "211659009",
+        "display": "Chemical burn of eyelid region (disorder)"
+      }, {
+        "code": "211661000",
+        "display": "Alkaline chemical burn of cornea and conjunctival sac (disorder)"
+      }, {
+        "code": "211662007",
+        "display": "Acid chemical burn of cornea and conjunctival sac (disorder)"
+      }, {
+        "code": "231819004",
+        "display": "Thermal burn of eyelid (disorder)"
+      }, {
+        "code": "231844007",
+        "display": "Lacrimal punctum burn (disorder)"
+      }, {
+        "code": "231867009",
+        "display": "Thermal injury to conjunctiva (disorder)"
+      }, {
+        "code": "231869007",
+        "display": "Chemical burn injury to conjunctiva (disorder)"
+      }, {
+        "code": "231884003",
+        "display": "Burn of sclera (disorder)"
+      }, {
+        "code": "231943000",
+        "display": "Thermal and radiation injury of cornea (disorder)"
+      }, {
+        "code": "231945007",
+        "display": "Chemical injury to cornea (disorder)"
+      }, {
+        "code": "232027007",
+        "display": "Photocoagulation burn to retina (disorder)"
+      }, {
+        "code": "232028002",
+        "display": "Laser coagulation burn to retina (disorder)"
+      }, {
+        "code": "232029005",
+        "display": "Cryotherapy burn to retina (disorder)"
+      }, {
+        "code": "269232009",
+        "display": "Burn confined to eye and adnexa (disorder)"
+      }, {
+        "code": "274204004",
+        "display": "Burn of cornea (disorder)"
+      }, {
+        "code": "274205003",
+        "display": "Burn of eye region (disorder)"
+      }, {
+        "code": "284537006",
+        "display": "Eyelid burn (disorder)"
+      }, {
+        "code": "284541005",
+        "display": "Burn of conjunctiva (disorder)"
+      }, {
+        "code": "287132002",
+        "display": "Epidermal burn of eyelid (disorder)"
+      }, {
+        "code": "287133007",
+        "display": "Burn to eyelid - blister (disorder)"
+      }, {
+        "code": "287134001",
+        "display": "Full thickness burn of eyelid (disorder)"
+      }, {
+        "code": "287137008",
+        "display": "Burn to cornea - blister (disorder)"
+      }, {
+        "code": "287138003",
+        "display": "Burn to cornea - full thickness (disorder)"
+      }, {
+        "code": "312646002",
+        "display": "Burn of skin of eye region (disorder)"
+      }, {
+        "code": "314531003",
+        "display": "Burn of anterior eyeball segment (disorder)"
+      }, {
+        "code": "38916004",
+        "display": "Alkaline chemical burn of cornea AND/OR conjunctival sac (disorder)"
+      }, {
+        "code": "40901000087106",
+        "display": "Burn of left eye proper (disorder)"
+      }, {
+        "code": "41171000087107",
+        "display": "Burn of right eye proper (disorder)"
+      }, {
+        "code": "418591009",
+        "display": "Corneal wound burn (disorder)"
+      }, {
+        "code": "423838005",
+        "display": "Scleral surgical wound burn (disorder)"
+      }, {
+        "code": "445832003",
+        "display": "Chemical burn of eyelid (disorder)"
+      }, {
+        "code": "445850005",
+        "display": "Deep third degree burn of eye region (disorder)"
+      }, {
+        "code": "446234004",
+        "display": "Alkaline chemical burn of conjunctival sac (disorder)"
+      }, {
+        "code": "446556000",
+        "display": "Acid chemical burn of cornea (disorder)"
+      }, {
+        "code": "446856005",
+        "display": "Burn of conjuctival sac (disorder)"
+      }, {
+        "code": "447094002",
+        "display": "Alkaline chemical burn of cornea (disorder)"
+      }, {
+        "code": "447095001",
+        "display": "Acid chemical burn of conjunctival sac (disorder)"
+      }, {
+        "code": "447333000",
+        "display": "Burn of ocular adnexa (disorder)"
+      }, {
+        "code": "473243005",
+        "display": "Burn of eye region with burn of face (disorder)"
+      }, {
+        "code": "473244004",
+        "display": "Burn of eye region with epidermal burn of face (disorder)"
+      }, {
+        "code": "473245003",
+        "display": "Burn of eye region with partial thickness burn of face (disorder)"
+      }, {
+        "code": "473246002",
+        "display": "Burn of eye region with full thickness burn of face (disorder)"
+      }, {
+        "code": "473248001",
+        "display": "Burn of eye region with epidermal burn of head and/or neck (disorder)"
+      }, {
+        "code": "473249009",
+        "display": "Burn of eye region with partial thickness burn of head and/or neck (disorder)"
+      }, {
+        "code": "473250009",
+        "display": "Burn of eye region with full thickness burn of head and/or neck (disorder)"
+      }, {
+        "code": "63542002",
+        "display": "Acid chemical burn of cornea AND/OR conjunctival sac (disorder)"
+      }, {
+        "code": "770555009",
+        "display": "Burn of eye proper (disorder)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:91c7340e-0808-452b-a807-5d73ae220802",
+    "timestamp": "2025-06-20T16:55:54-04:00",
+    "total": 61,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "110170006",
+      "display": "Burn of periorbital region (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "110171005",
+      "display": "Epidermal burn of periorbital region (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "110172003",
+      "display": "Partial thickness burn of periorbital region (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "110173008",
+      "display": "Full thickness burn of periorbital region (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "12081251000119109",
+      "display": "Chemical burn of left conjunctival sac (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "12081291000119104",
+      "display": "Chemical burn of right conjunctival sac (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "12081411000119109",
+      "display": "Chemical burn of left cornea (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "12081451000119105",
+      "display": "Chemical burn of right cornea (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "12081491000119100",
+      "display": "Burn of cornea of left eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "12081531000119100",
+      "display": "Burn of cornea of right eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "12081651000119107",
+      "display": "Burn of conjunctival sac of left eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "12081691000119102",
+      "display": "Burn of conjunctival sac of right eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "12081931000119106",
+      "display": "Burn of left eye region (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "12081971000119109",
+      "display": "Burn of right eye region (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "12114081000119101",
+      "display": "Chemical burn of left eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "12115361000119108",
+      "display": "Chemical burn of right eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "211659009",
+      "display": "Chemical burn of eyelid region (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "211661000",
+      "display": "Alkaline chemical burn of cornea and conjunctival sac (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "211662007",
+      "display": "Acid chemical burn of cornea and conjunctival sac (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "231819004",
+      "display": "Thermal burn of eyelid (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "231844007",
+      "display": "Lacrimal punctum burn (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "231867009",
+      "display": "Thermal injury to conjunctiva (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "231869007",
+      "display": "Chemical burn injury to conjunctiva (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "231884003",
+      "display": "Burn of sclera (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "231943000",
+      "display": "Thermal and radiation injury to the cornea (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "231945007",
+      "display": "Chemical injury to cornea (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "232027007",
+      "display": "Photocoagulation burn to retina (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "232028002",
+      "display": "Laser coagulation burn to retina (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "232029005",
+      "display": "Cryotherapy burn to retina (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "269232009",
+      "display": "Burn confined to eye and adnexa (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "274204004",
+      "display": "Burn of cornea (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "274205003",
+      "display": "Burn of eye region (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "284537006",
+      "display": "Eyelid burn (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "284541005",
+      "display": "Burn of conjunctiva (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "287132002",
+      "display": "Epidermal burn of eyelid (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "287133007",
+      "display": "Burn to eyelid - blister (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "287134001",
+      "display": "Full thickness burn of eyelid (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "287137008",
+      "display": "Burn to cornea - blister (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "287138003",
+      "display": "Burn to cornea - full thickness (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "312646002",
+      "display": "Burn of skin of eye region (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "314531003",
+      "display": "Burn of anterior eyeball segment (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "38916004",
+      "display": "Alkaline chemical burn of cornea AND/OR conjunctival sac (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "418591009",
+      "display": "Corneal wound burn (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "423838005",
+      "display": "Scleral surgical wound burn (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "445832003",
+      "display": "Chemical burn of eyelid (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "445850005",
+      "display": "Deep third degree burn of eye region (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "446234004",
+      "display": "Alkaline chemical burn of conjunctival sac (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "446556000",
+      "display": "Acid chemical burn of cornea (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "446856005",
+      "display": "Burn of conjuctival sac (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "447094002",
+      "display": "Alkaline chemical burn of cornea (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "447095001",
+      "display": "Acid chemical burn of conjunctival sac (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "447333000",
+      "display": "Burn of ocular adnexa (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "473243005",
+      "display": "Burn of eye region with burn of face (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "473244004",
+      "display": "Burn of eye region with epidermal burn of face (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "473245003",
+      "display": "Burn of eye region with partial thickness burn of face (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "473246002",
+      "display": "Burn of eye region with full thickness burn of face (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "473248001",
+      "display": "Burn of eye region with epidermal burn of head and/or neck (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "473249009",
+      "display": "Burn of eye region with partial thickness burn of head and/or neck (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "473250009",
+      "display": "Burn of eye region with full thickness burn of head and/or neck (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "63542002",
+      "display": "Acid chemical burn of cornea AND/OR conjunctival sac (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "770555009",
+      "display": "Burn of eye proper (disorder)"
+    } ]
+  }
+}

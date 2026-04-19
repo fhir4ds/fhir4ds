@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "d6a29380-088e-4d07-8210-d12350ae5164",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "10624611000119102",
+      "display": "Stress fracture of lateral condyle of right femur (disorder)”) "
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/6805ecde-1eb5-4d9e-a4af-d8a82ce269df"
+  },
+  "onsetDateTime": "2024-10-31T00:00:00.000Z"
+}

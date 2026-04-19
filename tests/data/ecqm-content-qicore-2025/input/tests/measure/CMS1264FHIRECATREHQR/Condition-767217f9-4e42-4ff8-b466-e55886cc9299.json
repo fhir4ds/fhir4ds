@@ -1,0 +1,27 @@
+{
+  "resourceType": "Condition",
+  "id": "767217f9-4e42-4ff8-b466-e55886cc9299",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2023-09",
+      "code": "10349009",
+      "display": "Multi-infarct dementia with delirium (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/21b841f6-b863-4c1d-8798-41c527b04a92"
+  },
+  "recordedDate": "2027-04-09T08:00:00.000+00:00"
+}

@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<library xmlns="urn:hl7-org:elm:r1" xmlns:t="urn:hl7-org:elm-types:r1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:fhir="http://hl7.org/fhir" xmlns:qdm43="urn:healthit-gov:qdm:v4_3" xmlns:qdm53="urn:healthit-gov:qdm:v5_3" xmlns:a="urn:hl7-org:cql-annotations:r1" localId="0">
+   <annotation translatorVersion="3.20.0" translatorOptions="EnableAnnotations,EnableLocators,EnableResultTypes,DisableListDemotion,DisableListPromotion" signatureLevel="Overloads" xsi:type="a:CqlToElmInfo"/>
+   <annotation xsi:type="a:Annotation">
+      <a:s r="209">
+         <a:s>library TestSimpleObservation</a:s>
+      </a:s>
+   </annotation>
+   <identifier id="TestSimpleObservation"/>
+   <schemaIdentifier id="urn:hl7-org:elm" version="r1"/>
+   <usings>
+      <def localId="1" localIdentifier="System" uri="urn:hl7-org:elm-types:r1"/>
+      <def localId="206" locator="3:1-3:28" localIdentifier="QICore" uri="http://hl7.org/fhir">
+         <annotation xsi:type="a:Annotation">
+            <a:s r="206">
+               <a:s>using </a:s>
+               <a:s>
+                  <a:s>QICore</a:s>
+               </a:s>
+               <a:s> version '6.0.0'</a:s>
+            </a:s>
+         </annotation>
+      </def>
+   </usings>
+   <includes>
+      <def localId="207" locator="5:1-5:37" localIdentifier="FHIRHelpers" path="FHIRHelpers" version="4.4.000">
+         <annotation xsi:type="a:Annotation">
+            <a:s r="207">
+               <a:s>include </a:s>
+               <a:s>
+                  <a:s>FHIRHelpers</a:s>
+               </a:s>
+               <a:s> version '4.4.000'</a:s>
+            </a:s>
+         </annotation>
+      </def>
+   </includes>
+   <statements>
+      <def localId="209" locator="7:1-8:38" name="Test" context="Unfiltered" accessLevel="Public">
+         <annotation xsi:type="a:Annotation">
+            <a:s r="209">
+               <a:s>define Test: </a:s>
+               <a:s r="265">
+                  <a:s>
+                     <a:s r="210">
+                        <a:s r="211">
+                           <a:s r="211">
+                              <a:s>[&quot;SimpleObservation&quot;]</a:s>
+                           </a:s>
+                        </a:s>
+                        <a:s> EstimatedDateOfDelivery</a:s>
+                     </a:s>
+                  </a:s>
+                  <a:s>
+  </a:s>
+                  <a:s r="218">
+                     <a:s>return </a:s>
+                     <a:s r="221">
+                        <a:s r="219">
+                           <a:s>EstimatedDateOfDelivery</a:s>
+                        </a:s>
+                        <a:s>.</a:s>
+                        <a:s r="221">
+                           <a:s>value</a:s>
+                        </a:s>
+                     </a:s>
+                  </a:s>
+               </a:s>
+            </a:s>
+         </annotation>
+         <resultTypeSpecifier localId="281" xsi:type="ListTypeSpecifier">
+            <elementType localId="282" xsi:type="ChoiceTypeSpecifier">
+               <choice localId="283" name="t:Quantity" xsi:type="NamedTypeSpecifier"/>
+               <choice localId="284" name="t:Concept" xsi:type="NamedTypeSpecifier"/>
+               <choice localId="285" name="t:String" xsi:type="NamedTypeSpecifier"/>
+               <choice localId="286" name="t:Boolean" xsi:type="NamedTypeSpecifier"/>
+               <choice localId="287" name="t:Integer" xsi:type="NamedTypeSpecifier"/>
+               <choice localId="288" xsi:type="IntervalTypeSpecifier">
+                  <pointType localId="289" name="t:Quantity" xsi:type="NamedTypeSpecifier"/>
+               </choice>
+               <choice localId="290" name="t:Ratio" xsi:type="NamedTypeSpecifier"/>
+               <choice localId="291" name="fhir:SampledData" xsi:type="NamedTypeSpecifier"/>
+               <choice localId="292" name="t:Time" xsi:type="NamedTypeSpecifier"/>
+               <choice localId="293" name="t:DateTime" xsi:type="NamedTypeSpecifier"/>
+               <choice localId="294" xsi:type="IntervalTypeSpecifier">
+                  <pointType localId="295" name="t:DateTime" xsi:type="NamedTypeSpecifier"/>
+               </choice>
+            </elementType>
+         </resultTypeSpecifier>
+         <expression localId="265" locator="7:14-8:38" xsi:type="Query">
+            <resultTypeSpecifier localId="266" xsi:type="ListTypeSpecifier">
+               <elementType localId="267" xsi:type="ChoiceTypeSpecifier">
+                  <choice localId="268" name="t:Quantity" xsi:type="NamedTypeSpecifier"/>
+                  <choice localId="269" name="t:Concept" xsi:type="NamedTypeSpecifier"/>
+                  <choice localId="270" name="t:String" xsi:type="NamedTypeSpecifier"/>
+                  <choice localId="271" name="t:Boolean" xsi:type="NamedTypeSpecifier"/>
+                  <choice localId="272" name="t:Integer" xsi:type="NamedTypeSpecifier"/>
+                  <choice localId="273" xsi:type="IntervalTypeSpecifier">
+                     <pointType localId="274" name="t:Quantity" xsi:type="NamedTypeSpecifier"/>
+                  </choice>
+                  <choice localId="275" name="t:Ratio" xsi:type="NamedTypeSpecifier"/>
+                  <choice localId="276" name="fhir:SampledData" xsi:type="NamedTypeSpecifier"/>
+                  <choice localId="277" name="t:Time" xsi:type="NamedTypeSpecifier"/>
+                  <choice localId="278" name="t:DateTime" xsi:type="NamedTypeSpecifier"/>
+                  <choice localId="279" xsi:type="IntervalTypeSpecifier">
+                     <pointType localId="280" name="t:DateTime" xsi:type="NamedTypeSpecifier"/>
+                  </choice>
+               </elementType>
+            </resultTypeSpecifier>
+            <source localId="210" locator="7:14-7:58" alias="EstimatedDateOfDelivery">
+               <resultTypeSpecifier localId="216" xsi:type="ListTypeSpecifier">
+                  <elementType localId="217" name="fhir:Observation" xsi:type="NamedTypeSpecifier"/>
+               </resultTypeSpecifier>
+               <expression localId="211" locator="7:14-7:34" dataType="fhir:Observation" templateId="http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" xsi:type="Retrieve">
+                  <resultTypeSpecifier localId="214" xsi:type="ListTypeSpecifier">
+                     <elementType localId="215" name="fhir:Observation" xsi:type="NamedTypeSpecifier"/>
+                  </resultTypeSpecifier>
+               </expression>
+            </source>
+            <return localId="218" locator="8:3-8:38">
+               <resultTypeSpecifier localId="250" xsi:type="ListTypeSpecifier">
+                  <elementType localId="251" xsi:type="ChoiceTypeSpecifier">
+                     <choice localId="252" name="t:Quantity" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="253" name="t:Concept" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="254" name="t:String" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="255" name="t:Boolean" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="256" name="t:Integer" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="257" xsi:type="IntervalTypeSpecifier">
+                        <pointType localId="258" name="t:Quantity" xsi:type="NamedTypeSpecifier"/>
+                     </choice>
+                     <choice localId="259" name="t:Ratio" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="260" name="fhir:SampledData" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="261" name="t:Time" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="262" name="t:DateTime" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="263" xsi:type="IntervalTypeSpecifier">
+                        <pointType localId="264" name="t:DateTime" xsi:type="NamedTypeSpecifier"/>
+                     </choice>
+                  </elementType>
+               </resultTypeSpecifier>
+               <expression localId="221" locator="8:10-8:38" name="ToValue" libraryName="FHIRHelpers" xsi:type="FunctionRef">
+                  <resultTypeSpecifier localId="236" xsi:type="ChoiceTypeSpecifier">
+                     <choice localId="237" name="t:Quantity" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="238" name="t:Concept" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="239" name="t:String" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="240" name="t:Boolean" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="241" name="t:Integer" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="242" xsi:type="IntervalTypeSpecifier">
+                        <pointType localId="243" name="t:Quantity" xsi:type="NamedTypeSpecifier"/>
+                     </choice>
+                     <choice localId="244" name="t:Ratio" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="245" name="fhir:SampledData" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="246" name="t:Time" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="247" name="t:DateTime" xsi:type="NamedTypeSpecifier"/>
+                     <choice localId="248" xsi:type="IntervalTypeSpecifier">
+                        <pointType localId="249" name="t:DateTime" xsi:type="NamedTypeSpecifier"/>
+                     </choice>
+                  </resultTypeSpecifier>
+                  <operand localId="220" path="value" scope="EstimatedDateOfDelivery" xsi:type="Property"/>
+               </expression>
+            </return>
+         </expression>
+      </def>
+   </statements>
+</library>
+
+

@@ -1,0 +1,33 @@
+{
+  "resourceType": "Condition",
+  "id": "15732078-e9cb-47da-b913-9cf48f9711dc",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "active",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "314014002"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/380d6e3a-1fc1-474c-a8f3-8e6ba4f0dd42"
+  },
+  "onsetDateTime": "2021-05-10T08:00:00.000+00:00"
+}

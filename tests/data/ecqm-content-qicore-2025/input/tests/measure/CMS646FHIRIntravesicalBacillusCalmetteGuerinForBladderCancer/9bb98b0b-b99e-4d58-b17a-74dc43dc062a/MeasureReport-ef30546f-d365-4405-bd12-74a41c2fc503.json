@@ -1,0 +1,107 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "ef30546f-d365-4405-bd12-74a41c2fc503",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "1eddc781-b047-43ec-9a2a-8e824d49cdd4-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "9bb98b0b-b99e-4d58-b17a-74dc43dc062a"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#1eddc781-b047-43ec-9a2a-8e824d49cdd4-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient with OV in MP. Bladder cancer staging July 1 year prior to MP with bladder cancer diagnosis.  BCG given Jan 1 of MP."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS646FHIRIntravesicalBacillusCalmetteGuerinForBladderCancer",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/9bb98b0b-b99e-4d58-b17a-74dc43dc062a"
+  }, {
+    "reference": "Encounter/a0e46c21-7fa1-4f13-9c52-d3515e31df09"
+  }, {
+    "reference": "Condition/8cf21303-b794-4ef5-9006-c7ed562ea54d"
+  }, {
+    "reference": "Observation/d45081d3-6cc1-42ba-85f9-7fc126722430"
+  }, {
+    "reference": "MedicationAdministration/7cd4315e-b673-47c5-ae01-8511c958018f"
+  }, {
+    "reference": "Practitioner/783d959e-8988-46b6-a0c8-6efcbdf50f6c"
+  }, {
+    "reference": "Procedure/63d78685-7cc1-4910-9543-b53abc296b03"
+  } ]
+}

@@ -1,0 +1,31 @@
+{
+  "resourceType": "Observation",
+  "id": "244a42bf-32de-4ca3-91b2-344d45321cd2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "laboratory",
+      "display": "Laboratory"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.72",
+      "code": "1547-9",
+      "display": "Glucose [Mass/volume] in Serum or Plasma --baseline"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/98533ccd-24ee-41b3-aab2-ef6cbf89e00d"
+  },
+  "effectiveDateTime": "2026-11-12T14:20:00+00:00",
+  "valueQuantity": {
+    "value": 610,
+    "unit": "mg/dL"
+  }
+}

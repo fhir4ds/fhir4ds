@@ -1,0 +1,38 @@
+{
+  "resourceType": "Patient",
+  "id": "25938d1a-7785-4453-9574-01ccb82cb3e8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Hispanic or Latino"
+    } ]
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://bonnie-fhir.healthit.gov/",
+    "value": "62ec2d01ea03a4ebacd6a083"
+  } ],
+  "name": [ {
+    "family": "IPPDenomFail",
+    "given": [ "EncOverlapsMP" ]
+  } ],
+  "gender": "male",
+  "birthDate": "2008-01-01"
+}

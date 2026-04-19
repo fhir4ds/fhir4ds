@@ -1,0 +1,97 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "1d17d6cb-a00e-44e3-83e4-7815c441fa2f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "841d94be-b461-4018-8648-82e6911e14c5-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "8415bf7d-2920-4ec3-9774-7a6f4272397e"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#841d94be-b461-4018-8648-82e6911e14c5-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Elective hospitalization with 3 procs. 1st intubation during 2nd general anesthesia period so (fails Num 1 criteria) but has 2nd intubation later, outside of proc. Meets Numerator. \nHas a later procedure, with intubation during. Numerator still meets"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS1218FHIRHHRF",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Procedure/5641c359-17a3-457e-8ee8-ade12095fa2c"
+  }, {
+    "reference": "Procedure/6a24b6e9-6026-4fea-8112-feb1d68ecb87"
+  }, {
+    "reference": "Procedure/dfbcb23d-342f-4397-98a6-8161d6095cbc"
+  }, {
+    "reference": "Patient/8415bf7d-2920-4ec3-9774-7a6f4272397e"
+  }, {
+    "reference": "Encounter/b307d68b-e25a-46b2-bf37-3eda2fa9a190"
+  }, {
+    "reference": "Procedure/89d21b4c-d461-41ca-85a2-9d7f74705a45"
+  }, {
+    "reference": "Procedure/122892c8-05de-4136-886f-b14e90891c5a"
+  } ]
+}

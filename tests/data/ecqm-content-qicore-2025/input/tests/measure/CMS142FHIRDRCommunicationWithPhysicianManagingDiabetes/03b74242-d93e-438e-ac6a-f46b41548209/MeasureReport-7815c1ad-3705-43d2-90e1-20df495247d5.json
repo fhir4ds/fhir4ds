@@ -1,0 +1,95 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "7815c1ad-3705-43d2-90e1-20df495247d5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "c68da851-badb-4870-a59c-d4f2fabaadab-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "03b74242-d93e-438e-ac6a-f46b41548209"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#c68da851-badb-4870-a59c-d4f2fabaadab-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Communication status not done for Macular edema absent (situation)"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS142FHIRDRCommunicationWithPhysicianManagingDiabetes",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 1
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/03b74242-d93e-438e-ac6a-f46b41548209"
+  }, {
+    "reference": "Communication/1de991ac-491b-43d5-aeff-5afd9f25f409"
+  }, {
+    "reference": "Condition/93d1b084-2e10-46d0-ad32-3e0b82ba6e12"
+  }, {
+    "reference": "Observation/c89b5d1b-3042-4c10-9ae0-c63ab88562c2"
+  }, {
+    "reference": "Encounter/c600cbc4-afc5-4275-a7cc-3f7ef53d2582"
+  }, {
+    "reference": "Communication/67a8d7d6-21d2-41f2-8edf-da9550c93435"
+  } ]
+}

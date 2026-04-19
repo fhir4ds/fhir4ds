@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "fc63676c-844f-41f7-b9fd-2a64debffe11",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "98968",
+      "display": "Telephone assessment and management service provided by a qualified nonphysician health care professional to an established patient, parent, or guardian not originating from a related assessment and management service provided within the previous 7 days nor leading to an assessment and management service or procedure within the next 24 hours or soonest available appointment; 21-30 minutes of medical discussion"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/d5d0c4c9-b810-406d-9691-c18bca76f99b"
+  },
+  "period": {
+    "start": "2026-12-31T00:00:00.000Z",
+    "end": "2026-12-31T01:15:00.000Z"
+  }
+}

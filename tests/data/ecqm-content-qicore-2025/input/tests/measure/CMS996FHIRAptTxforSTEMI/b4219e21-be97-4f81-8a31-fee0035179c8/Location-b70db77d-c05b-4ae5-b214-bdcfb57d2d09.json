@@ -1,0 +1,38 @@
+{
+  "resourceType": "Location",
+  "id": "b70db77d-c05b-4ae5-b214-bdcfb57d2d09",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-location" ]
+  },
+  "identifier": [ {
+    "use": "usual",
+    "system": "http://exampleoflocation.com",
+    "value": "ED-1.R3"
+  } ],
+  "name": "Emergency Department, first floor",
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "20210611",
+      "code": "4525004",
+      "display": "Emergency department patient visit (procedure)",
+      "userSelected": true
+    } ]
+  }, {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
+      "version": "2019",
+      "code": "ER",
+      "display": "Emergency room",
+      "userSelected": true
+    } ]
+  }, {
+    "coding": [ {
+      "system": "https://www.cdc.gov/nhsn/cdaportal/terminology/codesystem/hsloc.html",
+      "version": "2022",
+      "code": "1108-0",
+      "display": "Emergency Department",
+      "userSelected": true
+    } ]
+  } ]
+}

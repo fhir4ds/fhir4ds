@@ -1,0 +1,32 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "8618fdd8-9bcc-4284-a285-f9d7b092ee15",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+      "code": "inpatient",
+      "display": "Inpatient",
+      "userSelected": true
+    } ]
+  } ],
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1037045",
+      "display": "dabigatran etexilate 150 MG Oral Capsule",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/afb2d04b-f766-465a-9215-79cb8dfafd73"
+  },
+  "authoredOn": "2026-10-11T08:00:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/62350356-bdc9-4860-ab5e-6fca48b47589"
+  }
+}

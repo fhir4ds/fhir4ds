@@ -1,0 +1,29 @@
+{
+  "resourceType": "Encounter",
+  "id": "e0572270-bfe4-4cee-a46a-aed1038752ec",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory",
+    "userSelected": true
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "210098006",
+      "display": "Domiciliary or rest home patient evaluation and management (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/de56e9db-49b7-4f1a-a1ae-2649b1bb52b9"
+  },
+  "period": {
+    "start": "2026-07-15T08:00:00.000+00:00",
+    "end": "2026-07-15T08:35:00.000+00:00"
+  }
+}

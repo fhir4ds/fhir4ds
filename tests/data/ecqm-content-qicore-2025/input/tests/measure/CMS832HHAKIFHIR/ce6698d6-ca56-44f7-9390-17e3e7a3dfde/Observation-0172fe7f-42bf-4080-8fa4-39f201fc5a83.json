@@ -1,0 +1,33 @@
+{
+  "resourceType": "Observation",
+  "id": "0172fe7f-42bf-4080-8fa4-39f201fc5a83",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "laboratory",
+      "display": "Laboratory"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "2160-0",
+      "display": "Creatinine [Mass/volume] in Serum or Plasma"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/ce6698d6-ca56-44f7-9390-17e3e7a3dfde"
+  },
+  "effectiveDateTime": "2026-10-01T09:01:00.000+00:00",
+  "issued": "2026-10-01T09:31:00.000+00:00",
+  "valueQuantity": {
+    "value": 1.8,
+    "unit": "mg/dL",
+    "system": "http://unitsofmeasure.org",
+    "code": "mg/dL"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "resourceType": "Encounter",
+  "id": "ad6fa87b-955a-486a-891f-bbc116fee58a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient encounter"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2024",
+      "code": "99223",
+      "display": "Initial hospital inpatient or observation care, per day, for the evaluation and management of a patient, which requires a medically appropriate history and/or examination and high level of medical decision making. When using total time on the date of the encounter for code selection, 75 minutes must be met or exceeded.",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/6552cc29-c4e2-441f-9ae5-41d3a2f5aea4"
+  },
+  "period": {
+    "start": "2025-10-01T08:00:00.000+00:00",
+    "end": "2025-10-05T08:30:00.000+00:00"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "74ab7bd8-d2a1-403c-bf4a-b56b16bb5e76",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+      "code": "discharge",
+      "display": "Discharge",
+      "userSelected": true
+    } ]
+  } ],
+  "doNotPerform": false,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1014632",
+      "display": "acetaminophen 300 MG / oxycodone hydrochloride 7.5 MG Oral Tablet",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/dde136d4-fa51-4b59-9bef-21dc51caf3d5"
+  },
+  "authoredOn": "2026-01-03T00:01:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/9d8e6c59-e55c-445e-8eaf-4b7a6609dcef"
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "19b35e2d-373e-4117-ab66-2340ef6e035a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "45d935b7-2229-45a7-8728-2838b973553f-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "8e38b797-4dec-437d-8bf0-6f0fc78f8ea7"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#45d935b7-2229-45a7-8728-2838b973553f-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "High BMI with dietary intervention ordered - f/u for above normal BMI, condition overweight"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS69FHIRPCSBMIScreenAndFollowUp",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/8e38b797-4dec-437d-8bf0-6f0fc78f8ea7"
+  }, {
+    "reference": "Encounter/2db46994-4c32-47d7-adff-0003d536902d"
+  }, {
+    "reference": "Observation/4e42348f-d89e-400c-a1b3-b434345f4113"
+  }, {
+    "reference": "Condition/5b9b0ba8-a068-4228-bff3-f80a92f9300c"
+  }, {
+    "reference": "ServiceRequest/4e6f932b-56af-4668-a196-5ce570726709"
+  }, {
+    "reference": "Coverage/e9382126-496b-4015-9e5a-eee661f01710"
+  }, {
+    "reference": "Organization/86b3c9c2-0dab-43e2-a9b3-75ab58f0fe5d"
+  } ]
+}

@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "91835c4f-0fec-422e-9cda-ba218a7f9e8a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "75285-7",
+      "display": "Comparative nutrition assessment standards panel",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/7a61226f-6ed7-4fa9-9055-5e9b0234db9b"
+  },
+  "effectiveDateTime": "2026-07-16T07:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "190606006",
+      "display": "Moderate protein energy malnutrition (disorder)",
+      "userSelected": true
+    } ]
+  }
+}

@@ -134,7 +134,7 @@ class CoreMixin:
     def _translate_date_time_literal(self, dt: DateTimeLiteral, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL DateTime literal to SQL TIMESTAMP."""
         value = dt.value
-        # CQL format: @2024-01-15T12:30:00 or @2024-01-15
+        # CQL format: @2024-01-15T12:30:00 or @2024-01-15 or @2024
         # DuckDB format: TIMESTAMP '2024-01-15 12:30:00' or '2024-01-15'
 
         # Remove @ prefix if present
@@ -142,7 +142,22 @@ class CoreMixin:
             value = value[1:]
 
         # Replace T with space for DuckDB
-        value = value.replace("T", " ")
+        value = value.replace("T", " ").strip()
+
+        # Year-only (e.g. "2014") → make_timestamp for correct TIMESTAMP type
+        if len(value) == 4 and value.isdigit():
+            return SQLFunctionCall(
+                name="make_timestamp",
+                args=[
+                    SQLLiteral(value=int(value)),
+                    SQLLiteral(value=1), SQLLiteral(value=1),
+                    SQLLiteral(value=0), SQLLiteral(value=0), SQLLiteral(value=0),
+                ],
+            )
+
+        # Year-month only (e.g. "2014-01") → pad to full date
+        if len(value) <= 7 and value.count("-") == 1:
+            value = value + "-01"
 
         # Return as string literal - DuckDB can parse ISO date/datetime strings
         return SQLLiteral(value=value)

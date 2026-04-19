@@ -1,0 +1,37 @@
+{
+  "resourceType": "Condition",
+  "id": "79cc3028-3b6d-4f4d-a60f-19d74e04a6b4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "version": "4.0.1",
+      "code": "inactive",
+      "display": "Inactive",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2020-09",
+      "code": "162710004",
+      "display": "On examination - collapse -cardiac arrest (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/105e8f1d-67bc-4093-8953-7aaca6e1411b"
+  },
+  "onsetDateTime": "2026-11-10T09:00:00.000+00:00"
+}

@@ -1,0 +1,347 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1718-20250125",
+  "meta": {
+    "versionId": "44",
+    "lastUpdated": "2025-01-25T01:09:35.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-01-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1718",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1718"
+  } ],
+  "version": "20250125",
+  "name": "RetinalDetachmentWithRetinalDefect",
+  "title": "Retinal Detachment with Retinal Defect",
+  "status": "active",
+  "date": "2025-01-25T01:09:35-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of a diagnosis for retinal detachment with a retinal defect.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of various types of retinal detachments.),(Exclusion Criteria: Excludes concepts that represent a diagnosis for 'unspecified eye.')",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "1231625008",
+        "display": "Tractional retinal detachment due to proliferative diabetic retinopathy (disorder)"
+      }, {
+        "code": "1231650006",
+        "display": "Combined rhegmatogenous and tractional retinal detachment due to proliferative diabetic retinopathy (disorder)"
+      }, {
+        "code": "1231698002",
+        "display": "Tractional retinal detachment with macula involvement due to proliferative diabetic retinopathy (disorder)"
+      }, {
+        "code": "1231728000",
+        "display": "Retinal detachment due to degenerative progressive high myopia (disorder)"
+      }, {
+        "code": "1279846006",
+        "display": "Detachment of retina of left eye with break of retina of left eye (disorder)"
+      }, {
+        "code": "1279847002",
+        "display": "Detachment of retina of right eye with break of retina of right eye (disorder)"
+      }, {
+        "code": "1279848007",
+        "display": "Detachment of retina with break of retina (disorder)"
+      }, {
+        "code": "1281813008",
+        "display": "Partial detachment of retina with single break of retina (disorder)"
+      }, {
+        "code": "1281815001",
+        "display": "Partial detachment of retina with multiple breaks of retina (disorder)"
+      }, {
+        "code": "193319001",
+        "display": "New partial retinal detachment with single defect (disorder)"
+      }, {
+        "code": "193322004",
+        "display": "New partial retinal detachment with retinal dialysis (disorder)"
+      }, {
+        "code": "19620000",
+        "display": "Rhegmatogenous retinal detachment (disorder)"
+      }, {
+        "code": "232008001",
+        "display": "Rhegmatogenous retinal detachment - macula on (disorder)"
+      }, {
+        "code": "232009009",
+        "display": "Rhegmatogenous retinal detachment - macula off (disorder)"
+      }, {
+        "code": "232010004",
+        "display": "Traction retinal detachment involving macula (disorder)"
+      }, {
+        "code": "232011000",
+        "display": "Traction retinal detachment sparing macula (disorder)"
+      }, {
+        "code": "232012007",
+        "display": "Combined traction and rhegmatogenous retinal detachment (disorder)"
+      }, {
+        "code": "232023006",
+        "display": "Traction detachment of retina due to diabetes mellitus (disorder)"
+      }, {
+        "code": "232068003",
+        "display": "Retinal pigment epithelial detachment with vascularization (disorder)"
+      }, {
+        "code": "232069006",
+        "display": "Retinal pigment epithelial detachment with tear of retinal pigment epithelium (disorder)"
+      }, {
+        "code": "247165009",
+        "display": "Retinal detachment - subretinal fluid (disorder)"
+      }, {
+        "code": "331811000119104",
+        "display": "Traction detachment of right retina (disorder)"
+      }, {
+        "code": "332521000119102",
+        "display": "Retinal detachment of right eye due to retinal tear of right eye (disorder)"
+      }, {
+        "code": "337431000119100",
+        "display": "Traction detachment of left retina (disorder)"
+      }, {
+        "code": "338131000119105",
+        "display": "Retinal detachment of left eye due to retinal tear of left eye (disorder)"
+      }, {
+        "code": "343221000119108",
+        "display": "Traction detachment of bilateral retinas (disorder)"
+      }, {
+        "code": "34711008",
+        "display": "Traction detachment of retina (disorder)"
+      }, {
+        "code": "38579007",
+        "display": "Partial recent retinal detachment with retinal dialysis (disorder)"
+      }, {
+        "code": "38599001",
+        "display": "Serous retinal detachment (disorder)"
+      }, {
+        "code": "712506009",
+        "display": "Rhegmatogenous retinal detachment with single break (disorder)"
+      }, {
+        "code": "712507000",
+        "display": "Rhegmatogenous retinal detachment with multiple breaks (disorder)"
+      }, {
+        "code": "712508005",
+        "display": "Rhegmatogenous retinal detachment due to retinal dialysis (disorder)"
+      }, {
+        "code": "7219007",
+        "display": "Traction detachment with vitreoretinal organization (disorder)"
+      }, {
+        "code": "773727009",
+        "display": "Autosomal dominant rhegmatogenous retinal detachment (disorder)"
+      }, {
+        "code": "82541000119100",
+        "display": "Traction detachment of retina due to type 2 diabetes mellitus (disorder)"
+      }, {
+        "code": "82571000119107",
+        "display": "Traction detachment of retina due to type 1 diabetes mellitus (disorder)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:f55361c2-86f7-41f5-919d-174c1681d9cf",
+    "timestamp": "2025-06-20T16:59:19-04:00",
+    "total": 36,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1231625008",
+      "display": "Tractional retinal detachment due to proliferative diabetic retinopathy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1231650006",
+      "display": "Combined rhegmatogenous and tractional retinal detachment due to proliferative diabetic retinopathy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1231698002",
+      "display": "Tractional retinal detachment with macula involvement due to proliferative diabetic retinopathy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1231728000",
+      "display": "Retinal detachment due to degenerative progressive high myopia (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1279846006",
+      "display": "Detachment of retina of left eye with break of retina of left eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1279847002",
+      "display": "Detachment of retina of right eye with break of retina of right eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1279848007",
+      "display": "Detachment of retina with break of retina (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1281813008",
+      "display": "Partial detachment of retina with single break of retina (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1281815001",
+      "display": "Partial detachment of retina with multiple breaks of retina (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "193319001",
+      "display": "New partial retinal detachment with single defect (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "193322004",
+      "display": "New partial retinal detachment with retinal dialysis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "19620000",
+      "display": "Rhegmatogenous retinal detachment (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "232008001",
+      "display": "Rhegmatogenous retinal detachment - macula on (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "232009009",
+      "display": "Rhegmatogenous retinal detachment - macula off (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "232010004",
+      "display": "Traction retinal detachment involving macula (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "232011000",
+      "display": "Traction retinal detachment sparing macula (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "232012007",
+      "display": "Combined traction and rhegmatogenous retinal detachment (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "232023006",
+      "display": "Traction detachment of retina due to diabetes mellitus (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "232068003",
+      "display": "Retinal pigment epithelial detachment with vascularization (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "232069006",
+      "display": "Retinal pigment epithelial detachment with tear of retinal pigment epithelium (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "247165009",
+      "display": "Retinal detachment - subretinal fluid (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "331811000119104",
+      "display": "Traction detachment of right retina (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "332521000119102",
+      "display": "Retinal detachment of right eye due to retinal tear of right eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "337431000119100",
+      "display": "Traction detachment of left retina (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "338131000119105",
+      "display": "Retinal detachment of left eye due to retinal tear of left eye (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "343221000119108",
+      "display": "Traction detachment of bilateral retinas (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "34711008",
+      "display": "Traction detachment of retina (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "38579007",
+      "display": "Partial recent retinal detachment with retinal dialysis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "38599001",
+      "display": "Serous retinal detachment (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "712506009",
+      "display": "Rhegmatogenous retinal detachment with single break (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "712507000",
+      "display": "Rhegmatogenous retinal detachment with multiple breaks (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "712508005",
+      "display": "Rhegmatogenous retinal detachment due to retinal dialysis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "7219007",
+      "display": "Traction detachment with vitreoretinal organization (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "773727009",
+      "display": "Autosomal dominant rhegmatogenous retinal detachment (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "82541000119100",
+      "display": "Traction detachment of retina due to type 2 diabetes mellitus (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "82571000119107",
+      "display": "Traction detachment of retina due to type 1 diabetes mellitus (disorder)"
+    } ]
+  }
+}

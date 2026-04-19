@@ -1,0 +1,330 @@
+{
+  "resourceType": "Bundle",
+  "id": "630307cb0968f80122478458",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/b2dab5c6-a321-43e0-9702-6b160890a2e7",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "b2dab5c6-a321-43e0-9702-6b160890a2e7",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2106-3",
+            "display": "White"
+          }
+        }, {
+          "url": "text",
+          "valueString": "White"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "630307cb0968f80122478458"
+      } ],
+      "name": [ {
+        "family": "NUMERPopStrat2Pass",
+        "given": [ "FUAssessment12MonthsAfterInitial" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1936-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/b2dab5c6-a321-43e0-9702-6b160890a2e7"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/0c204bb3-605c-4a06-a9a0-c12364105b3a",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "0c204bb3-605c-4a06-a9a0-c12364105b3a",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "version": "2024",
+          "code": "90791"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/b2dab5c6-a321-43e0-9702-6b160890a2e7"
+      },
+      "period": {
+        "start": "2025-02-25T14:30:00+00:00",
+        "end": "2025-02-25T14:50:00+00:00"
+      },
+      "length": {
+        "value": 0,
+        "unit": "days"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/0c204bb3-605c-4a06-a9a0-c12364105b3a"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/340d029b-638b-4095-abac-4885c6ef7dfe",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "340d029b-638b-4095-abac-4885c6ef7dfe",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey",
+          "display": "Survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "44261-6"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/b2dab5c6-a321-43e0-9702-6b160890a2e7"
+      },
+      "effectiveDateTime": "2025-02-25T14:35:00+00:00",
+      "valueInteger": 10
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/340d029b-638b-4095-abac-4885c6ef7dfe"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/e70639e1-ccc9-4a4a-b6f2-121821fff6c5",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "e70639e1-ccc9-4a4a-b6f2-121821fff6c5",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey",
+          "display": "Survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "44261-6"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/b2dab5c6-a321-43e0-9702-6b160890a2e7"
+      },
+      "effectiveDateTime": "2026-02-19T14:30:00+00:00",
+      "valueInteger": 3
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/e70639e1-ccc9-4a4a-b6f2-121821fff6c5"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/301a789a-9cac-4e4b-afe0-1654b7802011",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "301a789a-9cac-4e4b-afe0-1654b7802011",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/b2dab5c6-a321-43e0-9702-6b160890a2e7"
+      },
+      "payor": [ {
+        "reference": "Organization/123456"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/301a789a-9cac-4e4b-afe0-1654b7802011"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/63968eec-b975-4dd6-87d4-945d9eadabd7",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "63968eec-b975-4dd6-87d4-945d9eadabd7",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active"
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "version": "2024",
+          "code": "F32.9"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/b2dab5c6-a321-43e0-9702-6b160890a2e7"
+      },
+      "onsetDateTime": "2025-02-25T14:35:00+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/63968eec-b975-4dd6-87d4-945d9eadabd7"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/88370adb-79e4-451e-b972-7de950dae45a",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "88370adb-79e4-451e-b972-7de950dae45a",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "bc9394ef-7e90-4ead-b263-7ed663032e37-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "b2dab5c6-a321-43e0-9702-6b160890a2e7"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#bc9394ef-7e90-4ead-b263-7ed663032e37-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient has a Major Depression diagnosis, an encounter with PHQ-9>9 during Denom ID period, and a PHQ-9<5 during MAP. Patient passes num and falls into strat 2. "
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS159FHIRDepressionRemissionatTwelveMonths",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/b2dab5c6-a321-43e0-9702-6b160890a2e7"
+      }, {
+        "reference": "Encounter/0c204bb3-605c-4a06-a9a0-c12364105b3a"
+      }, {
+        "reference": "Observation/340d029b-638b-4095-abac-4885c6ef7dfe"
+      }, {
+        "reference": "Observation/e70639e1-ccc9-4a4a-b6f2-121821fff6c5"
+      }, {
+        "reference": "Coverage/301a789a-9cac-4e4b-afe0-1654b7802011"
+      }, {
+        "reference": "Condition/63968eec-b975-4dd6-87d4-945d9eadabd7"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/88370adb-79e4-451e-b972-7de950dae45a"
+    }
+  } ]
+}

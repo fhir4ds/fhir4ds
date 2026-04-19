@@ -1,0 +1,322 @@
+{
+  "resourceType": "Bundle",
+  "id": "63f3a249ccb3770120ffe6eb",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/443d0779-d000-4791-a78d-02069d8bdf2f",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "443d0779-d000-4791-a78d-02069d8bdf2f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "text": {
+        "status": "generated",
+        "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">LTE24before <b>BICARBPASS </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>d69abbc179641b9cd673a4a9152886e8e63bc2e0e7b27e1a51505ef2a774679e</td></tr><tr><td>Date of birth</td><td><span>15 June 1956</span></td></tr></tbody></table></div>"
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248153007"
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "63f3a249ccb3770120ffe6eb"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "BicarbonatePass",
+        "given": [ "1MinAfterStartOfAdmit" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1961-07-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/443d0779-d000-4791-a78d-02069d8bdf2f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/7df413d8-dbfc-4460-a65e-7c7843725229",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "7df413d8-dbfc-4460-a65e-7c7843725229",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183452005"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/443d0779-d000-4791-a78d-02069d8bdf2f"
+      },
+      "period": {
+        "start": "2026-07-01T08:00:00.000+00:00",
+        "end": "2026-07-03T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/7df413d8-dbfc-4460-a65e-7c7843725229"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/e6d90f71-68cd-4492-ae6e-c8411311b723",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "e6d90f71-68cd-4492-ae6e-c8411311b723",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "type": {
+        "coding": [ {
+          "system": "https://nahdo.org/sopt",
+          "version": "1.0.1",
+          "code": "1",
+          "display": "MEDICARE",
+          "userSelected": true
+        } ]
+      },
+      "subscriberId": "AB9876",
+      "beneficiary": {
+        "reference": "Patient/443d0779-d000-4791-a78d-02069d8bdf2f"
+      },
+      "relationship": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+          "code": "self"
+        } ]
+      },
+      "period": {
+        "start": "2026-01-01T08:00:00.000+00:00",
+        "end": "2026-12-31T08:15:00.000+00:00"
+      },
+      "payor": [ {
+        "reference": "Organization/c4422d30-5f09-4041-9a8e-39282067c62a"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/e6d90f71-68cd-4492-ae6e-c8411311b723"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/3514bab7-e8cc-4637-b731-934029c5bea1",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "3514bab7-e8cc-4637-b731-934029c5bea1",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "laboratory",
+          "display": "Laboratory",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.72",
+          "code": "14627-4",
+          "display": "Bicarbonate [Moles/volume] in Venous blood"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/443d0779-d000-4791-a78d-02069d8bdf2f"
+      },
+      "effectiveDateTime": "2026-07-01T08:01:00.000+00:00",
+      "issued": "2026-07-01T08:01:00.000+00:00",
+      "performer": [ {
+        "reference": "Organization/Organization-1"
+      } ],
+      "valueQuantity": {
+        "value": 25,
+        "unit": "mmol/L",
+        "system": "http://unitsofmeasure.org",
+        "code": "mg/dL"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/3514bab7-e8cc-4637-b731-934029c5bea1"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/c4422d30-5f09-4041-9a8e-39282067c62a",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "c4422d30-5f09-4041-9a8e-39282067c62a",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/c4422d30-5f09-4041-9a8e-39282067c62a"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/507e9215-42ce-4928-886a-32a000324f40",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "507e9215-42ce-4928-886a-32a000324f40",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "0723660813"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/507e9215-42ce-4928-886a-32a000324f40"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/b652cca2-f737-439f-8746-076f02ba8252",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "b652cca2-f737-439f-8746-076f02ba8252",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "a3b664d0-2ce6-4ffc-9ecf-d81834b9f3cd-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "443d0779-d000-4791-a78d-02069d8bdf2f"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#a3b664d0-2ce6-4ffc-9ecf-d81834b9f3cd-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Enc starts first day of MP, age 65 first day of MP, has Medicare, bicarbonate 25 mmol/L 1 min after  start"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMSFHIR844HybridHospitalWideMortality",
+      "period": {
+        "start": "2026-07-01",
+        "end": "2027-06-30"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/443d0779-d000-4791-a78d-02069d8bdf2f"
+      }, {
+        "reference": "Encounter/7df413d8-dbfc-4460-a65e-7c7843725229"
+      }, {
+        "reference": "Coverage/e6d90f71-68cd-4492-ae6e-c8411311b723"
+      }, {
+        "reference": "Observation/3514bab7-e8cc-4637-b731-934029c5bea1"
+      }, {
+        "reference": "Organization/c4422d30-5f09-4041-9a8e-39282067c62a"
+      }, {
+        "reference": "Practitioner/507e9215-42ce-4928-886a-32a000324f40"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/b652cca2-f737-439f-8746-076f02ba8252"
+    }
+  } ]
+}

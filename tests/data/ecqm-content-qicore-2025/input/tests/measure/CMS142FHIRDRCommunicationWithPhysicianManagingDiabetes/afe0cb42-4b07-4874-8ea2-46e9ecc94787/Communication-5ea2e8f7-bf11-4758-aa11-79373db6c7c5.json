@@ -1,0 +1,26 @@
+{
+  "resourceType": "Communication",
+  "id": "5ea2e8f7-bf11-4758-aa11-79373db6c7c5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone" ]
+  },
+  "status": "not-done",
+  "statusReason": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "182890002",
+      "display": "Patient requests alternative treatment (finding)",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "312903003",
+      "display": "Mild nonproliferative retinopathy due to diabetes mellitus (disorder)",
+      "userSelected": true
+    } ]
+  } ],
+  "sent": "2026-03-09T08:03:00.000+00:00"
+}

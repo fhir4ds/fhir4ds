@@ -1,0 +1,24 @@
+{
+  "resourceType": "Procedure",
+  "id": "cdb23dda-b38b-4e70-8567-42b52c18ce1a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-04-11T10:10:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+      "code": "0BW10FZ",
+      "display": "Revision of Tracheostomy Device in Trachea, Open Approach"
+    } ],
+    "text": "Revision of Tracheostomy Device in Trachea, Open Approach"
+  },
+  "subject": {
+    "reference": "Patient/b203d4af-3937-4fb3-a7c0-6014d18f433d"
+  },
+  "performedDateTime": "2026-04-11T09:00:00.000+00:00"
+}

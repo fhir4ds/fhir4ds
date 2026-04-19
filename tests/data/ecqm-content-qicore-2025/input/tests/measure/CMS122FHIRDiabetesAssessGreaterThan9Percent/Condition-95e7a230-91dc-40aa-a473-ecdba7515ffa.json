@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "95e7a230-91dc-40aa-a473-ecdba7515ffa",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "102781000119107",
+      "display": "Sensory neuropathy due to type 1 diabetes mellitus (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/8fa86a00-fa67-4dd6-b2d8-6fe23edde9c7"
+  },
+  "onsetDateTime": "2026-01-01T23:59:00.000+00:00"
+}

@@ -65,5 +65,11 @@ def registerLogicalMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute('CREATE MACRO IF NOT EXISTS "IsNotNull"(x) AS x IS NOT NULL')
     con.execute('CREATE MACRO IF NOT EXISTS "IfNull"(a, b) AS COALESCE(a, b)')
 
+    # CQL §22.16 IsTrue / §22.15 IsFalse
+    # IsTrue returns true only if the argument is explicitly true (not null)
+    # IsFalse returns true only if the argument is explicitly false (not null)
+    con.execute('CREATE MACRO IF NOT EXISTS "IsTrue"(x) AS (x IS NOT NULL AND x = true)')
+    con.execute('CREATE MACRO IF NOT EXISTS "IsFalse"(x) AS (x IS NOT NULL AND x = false)')
+
 
 __all__ = ["registerLogicalMacros"]

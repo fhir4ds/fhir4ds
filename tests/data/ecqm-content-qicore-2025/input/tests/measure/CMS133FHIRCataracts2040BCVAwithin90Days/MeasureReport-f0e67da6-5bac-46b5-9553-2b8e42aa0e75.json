@@ -1,0 +1,95 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "f0e67da6-5bac-46b5-9553-2b8e42aa0e75",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "87a0ba28-b16e-4144-ac4e-11695c640af8-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "32a253b0-79d4-4bd8-a591-5557984392c6"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#87a0ba28-b16e-4144-ac4e-11695c640af8-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient is age 18 on Jan 1"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS133FHIRCataracts2040BCVAwithin90Days",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/32a253b0-79d4-4bd8-a591-5557984392c6"
+  }, {
+    "reference": "Observation/bdee7bff-331c-461b-9da0-1eb4a9e58b2e"
+  }, {
+    "reference": "Procedure/9217c78d-a3c7-4cd5-8fd4-170555e29a6e"
+  }, {
+    "reference": "Coverage/b62af6f2-af14-4663-aa86-f02948bf3d67"
+  }, {
+    "reference": "Organization/d7317a3f-2b9e-4467-8c1c-57c3c9b335d5"
+  }, {
+    "reference": "Practitioner/dab2f47b-e944-49a2-bb80-a98e9bebdab0"
+  } ]
+}

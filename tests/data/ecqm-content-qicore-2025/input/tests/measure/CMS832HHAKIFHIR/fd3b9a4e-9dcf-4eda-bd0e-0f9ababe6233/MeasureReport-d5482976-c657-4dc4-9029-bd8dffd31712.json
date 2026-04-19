@@ -1,0 +1,95 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "d5482976-c657-4dc4-9029-bd8dffd31712",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "61efdb48-0e7d-45ee-8aa3-64d943ca04bd-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "fd3b9a4e-9dcf-4eda-bd0e-0f9ababe6233"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#61efdb48-0e7d-45ee-8aa3-64d943ca04bd-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "IP encounter w/ increase in SCr value of >= 0.3 mg/dL between index SCr and a subsequent SCr taken within 48 of the index SCr. Index SCr is  value of  first SCr result obtained on arrival, done <=48 hours after the start of the encounter. Meets DENEX"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS832HHAKIFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Observation/0c757672-9419-40a5-ac5f-105079fb8323"
+  }, {
+    "reference": "Encounter/4f1798f6-b2e0-42e7-89d2-e1e0a99fcb88"
+  }, {
+    "reference": "Encounter/171dc67b-c81b-4dff-90e6-689ad4c5e23f"
+  }, {
+    "reference": "Observation/6f986e45-b90e-4243-af73-3de8d5f4a47d"
+  }, {
+    "reference": "Observation/45823938-c992-48da-8a47-fe8ec5dac088"
+  }, {
+    "reference": "Patient/fd3b9a4e-9dcf-4eda-bd0e-0f9ababe6233"
+  } ]
+}

@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "1a9eaec1-5903-439b-aa31-c22639f87bbb",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "exam",
+      "display": "Exam"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "8709-8",
+      "display": "Physical findings of Skin",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/599d4177-ae6e-4448-8b7d-9cfcdbdd9dc9"
+  },
+  "effectiveDateTime": "2026-03-16T08:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "54579-8",
+      "display": "Pressure injuries - unstageable due to non-removable dressing"
+    } ]
+  }
+}

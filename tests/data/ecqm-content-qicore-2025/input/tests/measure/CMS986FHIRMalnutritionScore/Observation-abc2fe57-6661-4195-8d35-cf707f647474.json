@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "abc2fe57-6661-4195-8d35-cf707f647474",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "98968-1",
+      "display": "Initial screening NRS_2002",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b13bed65-b8cd-4905-b3c7-81a9c11dffc2"
+  },
+  "effectiveDateTime": "2026-02-01T09:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "704361005",
+      "display": "At increased risk of deficient food intake (finding)",
+      "userSelected": true
+    } ]
+  }
+}

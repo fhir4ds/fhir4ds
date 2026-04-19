@@ -1,0 +1,81 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "d28ca183-a7af-44f8-84b9-431af2d93a15",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "2de83d19-340b-4019-aee7-9fb4ef828095-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "1994e69a-472b-4e32-80c1-5c692f36acce"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#2de83d19-340b-4019-aee7-9fb4ef828095-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Inpatient encounter where patient given opioid 8:15AM. Antagonist administration start time is 8:15PM, exactly 12 hours after opioid. Meets numerator criteria. "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS819FHIRHHORAE",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/1994e69a-472b-4e32-80c1-5c692f36acce"
+  }, {
+    "reference": "Encounter/67daed6d-f724-488c-82d0-08edc19c86c8"
+  }, {
+    "reference": "MedicationAdministration/922ae883-33b3-4dcc-89b0-d99259ae253e"
+  }, {
+    "reference": "MedicationAdministration/4fecde35-1fa2-4b05-8822-dc3be6212106"
+  } ]
+}

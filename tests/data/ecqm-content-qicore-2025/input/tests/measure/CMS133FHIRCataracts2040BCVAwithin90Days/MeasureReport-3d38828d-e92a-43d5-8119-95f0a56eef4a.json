@@ -1,0 +1,97 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "3d38828d-e92a-43d5-8119-95f0a56eef4a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "658e3489-f1a8-4db2-a74b-16e83b091590-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "1b854323-2f47-4bdb-88ee-d34e6d28ba63"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#658e3489-f1a8-4db2-a74b-16e83b091590-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient with cat surg September 30 and visual acuity 20/40 or better within 90 days of cataract surgery. "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS133FHIRCataracts2040BCVAwithin90Days",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/1b854323-2f47-4bdb-88ee-d34e6d28ba63"
+  }, {
+    "reference": "Observation/8bc079fe-b089-4514-aba7-e446193a9b1b"
+  }, {
+    "reference": "Observation/804620e5-f613-4235-9163-e2bba07619fb"
+  }, {
+    "reference": "Procedure/c8f21ee7-aa53-48c7-b5df-3388309cbf1b"
+  }, {
+    "reference": "Coverage/0ee33a4d-8367-4ec1-a17f-62e2d3ef88c9"
+  }, {
+    "reference": "Organization/4ae2607e-0a31-49a6-aca9-189c10e5b5c7"
+  }, {
+    "reference": "Practitioner/c6ba4b87-35cc-41f0-97f5-4b7e63e3ff25"
+  } ]
+}

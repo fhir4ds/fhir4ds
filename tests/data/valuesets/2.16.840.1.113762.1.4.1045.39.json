@@ -1,0 +1,135 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1045.39",
+  "meta": {
+    "versionId": "75",
+    "lastUpdated": "2026-02-03T15:17:06.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2024-02-03"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2024-02-03"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.39",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1045.39"
+    }
+  ],
+  "version": "20240203",
+  "name": "LowDoseUnfractionatedHeparinForVTEProphylaxis",
+  "title": "Low Dose Unfractionated Heparin for VTE Prophylaxis",
+  "status": "active",
+  "date": "2024-02-03T01:09:29-05:00",
+  "publisher": "Joint Commission",
+  "expansion": {
+    "identifier": "urn:uuid:f0b0424a-002e-4d01-b210-9fee21bd405a",
+    "timestamp": "2026-03-13T12:46:52-04:00",
+    "total": 13,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1361226",
+        "display": "heparin sodium, porcine 1000 UNT/ML Injectable Solution"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1361574",
+        "display": "heparin sodium, porcine 20000 UNT/ML Injectable Solution"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1361615",
+        "display": "heparin sodium, porcine 5000 UNT/ML Injectable Solution"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1361853",
+        "display": "0.5 ML heparin sodium, porcine 10000 UNT/ML Cartridge"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1362831",
+        "display": "heparin sodium, porcine 10000 UNT/ML Injectable Solution"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1658634",
+        "display": "0.5 ML heparin sodium, porcine 10000 UNT/ML Injection"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1658637",
+        "display": "1 ML heparin sodium, porcine 10000 UNT/ML Injection"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1658647",
+        "display": "2 ML heparin sodium, porcine 1000 UNT/ML Injection"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1658659",
+        "display": "1 ML heparin sodium, porcine 1000 UNT/ML Injection"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1659260",
+        "display": "1 ML heparin sodium, porcine 5000 UNT/ML Cartridge"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1659263",
+        "display": "1 ML heparin sodium, porcine 5000 UNT/ML Injection"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "1798389",
+        "display": "1 ML heparin sodium, porcine 5000 UNT/ML Prefilled Syringe"
+      },
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "version": "02022026",
+        "code": "2121591",
+        "display": "0.5 ML heparin sodium, porcine 10000 UNT/ML Prefilled Syringe"
+      }
+    ]
+  }
+}

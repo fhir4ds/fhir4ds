@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "895e10a1-9591-4f36-87d4-0df47c0a6d50",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "441874000",
+      "display": "Seen by palliative care service (finding)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/63ae0b9f-2636-4bf3-85ef-4ff20bdb09de"
+  },
+  "onsetDateTime": "2026-12-31T23:59:59.000+00:00"
+}

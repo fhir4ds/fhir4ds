@@ -1,0 +1,27 @@
+{
+  "resourceType": "Procedure",
+  "id": "77740ce8-3a83-43bf-bd35-7493c9a9e0da",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-04-21T12:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "271280005",
+      "display": "Removal of endotracheal tube (procedure)"
+    } ],
+    "text": "Removal of endotracheal tube (procedure)"
+  },
+  "subject": {
+    "reference": "Patient/6e71fd2a-fa28-485b-9194-dd4666b04f87"
+  },
+  "performedPeriod": {
+    "start": "2026-05-15T13:04:00.000+00:00",
+    "end": "2026-05-15T13:19:00.000+00:00"
+  }
+}

@@ -1,0 +1,293 @@
+{
+  "resourceType": "Bundle",
+  "id": "tests-DENOMPass-RiskVariableASAClass-bundle",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Encounter/640bc597-39af-4226-9f8b-7b8320414a17",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "640bc597-39af-4226-9f8b-7b8320414a17",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "112689000",
+          "display": "Hospital admission, elective, with complete pre-admission work-up"
+        } ],
+        "text": "Hospital admission, elective, with complete pre-admission work-up"
+      } ],
+      "priority": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "103390000"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/7797d382-90bf-4c6b-96f5-c16acd721899"
+      },
+      "period": {
+        "start": "2026-04-10T08:00:00.000+00:00",
+        "end": "2026-04-14T08:15:00.000+00:00"
+      },
+      "diagnosis": [ {
+        "condition": {
+          "reference": "Procedure/002e8cba-2349-43cf-b97e-42fbdbea3a4d"
+        },
+        "rank": 1
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/640bc597-39af-4226-9f8b-7b8320414a17"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/2f7b379f-0211-47e5-a7be-962a21bc17f1",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "2f7b379f-0211-47e5-a7be-962a21bc17f1",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "exam",
+          "display": "Exam"
+        } ],
+        "text": "Exam"
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "97816-3",
+          "display": "American society of anesthesiologists morbidity state"
+        } ],
+        "text": "American society of anesthesiologists morbidity state"
+      },
+      "subject": {
+        "reference": "Patient/7797d382-90bf-4c6b-96f5-c16acd721899"
+      },
+      "encounter": {
+        "reference": "Encounter/640bc597-39af-4226-9f8b-7b8320414a17"
+      },
+      "effectiveDateTime": "2026-04-11T08:00:00.000+00:00",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "413499007",
+          "display": "American Society of Anesthesiologists physical status class 5 (finding)"
+        } ],
+        "text": "American Society of Anesthesiologists physical status class 5 (finding)"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/2f7b379f-0211-47e5-a7be-962a21bc17f1"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Patient/7797d382-90bf-4c6b-96f5-c16acd721899",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "7797d382-90bf-4c6b-96f5-c16acd721899",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2054-5",
+            "display": "Black or African American",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Black or African American"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "61152a3b98086b7a79cbd7c1"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "DENOMPass",
+        "given": [ "RiskVariableASAClass" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1966-07-12"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/7797d382-90bf-4c6b-96f5-c16acd721899"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/002e8cba-2349-43cf-b97e-42fbdbea3a4d",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "002e8cba-2349-43cf-b97e-42fbdbea3a4d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-04-11T10:30:00.000+00:00"
+      } ],
+      "status": "completed",
+      "category": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "18286008",
+          "display": "General or neuraxial anesthesia"
+        } ]
+      },
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "112943005",
+          "display": "Epidural injection of anesthetic substance, diagnostic, caudal, continuous"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/7797d382-90bf-4c6b-96f5-c16acd721899"
+      },
+      "performedPeriod": {
+        "start": "2026-04-11T08:00:00.000+00:00",
+        "end": "2026-04-11T10:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/002e8cba-2349-43cf-b97e-42fbdbea3a4d"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/ab6e1d7b-ba70-4458-b890-f9c9cc9da268",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "ab6e1d7b-ba70-4458-b890-f9c9cc9da268",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "3f5b7531-50db-4c2d-8fde-1913a4ae13ab-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "7797d382-90bf-4c6b-96f5-c16acd721899"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#3f5b7531-50db-4c2d-8fde-1913a4ae13ab-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Elective hospitalization with procedure (general anesthesia) within first 3 days of encounter. Meets IPP/Denom. Risk Variable Encounter Procedures populated "
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS1218FHIRHHRF",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Encounter/640bc597-39af-4226-9f8b-7b8320414a17"
+      }, {
+        "reference": "Observation/2f7b379f-0211-47e5-a7be-962a21bc17f1"
+      }, {
+        "reference": "Patient/7797d382-90bf-4c6b-96f5-c16acd721899"
+      }, {
+        "reference": "Procedure/002e8cba-2349-43cf-b97e-42fbdbea3a4d"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/ab6e1d7b-ba70-4458-b890-f9c9cc9da268"
+    }
+  } ]
+}

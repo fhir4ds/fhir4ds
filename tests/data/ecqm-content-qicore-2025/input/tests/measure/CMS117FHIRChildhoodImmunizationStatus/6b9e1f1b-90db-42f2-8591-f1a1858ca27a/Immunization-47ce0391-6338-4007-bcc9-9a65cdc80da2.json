@@ -1,0 +1,21 @@
+{
+  "resourceType": "Immunization",
+  "id": "47ce0391-6338-4007-bcc9-9a65cdc80da2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ]
+  },
+  "status": "completed",
+  "vaccineCode": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/cvx",
+      "code": "51",
+      "display": "Haemophilus influenzae type b conjugate and Hepatitis B vaccine"
+    } ]
+  },
+  "patient": {
+    "reference": "Patient/6b9e1f1b-90db-42f2-8591-f1a1858ca27a"
+  },
+  "occurrenceDateTime": "2025-01-02T00:00:00.000Z",
+  "recorded": "2025-01-02T00:00:00.000Z",
+  "primarySource": true
+}

@@ -1,0 +1,702 @@
+{
+  "resourceType": "Group",
+  "id": "CMS1218FHIRHHRF",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS1218FHIRHHRF"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/741f622c-ef09-42ad-a58c-faead9aa2121",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/741f622c-ef09-42ad-a58c-faead9aa2121",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8415bf7d-2920-4ec3-9774-7a6f4272397e",
+      "display": "3Intubations2DuringProc1OutsideOfProc NUMER1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8415bf7d-2920-4ec3-9774-7a6f4272397e",
+      "display": "3Intubations2DuringProc1OutsideOfProc NUMER1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/80b68f78-88e0-4fc7-b622-f82bc133ddc9",
+      "display": "IPElectiveEncWithProcedure DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/80b68f78-88e0-4fc7-b622-f82bc133ddc9",
+      "display": "IPElectiveEncWithProcedure DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/03fae2d5-3bb7-4730-98fc-98a419a5e555",
+      "display": "Enc1HiRiskSurgExcEnc2meetsNum DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/03fae2d5-3bb7-4730-98fc-98a419a5e555",
+      "display": "Enc1HiRiskSurgExcEnc2meetsNum DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fe79603f-2876-45eb-a9d0-0be56d3d29a1",
+      "display": "1EncPaO2Exc2EncNum DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/fe79603f-2876-45eb-a9d0-0be56d3d29a1",
+      "display": "1EncPaO2Exc2EncNum DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c1dd1d9f-2529-40e2-98c8-c7ae44158cea",
+      "display": "ObstetricalDiagnosis IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c1dd1d9f-2529-40e2-98c8-c7ae44158cea",
+      "display": "ObstetricalDiagnosis IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cb4e080a-0fb4-4a02-b923-aef5a4264fb3",
+      "display": "2IntubsDurFirstORandAft2ndProc NUMER1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cb4e080a-0fb4-4a02-b923-aef5a4264fb3",
+      "display": "2IntubsDurFirstORandAft2ndProc NUMER1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/23191b54-f639-47a2-88ad-dc7fabaec98a",
+      "display": "Num2TwoEncO2DurEnc1andMVDDurEnc2 NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/23191b54-f639-47a2-88ad-dc7fabaec98a",
+      "display": "Num2TwoEncO2DurEnc1andMVDDurEnc2 NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b9a0c3ab-10ba-42b1-a1c0-104e1651896d",
+      "display": "Num2FailsNum4Pass NUMER4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b9a0c3ab-10ba-42b1-a1c0-104e1651896d",
+      "display": "Num2FailsNum4Pass NUMER4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f09836ee-f6c6-4fd0-8e17-547df4d65bff",
+      "display": "ElecEncWithEDVisitEndDTSameAsIPStartDT RISKVarPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f09836ee-f6c6-4fd0-8e17-547df4d65bff",
+      "display": "ElecEncWithEDVisitEndDTSameAsIPStartDT RISKVarPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6fcf2c8a-e316-4cb3-b9c8-cae8f52b8a84",
+      "display": "SecondaryDxAcuteRespFailurePOA DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6fcf2c8a-e316-4cb3-b9c8-cae8f52b8a84",
+      "display": "SecondaryDxAcuteRespFailurePOA DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/25a4e31a-832c-4337-9a8e-8a0a6dfb189d",
+      "display": "DegenerativeNeuroDisorder DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/25a4e31a-832c-4337-9a8e-8a0a6dfb189d",
+      "display": "DegenerativeNeuroDisorder DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/02ee1832-5609-46f6-83ad-32c04620619b",
+      "display": "DegenerativeNeuroDisorder DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/02ee1832-5609-46f6-83ad-32c04620619b",
+      "display": "DegenerativeNeuroDisorder DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8c1d0b6e-067f-4a0b-b4c5-adec7b2aeeef",
+      "display": "RiskVariableFirstPlateletmm3Units DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8c1d0b6e-067f-4a0b-b4c5-adec7b2aeeef",
+      "display": "RiskVariableFirstPlateletmm3Units DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b5548207-b73d-4013-8827-b76a641a2cf7",
+      "display": "Num3IntubationDuring1stProcExtubationGT48HrsProc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b5548207-b73d-4013-8827-b76a641a2cf7",
+      "display": "Num3IntubationDuring1stProcExtubationGT48HrsProc NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ae2f56d6-c3ee-4ed4-a425-365e532dafa8",
+      "display": "PaCO2GT50andpHLT70EQ48HrsOfFirstProc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ae2f56d6-c3ee-4ed4-a425-365e532dafa8",
+      "display": "PaCO2GT50andpHLT70EQ48HrsOfFirstProc DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1f6b9700-837c-41c6-8117-02939ef57de8",
+      "display": "RiskVFirstHemoglobinMmolLunits DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1f6b9700-837c-41c6-8117-02939ef57de8",
+      "display": "RiskVFirstHemoglobinMmolLunits DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ac9e7170-bfef-4c14-9118-f290877b4756",
+      "display": "TracheostomyDxPOA DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ac9e7170-bfef-4c14-9118-f290877b4756",
+      "display": "TracheostomyDxPOA DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/165ecd09-8616-45dd-bdb6-78a883184d08",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/165ecd09-8616-45dd-bdb6-78a883184d08",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/35b12f5c-3630-462c-b094-69e91c702b71",
+      "display": "EncWithSurgeryWithin3Days DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/35b12f5c-3630-462c-b094-69e91c702b71",
+      "display": "EncWithSurgeryWithin3Days DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/223bc449-fc6b-4636-b392-3613761ee5c8",
+      "display": "Num4-2MVGT48HrsAfterORNoInterruptions NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/223bc449-fc6b-4636-b392-3613761ee5c8",
+      "display": "Num4-2MVGT48HrsAfterORNoInterruptions NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0ef36c93-9547-4238-a59e-3f7c2fa37293",
+      "display": "Num3EncWithExtubationGT48Hrs NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0ef36c93-9547-4238-a59e-3f7c2fa37293",
+      "display": "Num3EncWithExtubationGT48Hrs NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f29f69fc-dcbd-4296-8b56-e6e081758ed9",
+      "display": "Num2TwoEncO2DurEnc1andMVDDurEnc2 NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f29f69fc-dcbd-4296-8b56-e6e081758ed9",
+      "display": "Num2TwoEncO2DurEnc1andMVDDurEnc2 NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/77789a0c-8d3f-44cc-8014-75329aa8b1f3",
+      "display": "Num4MVStartsLT48HrsFromEndOfORProc NUMER4Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/77789a0c-8d3f-44cc-8014-75329aa8b1f3",
+      "display": "Num4MVStartsLT48HrsFromEndOfORProc NUMER4Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a40acaba-9191-4e65-8e32-cf3d48ec1964",
+      "display": "RiskVariableSmokingStatus2BeforeEnc DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a40acaba-9191-4e65-8e32-cf3d48ec1964",
+      "display": "RiskVariableSmokingStatus2BeforeEnc DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e2f1c511-959c-4f2a-b886-c820d983c2e3",
+      "display": "DENEXPass-TrachOnlyProcedure DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e2f1c511-959c-4f2a-b886-c820d983c2e3",
+      "display": "DENEXPass-TrachOnlyProcedure DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/22a4d066-3cc2-4d39-af04-8b89c3505b17",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/22a4d066-3cc2-4d39-af04-8b89c3505b17",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/97f045d5-0c9e-40c5-9f46-7adf4c049598",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/97f045d5-0c9e-40c5-9f46-7adf4c049598",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ea9c34ee-b50e-4d13-bd9c-ab2033d15717",
+      "display": "ObstetricalDiagnosis IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ea9c34ee-b50e-4d13-bd9c-ab2033d15717",
+      "display": "ObstetricalDiagnosis IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2f3ae88b-8fc4-4941-a2a3-09ae9e134c84",
+      "display": "Num2O2BtwnGATandMV NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2f3ae88b-8fc4-4941-a2a3-09ae9e134c84",
+      "display": "Num2O2BtwnGATandMV NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a65e5180-3578-4013-bdc2-925e1af1e627",
+      "display": "1EncPaO2Exc2EncNum DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a65e5180-3578-4013-bdc2-925e1af1e627",
+      "display": "1EncPaO2Exc2EncNum DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c706d170-57b2-4eb2-9af8-d7bcce8728a1",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c706d170-57b2-4eb2-9af8-d7bcce8728a1",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2bfea766-6c3c-487a-8c3e-8cab9966603f",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2bfea766-6c3c-487a-8c3e-8cab9966603f",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8429a867-ba07-4140-8ad8-197b95d694cf",
+      "display": "Num3EncWithExtubationGT48Hrs NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8429a867-ba07-4140-8ad8-197b95d694cf",
+      "display": "Num3EncWithExtubationGT48Hrs NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/171804b8-0f80-498e-92ea-7812b704013d",
+      "display": "Num4MVduringIntervalNoInterruptionTime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/171804b8-0f80-498e-92ea-7812b704013d",
+      "display": "Num4MVduringIntervalNoInterruptionTime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f9b2fb9f-d553-420c-aac3-8633fb3d4d16",
+      "display": "Num4MVStartsExactly48HrsFromEndOfORProc NUMER4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f9b2fb9f-d553-420c-aac3-8633fb3d4d16",
+      "display": "Num4MVStartsExactly48HrsFromEndOfORProc NUMER4Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6e71fd2a-fa28-485b-9194-dd4666b04f87",
+      "display": "Num2TwoEncO2DurEnc1andMVDDurEnc2 NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6e71fd2a-fa28-485b-9194-dd4666b04f87",
+      "display": "Num2TwoEncO2DurEnc1andMVDDurEnc2 NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b58af351-e517-48d2-9bde-33654592f6f4",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b58af351-e517-48d2-9bde-33654592f6f4",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7797d382-90bf-4c6b-96f5-c16acd721899",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7797d382-90bf-4c6b-96f5-c16acd721899",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0b924188-db4b-45ff-a79d-761f6fd85c89",
+      "display": "IntubAft2Proc NUMER1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0b924188-db4b-45ff-a79d-761f6fd85c89",
+      "display": "IntubAft2Proc NUMER1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d1083a80-4ba5-4191-aae3-fc3bc4731b4d",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/d1083a80-4ba5-4191-aae3-fc3bc4731b4d",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8942da50-6322-4df7-bd03-21aecbc427a4",
+      "display": "2Enc1stMVexc2ndNum DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8942da50-6322-4df7-bd03-21aecbc427a4",
+      "display": "2Enc1stMVexc2ndNum DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/077e122d-ed4d-4cf0-b665-1bf87710171d",
+      "display": "EncWithEDVisitGTOneHrPrior DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/077e122d-ed4d-4cf0-b665-1bf87710171d",
+      "display": "EncWithEDVisitGTOneHrPrior DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9d11a22c-a1b8-4dd2-ae22-d04194da5e15",
+      "display": "1EncPaO2Exc2EncNum DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9d11a22c-a1b8-4dd2-ae22-d04194da5e15",
+      "display": "1EncPaO2Exc2EncNum DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/055e466e-dd71-4a1f-b3d4-bc54ecf95721",
+      "display": "NonElecEncWithEDVisitEndDTSameAsIPStartDT IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/055e466e-dd71-4a1f-b3d4-bc54ecf95721",
+      "display": "NonElecEncWithEDVisitEndDTSameAsIPStartDT IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bf37ac0a-db5f-4276-8048-8667477a57e9",
+      "display": "TracheostomyDxPOA DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bf37ac0a-db5f-4276-8048-8667477a57e9",
+      "display": "TracheostomyDxPOA DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f9b65091-3a37-4f02-8e20-96f3d7b9f838",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f9b65091-3a37-4f02-8e20-96f3d7b9f838",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/55ad84c0-3a0f-4154-9526-341b04b1a7b1",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/55ad84c0-3a0f-4154-9526-341b04b1a7b1",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ad2c243-5601-463f-99cb-def89646e3c3",
+      "display": "Num3EncWithExtubationGT48Hrs NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/3ad2c243-5601-463f-99cb-def89646e3c3",
+      "display": "Num3EncWithExtubationGT48Hrs NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5dfd143a-78bc-405c-acf5-cdf906987ab2",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5dfd143a-78bc-405c-acf5-cdf906987ab2",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/629f2165-c162-4ed7-901f-9056ed997beb",
+      "display": "Pa02LT50EQFirstORstrt DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/629f2165-c162-4ed7-901f-9056ed997beb",
+      "display": "Pa02LT50EQFirstORstrt DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/34cb56f5-60cb-45c7-8da6-b8407bc799b9",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/34cb56f5-60cb-45c7-8da6-b8407bc799b9",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c6e6306d-e742-488e-8bde-71c1a8e1b0c1",
+      "display": "EncWithEDVisitMoreThanOneHrPriorToIPStart DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c6e6306d-e742-488e-8bde-71c1a8e1b0c1",
+      "display": "EncWithEDVisitMoreThanOneHrPriorToIPStart DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4e29d86b-a6d3-45ac-98c4-7a3e5e4f6495",
+      "display": "IntubAftFirstORrelvtDatetime NUMER1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/4e29d86b-a6d3-45ac-98c4-7a3e5e4f6495",
+      "display": "IntubAftFirstORrelvtDatetime NUMER1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9d196de1-92ff-42f7-88a5-b0dfdfa36e57",
+      "display": "TracheostomyAfterFirstProcedure DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9d196de1-92ff-42f7-88a5-b0dfdfa36e57",
+      "display": "TracheostomyAfterFirstProcedure DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b203d4af-3937-4fb3-a7c0-6014d18f433d",
+      "display": "2Enc1stDenex2ndNumer DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b203d4af-3937-4fb3-a7c0-6014d18f433d",
+      "display": "2Enc1stDenex2ndNumer DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/683be14a-90bc-41bd-a96b-6a1297f5f42e",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/683be14a-90bc-41bd-a96b-6a1297f5f42e",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5dc1a11f-f27d-4e85-baf9-d80ca40f2cf9",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5dc1a11f-f27d-4e85-baf9-d80ca40f2cf9",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c87a3d8c-6b6d-44d0-b701-27390c235991",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/c87a3d8c-6b6d-44d0-b701-27390c235991",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/29815dd6-1ee5-4811-8452-7aaed65ec1e7",
+      "display": "MV-GT1HrBeforeStartOfFirstProcRelDateTime DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/29815dd6-1ee5-4811-8452-7aaed65ec1e7",
+      "display": "MV-GT1HrBeforeStartOfFirstProcRelDateTime DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a82b589d-d741-4bc8-941c-9546a2b787e8",
+      "display": "ElecEncWithEDVisitEndDTSameAsIPStartDT IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a82b589d-d741-4bc8-941c-9546a2b787e8",
+      "display": "ElecEncWithEDVisitEndDTSameAsIPStartDT IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0c76341a-34f1-4d1b-9bbe-5915e00a0818",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0c76341a-34f1-4d1b-9bbe-5915e00a0818",
+      "display": "RiskVariableASAClass DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ddb3bc0c-5130-433b-af9c-a8af106aecab",
+      "display": "EncHasNoElectiveClassAttr IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ddb3bc0c-5130-433b-af9c-a8af106aecab",
+      "display": "EncHasNoElectiveClassAttr IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8b5ce980-3136-459b-83e3-419ea37aee91",
+      "display": "Intub31DaysAftFirstOr NUMER1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8b5ce980-3136-459b-83e3-419ea37aee91",
+      "display": "Intub31DaysAftFirstOr NUMER1Fail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1939f5b2-658c-4f27-a62c-2368b76f4ac8",
+      "display": "RiskVariableFirstAlbuminGDLunit DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1939f5b2-658c-4f27-a62c-2368b76f4ac8",
+      "display": "RiskVariableFirstAlbuminGDLunit DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0770c85b-6b0c-46cc-a5e7-9c3db8ba6063",
+      "display": "NeuromuscularDisorder DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0770c85b-6b0c-46cc-a5e7-9c3db8ba6063",
+      "display": "NeuromuscularDisorder DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f2e41ef7-1aa1-4ea0-8541-be476f3cb661",
+      "display": "Num4MVGT48HrsORProcAt48Hrs NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f2e41ef7-1aa1-4ea0-8541-be476f3cb661",
+      "display": "Num4MVGT48HrsORProcAt48Hrs NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/26bdeffc-bf6b-4def-af9d-6de005fd5603",
+      "display": "IntubationEQ30DaysAftFirstOR NUMER1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/26bdeffc-bf6b-4def-af9d-6de005fd5603",
+      "display": "IntubationEQ30DaysAftFirstOR NUMER1Pass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7c224175-f689-4b7e-82ad-22175d5238b7",
+      "display": "NeuromuscularDisorder DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7c224175-f689-4b7e-82ad-22175d5238b7",
+      "display": "NeuromuscularDisorder DENEXPass"
+    }
+  } ]
+}

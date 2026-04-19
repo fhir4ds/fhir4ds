@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "c7af4c53-79a8-4381-9c63-5b8740a67201",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "101819-1",
+      "display": "Nutritional assessment for malnutrition status",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/eeebf78e-439d-445b-a4e1-74d3b6eaeb08"
+  },
+  "effectiveDateTime": "2026-09-01T10:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "LA33704-0",
+      "display": "Moderately malnourished",
+      "userSelected": true
+    } ]
+  }
+}

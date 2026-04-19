@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "07e8a53b-b717-4e17-a718-d657ed5ce7a0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+  },
+  "status": "corrected",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "laboratory"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "77353-1",
+      "display": "Noninvasive colorectal cancer DNA and occult blood screening [Interpretation] in Stool Narrative"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/5445cc72-68a1-4b73-b06d-4cf52098e0db"
+  },
+  "effectivePeriod": {
+    "start": "2023-12-31T23:50:00.000+00:00",
+    "end": "2023-12-31T23:59:00.000+00:00"
+  },
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "373066001",
+      "display": "Yes (qualifier value)"
+    } ]
+  }
+}

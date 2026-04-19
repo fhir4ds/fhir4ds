@@ -1,0 +1,42 @@
+{
+  "resourceType": "Observation",
+  "id": "63c9b32a-25da-4661-8ff5-1c3bd825a000",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+  },
+  "partOf": [ {
+    "reference": "Procedure/7e1f9173-1e75-43b0-a1af-cb6a86115034"
+  } ],
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "procedure",
+      "display": "Procedure"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "21902-2",
+      "display": "Stage group.pathology Cancer"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b487e8da-c244-4cb8-9575-48eab7d7c28d"
+  },
+  "effectivePeriod": {
+    "start": "2026-01-01T08:00:00.000+00:00",
+    "end": "2026-01-01T08:15:00.000+00:00"
+  },
+  "issued": "2026-01-01T08:10:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "D09.0",
+      "display": "Carcinoma in situ of bladder"
+    } ]
+  }
+}

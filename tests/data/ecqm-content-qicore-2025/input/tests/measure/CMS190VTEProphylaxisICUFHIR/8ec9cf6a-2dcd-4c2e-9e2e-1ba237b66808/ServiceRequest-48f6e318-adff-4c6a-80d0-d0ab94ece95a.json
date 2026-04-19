@@ -1,0 +1,21 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "48f6e318-adff-4c6a-80d0-d0ab94ece95a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "428411000124104",
+      "display": "Intermittent pneumatic compression boot (physical object)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/8ec9cf6a-2dcd-4c2e-9e2e-1ba237b66808"
+  },
+  "authoredOn": "2026-11-03T11:00:00Z"
+}

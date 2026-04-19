@@ -1,0 +1,29 @@
+{
+  "resourceType": "Encounter",
+  "id": "a98daf4f-e46f-4bd6-9ba6-369f5d73f2d0",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "arrived",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2021",
+      "code": "99391",
+      "display": "Periodic comprehensive preventive medicine reevaluation and management of an individual including an age and gender appropriate history, examination, counseling/anticipatory guidance/risk factor reduction interventions, and the ordering of laboratory/diagnostic procedures, established patient; infant (age younger than 1 year)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/a4eb4933-e343-4e4b-b4bd-f582c42979be"
+  },
+  "period": {
+    "start": "2026-12-31T00:00:00.000+00:00",
+    "end": "2026-12-31T00:59:00.000+00:00"
+  }
+}

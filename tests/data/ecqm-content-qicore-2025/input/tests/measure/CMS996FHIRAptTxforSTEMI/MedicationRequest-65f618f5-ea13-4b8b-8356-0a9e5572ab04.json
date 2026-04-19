@@ -1,0 +1,32 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "65f618f5-ea13-4b8b-8356-0a9e5572ab04",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+      "code": "inpatient",
+      "display": "Inpatient",
+      "userSelected": true
+    } ]
+  } ],
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1114202",
+      "display": "rivaroxaban 10 MG Oral Tablet [Xarelto]",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/ebdb2548-e2a1-4cee-a7df-c824f80b4eab"
+  },
+  "authoredOn": "2026-06-02T08:00:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/b1831627-b46e-4eff-bc69-7d75e2ed79c5"
+  }
+}

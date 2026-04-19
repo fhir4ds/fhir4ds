@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "33841cfe-45d3-4836-96f7-515b956dbec5.1",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2027-01-01T01:00:00.000Z"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "313042009",
+      "display": "Application of dental fluoride varnish (procedure)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/3d962304-b248-4e8b-9e42-b382a5b4754c"
+  },
+  "performedPeriod": {
+    "start": "2027-01-01T00:00:00.000Z",
+    "end": "2027-01-01T00:00:00.000Z"
+  }
+}

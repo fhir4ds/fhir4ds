@@ -1,0 +1,27 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "b4d89ccf-2291-4f04-a017-5641770e0464",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "doNotPerform": false,
+  "medicationReference": {
+    "reference": "Medication/f36ed433-5af7-49aa-921b-135d0719f1e9"
+  },
+  "subject": {
+    "reference": "Patient/45e01fed-56bb-483d-a860-af3d566bda11"
+  },
+  "authoredOn": "2026-12-30T00:00:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/example"
+  },
+  "dispenseRequest": {
+    "expectedSupplyDuration": {
+      "value": 90,
+      "system": "http://unitsofmeasure.org",
+      "code": "days"
+    }
+  }
+}

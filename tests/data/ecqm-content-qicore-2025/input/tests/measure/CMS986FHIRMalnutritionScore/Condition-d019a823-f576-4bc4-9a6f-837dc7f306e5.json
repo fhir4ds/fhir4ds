@@ -1,0 +1,46 @@
+{
+  "resourceType": "Condition",
+  "id": "d019a823-f576-4bc4-9a6f-837dc7f306e5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "441971000124107",
+      "display": "Chronic disease-related malnutrition",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/8269bfc3-071c-40e9-b523-07f615752097"
+  },
+  "onsetPeriod": {
+    "start": "2026-07-01T08:00:00.000+00:00"
+  },
+  "recordedDate": "2026-07-01T11:00:00.000+00:00"
+}

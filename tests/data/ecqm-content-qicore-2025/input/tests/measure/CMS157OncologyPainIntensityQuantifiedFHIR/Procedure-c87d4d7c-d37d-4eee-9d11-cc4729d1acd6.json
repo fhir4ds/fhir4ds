@@ -1,0 +1,25 @@
+{
+  "resourceType": "Procedure",
+  "id": "c87d4d7c-d37d-4eee-9d11-cc4729d1acd6",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-01-01T12:35:00.000Z"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "169396008"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/fe6ef07d-bff1-4e0e-9bf4-b0424a1d0ab4"
+  },
+  "performedPeriod": {
+    "start": "2025-01-01T08:00:00.000Z",
+    "end": "2025-01-01T08:15:00.000Z"
+  }
+}

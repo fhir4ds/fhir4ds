@@ -1,0 +1,61 @@
+{
+  "resourceType": "Patient",
+  "id": "a4f53b12-e0e3-4faf-8e66-6ce8193a6477",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2054-5",
+        "display": "Black or African American",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Black"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Hispanic or Latino"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248152002"
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://madie.cms.gov/",
+    "value": "HospiceExclu3"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "text": "HospiceExclu3",
+    "family": "IPPFAIL",
+    "given": [ "HospiceExclu3" ]
+  } ],
+  "gender": "female",
+  "birthDate": "1985-01-01",
+  "address": [ {
+    "text": "HospiceExclu3, Hospice Status, ID=HospiceExclu3, DOB: 01 Jan 1985"
+  } ]
+}

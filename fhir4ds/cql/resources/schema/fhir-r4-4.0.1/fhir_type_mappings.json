@@ -1,7 +1,7 @@
 {
     "_comment": "Maps FHIR element types to DuckDB fhirpath UDF function names and SQL column types",
     "type_mappings": {
-        "dateTime":         {"udf": "fhirpath_date",   "sql_type": "DATE"},
+        "dateTime":         {"udf": "fhirpath_text",   "sql_type": "VARCHAR"},
         "date":             {"udf": "fhirpath_date",   "sql_type": "DATE"},
         "instant":          {"udf": "fhirpath_date",   "sql_type": "TIMESTAMP"},
         "Period":           {"udf": "fhirpath_date",   "sql_type": "DATE"},

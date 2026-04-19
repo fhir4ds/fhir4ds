@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "a972e7cb-d410-46fb-8524-579cd7178b75",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-01-02T00:00:00.000Z"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "90700",
+      "display": "Diphtheria, tetanus toxoids, and acellular pertussis vaccine (DTaP), when administered to individuals younger than 7 years, for intramuscular use"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1e7dc519-5d75-4c07-b23f-ae9421a12943"
+  },
+  "performedPeriod": {
+    "start": "2025-01-02T00:00:00.000Z",
+    "end": "2025-01-02T23:59:59.000Z"
+  }
+}

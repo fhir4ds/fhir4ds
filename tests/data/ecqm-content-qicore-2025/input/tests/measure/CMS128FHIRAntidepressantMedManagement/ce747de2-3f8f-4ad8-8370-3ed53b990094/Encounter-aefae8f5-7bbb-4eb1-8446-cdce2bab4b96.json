@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "aefae8f5-7bbb-4eb1-8446-cdce2bab4b96",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "code": "90791",
+      "display": "Psychiatric diagnostic evaluation"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/ce747de2-3f8f-4ad8-8370-3ed53b990094"
+  },
+  "period": {
+    "start": "2026-01-01T00:00:00.000Z",
+    "end": "2026-01-01T01:00:00.000Z"
+  }
+}

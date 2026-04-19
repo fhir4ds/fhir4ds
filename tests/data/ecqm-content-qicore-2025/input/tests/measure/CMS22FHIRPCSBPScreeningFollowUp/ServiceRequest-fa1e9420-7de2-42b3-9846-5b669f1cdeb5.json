@@ -1,0 +1,34 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "fa1e9420-7de2-42b3-9846-5b669f1cdeb5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "1296859006",
+        "display": "Procedure declined by patient (situation)",
+        "userSelected": true
+      } ]
+    }
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "1181000175107",
+      "display": "Recommendation to lose weight (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/695cee04-cf12-411e-a258-99e430093a4e"
+  },
+  "authoredOn": "2026-01-01T00:05:00.000+00:00"
+}

@@ -1,0 +1,93 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "d31cdc02-9e6a-4226-8d79-40e01ad4622f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "93555021-6529-44ff-a9fe-eaf3b33fa878-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "11c8c8ff-97d1-4b46-8297-0a85d5caa1f3"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#93555021-6529-44ff-a9fe-eaf3b33fa878-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient w/ a THA Procedure 11/1, Initial Hip Assessment HOOSJr 90 days before THA Procedure(8/3), and FollowUp Hip Assessment HOOSJr 425 days after THA Procedure (12/30)"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS56FHIRFunctionalStatusAssessmentforTotalHipReplacement",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/11c8c8ff-97d1-4b46-8297-0a85d5caa1f3"
+  }, {
+    "reference": "Procedure/b32331c7-083d-4437-8266-6cf075d08bd9"
+  }, {
+    "reference": "Encounter/20a24a27-8e28-451d-87b0-cf6c9068911d"
+  }, {
+    "reference": "Observation/f904e578-790e-480c-9305-1e915e8232fb"
+  }, {
+    "reference": "Observation/bb960b68-7c9c-4011-82f8-16fbb4809660"
+  } ]
+}

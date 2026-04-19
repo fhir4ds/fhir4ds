@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "702e3670-ac02-41d5-812b-d0f6efa1ed0b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "75282-4",
+      "display": "Nutrition assessment panel",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/31ed0db8-1972-40ed-be78-0653f2cd9a95"
+  },
+  "effectiveDateTime": "2026-07-05T08:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "2492009",
+      "display": "Nutritional disorder (disorder)",
+      "userSelected": true
+    } ]
+  }
+}

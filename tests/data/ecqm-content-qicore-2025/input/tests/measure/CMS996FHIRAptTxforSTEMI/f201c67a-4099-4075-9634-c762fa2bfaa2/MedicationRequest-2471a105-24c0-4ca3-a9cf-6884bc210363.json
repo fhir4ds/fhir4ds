@@ -1,0 +1,32 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "2471a105-24c0-4ca3-a9cf-6884bc210363",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+      "code": "inpatient",
+      "display": "Inpatient",
+      "userSelected": true
+    } ]
+  } ],
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "2059015",
+      "display": "rivaroxaban 2.5 MG Oral Tablet",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f201c67a-4099-4075-9634-c762fa2bfaa2"
+  },
+  "authoredOn": "2026-10-02T08:00:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/dd7bbcbc-2d75-46f3-ac78-66bff80ffe1a"
+  }
+}

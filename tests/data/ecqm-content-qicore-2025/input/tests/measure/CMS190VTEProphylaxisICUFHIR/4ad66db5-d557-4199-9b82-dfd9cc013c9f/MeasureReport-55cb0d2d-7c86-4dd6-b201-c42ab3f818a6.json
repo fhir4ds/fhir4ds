@@ -1,0 +1,111 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "55cb0d2d-7c86-4dd6-b201-c42ab3f818a6",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "b4480ab4-2e8a-4b7a-9b64-dd146785e613-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "4ad66db5-d557-4199-9b82-dfd9cc013c9f"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#b4480ab4-2e8a-4b7a-9b64-dd146785e613-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "meets IPP, meets Denominator, GCS ordered not done PatRfsl and Unfractionated Heparin not done MedRsn - on ED EndTime\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS190VTEProphylaxisICUFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/4ad66db5-d557-4199-9b82-dfd9cc013c9f"
+  }, {
+    "reference": "Encounter/38fc15f7-636f-46f4-a478-28bb70b3a461"
+  }, {
+    "reference": "Encounter/8e2d4044-4503-4cf6-a49e-bf481581f8ea"
+  }, {
+    "reference": "Coverage/4d95e7b2-db0e-42ce-9c6a-aacc9e34ed4a"
+  }, {
+    "reference": "ServiceRequest/edaa582b-268d-46cd-9cc8-08e25d83c84f"
+  }, {
+    "reference": "MedicationAdministration/9f130be1-b839-4412-b9f1-76e0a9610ba6"
+  }, {
+    "reference": "Location/8eccda6d-4b0c-4645-90e1-2b6b93274120"
+  }, {
+    "reference": "Organization/0a486cc2-e562-4a0c-8b24-043e39685d48"
+  }, {
+    "reference": "Practitioner/93c975b8-f430-434f-8d07-cbc2cf9c566d"
+  } ]
+}

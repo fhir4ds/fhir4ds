@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "2383b0bb-305e-44e0-86ea-f8e6b73eee82",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "75303-8",
+      "display": "Nutrition assessment narrative",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/0c3b72aa-9a9b-468d-b2fb-95153a9136bc"
+  },
+  "effectiveDateTime": "2026-11-21T10:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "LA33702-4",
+      "display": "Not malnourished",
+      "userSelected": true
+    } ]
+  }
+}

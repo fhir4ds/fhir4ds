@@ -1,0 +1,76 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1402-20210209",
+  "meta": {
+    "versionId": "25",
+    "lastUpdated": "2023-12-21T17:43:03.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2024-12-20"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2021-02-09"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1402",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1402"
+  } ],
+  "version": "20210209",
+  "name": "CupToDiscRatio",
+  "title": "Cup to Disc Ratio",
+  "status": "active",
+  "experimental": false,
+  "date": "2021-02-09T01:00:25-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of diagnostic studies specific to obtaining cup to disc ratio by ophthalmoscopy.),(Data Element Scope: This value set may use a model element related to Diagnostic Study.),(Inclusion Criteria: Includes concepts that represent a diagnostic study using ophthalmoscopy.),(Exclusion Criteria: No exclusions.)",
+  "compose": {
+    "include": [ {
+      "system": "http://loinc.org",
+      "concept": [ {
+        "code": "71484-0",
+        "display": "Left optic nerve Cup-disc ratio by Ophthalmoscopy"
+      }, {
+        "code": "71485-7",
+        "display": "Right optic nerve Cup-disc ratio by Ophthalmoscopy"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:0d0d0e7b-f54a-4258-b355-37875757b6db",
+    "timestamp": "2025-06-20T16:52:08-04:00",
+    "total": 2,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "71484-0",
+      "display": "Left optic nerve Cup-disc ratio by Ophthalmoscopy"
+    }, {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "71485-7",
+      "display": "Right optic nerve Cup-disc ratio by Ophthalmoscopy"
+    } ]
+  }
+}

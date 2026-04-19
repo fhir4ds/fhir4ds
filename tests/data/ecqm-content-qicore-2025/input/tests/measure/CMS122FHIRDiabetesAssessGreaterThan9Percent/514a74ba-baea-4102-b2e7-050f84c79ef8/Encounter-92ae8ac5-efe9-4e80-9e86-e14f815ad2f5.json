@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "92ae8ac5-efe9-4e80-9e86-e14f815ad2f5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "401267002",
+      "display": "Telephone triage encounter (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/514a74ba-baea-4102-b2e7-050f84c79ef8"
+  },
+  "period": {
+    "start": "2026-01-01T00:00:00.000+00:00",
+    "end": "2026-01-01T01:00:00.000+00:00"
+  }
+}

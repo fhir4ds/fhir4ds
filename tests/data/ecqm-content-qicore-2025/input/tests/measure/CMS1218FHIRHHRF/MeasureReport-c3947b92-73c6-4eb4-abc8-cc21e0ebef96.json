@@ -1,0 +1,93 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "c3947b92-73c6-4eb4-abc8-cc21e0ebef96",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "295dc4ad-e156-4e3d-b3c7-97394fecb7fd-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "1939f5b2-658c-4f27-a62c-2368b76f4ac8"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#295dc4ad-e156-4e3d-b3c7-97394fecb7fd-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Encounter with 2 albumins during encounter. RV returns first, not second value. First value = 1. Second value = 2. Test for RV first albumin using unit g/dL passes. "
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS1218FHIRHHRF",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Procedure/6095f6f2-7f9d-4ab1-9c91-d13da360dab7"
+  }, {
+    "reference": "Observation/16adc840-82a6-4fbc-80bc-61011e99dae3"
+  }, {
+    "reference": "Patient/1939f5b2-658c-4f27-a62c-2368b76f4ac8"
+  }, {
+    "reference": "Encounter/363a292f-8b5f-4403-b867-15ec040096aa"
+  }, {
+    "reference": "Observation/223212ec-f67a-4183-90ae-87643385b38c"
+  } ]
+}

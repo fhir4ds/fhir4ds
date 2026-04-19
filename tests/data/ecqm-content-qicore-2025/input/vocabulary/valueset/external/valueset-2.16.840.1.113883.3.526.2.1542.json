@@ -1,0 +1,92 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1542-20250125",
+  "meta": {
+    "versionId": "38",
+    "lastUpdated": "2025-01-25T01:09:35.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-01-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1542",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1542"
+  } ],
+  "version": "20250125",
+  "name": "ChronicIridocyclitis",
+  "title": "Chronic Iridocyclitis",
+  "status": "active",
+  "date": "2025-01-25T01:09:35-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of a diagnosis of chronic iridocyclitis.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of chronic or recurrent iridocyclitis or tuberculous iridocyclitis.),(Exclusion Criteria: Excludes concepts that represent a diagnosis for 'unspecified eye.')",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "186266008",
+        "display": "Tuberculous chronic iridocyclitis (disorder)"
+      }, {
+        "code": "332731000119108",
+        "display": "Recurrent iridocyclitis of right eye (disorder)"
+      }, {
+        "code": "338341000119103",
+        "display": "Recurrent iridocyclitis of left eye (disorder)"
+      }, {
+        "code": "344111000119109",
+        "display": "Recurrent iridocyclitis of bilateral eyes (disorder)"
+      }, {
+        "code": "416449002",
+        "display": "Chronic iridocyclitis in young girls (disorder)"
+      }, {
+        "code": "6869001",
+        "display": "Recurrent iridocyclitis (disorder)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:b2818b7b-222c-4592-8709-8769a021b32f",
+    "timestamp": "2025-06-20T16:58:26-04:00",
+    "total": 3,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "186266008",
+      "display": "Tuberculous chronic iridocyclitis (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "416449002",
+      "display": "Chronic iridocyclitis in young girls (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "6869001",
+      "display": "Recurrent iridocyclitis (disorder)"
+    } ]
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "resourceType": "Condition",
+  "id": "fd134b64-03f6-4207-ab62-8ac4fd281531",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "version": "4.0.1",
+      "code": "inactive",
+      "display": "inactive",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "differential"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2020-09",
+      "code": "77386006",
+      "display": "Pregnant woman (person)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c453e51c-aa59-4755-b872-28b2f05f3552"
+  },
+  "onsetDateTime": "2024-10-01T08:00:00.000+00:00",
+  "abatementDateTime": "2026-10-31T08:15:00.000+00:00"
+}

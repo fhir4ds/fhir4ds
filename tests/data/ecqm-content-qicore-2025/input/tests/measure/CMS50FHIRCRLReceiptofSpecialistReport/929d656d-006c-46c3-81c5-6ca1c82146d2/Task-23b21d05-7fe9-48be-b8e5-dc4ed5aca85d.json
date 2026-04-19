@@ -1,0 +1,34 @@
+{
+  "resourceType": "Task",
+  "id": "23b21d05-7fe9-48be-b8e5-dc4ed5aca85d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-task" ]
+  },
+  "identifier": [ {
+    "use": "official",
+    "system": "http:/goodhealth.org/identifiers",
+    "value": "20170201-002"
+  } ],
+  "basedOn": [ {
+    "reference": "ServiceRequest/fc75c861-71f6-4d40-9d2c-cfbf7df9a381"
+  } ],
+  "status": "failed",
+  "intent": "order",
+  "priority": "routine",
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.72",
+      "code": "11488-4",
+      "display": "Consult note",
+      "userSelected": true
+    } ]
+  },
+  "for": {
+    "reference": "Patient/929d656d-006c-46c3-81c5-6ca1c82146d2"
+  },
+  "executionPeriod": {
+    "start": "2026-06-09T08:00:00.000+00:00",
+    "end": "2026-06-09T08:15:00.000+00:00"
+  }
+}

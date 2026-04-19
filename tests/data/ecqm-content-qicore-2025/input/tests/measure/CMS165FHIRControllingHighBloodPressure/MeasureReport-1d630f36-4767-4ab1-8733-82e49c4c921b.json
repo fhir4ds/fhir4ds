@@ -1,0 +1,97 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "1d630f36-4767-4ab1-8733-82e49c4c921b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "35178cc8-de73-4c7a-9463-cdb82438d6f8-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "821185af-e5b2-4552-a63c-36b64a9200a9"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#35178cc8-de73-4c7a-9463-cdb82438d6f8-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Frailty device request with no doNotPerform extension value is still meeting DENEX because value is fixed to false in the profile."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS165FHIRControllingHighBloodPressure",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/821185af-e5b2-4552-a63c-36b64a9200a9"
+  }, {
+    "reference": "Encounter/7444e991-83da-4243-9775-44554a9f116a"
+  }, {
+    "reference": "Condition/31a988df-6665-4c21-b643-85a16707ddf8"
+  }, {
+    "reference": "Encounter/b0e88e77-ecf6-4594-9c00-ba0dc1a37efc"
+  }, {
+    "reference": "Encounter/4c9dac8b-6260-4d3b-97f4-39279c21e09b"
+  }, {
+    "reference": "Condition/4afdb100-1622-4319-9fe2-c1ebca69f5b1"
+  }, {
+    "reference": "DeviceRequest/1ac7b478-eb07-42a4-a492-ccaacf4d0ae2"
+  } ]
+}

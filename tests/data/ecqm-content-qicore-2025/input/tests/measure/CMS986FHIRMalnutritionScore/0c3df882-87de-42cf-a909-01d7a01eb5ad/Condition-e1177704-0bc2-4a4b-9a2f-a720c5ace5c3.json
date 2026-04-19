@@ -1,0 +1,46 @@
+{
+  "resourceType": "Condition",
+  "id": "e1177704-0bc2-4a4b-9a2f-a720c5ace5c3",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "722960005",
+      "display": "Anorexia nervosa co-occurrent with significantly low body weight (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/0c3df882-87de-42cf-a909-01d7a01eb5ad"
+  },
+  "onsetPeriod": {
+    "start": "2026-03-02T08:00:00.000+00:00"
+  },
+  "recordedDate": "2026-03-02T11:00:00.000+00:00"
+}

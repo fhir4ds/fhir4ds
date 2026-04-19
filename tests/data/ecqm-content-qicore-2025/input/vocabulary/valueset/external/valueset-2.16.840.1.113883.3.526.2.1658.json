@@ -1,0 +1,179 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1658-20250125",
+  "meta": {
+    "versionId": "38",
+    "lastUpdated": "2025-01-25T01:09:35.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-01-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1658",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1658"
+  } ],
+  "version": "20250125",
+  "name": "DisordersOfVisualCortex",
+  "title": "Disorders of Visual Cortex",
+  "status": "active",
+  "date": "2025-01-25T01:09:35-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of a diagnosis of disorders of visual cortex.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of a disorder of visual cortex, including inflammatory disorders, neoplasm, and cortical blindness.),(Exclusion Criteria: Excludes concepts that represent a diagnosis for 'unspecified eye.')",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "1172900005",
+        "display": "Progressive microcephaly, seizures, cortical blindness, developmental delay syndrome (disorder)"
+      }, {
+        "code": "128329001",
+        "display": "Disorder of visual cortex (disorder)"
+      }, {
+        "code": "15913031000119100",
+        "display": "Cortical blindness of bilateral sides of brain (disorder)"
+      }, {
+        "code": "194068002",
+        "display": "Visual cortex disorder due to neoplasm (disorder)"
+      }, {
+        "code": "194069005",
+        "display": "Visual cortex disorder due to vascular disorder (disorder)"
+      }, {
+        "code": "194070006",
+        "display": "Inflammatory disorder of visual cortex (disorder)"
+      }, {
+        "code": "230526001",
+        "display": "Compression of visual cortex (disorder)"
+      }, {
+        "code": "302904002",
+        "display": "Infarction of visual cortex (disorder)"
+      }, {
+        "code": "342741000119103",
+        "display": "Cortical blindness of right side of brain (disorder)"
+      }, {
+        "code": "342751000119101",
+        "display": "Cortical blindness of left side of brain (disorder)"
+      }, {
+        "code": "39194005",
+        "display": "Visual epilepsy (disorder)"
+      }, {
+        "code": "413924001",
+        "display": "Cortical visual impairment (disorder)"
+      }, {
+        "code": "68574006",
+        "display": "Cortical blindness (disorder)"
+      }, {
+        "code": "732251003",
+        "display": "Cortical blindness, intellectual disability, polydactyly syndrome (disorder)"
+      }, {
+        "code": "773548008",
+        "display": "Early-onset epileptic encephalopathy, cortical blindness, intellectual disability, facial dysmorphism syndrome (disorder)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:a805bd59-3446-4253-a81f-1c22e50e7613",
+    "timestamp": "2025-06-20T16:52:28-04:00",
+    "total": 15,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "1172900005",
+      "display": "Progressive microcephaly, seizures, cortical blindness, developmental delay syndrome (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "128329001",
+      "display": "Disorder of visual cortex (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "15913031000119100",
+      "display": "Cortical blindness of bilateral sides of brain (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "194068002",
+      "display": "Visual cortex disorder due to neoplasm (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "194069005",
+      "display": "Visual cortex disorder due to vascular disorder (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "194070006",
+      "display": "Inflammatory disorder of visual cortex (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "230526001",
+      "display": "Compression of visual cortex (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "302904002",
+      "display": "Infarction of visual cortex (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "342741000119103",
+      "display": "Cortical blindness of right side of brain (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "342751000119101",
+      "display": "Cortical blindness of left side of brain (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "39194005",
+      "display": "Visual epilepsy (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "413924001",
+      "display": "Cortical visual impairment (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "68574006",
+      "display": "Cortical blindness (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "732251003",
+      "display": "Cortical blindness, intellectual disability, polydactyly syndrome (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "773548008",
+      "display": "Early-onset epileptic encephalopathy, cortical blindness, intellectual disability, facial dysmorphism syndrome (disorder)"
+    } ]
+  }
+}

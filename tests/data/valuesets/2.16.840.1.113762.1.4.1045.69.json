@@ -1,0 +1,225 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1045.69",
+  "meta": {
+    "versionId": "32",
+    "lastUpdated": "2025-02-12T01:07:44.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2025-02-12"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2025-02-12"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.69",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1045.69"
+    }
+  ],
+  "version": "20250212",
+  "name": "EndotrachealIntubation",
+  "title": "Endotracheal Intubation",
+  "status": "active",
+  "date": "2025-02-12T01:07:44-05:00",
+  "publisher": "Acumen OP Steward",
+  "expansion": {
+    "identifier": "urn:uuid:32a34175-b98d-449e-94dd-e9191b02a886",
+    "timestamp": "2026-03-13T13:02:18-04:00",
+    "total": 28,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0B110F4",
+        "display": "Bypass Trachea to Cutaneous with Tracheostomy Device, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0B113F4",
+        "display": "Bypass Trachea to Cutaneous with Tracheostomy Device, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0B114F4",
+        "display": "Bypass Trachea to Cutaneous with Tracheostomy Device, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0BH13EZ",
+        "display": "Insertion of Endotracheal Airway into Trachea, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0BH17EZ",
+        "display": "Insertion of Endotracheal Airway into Trachea, Via Natural or Artificial Opening"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "0BH18EZ",
+        "display": "Insertion of Endotracheal Airway into Trachea, Via Natural or Artificial Opening Endoscopic"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "112798008",
+        "display": "Insertion of endotracheal tube (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16883004",
+        "display": "Endotracheal intubation, emergency procedure (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "182682004",
+        "display": "Emergency laryngeal intubation (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "232674004",
+        "display": "Orotracheal intubation (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "232675003",
+        "display": "Oral intubation awake (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "232677006",
+        "display": "Tracheal intubation using rigid bronchoscope (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "232678001",
+        "display": "Orotracheal fiberoptic intubation (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "232679009",
+        "display": "Nasotracheal intubation (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "232680007",
+        "display": "Nasal intubation awake (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "232682004",
+        "display": "Nasotracheal fiberoptic intubation (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "232685002",
+        "display": "Insertion of tracheostomy tube (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "232686001",
+        "display": "Insertion of tracheal T-tube (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "243141005",
+        "display": "Mechanically assisted spontaneous ventilation (regime/therapy)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "304341005",
+        "display": "Awake intubation (procedure)"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "31500",
+        "display": "Intubation, endotracheal, emergency procedure"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "418613003",
+        "display": "Tracheal intubation through a laryngeal mask airway (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "429161001",
+        "display": "Insertion of endotracheal tube using laryngoscope (procedure)"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "5A1935Z",
+        "display": "Respiratory Ventilation, Less than 24 Consecutive Hours"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "5A1945Z",
+        "display": "Respiratory Ventilation, 24-96 Consecutive Hours"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "5A1955Z",
+        "display": "Respiratory Ventilation, Greater than 96 Consecutive Hours"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "94002",
+        "display": "Ventilation assist and management, initiation of pressure or volume preset ventilators for assisted or controlled breathing; hospital inpatient/observation, initial day"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "94003",
+        "display": "Ventilation assist and management, initiation of pressure or volume preset ventilators for assisted or controlled breathing; hospital inpatient/observation, each subsequent day"
+      }
+    ]
+  }
+}

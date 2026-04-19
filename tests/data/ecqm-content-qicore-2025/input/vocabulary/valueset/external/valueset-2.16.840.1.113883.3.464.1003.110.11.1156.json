@@ -1,0 +1,99 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.464.1003.110.11.1156-20240302",
+  "meta": {
+    "versionId": "16",
+    "lastUpdated": "2024-03-02T01:18:41.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "NCQA PHEMUR Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-03-10"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2024-03-02"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.110.11.1156",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.464.1003.110.11.1156"
+  } ],
+  "version": "20240302",
+  "name": "HiBVaccine3DoseScheduleAdministered",
+  "title": "HiB Vaccine (3 dose schedule) Administered",
+  "status": "active",
+  "date": "2024-03-02T01:18:41-05:00",
+  "publisher": "NCQA PHEMUR",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts for a 3-dose haemophilus influenzae type b (Hib) vaccination.),(Data Element Scope: This value set may use a model element related to Procedure.),(Inclusion Criteria: Includes concepts that represent a 3-dose haemophilus influenzae type b (Hib) vaccination.),(Exclusion Criteria: No exclusions.)",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "127787002",
+        "display": "Administration of vaccine product containing only Haemophilus influenzae type b antigen (procedure)"
+      }, {
+        "code": "170343007",
+        "display": "Administration of first dose of vaccine product containing only Haemophilus influenzae type b antigen (procedure)"
+      }, {
+        "code": "170344001",
+        "display": "Administration of second dose of vaccine product containing only Haemophilus influenzae type b antigen (procedure)"
+      }, {
+        "code": "170345000",
+        "display": "Administration of third dose of vaccine product containing only Haemophilus influenzae type b antigen (procedure)"
+      }, {
+        "code": "170346004",
+        "display": "Administration of booster dose of vaccine product containing only Haemophilus influenzae type b antigen (procedure)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:000f424f-044c-4db5-bfe4-2dfa411601fa",
+    "timestamp": "2025-06-20T16:54:30-04:00",
+    "total": 5,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "127787002",
+      "display": "Administration of vaccine product containing only Haemophilus influenzae type b antigen (procedure)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "170343007",
+      "display": "Administration of first dose of vaccine product containing only Haemophilus influenzae type b antigen (procedure)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "170344001",
+      "display": "Administration of second dose of vaccine product containing only Haemophilus influenzae type b antigen (procedure)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "170345000",
+      "display": "Administration of third dose of vaccine product containing only Haemophilus influenzae type b antigen (procedure)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "170346004",
+      "display": "Administration of booster dose of vaccine product containing only Haemophilus influenzae type b antigen (procedure)"
+    } ]
+  }
+}

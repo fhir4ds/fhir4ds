@@ -1,0 +1,22 @@
+{
+  "resourceType": "Procedure",
+  "id": "dfcf948c-3ef1-44db-824d-6bf5f112b72f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.icd10data.com",
+      "code": "02LW3DJ",
+      "display": "High Risk Procedures for AKI"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/d9cd9b8d-12f5-4e34-8663-e876656b8f35"
+  },
+  "performedPeriod": {
+    "start": "2026-10-04T01:01:00.000+00:00",
+    "end": "2026-10-04T01:02:00.000+00:00"
+  }
+}

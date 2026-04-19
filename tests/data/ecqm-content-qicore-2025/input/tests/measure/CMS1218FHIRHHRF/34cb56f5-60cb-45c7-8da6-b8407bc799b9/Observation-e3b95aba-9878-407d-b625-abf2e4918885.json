@@ -1,0 +1,39 @@
+{
+  "resourceType": "Observation",
+  "id": "e3b95aba-9878-407d-b625-abf2e4918885",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "laboratory",
+      "display": "Laboratory"
+    } ],
+    "text": "Laboratory"
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "97816-3",
+      "display": "American society of anesthesiologists morbidity state"
+    } ],
+    "text": "American society of anesthesiologists morbidity state"
+  },
+  "subject": {
+    "reference": "Patient/34cb56f5-60cb-45c7-8da6-b8407bc799b9"
+  },
+  "encounter": {
+    "reference": "Encounter/ccd5135e-9fef-48f9-9cc6-ed0f9ab4f6a0"
+  },
+  "effectiveDateTime": "2026-04-11T08:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "413499007",
+      "display": "American Society of Anesthesiologists physical status class 5 (finding)"
+    } ],
+    "text": "American Society of Anesthesiologists physical status class 5 (finding)"
+  }
+}

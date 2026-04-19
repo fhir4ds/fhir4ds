@@ -1,0 +1,92 @@
+{
+  "resourceType": "Library",
+  "id": "Antibiotic",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-shareablelibrary", "http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-computablelibrary", "http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-publishablelibrary", "http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-executablelibrary", "http://hl7.org/fhir/uv/cql/StructureDefinition/cql-library", "http://hl7.org/fhir/uv/cql/StructureDefinition/elm-json-library", "http://hl7.org/fhir/uv/cql/StructureDefinition/elm-xml-library" ]
+  },
+  "language": "en",
+  "text": {
+    "status": "extensions",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\">\n    <table class=\"grid dict\">\n        \n        \n        <tr>\n            <th scope=\"row\"><b>Title: </b></th>\n            <td style=\"padding-left: 4px;\">Antibiotic</td>\n        </tr>\n        \n\n        \n        \n        <tr>\n            <th scope=\"row\"><b>Id: </b></th>\n            <td style=\"padding-left: 4px;\">Antibiotic</td>\n        </tr>\n        \n\n        \n        \n        <tr>\n            <th scope=\"row\"><b>Version: </b></th>\n            <td style=\"padding-left: 4px;\">1.9.000</td>\n        </tr>\n        \n\n        \n        <tr>\n            <th scope=\"row\"><b>Url: </b></th>\n            <td style=\"padding-left: 4px;\">https://madie.cms.gov/Library/Antibiotic</td>\n        </tr>\n        \n\n        \n        <tr>\n            <th scope=\"row\">\n                <b>\n                    \n                        official\n                    \n                </b>\n            </th>\n            <td style=\"padding-left: 4px;\">\n                \n                <p style=\"margin-bottom: 5px;\">\n                    <span>67fd69295291b0360f7fbac8</span>\n                </p>\n                \n            </td>\n        </tr>\n        \n\n        \n\n        \n\n        \n\n        \n        <tr>\n            <th scope=\"row\"><b>Type: </b></th>\n            <td style=\"padding-left: 4px;\">\n                \n                    \n                        \n                        <p style=\"margin-bottom: 5px;\">\n                            <b>system: </b> <span>http://terminology.hl7.org/CodeSystem/library-type</span>\n                        </p>\n                        \n                        \n                        <p style=\"margin-bottom: 5px;\">\n                            <b>code: </b> <span>logic-library</span>\n                        </p>\n                        \n                        \n                    \n                \n                \n            </td>\n        </tr>\n        \n\n        \n\n        \n        <tr>\n            <th scope=\"row\"><b>Date: </b></th>\n            <td style=\"padding-left: 4px;\">2025-04-15T20:44:04+00:00</td>\n        </tr>\n        \n\n        \n        <tr>\n            <th scope=\"row\"><b>Publisher: </b></th>\n            <td style=\"padding-left: 4px;\">National Committee for Quality Assurance</td>\n        </tr>\n        \n\n        \n        <tr>\n            <th scope=\"row\"><b>Description: </b></th>\n            <td style=\"padding-left: 4px;\">This library contains functions used to exclude patients with a history of comorbid conditions, competing diagnoses, or antibiotic medications.</td>\n        </tr>\n        \n\n        \n\n        \n\n        \n\n        \n\n        \n\n        \n\n        \n\n        \n\n        \n\n        \n\n        \n        <tr>\n            <th scope=\"row\"><b>Related Artifacts: </b></th>\n            <td style=\"padding-left: 4px;\">\n                \n                \n                \n                <p><b>Dependencies</b></p>\n                <ul>\n                  \n                    <li>https://madie.cms.gov/Library/QICoreCommon|4.0.000</li>\n                  \n                    <li>https://madie.cms.gov/Library/FHIRHelpers|4.4.000</li>\n                  \n                    <li>https://madie.cms.gov/Library/CumulativeMedicationDuration|6.0.000</li>\n                  \n                </ul>\n                \n                \n                \n                \n                \n            </td>\n        </tr>\n        \n\n        \n\n        \n\n        \n        \n        <tr>\n          <td colspan=\"2\">\n            <table>\n              <tr><th><a id=\"cql-content\"><b>Content: </b></a> text/cql</th></tr>\n              <tr><td><pre><code class=\"language-cql\">library Antibiotic version '1.9.000'\n\nusing QICore version '6.0.0'\n\ninclude FHIRHelpers version '4.4.000' called FHIRHelpers\ninclude QICoreCommon version '4.0.000' called QICoreCommon\ninclude CumulativeMedicationDuration version '6.0.000' called CMD\n\nparameter &quot;Measurement Period&quot; Interval&lt;DateTime&gt;\n\ncontext Patient\n\ndefine function &quot;Has Comorbid Condition History&quot;(episodeDate List&lt;Encounter&gt;, comorbidConditions List&lt;ConditionEncounterDiagnosis&gt;):\n  episodeDate eDate\n      with comorbidConditions comcondition\n        such that date from start of comcondition.prevalenceInterval() during Interval[date from start of eDate.period.toInterval() - 1 year, date from start of eDate.period.toInterval()]\n      return eDate\n\ndefine function &quot;Has Competing Diagnosis History&quot;(episodeDate List&lt;Encounter&gt;, competingConditions List&lt;ConditionEncounterDiagnosis&gt;):\n  episodeDate eDate\n      with competingConditions competcondition\n        such that competcondition.prevalenceInterval() starts 3 days or less on or after day of start of eDate.period\n      return eDate\n\ndefine function &quot;Has Antibiotic Medication History&quot;(episodeDate List&lt;Encounter&gt;, antibioticMedications List&lt;MedicationRequest&gt;):\n   episodeDate DateOfEpisode\n    with antibioticMedications ActiveMedication\n      such that ActiveMedication.medicationRequestPeriod() overlaps day of Interval[date from start of DateOfEpisode.period.toInterval()  - 30 days, date from start of DateOfEpisode.period.toInterval() - 1 day]</code></pre></td></tr>\n            </table>\n          </td>\n        </tr>\n        \n        \n        \n    </table>\n</div>"
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "options",
+    "parameter": [ {
+      "name": "translatorVersion",
+      "valueString": "3.25.0"
+    }, {
+      "name": "option",
+      "valueString": "EnableAnnotations"
+    }, {
+      "name": "option",
+      "valueString": "EnableLocators"
+    }, {
+      "name": "option",
+      "valueString": "DisableListDemotion"
+    }, {
+      "name": "option",
+      "valueString": "DisableListPromotion"
+    }, {
+      "name": "format",
+      "valueString": "JSON"
+    }, {
+      "name": "format",
+      "valueString": "XML"
+    }, {
+      "name": "analyzeDataRequirements",
+      "valueBoolean": false
+    }, {
+      "name": "collapseDataRequirements",
+      "valueBoolean": false
+    }, {
+      "name": "compatibilityLevel",
+      "valueString": "1.5"
+    }, {
+      "name": "enableCqlOnly",
+      "valueBoolean": false
+    }, {
+      "name": "errorLevel",
+      "valueString": "Info"
+    }, {
+      "name": "signatureLevel",
+      "valueString": "Overloads"
+    }, {
+      "name": "validateUnits",
+      "valueBoolean": true
+    }, {
+      "name": "verifyOnly",
+      "valueBoolean": false
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-cqlOptions",
+    "valueReference": {
+      "reference": "#options"
+    }
+  } ],
+  "url": "https://madie.cms.gov/Library/Antibiotic",
+  "identifier": [ {
+    "use": "official",
+    "system": "https://madie.cms.gov/login",
+    "value": "67fd69295291b0360f7fbac8"
+  } ],
+  "version": "1.9.000",
+  "name": "Antibiotic",
+  "title": "Antibiotic",
+  "status": "active",
+  "experimental": false,
+  "type": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/library-type",
+      "code": "logic-library"
+    } ]
+  },
+  "date": "2025-04-15T20:44:04+00:00",
+  "publisher": "National Committee for Quality Assurance",
+  "description": "This library contains functions used to exclude patients with a history of comorbid conditions, competing diagnoses, or antibiotic medications.",
+  "content": [ {
+    "contentType": "text/cql",
+    "data": "bGlicmFyeSBBbnRpYmlvdGljIHZlcnNpb24gJzEuOS4wMDAnCgp1c2luZyBRSUNvcmUgdmVyc2lvbiAnNi4wLjAnCgppbmNsdWRlIEZISVJIZWxwZXJzIHZlcnNpb24gJzQuNC4wMDAnIGNhbGxlZCBGSElSSGVscGVycwppbmNsdWRlIFFJQ29yZUNvbW1vbiB2ZXJzaW9uICc0LjAuMDAwJyBjYWxsZWQgUUlDb3JlQ29tbW9uCmluY2x1ZGUgQ3VtdWxhdGl2ZU1lZGljYXRpb25EdXJhdGlvbiB2ZXJzaW9uICc2LjAuMDAwJyBjYWxsZWQgQ01ECgpwYXJhbWV0ZXIgIk1lYXN1cmVtZW50IFBlcmlvZCIgSW50ZXJ2YWw8RGF0ZVRpbWU+Cgpjb250ZXh0IFBhdGllbnQKCmRlZmluZSBmdW5jdGlvbiAiSGFzIENvbW9yYmlkIENvbmRpdGlvbiBIaXN0b3J5IihlcGlzb2RlRGF0ZSBMaXN0PEVuY291bnRlcj4sIGNvbW9yYmlkQ29uZGl0aW9ucyBMaXN0PENvbmRpdGlvbkVuY291bnRlckRpYWdub3Npcz4pOgogIGVwaXNvZGVEYXRlIGVEYXRlCiAgICAgIHdpdGggY29tb3JiaWRDb25kaXRpb25zIGNvbWNvbmRpdGlvbgogICAgICAgIHN1Y2ggdGhhdCBkYXRlIGZyb20gc3RhcnQgb2YgY29tY29uZGl0aW9uLnByZXZhbGVuY2VJbnRlcnZhbCgpIGR1cmluZyBJbnRlcnZhbFtkYXRlIGZyb20gc3RhcnQgb2YgZURhdGUucGVyaW9kLnRvSW50ZXJ2YWwoKSAtIDEgeWVhciwgZGF0ZSBmcm9tIHN0YXJ0IG9mIGVEYXRlLnBlcmlvZC50b0ludGVydmFsKCldCiAgICAgIHJldHVybiBlRGF0ZQoKZGVmaW5lIGZ1bmN0aW9uICJIYXMgQ29tcGV0aW5nIERpYWdub3NpcyBIaXN0b3J5IihlcGlzb2RlRGF0ZSBMaXN0PEVuY291bnRlcj4sIGNvbXBldGluZ0NvbmRpdGlvbnMgTGlzdDxDb25kaXRpb25FbmNvdW50ZXJEaWFnbm9zaXM+KToKICBlcGlzb2RlRGF0ZSBlRGF0ZQogICAgICB3aXRoIGNvbXBldGluZ0NvbmRpdGlvbnMgY29tcGV0Y29uZGl0aW9uCiAgICAgICAgc3VjaCB0aGF0IGNvbXBldGNvbmRpdGlvbi5wcmV2YWxlbmNlSW50ZXJ2YWwoKSBzdGFydHMgMyBkYXlzIG9yIGxlc3Mgb24gb3IgYWZ0ZXIgZGF5IG9mIHN0YXJ0IG9mIGVEYXRlLnBlcmlvZAogICAgICByZXR1cm4gZURhdGUKCmRlZmluZSBmdW5jdGlvbiAiSGFzIEFudGliaW90aWMgTWVkaWNhdGlvbiBIaXN0b3J5IihlcGlzb2RlRGF0ZSBMaXN0PEVuY291bnRlcj4sIGFudGliaW90aWNNZWRpY2F0aW9ucyBMaXN0PE1lZGljYXRpb25SZXF1ZXN0Pik6CiAgIGVwaXNvZGVEYXRlIERhdGVPZkVwaXNvZGUKICAgIHdpdGggYW50aWJpb3RpY01lZGljYXRpb25zIEFjdGl2ZU1lZGljYXRpb24KICAgICAgc3VjaCB0aGF0IEFjdGl2ZU1lZGljYXRpb24ubWVkaWNhdGlvblJlcXVlc3RQZXJpb2QoKSBvdmVybGFwcyBkYXkgb2YgSW50ZXJ2YWxbZGF0ZSBmcm9tIHN0YXJ0IG9mIERhdGVPZkVwaXNvZGUucGVyaW9kLnRvSW50ZXJ2YWwoKSAgLSAzMCBkYXlzLCBkYXRlIGZyb20gc3RhcnQgb2YgRGF0ZU9mRXBpc29kZS5wZXJpb2QudG9JbnRlcnZhbCgpIC0gMSBkYXld"
+  } ]
+}

@@ -1,0 +1,311 @@
+{
+  "resourceType": "Bundle",
+  "id": "610965b998086b538055c15d",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/5e4b8bcc-7354-4513-8c9e-61c59bf7c2fc",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "5e4b8bcc-7354-4513-8c9e-61c59bf7c2fc",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "text": {
+        "status": "generated",
+        "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">LabTestHIVDxDuringMPrelevantPeriod <b>NUMERPASS </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Date of birth</td><td><span>31 July 1992</span></td></tr></tbody></table></div>"
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        }, {
+          "url": "detailed",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1653-5",
+            "display": "Tohono O'Odham"
+          }
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        }, {
+          "url": "detailed",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2153-5",
+            "display": "Mexican American Indian"
+          }
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248153007"
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "610965b998086b538055c15d"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "NUMERPass",
+        "given": [ "LabTestHIVDxDuringMPrelevantPeriod" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1994-07-31"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/5e4b8bcc-7354-4513-8c9e-61c59bf7c2fc"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/a0ddda3e-4160-4e22-a889-3ac952b85043",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "a0ddda3e-4160-4e22-a889-3ac952b85043",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "inactive",
+          "display": "inactive",
+          "userSelected": true
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "Confirmed",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "encounter-diagnosis",
+          "display": "Encounter Diagnosis",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-9-cm",
+          "code": "042"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/5e4b8bcc-7354-4513-8c9e-61c59bf7c2fc"
+      },
+      "onsetDateTime": "2026-07-31T08:00:00.000+00:00",
+      "abatementDateTime": "2026-10-24T08:00:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/a0ddda3e-4160-4e22-a889-3ac952b85043"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/8d337f62-1af9-49d7-8bfc-b00fc8eb58c8",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "8d337f62-1af9-49d7-8bfc-b00fc8eb58c8",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "code": "99215"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/5e4b8bcc-7354-4513-8c9e-61c59bf7c2fc"
+      },
+      "period": {
+        "start": "2026-10-24T08:00:00.000+00:00",
+        "end": "2026-10-24T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/8d337f62-1af9-49d7-8bfc-b00fc8eb58c8"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/c2d572ee-b03c-49ff-9711-f0b3a5e6c181",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "c2d572ee-b03c-49ff-9711-f0b3a5e6c181",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "laboratory",
+          "display": "Laboratory",
+          "userSelected": true
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "75622-1"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/5e4b8bcc-7354-4513-8c9e-61c59bf7c2fc"
+      },
+      "effectivePeriod": {
+        "start": "2025-07-31T08:00:00.000+00:00",
+        "end": "2025-07-31T08:15:00.000+00:00"
+      },
+      "valueBoolean": true
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/c2d572ee-b03c-49ff-9711-f0b3a5e6c181"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/6729d77d-7a05-432c-bf36-12101dc5613c",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "6729d77d-7a05-432c-bf36-12101dc5613c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "1f0a187c-fc6f-4bc5-9cd6-e09c3c427268-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "5e4b8bcc-7354-4513-8c9e-61c59bf7c2fc"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#1f0a187c-fc6f-4bc5-9cd6-e09c3c427268-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient 31 at start of MP, qual encounter during MP, HIV diagnosis starts during MP, invalid lab test at 20 during MP. - relevantPeriod"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS349FHIRHIVScreening",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/5e4b8bcc-7354-4513-8c9e-61c59bf7c2fc"
+      }, {
+        "reference": "Condition/a0ddda3e-4160-4e22-a889-3ac952b85043"
+      }, {
+        "reference": "Encounter/8d337f62-1af9-49d7-8bfc-b00fc8eb58c8"
+      }, {
+        "reference": "Observation/c2d572ee-b03c-49ff-9711-f0b3a5e6c181"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/6729d77d-7a05-432c-bf36-12101dc5613c"
+    }
+  } ]
+}

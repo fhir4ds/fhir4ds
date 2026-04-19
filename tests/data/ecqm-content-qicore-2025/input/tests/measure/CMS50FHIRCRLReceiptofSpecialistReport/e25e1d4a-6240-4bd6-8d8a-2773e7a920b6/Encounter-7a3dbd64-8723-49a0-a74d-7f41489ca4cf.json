@@ -1,0 +1,29 @@
+{
+  "resourceType": "Encounter",
+  "id": "7a3dbd64-8723-49a0-a74d-7f41489ca4cf",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2021",
+      "code": "99385",
+      "display": "Initial comprehensive preventive medicine evaluation and management of an individual including an age and gender appropriate history, examination, counseling/anticipatory guidance/risk factor reduction interventions, and the ordering of laboratory/diagnostic procedures, new patient; 18-39 years",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/e25e1d4a-6240-4bd6-8d8a-2773e7a920b6"
+  },
+  "period": {
+    "start": "2026-12-31T23:59:00.000+00:00",
+    "end": "2027-01-01T00:15:00.000+00:00"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "c27a0cac-0739-4baa-baa3-ad03e0d0da9e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "101371000119101",
+      "display": "Adamantinoma of long bone of lower limb (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/4029b23c-b8b3-43aa-a1c5-049b046646bf"
+  },
+  "onsetDateTime": "2024-11-01T00:00:00.000Z"
+}

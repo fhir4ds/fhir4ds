@@ -1,0 +1,29 @@
+{
+  "resourceType": "Encounter",
+  "id": "bdd70e07-7744-4437-a6c4-3adf9311273d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "IMP",
+    "display": "inpatient"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2023-09",
+      "code": "8715000",
+      "display": "Hospital admission, elective (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/9b5e4d84-366b-4082-8409-b7e18e0a3c45"
+  },
+  "period": {
+    "start": "2027-05-01T23:59:00.000+00:00",
+    "end": "2027-05-03T08:00:00.000+00:00"
+  }
+}

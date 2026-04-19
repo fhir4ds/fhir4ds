@@ -1,0 +1,37 @@
+{
+  "resourceType": "Condition",
+  "id": "c38925d3-378e-4f75-aa88-d49e48b3cd7f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "inactive",
+      "display": "inactivective",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "232020009",
+      "display": "Disorder of macula due to diabetes mellitus (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/fa93e3b9-fe40-4a1c-be89-536969a54f2c"
+  },
+  "onsetPeriod": {
+    "start": "2025-12-01T08:00:00.000+00:00",
+    "end": "2026-09-11T09:59:00.000+00:00"
+  }
+}

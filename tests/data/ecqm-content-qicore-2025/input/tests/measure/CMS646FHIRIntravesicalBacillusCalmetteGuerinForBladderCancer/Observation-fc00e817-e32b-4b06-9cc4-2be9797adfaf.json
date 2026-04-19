@@ -1,0 +1,42 @@
+{
+  "resourceType": "Observation",
+  "id": "fc00e817-e32b-4b06-9cc4-2be9797adfaf",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-lab" ]
+  },
+  "partOf": [ {
+    "reference": "Procedure/16d132a4-2f0a-4a5b-960d-5dc9476ec60f"
+  } ],
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "procedure",
+      "display": "Procedure"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "21902-2",
+      "display": "Stage group.pathology Cancer"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/10cec7db-41ae-49ad-b883-022f19d92a8b"
+  },
+  "effectivePeriod": {
+    "start": "2026-06-30T08:00:00.000+00:00",
+    "end": "2026-06-30T08:15:00.000+00:00"
+  },
+  "issued": "2026-06-30T08:15:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "1228883000",
+      "display": "American Joint Committee on Cancer cTa (qualifier value)"
+    } ]
+  }
+}

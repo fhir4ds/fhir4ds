@@ -1,0 +1,388 @@
+{
+  "resourceType": "Bundle",
+  "id": "62aa660cc4be4c506d4a5351",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/c1df0273-aad8-41a8-859c-edd204bb4f16",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "c1df0273-aad8-41a8-859c-edd204bb4f16",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2106-3",
+            "display": "White",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "White"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "62aa660cc4be4c506d4a5351"
+      } ],
+      "name": [ {
+        "family": "DENEXCEPPass",
+        "given": [ "MedicalReasonNoReferralForLowBMI" ]
+      } ],
+      "gender": "unknown",
+      "birthDate": "1957-11-07"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/c1df0273-aad8-41a8-859c-edd204bb4f16"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/1dd503ae-3fcc-4fd6-87c6-32f65c5b8deb",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "1dd503ae-3fcc-4fd6-87c6-32f65c5b8deb",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "10197000",
+          "display": "Psychiatric interview and evaluation (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/c1df0273-aad8-41a8-859c-edd204bb4f16"
+      },
+      "period": {
+        "start": "2026-01-01T00:00:00.000+00:00",
+        "end": "2026-01-01T00:30:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/1dd503ae-3fcc-4fd6-87c6-32f65c5b8deb"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/aa5e080b-f615-4254-9a60-c28ccaefb50d",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "aa5e080b-f615-4254-9a60-c28ccaefb50d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ]
+      },
+      "status": "corrected",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "procedure",
+          "display": "Procedure"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "39156-5",
+          "display": "Body mass index (BMI) [Ratio]",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/c1df0273-aad8-41a8-859c-edd204bb4f16"
+      },
+      "effectiveDateTime": "2026-01-01T00:05:00.000+00:00",
+      "valueQuantity": {
+        "value": 24.9,
+        "unit": "kg/m2"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/aa5e080b-f615-4254-9a60-c28ccaefb50d"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/ServiceRequest/83a9c275-da5d-4864-88e9-48342f0c5d37",
+    "resource": {
+      "resourceType": "ServiceRequest",
+      "id": "83a9c275-da5d-4864-88e9-48342f0c5d37",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-doNotPerformReason",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "code": "183932001",
+            "display": "Procedure contraindicated (situation)",
+            "userSelected": true
+          } ]
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-reasonRefused",
+        "valueCodeableConcept": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "code": "183932001",
+            "display": "Procedure contraindicated (situation)",
+            "userSelected": true
+          } ]
+        }
+      } ],
+      "status": "completed",
+      "intent": "order",
+      "doNotPerform": true,
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2022-03",
+          "code": "103699006",
+          "display": "Patient referral to dietitian (procedure)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/c1df0273-aad8-41a8-859c-edd204bb4f16"
+      },
+      "authoredOn": "2026-01-01T00:15:00.000+00:00",
+      "reasonCode": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183932001",
+          "display": "Procedure contraindicated (situation)",
+          "userSelected": true
+        } ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "ServiceRequest/83a9c275-da5d-4864-88e9-48342f0c5d37"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/d0b07787-cc1f-4692-9537-3740b0662041",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "d0b07787-cc1f-4692-9537-3740b0662041",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "beneficiary": {
+        "reference": "Patient/c1df0273-aad8-41a8-859c-edd204bb4f16"
+      },
+      "payor": [ {
+        "reference": "Organization/9fdb1d8f-dd15-41e7-ab8c-7029ee444a19"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/d0b07787-cc1f-4692-9537-3740b0662041"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/9fdb1d8f-dd15-41e7-ab8c-7029ee444a19",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "9fdb1d8f-dd15-41e7-ab8c-7029ee444a19",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/9fdb1d8f-dd15-41e7-ab8c-7029ee444a19"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/c3e2ec13-7c11-45ba-9b65-e307eeaa9d1a",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "c3e2ec13-7c11-45ba-9b65-e307eeaa9d1a",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "123456"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/c3e2ec13-7c11-45ba-9b65-e307eeaa9d1a"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/7ab1c0a9-beae-45bf-9459-1964921ed1a5",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "7ab1c0a9-beae-45bf-9459-1964921ed1a5",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "91b392f1-0c90-4b4c-8178-ec7fdba7bd84-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "c1df0273-aad8-41a8-859c-edd204bb4f16"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#91b392f1-0c90-4b4c-8178-ec7fdba7bd84-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Enc first day of MP, BMI Low at 24.9, no referral where weight assessment might be performed. "
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS69FHIRPCSBMIScreenAndFollowUp",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/c1df0273-aad8-41a8-859c-edd204bb4f16"
+      }, {
+        "reference": "Encounter/1dd503ae-3fcc-4fd6-87c6-32f65c5b8deb"
+      }, {
+        "reference": "Observation/aa5e080b-f615-4254-9a60-c28ccaefb50d"
+      }, {
+        "reference": "ServiceRequest/83a9c275-da5d-4864-88e9-48342f0c5d37"
+      }, {
+        "reference": "Coverage/d0b07787-cc1f-4692-9537-3740b0662041"
+      }, {
+        "reference": "Organization/9fdb1d8f-dd15-41e7-ab8c-7029ee444a19"
+      }, {
+        "reference": "Practitioner/c3e2ec13-7c11-45ba-9b65-e307eeaa9d1a"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/7ab1c0a9-beae-45bf-9459-1964921ed1a5"
+    }
+  } ]
+}

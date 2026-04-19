@@ -1,0 +1,82 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113762.1.4.1045.26",
+  "meta": {
+    "versionId": "62",
+    "lastUpdated": "2026-02-04T09:25:09.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2021-06-11"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2021-06-11"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.26",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113762.1.4.1045.26"
+    }
+  ],
+  "version": "20210611",
+  "name": "EstimatedGestationalAge",
+  "title": "Estimated Gestational Age",
+  "status": "active",
+  "experimental": false,
+  "date": "2021-06-11T01:02:23-04:00",
+  "publisher": "Joint Commission",
+  "expansion": {
+    "identifier": "urn:uuid:580ce05a-01ff-44fd-8cac-a16570733c8d",
+    "timestamp": "2026-03-13T13:02:15-04:00",
+    "total": 4,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "11884-4",
+        "display": "Gestational age Estimated"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "11885-1",
+        "display": "Gestational age Estimated from last menstrual period"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "18185-9",
+        "display": "Gestational age"
+      },
+      {
+        "system": "http://loinc.org",
+        "version": "2.81",
+        "code": "49051-6",
+        "display": "Gestational age in weeks"
+      }
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "resourceType": "Practitioner",
+  "id": "bf84905c-6b69-42ef-b69f-156957b16e28",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+  },
+  "identifier": [ {
+    "system": "http://hl7.org/fhir/sid/us-npi",
+    "value": "2496541684"
+  } ],
+  "name": [ {
+    "family": "Smith",
+    "prefix": [ "Dr" ]
+  } ]
+}

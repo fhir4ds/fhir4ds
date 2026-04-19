@@ -1,0 +1,115 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "53379c81-39bd-4785-af0e-48e26971da5f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "a867ffcb-e47a-4aa4-b6e6-9f15f84ac5fb-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "0c90d2ea-5034-4465-8e4a-4d0d4e17cd5a"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#a867ffcb-e47a-4aa4-b6e6-9f15f84ac5fb-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient receives CMO order during ED. ED visit ends 61 min. before Obs start, Obs ends 61 min before Inpatient encounter. Testing HospitalizationWithObservation function.\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS71FHIRSTKAnticoagAFFlutter",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/0c90d2ea-5034-4465-8e4a-4d0d4e17cd5a"
+  }, {
+    "reference": "Condition/c32932d1-c3f5-4363-a629-d3597fefe862"
+  }, {
+    "reference": "Encounter/76fe4328-8a55-4ad3-9ed2-ef21f92398d2"
+  }, {
+    "reference": "Encounter/9eb96f47-574f-436a-ab25-3aba9ab864c8"
+  }, {
+    "reference": "Encounter/c0cd2c8f-7aea-4f57-a3bf-b2965ec25186"
+  }, {
+    "reference": "ServiceRequest/9c36a6ec-f120-493f-9f94-14d1b9141b7d"
+  }, {
+    "reference": "Coverage/9fa9c619-5313-4e81-9bc8-72db06f55c55"
+  }, {
+    "reference": "Claim/5ca62962b8484628b8de1ec5"
+  }, {
+    "reference": "Condition/f47c0d92-0aec-4c52-a330-f541a28ab5da"
+  }, {
+    "reference": "Organization/98c7411e-ce02-4ed8-8746-5f34b5112ef4"
+  }, {
+    "reference": "Practitioner/8731fed5-086d-41b7-8adf-509c5960ade5"
+  } ]
+}

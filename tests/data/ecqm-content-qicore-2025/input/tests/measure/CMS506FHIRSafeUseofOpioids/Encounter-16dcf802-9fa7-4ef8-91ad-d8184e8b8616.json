@@ -1,0 +1,29 @@
+{
+  "resourceType": "Encounter",
+  "id": "16dcf802-9fa7-4ef8-91ad-d8184e8b8616",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "183452005",
+      "display": "Emergency hospital admission (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/cbf21555-f64b-427a-b274-111b94523cf7"
+  },
+  "period": {
+    "start": "2026-01-01T00:01:00.000+00:00",
+    "end": "2026-01-05T00:30:00.000+00:00"
+  }
+}

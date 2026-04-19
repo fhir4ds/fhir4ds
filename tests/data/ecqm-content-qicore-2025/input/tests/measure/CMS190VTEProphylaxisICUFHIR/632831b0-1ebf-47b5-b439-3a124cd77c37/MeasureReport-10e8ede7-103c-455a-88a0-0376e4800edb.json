@@ -1,0 +1,109 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "10e8ede7-103c-455a-88a0-0376e4800edb",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "08dc457a-437d-49b4-abdb-639592d226ff-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "632831b0-1ebf-47b5-b439-3a124cd77c37"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#08dc457a-437d-49b4-abdb-639592d226ff-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "vfp adm not done due to patient refusal on the day of ICU\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS190VTEProphylaxisICUFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/632831b0-1ebf-47b5-b439-3a124cd77c37"
+  }, {
+    "reference": "Encounter/43964403-30a3-4a58-b2d3-9b93ee777e3b"
+  }, {
+    "reference": "Encounter/49c1ba8e-f699-4c2d-bc6d-4575b07ab80c"
+  }, {
+    "reference": "Coverage/220dba21-4aa3-43fe-826b-3b2b9cf92abf"
+  }, {
+    "reference": "Procedure/65ef6af3-5af5-4870-b7c1-a07835f97f33"
+  }, {
+    "reference": "Location/471ff22f-872c-45be-bd32-a9c15e069fff"
+  }, {
+    "reference": "Organization/67138677-9759-462c-a60e-3c219315a9da"
+  }, {
+    "reference": "Practitioner/2d3bc8e0-862c-490e-93dd-cacc7a847f08"
+  } ]
+}

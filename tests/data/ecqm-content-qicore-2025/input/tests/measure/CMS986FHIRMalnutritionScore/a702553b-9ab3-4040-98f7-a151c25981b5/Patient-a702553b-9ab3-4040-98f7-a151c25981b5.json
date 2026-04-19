@@ -1,0 +1,61 @@
+{
+  "resourceType": "Patient",
+  "id": "a702553b-9ab3-4040-98f7-a151c25981b5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "1002-5",
+        "display": "American Indian or Alaska Native",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "American Indian or Alaska Native"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Hispanic or Latino"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+    "valueCode": "248152002"
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://madie.cms.gov/",
+    "value": "NoscreNorefAsseNotmNodxCp"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "text": "NoscreNorefAsseNotmNodxCp",
+    "family": "MSROBSPass1",
+    "given": [ "NoscreNorefAsseNotmNodxCp" ]
+  } ],
+  "gender": "female",
+  "birthDate": "1954-11-24",
+  "address": [ {
+    "text": "NoscreNorefAsseNotmNodxCp, Screened Not at risk Assessed Severely Malnourished Diagnosed Care Plan, ID=NoscreNorefAsseNotmNodxCp, DOB: 24 Nov 1954"
+  } ]
+}

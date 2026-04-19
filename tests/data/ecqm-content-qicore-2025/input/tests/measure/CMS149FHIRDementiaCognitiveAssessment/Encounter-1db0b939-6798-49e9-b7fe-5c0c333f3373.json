@@ -1,0 +1,29 @@
+{
+  "resourceType": "Encounter",
+  "id": "1db0b939-6798-49e9-b7fe-5c0c333f3373",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory",
+    "userSelected": true
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "77406008",
+      "display": "Confirmatory medical consultation (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/69e641df-d0f6-47b7-82e3-7fd6251554d6"
+  },
+  "period": {
+    "start": "2026-08-15T08:00:00.000+00:00",
+    "end": "2026-08-15T08:35:00.000+00:00"
+  }
+}

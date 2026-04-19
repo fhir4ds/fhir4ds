@@ -1,0 +1,109 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "856edf10-7117-4ab9-a03f-a081517f95a9",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "3dbcca34-5fbd-4f7b-988c-6a9fa2f1af9b-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "98d6da30-f55a-411d-94b4-359b204bcb5a"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#3dbcca34-5fbd-4f7b-988c-6a9fa2f1af9b-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient refusal for Unfractionated Heparin with Task Rejected"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS190VTEProphylaxisICUFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/98d6da30-f55a-411d-94b4-359b204bcb5a"
+  }, {
+    "reference": "Encounter/43a4b4a6-bcb1-41b0-8e3e-33d2619b59b8"
+  }, {
+    "reference": "Coverage/d7f5a023-f6f8-4380-93ac-361f2d7064c8"
+  }, {
+    "reference": "MedicationRequest/a1b7b9bb-defb-4887-ab63-c73ba0e25387"
+  }, {
+    "reference": "Task/b8e138c9-9f98-4853-bff2-0871c4d4b94e"
+  }, {
+    "reference": "Location/df07b42e-03d6-4c7d-a227-8b51889323df"
+  }, {
+    "reference": "Organization/f7d86fc0-2608-4369-b5b8-d47ae19a66d8"
+  }, {
+    "reference": "Practitioner/76d6fd91-cad6-472e-9e69-d6e9e43e5daf"
+  } ]
+}

@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "7bdfe387-6d72-4d3e-b176-68572f0787a4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "17741008",
+      "display": "Acute tonsillitis (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/946c9d68-dc7a-449a-a113-d76a735e3403"
+  },
+  "onsetDateTime": "2026-10-11T12:48:00.000Z"
+}

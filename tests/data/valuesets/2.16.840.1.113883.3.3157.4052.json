@@ -1,0 +1,519 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.3157.4052",
+  "meta": {
+    "versionId": "25",
+    "lastUpdated": "2025-02-11T01:03:34.000-05:00",
+    "profile": [
+      "http://hl7.org/fhir/StructureDefinition/shareablevalueset",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm",
+      "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm"
+    ]
+  },
+  "language": "en",
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+      "valueDateTime": "2025-02-11"
+    },
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/artifact-effectivePeriod",
+      "valuePeriod": {
+        "start": "2025-02-11"
+      }
+    }
+  ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.3157.4052",
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:oid:2.16.840.1.113883.3.3157.4052"
+    }
+  ],
+  "version": "20250211",
+  "name": "MechanicalCirculatoryAssistDevice",
+  "title": "Mechanical Circulatory Assist Device",
+  "status": "active",
+  "date": "2025-02-11T01:03:34-05:00",
+  "publisher": "Acumen OP Steward",
+  "expansion": {
+    "identifier": "urn:uuid:1919808a-03d9-4420-95d7-d66aff47cfcd",
+    "timestamp": "2026-03-13T13:04:39-04:00",
+    "total": 77,
+    "offset": 0,
+    "parameter": [
+      {
+        "name": "count",
+        "valueInteger": 1000
+      },
+      {
+        "name": "offset",
+        "valueInteger": 0
+      }
+    ],
+    "contains": [
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HA0QZ",
+        "display": "Insertion of Implantable Heart Assist System into Heart, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HA0RJ",
+        "display": "Insertion of Short-term External Heart Assist System into Heart, Intraoperative, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HA0RS",
+        "display": "Insertion of Biventricular Short-term External Heart Assist System into Heart, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HA0RZ",
+        "display": "Insertion of Short-term External Heart Assist System into Heart, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HA3QZ",
+        "display": "Insertion of Implantable Heart Assist System into Heart, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HA3RJ",
+        "display": "Insertion of Short-term External Heart Assist System into Heart, Intraoperative, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HA3RS",
+        "display": "Insertion of Biventricular Short-term External Heart Assist System into Heart, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HA3RZ",
+        "display": "Insertion of Short-term External Heart Assist System into Heart, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HA4QZ",
+        "display": "Insertion of Implantable Heart Assist System into Heart, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HA4RJ",
+        "display": "Insertion of Short-term External Heart Assist System into Heart, Intraoperative, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HA4RS",
+        "display": "Insertion of Biventricular Short-term External Heart Assist System into Heart, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HA4RZ",
+        "display": "Insertion of Short-term External Heart Assist System into Heart, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HK0YZ",
+        "display": "Insertion of Other Device into Right Ventricle, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HK3YZ",
+        "display": "Insertion of Other Device into Right Ventricle, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HK4YZ",
+        "display": "Insertion of Other Device into Right Ventricle, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HL0YZ",
+        "display": "Insertion of Other Device into Left Ventricle, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HL3YZ",
+        "display": "Insertion of Other Device into Left Ventricle, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HL4YZ",
+        "display": "Insertion of Other Device into Left Ventricle, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02HW3RZ",
+        "display": "Insertion of Short-term External Heart Assist System into Thoracic Aorta, Descending, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02PA0QZ",
+        "display": "Removal of Implantable Heart Assist System from Heart, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02PA0RS",
+        "display": "Removal of Biventricular Short-term External Heart Assist System from Heart, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02PA0RZ",
+        "display": "Removal of Short-term External Heart Assist System from Heart, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02PA3QZ",
+        "display": "Removal of Implantable Heart Assist System from Heart, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02PA3RS",
+        "display": "Removal of Biventricular Short-term External Heart Assist System from Heart, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02PA3RZ",
+        "display": "Removal of Short-term External Heart Assist System from Heart, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02PA4QZ",
+        "display": "Removal of Implantable Heart Assist System from Heart, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02PA4RS",
+        "display": "Removal of Biventricular Short-term External Heart Assist System from Heart, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02PA4RZ",
+        "display": "Removal of Short-term External Heart Assist System from Heart, Percutaneous Endoscopic Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02WA0RS",
+        "display": "Revision of Biventricular Short-term External Heart Assist System in Heart, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02WA0RZ",
+        "display": "Revision of Short-term External Heart Assist System in Heart, Open Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02WA3RS",
+        "display": "Revision of Biventricular Short-term External Heart Assist System in Heart, Percutaneous Approach"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "02WA3RZ",
+        "display": "Revision of Short-term External Heart Assist System in Heart, Percutaneous Approach"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "1306305003",
+        "display": "Mechanical circulatory support using left ventricular assist device (regime/therapy)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "16965008",
+        "display": "Insertion of intra-aortic balloon counterpulsation (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "175113001",
+        "display": "Transluminal insertion of aortic balloon pump (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "232965003",
+        "display": "Implantation of cardiac ventricular assist device (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "232966002",
+        "display": "Implantation of right cardiac ventricular assist device (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "232967006",
+        "display": "Implantation of left cardiac ventricular assist device (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "232968001",
+        "display": "Implantation of cardiac biventricular assist device (procedure)"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33967",
+        "display": "Insertion of intra-aortic balloon assist device, percutaneous"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33968",
+        "display": "Removal of intra-aortic balloon assist device, percutaneous"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33970",
+        "display": "Insertion of intra-aortic balloon assist device through the femoral artery, open approach"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33971",
+        "display": "Removal of intra-aortic balloon assist device including repair of femoral artery, with or without graft"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33973",
+        "display": "Insertion of intra-aortic balloon assist device through the ascending aorta"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33974",
+        "display": "Removal of intra-aortic balloon assist device from the ascending aorta, including repair of the ascending aorta, with or without graft"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33975",
+        "display": "Insertion of ventricular assist device; extracorporeal, single ventricle"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33976",
+        "display": "Insertion of ventricular assist device; extracorporeal, biventricular"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33977",
+        "display": "Removal of ventricular assist device; extracorporeal, single ventricle"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33978",
+        "display": "Removal of ventricular assist device; extracorporeal, biventricular"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33979",
+        "display": "Insertion of ventricular assist device, implantable intracorporeal, single ventricle"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33980",
+        "display": "Removal of ventricular assist device, implantable intracorporeal, single ventricle"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33981",
+        "display": "Replacement of extracorporeal ventricular assist device, single or biventricular, pump(s), single or each pump"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33982",
+        "display": "Replacement of ventricular assist device pump(s); implantable intracorporeal, single ventricle, without cardiopulmonary bypass"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33983",
+        "display": "Replacement of ventricular assist device pump(s); implantable intracorporeal, single ventricle, with cardiopulmonary bypass"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33990",
+        "display": "Insertion of ventricular assist device, percutaneous, including radiological supervision and interpretation; left heart, arterial access only"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33991",
+        "display": "Insertion of ventricular assist device, percutaneous, including radiological supervision and interpretation; left heart, both arterial and venous access, with transseptal puncture"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33992",
+        "display": "Removal of percutaneous left heart ventricular assist device, arterial or arterial and venous cannula(s), at separate and distinct session from insertion"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33993",
+        "display": "Repositioning of percutaneous right or left heart ventricular assist device with imaging guidance at separate and distinct session from insertion"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33995",
+        "display": "Insertion of ventricular assist device, percutaneous, including radiological supervision and interpretation; right heart, venous access only"
+      },
+      {
+        "system": "http://www.ama-assn.org/go/cpt",
+        "version": "2026",
+        "code": "33997",
+        "display": "Removal of percutaneous right heart ventricular assist device, venous cannula, at separate and distinct session from insertion"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "399052009",
+        "display": "Aortic balloon pump operation (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "399217008",
+        "display": "Cardioassist by aortic balloon pump (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "426410001",
+        "display": "Removal of ventricular assist device (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "426568003",
+        "display": "Open implantation of cardiac ventricular assist device (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "427198005",
+        "display": "Open removal of ventricular assist device (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "432375008",
+        "display": "Insertion of intra-aortic balloon pump using fluoroscopic guidance with contrast (procedure)"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "5A02110",
+        "display": "Assistance with Cardiac Output using Balloon Pump, Intermittent"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "5A02115",
+        "display": "Assistance with Cardiac Output using Pulsatile Compression, Intermittent"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "5A02116",
+        "display": "Assistance with Cardiac Output using Other Pump, Intermittent"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "5A0211D",
+        "display": "Assistance with Cardiac Output using Impeller Pump, Intermittent"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "5A02210",
+        "display": "Assistance with Cardiac Output using Balloon Pump, Continuous"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "5A02215",
+        "display": "Assistance with Cardiac Output using Pulsatile Compression, Continuous"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "5A02216",
+        "display": "Assistance with Cardiac Output using Other Pump, Continuous"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "5A0221D",
+        "display": "Assistance with Cardiac Output using Impeller Pump, Continuous"
+      },
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "version": "2026",
+        "code": "5A0222C",
+        "display": "Assistance with Cardiac Oxygenation, Supersaturated"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "700151002",
+        "display": "Temporary implantation of left cardiac ventricular assist device (procedure)"
+      },
+      {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/20250901",
+        "code": "87701006",
+        "display": "Intraaortic balloon pump weaning (procedure)"
+      }
+    ]
+  }
+}

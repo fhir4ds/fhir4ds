@@ -1,0 +1,25 @@
+{
+  "resourceType": "Communication",
+  "id": "44489370-f624-44cc-856a-9d8b5a186d5b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communication" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2014-02-12T08:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "subject": {
+    "reference": "Patient/15b275f0-8540-4c32-8ab6-29e535dcea64"
+  },
+  "encounter": {
+    "reference": "Encounter/62bf1b33-86a9-467e-8ff8-e9f9f88c00f5"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "428341000124108"
+    } ]
+  } ]
+}

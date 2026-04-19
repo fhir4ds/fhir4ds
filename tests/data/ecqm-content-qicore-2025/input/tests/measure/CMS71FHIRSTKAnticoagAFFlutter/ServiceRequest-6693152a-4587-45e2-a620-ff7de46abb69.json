@@ -1,0 +1,19 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "6693152a-4587-45e2-a620-ff7de46abb69",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "133918004"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/3ed947b5-9aba-4bed-aa72-f96b6f3f5082"
+  },
+  "authoredOn": "2026-10-01T10:00:00Z"
+}

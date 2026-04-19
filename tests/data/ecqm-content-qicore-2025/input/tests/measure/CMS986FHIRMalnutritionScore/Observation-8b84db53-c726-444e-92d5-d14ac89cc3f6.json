@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "8b84db53-c726-444e-92d5-d14ac89cc3f6",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "101819-1",
+      "display": "Nutritional assessment for malnutrition status",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/78a3078e-68a7-4715-9490-60eaf10111a4"
+  },
+  "effectiveDateTime": "2026-01-31T08:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "788876001",
+      "display": "Cachexia due to malignant neoplastic disease (finding)",
+      "userSelected": true
+    } ]
+  }
+}

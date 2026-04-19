@@ -1,0 +1,321 @@
+{
+  "resourceType": "Bundle",
+  "id": "DENEXPass-HospiceProcedureStartsDuringMP",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/104ee6b1-c36f-420c-bedd-0a2064f748d8",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "104ee6b1-c36f-420c-bedd-0a2064f748d8",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "Bertha",
+        "given": [ "Betty" ]
+      } ],
+      "gender": "female",
+      "birthDate": "2024-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/104ee6b1-c36f-420c-bedd-0a2064f748d8"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/0e7a10de-bfa8-4880-ad20-65054c22e0b2",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "0e7a10de-bfa8-4880-ad20-65054c22e0b2",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "185317003",
+          "display": "Telephone encounter (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/104ee6b1-c36f-420c-bedd-0a2064f748d8"
+      },
+      "period": {
+        "start": "2026-01-01T01:00:00.000Z",
+        "end": "2026-01-01T01:15:00.000Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/0e7a10de-bfa8-4880-ad20-65054c22e0b2"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Procedure/0b6c3ea7-8fae-40e6-9481-d33764483777",
+    "resource": {
+      "resourceType": "Procedure",
+      "id": "0b6c3ea7-8fae-40e6-9481-d33764483777",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+        "valueDateTime": "2026-12-31T00:00:00.000Z"
+      } ],
+      "status": "completed",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "385763009",
+          "display": "Hospice care (regime/therapy)"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/104ee6b1-c36f-420c-bedd-0a2064f748d8"
+      },
+      "performedPeriod": {
+        "start": "2026-12-31T00:00:00.000Z",
+        "end": "2026-12-31T23:59:59.000Z"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Procedure/0b6c3ea7-8fae-40e6-9481-d33764483777"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/2c8c1490-4ec5-4467-a736-9f32fdf87e69",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "2c8c1490-4ec5-4467-a736-9f32fdf87e69",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "2fa0116f-ded4-4201-83a3-94c8036f0562-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "104ee6b1-c36f-420c-bedd-0a2064f748d8"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#2fa0116f-ded4-4201-83a3-94c8036f0562-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient has hospice procedure starting during MP"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/ChildhoodImmunizationStatusFHIR",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/104ee6b1-c36f-420c-bedd-0a2064f748d8"
+      }, {
+        "reference": "Encounter/0e7a10de-bfa8-4880-ad20-65054c22e0b2"
+      }, {
+        "reference": "Procedure/0b6c3ea7-8fae-40e6-9481-d33764483777"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/2c8c1490-4ec5-4467-a736-9f32fdf87e69"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/740464e8-4782-49e7-97f8-1bd87c6ea304",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "740464e8-4782-49e7-97f8-1bd87c6ea304",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "93e1755a-f258-4fee-85a4-65ba05c97005-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "104ee6b1-c36f-420c-bedd-0a2064f748d8"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#93e1755a-f258-4fee-85a4-65ba05c97005-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient has hospice procedure starting during MP"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS117FHIRChildhoodImmunizationStatus",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/104ee6b1-c36f-420c-bedd-0a2064f748d8"
+      }, {
+        "reference": "Encounter/0e7a10de-bfa8-4880-ad20-65054c22e0b2"
+      }, {
+        "reference": "Procedure/0b6c3ea7-8fae-40e6-9481-d33764483777"
+      }, {
+        "reference": "MeasureReport/2c8c1490-4ec5-4467-a736-9f32fdf87e69"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/740464e8-4782-49e7-97f8-1bd87c6ea304"
+    }
+  } ]
+}

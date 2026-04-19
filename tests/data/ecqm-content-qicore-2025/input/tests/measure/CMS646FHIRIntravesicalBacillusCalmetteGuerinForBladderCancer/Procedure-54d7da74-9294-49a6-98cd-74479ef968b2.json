@@ -1,0 +1,28 @@
+{
+  "resourceType": "Procedure",
+  "id": "54d7da74-9294-49a6-98cd-74479ef968b2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-05-29T08:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2024",
+      "code": "51585",
+      "display": "Cystectomy Done",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/da823bdf-248b-4b9b-8fec-363d673036c8"
+  },
+  "performedPeriod": {
+    "start": "2026-05-29T08:00:00.000+00:00",
+    "end": "2026-05-29T08:15:00.000+00:00"
+  }
+}

@@ -1,0 +1,339 @@
+{
+  "resourceType": "Bundle",
+  "id": "62b1e15a3968556e5150cf3b",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/cf76e904-95bd-445d-8384-62be012b76f6",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "cf76e904-95bd-445d-8384-62be012b76f6",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "62b1e15a3968556e5150cf3b"
+      } ],
+      "name": [ {
+        "family": "DENOMEXPass",
+        "given": [ "AdolescentHistoryOfBipolarRemission" ]
+      } ],
+      "gender": "male",
+      "birthDate": "2009-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/cf76e904-95bd-445d-8384-62be012b76f6"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/1ea31e90-6142-4c72-a790-b6c035266205",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "1ea31e90-6142-4c72-a790-b6c035266205",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "10197000",
+          "display": "Psychiatric interview and evaluation (procedure)",
+          "userSelected": true
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/cf76e904-95bd-445d-8384-62be012b76f6"
+      },
+      "period": {
+        "start": "2026-01-01T08:00:00.000+00:00",
+        "end": "2026-01-01T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/1ea31e90-6142-4c72-a790-b6c035266205"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/a00e87e3-0395-4544-accc-1571df79b79a",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "a00e87e3-0395-4544-accc-1571df79b79a",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active",
+          "userSelected": true
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "12969000",
+          "display": "Severe bipolar II disorder, most recent episode major depressive, in full remission (disorder)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/cf76e904-95bd-445d-8384-62be012b76f6"
+      },
+      "onsetDateTime": "2021-12-31T23:59:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/a00e87e3-0395-4544-accc-1571df79b79a"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/a304698f-cfdb-41ec-83ae-2f527e8acbab",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "a304698f-cfdb-41ec-83ae-2f527e8acbab",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "subscriberId": "123456789",
+      "beneficiary": {
+        "reference": "Patient/cf76e904-95bd-445d-8384-62be012b76f6"
+      },
+      "relationship": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+          "code": "self",
+          "display": "Self",
+          "userSelected": true
+        } ]
+      },
+      "payor": [ {
+        "reference": "Organization/26a16a18-e1db-44b2-b1a5-bacd3056823d"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/a304698f-cfdb-41ec-83ae-2f527e8acbab"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Organization/26a16a18-e1db-44b2-b1a5-bacd3056823d",
+    "resource": {
+      "resourceType": "Organization",
+      "id": "26a16a18-e1db-44b2-b1a5-bacd3056823d",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+      },
+      "identifier": [ {
+        "use": "temp",
+        "system": "urn:oid:2.16.840.1.113883.4.4",
+        "value": "21-3259825"
+      } ],
+      "active": true,
+      "type": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+          "code": "pay",
+          "display": "Payer"
+        } ]
+      } ],
+      "name": "Blue Cross Blue Shield of Texas",
+      "telecom": [ {
+        "system": "phone",
+        "value": "(+1) 972-766-6900"
+      } ],
+      "address": [ {
+        "use": "billing",
+        "type": "postal",
+        "line": [ "P.O. Box 660044" ],
+        "city": "Dallas",
+        "state": "TX",
+        "postalCode": "75266-0044",
+        "country": "USA"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Organization/26a16a18-e1db-44b2-b1a5-bacd3056823d"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/1c7fdb26-ae7c-442a-9d32-6c05dfe20e8f",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "1c7fdb26-ae7c-442a-9d32-6c05dfe20e8f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "1234567893"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/1c7fdb26-ae7c-442a-9d32-6c05dfe20e8f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/3008fdc1-7067-41d8-99ac-1ac77dbf4d45",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "3008fdc1-7067-41d8-99ac-1ac77dbf4d45",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "7bd333bd-7294-4a2f-a74e-f8efd47e20cf-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "cf76e904-95bd-445d-8384-62be012b76f6"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#7bd333bd-7294-4a2f-a74e-f8efd47e20cf-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "17 yo patient on first day of MP with history of bipolar – remission day before MP starts"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS2FHIRPCSDepressionScreenAndFollowUp",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorException_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exception",
+              "display": "Denominator Exception"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/cf76e904-95bd-445d-8384-62be012b76f6"
+      }, {
+        "reference": "Encounter/1ea31e90-6142-4c72-a790-b6c035266205"
+      }, {
+        "reference": "Condition/a00e87e3-0395-4544-accc-1571df79b79a"
+      }, {
+        "reference": "Coverage/a304698f-cfdb-41ec-83ae-2f527e8acbab"
+      }, {
+        "reference": "Organization/26a16a18-e1db-44b2-b1a5-bacd3056823d"
+      }, {
+        "reference": "Practitioner/1c7fdb26-ae7c-442a-9d32-6c05dfe20e8f"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/3008fdc1-7067-41d8-99ac-1ac77dbf4d45"
+    }
+  } ]
+}

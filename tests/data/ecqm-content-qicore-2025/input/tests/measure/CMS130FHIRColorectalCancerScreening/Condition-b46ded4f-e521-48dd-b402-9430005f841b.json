@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "b46ded4f-e521-48dd-b402-9430005f841b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "101421000119107",
+      "display": "Dementia due to Parkinson's disease (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/df62e712-a702-4c1e-82c6-4676578371f9"
+  },
+  "onsetDateTime": "2025-12-31T23:59:59Z"
+}

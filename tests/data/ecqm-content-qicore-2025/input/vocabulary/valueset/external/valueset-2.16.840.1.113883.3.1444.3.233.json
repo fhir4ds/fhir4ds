@@ -1,0 +1,67 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.1444.3.233-20240131",
+  "meta": {
+    "versionId": "5",
+    "lastUpdated": "2024-01-31T01:08:33.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Society of Clinical Oncology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-30"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2024-01-31"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.1444.3.233",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.1444.3.233"
+  } ],
+  "version": "20240131",
+  "name": "ChemotherapyAdministration",
+  "title": "Chemotherapy Administration",
+  "status": "active",
+  "date": "2024-01-31T01:08:33-05:00",
+  "publisher": "American Society of Clinical Oncology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts for the procedure of chemotherapy administration.),(Data Element Scope: This value set may use a model element related to Procedure.),(Inclusion Criteria: Includes concepts that represent a procedure for chemotherapy administration.),(Exclusion Criteria: Excludes concepts that describe a procedure for topical chemotherapy.)",
+  "compose": {
+    "include": [ {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "concept": [ {
+        "code": "G0498",
+        "display": "Chemotherapy administration, intravenous infusion technique; initiation of infusion in the office/clinic setting using office/clinic pump/supplies, with continuation of the infusion in the community setting (e.g., home, domiciliary, rest home or assisted living) using a portable pump provided by the office/clinic, includes follow up office/clinic visit at the conclusion of the infusion"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:c61d351d-0ddc-44f0-9f5e-d1a42d12d48c",
+    "timestamp": "2025-06-20T16:55:27-04:00",
+    "total": 1,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "version": "2024",
+      "code": "G0498",
+      "display": "Chemotherapy administration, intravenous infusion technique; initiation of infusion in the office/clinic setting using office/clinic pump/supplies, with continuation of the infusion in the community setting (e.g., home, domiciliary, rest home or assisted living) using a portable pump provided by the office/clinic, includes follow up office/clinic visit at the conclusion of the infusion"
+    } ]
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "resourceType": "Observation",
+  "id": "c0e542e3-1eb2-408e-918c-5a033807a992",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observationcancelled" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneReason",
+    "valueCodeableConcept": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "version": "http://snomed.info/sct/731000124108/version/202303",
+        "code": "410536001",
+        "display": "Contraindicated (qualifier value)"
+      } ]
+    }
+  } ],
+  "status": "cancelled",
+  "category": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "428119001",
+      "display": "Procedure not indicated (situation)",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.73",
+      "code": "71487-3"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/4ca8189d-0064-457f-af42-9a02e5d0cc97"
+  },
+  "effectiveDateTime": "2026-08-27T13:00:00.000+00:00",
+  "issued": "2026-08-27T13:00:00.000+00:00"
+}

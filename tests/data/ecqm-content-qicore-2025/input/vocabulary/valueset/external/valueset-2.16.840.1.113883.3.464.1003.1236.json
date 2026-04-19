@@ -1,0 +1,83 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.464.1003.1236-20230722",
+  "meta": {
+    "versionId": "5",
+    "lastUpdated": "2024-08-12T12:53:51.000-04:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Institutes for Research Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-31"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2023-07-22"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1236",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.464.1003.1236"
+  } ],
+  "version": "20230722",
+  "name": "RemovalRevisionAndSupplementProceduresOfTheLowerBodyAndSpine",
+  "title": "Removal, Revision and Supplement Procedures of the Lower Body and Spine",
+  "status": "active",
+  "date": "2023-07-22T01:12:36-04:00",
+  "publisher": "American Institutes for Research Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts for Removal, Revision and Supplement Procedures of the Lower Body and Spine.),(Data Element Scope: This value set may use a model element related to Procedure.),(Inclusion Criteria: Includes concepts that represent Removal, Revision and Supplement Procedures of the Lower Body and Spine.),(Exclusion Criteria: No exclusions.)",
+  "compose": {
+    "include": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "concept": [ {
+        "code": "27134",
+        "display": "Revision of total hip arthroplasty; both components, with or without autograft or allograft"
+      }, {
+        "code": "27137",
+        "display": "Revision of total hip arthroplasty; acetabular component only, with or without autograft or allograft"
+      }, {
+        "code": "27138",
+        "display": "Revision of total hip arthroplasty; femoral component only, with or without allograft"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:eefaa7f4-c4bb-46fe-87ad-5e46e9759da2",
+    "timestamp": "2025-06-20T16:53:49-04:00",
+    "total": 3,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2024",
+      "code": "27134",
+      "display": "Revision of total hip arthroplasty; both components, with or without autograft or allograft"
+    }, {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2024",
+      "code": "27137",
+      "display": "Revision of total hip arthroplasty; acetabular component only, with or without autograft or allograft"
+    }, {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2024",
+      "code": "27138",
+      "display": "Revision of total hip arthroplasty; femoral component only, with or without allograft"
+    } ]
+  }
+}

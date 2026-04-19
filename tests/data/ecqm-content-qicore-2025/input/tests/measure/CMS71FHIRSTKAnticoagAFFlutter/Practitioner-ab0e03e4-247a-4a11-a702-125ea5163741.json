@@ -1,0 +1,12 @@
+{
+  "resourceType": "Practitioner",
+  "id": "ab0e03e4-247a-4a11-a702-125ea5163741",
+  "identifier": [ {
+    "system": "http://hl7.org/fhir/sid/us-npi",
+    "value": "123456"
+  } ],
+  "name": [ {
+    "family": "Evil",
+    "prefix": [ "Dr" ]
+  } ]
+}

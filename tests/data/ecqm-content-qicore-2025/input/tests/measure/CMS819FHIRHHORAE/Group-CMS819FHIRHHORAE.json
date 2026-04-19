@@ -1,0 +1,192 @@
+{
+  "resourceType": "Group",
+  "id": "CMS819FHIRHHORAE",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS819FHIRHHORAE"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/93064568-a739-403d-853f-a3150bd8f752",
+      "display": "NonOralOpioidLT12hrsBeforeAntag NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/93064568-a739-403d-853f-a3150bd8f752",
+      "display": "NonOralOpioidLT12hrsBeforeAntag NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1994e69a-472b-4e32-80c1-5c692f36acce",
+      "display": "OpioidExactly12hrsBeforeAntagonist NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1994e69a-472b-4e32-80c1-5c692f36acce",
+      "display": "OpioidExactly12hrsBeforeAntagonist NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/06d7810a-dcc6-4f6d-ab28-2a0843449475",
+      "display": "Age17InEDAge18DayOfIPAdmit DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/06d7810a-dcc6-4f6d-ab28-2a0843449475",
+      "display": "Age17InEDAge18DayOfIPAdmit DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6d76c342-ac9f-4c46-b224-f39b8216d30e",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6d76c342-ac9f-4c46-b224-f39b8216d30e",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9e1276d8-5574-424a-b093-0bd89b45019e",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9e1276d8-5574-424a-b093-0bd89b45019e",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8fc93696-e9a6-46a3-b8e9-7c7929e8ad36",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8fc93696-e9a6-46a3-b8e9-7c7929e8ad36",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/31b40acc-ca5f-4d1d-bd83-4b1a14eb822e",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/31b40acc-ca5f-4d1d-bd83-4b1a14eb822e",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/47e2c410-9c00-4f05-96b4-b925e0c158b1",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/47e2c410-9c00-4f05-96b4-b925e0c158b1",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bef27397-e972-46e8-8e92-b8d4fd7985dc",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bef27397-e972-46e8-8e92-b8d4fd7985dc",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1de546d8-e39f-4d9f-b606-d3be3a24b3be",
+      "display": "Antagonist12Hrs1MinuteAfterOpioid NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1de546d8-e39f-4d9f-b606-d3be3a24b3be",
+      "display": "Antagonist12Hrs1MinuteAfterOpioid NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cf4e9832-fad4-4041-9c6b-e7605bf0b3a0",
+      "display": "OpioidExactly12hrsBeforeAntagonist NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/cf4e9832-fad4-4041-9c6b-e7605bf0b3a0",
+      "display": "OpioidExactly12hrsBeforeAntagonist NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/11589117-d7b3-48d2-ac4e-b2dedd2dda37",
+      "display": "Age17StartOfEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/11589117-d7b3-48d2-ac4e-b2dedd2dda37",
+      "display": "Age17StartOfEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/67f1ba74-5f3c-4729-9085-69bc55f49225",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/67f1ba74-5f3c-4729-9085-69bc55f49225",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/73b0c1fe-874b-4982-8cb2-3c30520441de",
+      "display": "OpioidAndAntagInOROpioidAndAntagOutsideOR NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/73b0c1fe-874b-4982-8cb2-3c30520441de",
+      "display": "OpioidAndAntagInOROpioidAndAntagOutsideOR NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b88740a3-5143-4b36-ae0d-75a6b95db7e2",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b88740a3-5143-4b36-ae0d-75a6b95db7e2",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bdd17c60-c755-4150-8137-fa3884903970",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bdd17c60-c755-4150-8137-fa3884903970",
+      "display": "Patient Example"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6127705f-6f70-4134-9c87-1129389bea42",
+      "display": "Age17InEDAge18DayOfIPAdmit DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6127705f-6f70-4134-9c87-1129389bea42",
+      "display": "Age17InEDAge18DayOfIPAdmit DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2adae583-4f70-4492-add5-c56cd38f5843",
+      "display": "OpioidExactly12hrsBeforeAntagonist NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2adae583-4f70-4492-add5-c56cd38f5843",
+      "display": "OpioidExactly12hrsBeforeAntagonist NUMERPass"
+    }
+  } ]
+}

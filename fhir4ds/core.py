@@ -48,18 +48,51 @@ def register_cql(
     Returns True if the CQL C++ extension was loaded.
     """
     from fhir4ds.fhirpath.duckdb.extension import register_fhirpath as _fhirpath_register
-    from fhir4ds.cql.duckdb.extension import (
-        _try_load_bundled_cpp_extension as _try_cql_cpp,
-        register as _cql_register,
-    )
 
     # Step 1: register FHIRPath (C++ bundled extension or Python UDFs)
     _fhirpath_register(con)
 
-    # Step 2: load CQL C++ extension or fall back to Python UDFs
-    cql_cpp = _try_cql_cpp(con)
-    if not cql_cpp:
-        _cql_register(con, include_fhirpath=False)  # fhirpath already registered
+    # Step 2: register CQL Python UDFs directly (skip C++ extension).
+    # The C++ extension only handles date/datetime intervals correctly;
+    # Decimal, Integer, Quantity, and Time intervals return NULL from C++.
+    # DuckDB cannot override C++ scalar functions with Python UDFs, so we
+    # must use the Python path exclusively for full CQL spec compliance.
+    cql_cpp = False
+    from fhir4ds.cql.duckdb.udf.age import registerAgeUdfs
+    from fhir4ds.cql.duckdb.udf.aggregate import registerAggregateUdfs
+    from fhir4ds.cql.duckdb.udf.clinical import registerClinicalUdfs
+    from fhir4ds.cql.duckdb.udf.datetime import registerDatetimeUdfs
+    from fhir4ds.cql.duckdb.udf.interval import registerIntervalUdfs
+    from fhir4ds.cql.duckdb.udf.valueset import registerValuesetUdfs
+    from fhir4ds.cql.duckdb.udf.ratio import registerRatioUdfs
+    from fhir4ds.cql.duckdb.udf.quantity import registerQuantityUdfs
+    from fhir4ds.cql.duckdb.udf.list import registerListUdfs
+    from fhir4ds.cql.duckdb.udf.variable import registerVariableUdfs
+    from fhir4ds.cql.duckdb.udf.math import registerMathUdfs
+    from fhir4ds.cql.duckdb.udf.string import registerStringUdfs
+    from fhir4ds.cql.duckdb.udf.logical import registerLogicalUdfs
+
+    registerAgeUdfs(con)
+    registerAggregateUdfs(con)
+    registerClinicalUdfs(con)
+    registerDatetimeUdfs(con)
+    registerIntervalUdfs(con)
+    registerValuesetUdfs(con)
+    registerRatioUdfs(con)
+    registerQuantityUdfs(con)
+    registerListUdfs(con)
+    registerVariableUdfs(con)
+    registerMathUdfs(con)
+    registerStringUdfs(con)
+    registerLogicalUdfs(con)
+
+    # Step 2b: Always register SQL macros — they supplement both C++ and Python UDFs
+    # with functions like Truncate, IsTrue, IsFalse, Skip, Take, Tail, etc.
+    from fhir4ds.cql.duckdb.macros import register_all_macros
+    try:
+        register_all_macros(con)
+    except Exception:
+        pass  # some macros may conflict with C++ functions; that's OK
 
     # Step 3: ValueSet expansion always uses Python
     if valueset_cache is not None:

@@ -1,0 +1,105 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "3ece9527-9650-45cb-b581-5e05ffb9343a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "b390946c-9bc8-4646-bf1f-2284376ae312-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "3a4004a0-b352-488d-8c18-8fd023308646"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#b390946c-9bc8-4646-bf1f-2284376ae312-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient with HF and LVSD encounters not prescribed ACE/ARB medication qualifies for denominator exclusion with Heart Transplant Complication history (using recorded time)."
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS135FHIRHFACEIorARBorARNIforLVSD",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/3a4004a0-b352-488d-8c18-8fd023308646"
+  }, {
+    "reference": "Encounter/b837a0e5-469b-45cc-8b02-c10228755b84"
+  }, {
+    "reference": "Encounter/5b5f4312-f067-4d95-a774-bbda769e146b"
+  }, {
+    "reference": "Condition/33a86ba4-fef9-40bb-9875-b77f3f2120b8"
+  }, {
+    "reference": "Condition/3dae5e7d-4766-4668-b6ce-6154bcf3a5c4"
+  }, {
+    "reference": "Condition/5477f165-d971-443a-ad09-11474ba0e1ad"
+  } ]
+}

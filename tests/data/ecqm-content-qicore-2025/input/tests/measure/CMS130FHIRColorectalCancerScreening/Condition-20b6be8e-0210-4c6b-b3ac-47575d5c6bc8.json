@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "20b6be8e-0210-4c6b-b3ac-47575d5c6bc8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "109838007",
+      "display": "Overlapping malignant neoplasm of colon (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/0750b201-5a60-4757-9809-0db3aa767b50"
+  },
+  "onsetDateTime": "2026-01-01T01:15:00Z"
+}

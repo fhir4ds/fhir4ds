@@ -1,0 +1,50 @@
+{
+  "resourceType": "Encounter",
+  "id": "20b9662b-0fd1-4723-ba9c-ba6260f32114",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "EMER",
+    "display": "emergency department"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2023-09",
+      "code": "4525004",
+      "display": "Emergency department patient visit (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/9f77830b-ff7c-4060-bf38-295b215ab56d"
+  },
+  "period": {
+    "start": "2027-05-01T06:00:00.000+00:00",
+    "end": "2027-05-01T14:01:00.000+00:00"
+  },
+  "diagnosis": [ {
+    "condition": {
+      "reference": "Condition/096b8b31-4711-4458-b025-a47d705eee89"
+    },
+    "use": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/diagnosis-role",
+        "code": "billing"
+      } ]
+    },
+    "rank": 1
+  } ],
+  "location": [ {
+    "location": {
+      "reference": "Location/c8194cc4-95df-4a55-bf11-5ae4548e2194"
+    },
+    "period": {
+      "start": "2027-05-01T06:00:00.000+00:00",
+      "end": "2027-05-01T14:01:00.000+00:00"
+    }
+  } ]
+}

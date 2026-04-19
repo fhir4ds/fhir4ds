@@ -1,0 +1,125 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "567b84c4-8396-4eba-bab1-bc8980f3cbf4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "93e7cba4-f585-4d53-96b6-677c052f58a2-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "ea08cba3-e556-496e-8aab-3b1e6f58fda0"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#93e7cba4-f585-4d53-96b6-677c052f58a2-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient with cancer diagnosis ending at the start of the office visit during the measurement period. No chemotherapy administered prior to the office visit. \n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/OncologyPainIntensityQuantifiedFHIR",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  }, {
+    "id": "Group_2",
+    "population": [ {
+      "id": "InitialPopulation_2",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Denominator_2",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_2",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/ea08cba3-e556-496e-8aab-3b1e6f58fda0"
+  }, {
+    "reference": "Condition/f7c0de4b-c6ec-41d8-9d53-56a5b2154668"
+  }, {
+    "reference": "Encounter/bc1dba0a-2b85-4926-96a8-7c1f2d5786cd"
+  }, {
+    "reference": "Coverage/ddb1042a-d209-473b-ae92-68ac73a007f1"
+  }, {
+    "reference": "Procedure/5e7483c2-41d1-426d-86cb-506223eec9f1"
+  }, {
+    "reference": "Procedure/7d870642-a67a-4081-85fe-c0cc8897c204"
+  }, {
+    "reference": "Organization/44c2909d-83ce-42dc-85f7-385a4d1d7b7d"
+  }, {
+    "reference": "Practitioner/0503e3c9-6dbc-474b-8abd-0edbf03a544f"
+  } ]
+}

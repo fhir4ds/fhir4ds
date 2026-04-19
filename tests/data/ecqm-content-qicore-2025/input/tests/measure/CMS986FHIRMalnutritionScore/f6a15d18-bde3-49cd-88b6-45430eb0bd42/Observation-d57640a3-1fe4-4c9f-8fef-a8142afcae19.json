@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "d57640a3-1fe4-4c9f-8fef-a8142afcae19",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "75285-7",
+      "display": "Comparative nutrition assessment standards panel",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f6a15d18-bde3-49cd-88b6-45430eb0bd42"
+  },
+  "effectiveDateTime": "2026-04-02T10:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "65404009",
+      "display": "Undernutrition (disorder)",
+      "userSelected": true
+    } ]
+  }
+}

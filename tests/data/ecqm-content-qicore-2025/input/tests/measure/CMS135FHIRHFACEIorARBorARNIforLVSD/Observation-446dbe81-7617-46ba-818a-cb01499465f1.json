@@ -1,0 +1,33 @@
+{
+  "resourceType": "Observation",
+  "id": "446dbe81-7617-46ba-818a-cb01499465f1",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "imaging",
+      "display": "Imaging"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "10230-1",
+      "display": "Left ventricular Ejection fraction"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c095195c-8893-4bf1-aa7d-ad2bfd9bafa5"
+  },
+  "effectiveDateTime": "2026-07-15T08:16:00.000+00:00",
+  "valueQuantity": {
+    "value": 39,
+    "unit": "%",
+    "system": "http://unitsofmeasure.org",
+    "code": "%"
+  }
+}

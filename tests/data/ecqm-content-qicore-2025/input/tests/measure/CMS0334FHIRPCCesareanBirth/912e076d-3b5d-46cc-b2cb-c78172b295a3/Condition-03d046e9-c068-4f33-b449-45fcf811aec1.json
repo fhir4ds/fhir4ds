@@ -1,0 +1,27 @@
+{
+  "resourceType": "Condition",
+  "id": "03d046e9-c068-4f33-b449-45fcf811aec1",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition" ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-09",
+      "code": "169826009",
+      "display": "Single live birth (finding)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/912e076d-3b5d-46cc-b2cb-c78172b295a3"
+  },
+  "recordedDate": "2026-10-21T08:00:00.000+00:00"
+}

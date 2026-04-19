@@ -1,0 +1,296 @@
+{
+  "resourceType": "Bundle",
+  "id": "63ec096bccb3770120fea0ad",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/bd6d6642-aeed-4665-aa95-c63afb0cd78c",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "bd6d6642-aeed-4665-aa95-c63afb0cd78c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "text": {
+        "status": "generated",
+        "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">NoResult <b>SODIUMFAIL </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>eb360e3679224871964d5b3575a59ceb3c2f6260372fb1be3ea61ac84d2937cf</td></tr><tr><td>Date of birth</td><td><span>15 June 1956</span></td></tr></tbody></table></div>"
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Not Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Not Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248153007"
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "63ec096bccb3770120fea0ad"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "OxygenAdminPass",
+        "given": [ "OxygenByDeviceOrderFirstMinOfEDArrival" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1941-07-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/bd6d6642-aeed-4665-aa95-c63afb0cd78c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/6c5dde82-bb3d-464e-b0c4-15f9bc511645",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "6c5dde82-bb3d-464e-b0c4-15f9bc511645",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "EMR",
+        "display": "emergency",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "4525004",
+          "display": "Emergency department patient visit (procedure)"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/bd6d6642-aeed-4665-aa95-c63afb0cd78c"
+      },
+      "period": {
+        "start": "2026-07-01T08:00:00.000+00:00",
+        "end": "2026-07-01T14:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/6c5dde82-bb3d-464e-b0c4-15f9bc511645"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/4cf1fb99-c1ab-4187-a2d5-c8c368c75091",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "4cf1fb99-c1ab-4187-a2d5-c8c368c75091",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter",
+        "userSelected": true
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183452005"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/bd6d6642-aeed-4665-aa95-c63afb0cd78c"
+      },
+      "period": {
+        "start": "2026-07-01T14:15:00.000+00:00",
+        "end": "2026-07-05T11:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/4cf1fb99-c1ab-4187-a2d5-c8c368c75091"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/ServiceRequest/d6a6d078-5e62-4505-a175-7d6ae1f55cf8",
+    "resource": {
+      "resourceType": "ServiceRequest",
+      "id": "d6a6d078-5e62-4505-a175-7d6ae1f55cf8",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+      },
+      "status": "completed",
+      "intent": "order",
+      "code": {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "version": "2024-09",
+          "code": "336623009",
+          "display": "Oxygen nasal cannula (physical object)",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/bd6d6642-aeed-4665-aa95-c63afb0cd78c"
+      },
+      "authoredOn": "2026-07-01T06:59:00.000+00:00"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "ServiceRequest/d6a6d078-5e62-4505-a175-7d6ae1f55cf8"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Coverage/5245ba27-4508-4df2-81e8-26661accf939",
+    "resource": {
+      "resourceType": "Coverage",
+      "id": "5245ba27-4508-4df2-81e8-26661accf939",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-coverage" ]
+      },
+      "status": "active",
+      "type": {
+        "coding": [ {
+          "system": "https://nahdo.org/sopt",
+          "version": "1.0.1",
+          "code": "1",
+          "display": "MEDICARE",
+          "userSelected": true
+        } ]
+      },
+      "subscriberId": "AB9876",
+      "beneficiary": {
+        "reference": "Patient/bd6d6642-aeed-4665-aa95-c63afb0cd78c"
+      },
+      "relationship": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/subscriber-relationship",
+          "code": "self"
+        } ]
+      },
+      "payor": [ {
+        "reference": "Organization/123456"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Coverage/5245ba27-4508-4df2-81e8-26661accf939"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Practitioner/09c6f3a5-53e0-499f-819b-50db8c69ef9f",
+    "resource": {
+      "resourceType": "Practitioner",
+      "id": "09c6f3a5-53e0-499f-819b-50db8c69ef9f",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+      },
+      "identifier": [ {
+        "system": "http://hl7.org/fhir/sid/us-npi",
+        "value": "0723660813"
+      } ],
+      "name": [ {
+        "family": "Evil",
+        "prefix": [ "Dr" ]
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Practitioner/09c6f3a5-53e0-499f-819b-50db8c69ef9f"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/327690c5-1f6e-4e28-808f-cc6b2f9c2225",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "327690c5-1f6e-4e28-808f-cc6b2f9c2225",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "abe383a5-f901-4740-8284-abf111cdd0f6-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "bd6d6642-aeed-4665-aa95-c63afb0cd78c"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#abe383a5-f901-4740-8284-abf111cdd0f6-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Oxygen nasal cannula device order 61 minutes prior to ED encounter"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMSFHIR844HybridHospitalWideMortality",
+      "period": {
+        "start": "2026-07-01",
+        "end": "2027-06-30"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/bd6d6642-aeed-4665-aa95-c63afb0cd78c"
+      }, {
+        "reference": "Encounter/6c5dde82-bb3d-464e-b0c4-15f9bc511645"
+      }, {
+        "reference": "Encounter/4cf1fb99-c1ab-4187-a2d5-c8c368c75091"
+      }, {
+        "reference": "ServiceRequest/d6a6d078-5e62-4505-a175-7d6ae1f55cf8"
+      }, {
+        "reference": "Coverage/5245ba27-4508-4df2-81e8-26661accf939"
+      }, {
+        "reference": "Practitioner/09c6f3a5-53e0-499f-819b-50db8c69ef9f"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/327690c5-1f6e-4e28-808f-cc6b2f9c2225"
+    }
+  } ]
+}

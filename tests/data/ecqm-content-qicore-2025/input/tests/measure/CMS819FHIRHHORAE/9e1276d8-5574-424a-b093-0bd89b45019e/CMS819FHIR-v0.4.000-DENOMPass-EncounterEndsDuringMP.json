@@ -1,0 +1,221 @@
+{
+  "resourceType": "Bundle",
+  "id": "tests-DenomPass-EncounterEndsDuringMP-bundle",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/MedicationAdministration/0fbe515c-35d5-4eae-bf3c-5daab7e1c1f4",
+    "resource": {
+      "resourceType": "MedicationAdministration",
+      "id": "0fbe515c-35d5-4eae-bf3c-5daab7e1c1f4",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+      },
+      "status": "completed",
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "1010600",
+          "display": "Opioids, All"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/9e1276d8-5574-424a-b093-0bd89b45019e"
+      },
+      "context": {
+        "reference": "Encounter/eaab5a11-c1eb-417d-a141-a9e42c944b4c"
+      },
+      "effectiveDateTime": "2025-12-31T08:00:00.000+00:00",
+      "note": [ {
+        "text": "Administered opioid medication as prescribed."
+      } ],
+      "dosage": {
+        "route": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v3-RouteOfAdministration",
+            "code": "PO",
+            "display": "Oral"
+          } ]
+        },
+        "rateQuantity": {
+          "value": 1,
+          "unit": "mg"
+        }
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationAdministration/0fbe515c-35d5-4eae-bf3c-5daab7e1c1f4"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/eaab5a11-c1eb-417d-a141-a9e42c944b4c",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "eaab5a11-c1eb-417d-a141-a9e42c944b4c",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183452005",
+          "display": "Inpatient encounter"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/9e1276d8-5574-424a-b093-0bd89b45019e"
+      },
+      "period": {
+        "start": "2025-12-30T08:00:00.000+00:00",
+        "end": "2026-02-08T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/eaab5a11-c1eb-417d-a141-a9e42c944b4c"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Patient/9e1276d8-5574-424a-b093-0bd89b45019e",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "9e1276d8-5574-424a-b093-0bd89b45019e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2106-3",
+            "display": "White"
+          }
+        }, {
+          "url": "text",
+          "valueString": "White"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248152002"
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999999"
+      } ],
+      "name": [ {
+        "family": "Example",
+        "given": [ "Patient" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1956-01-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/9e1276d8-5574-424a-b093-0bd89b45019e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/2d99bfc5-07d1-4749-80c8-e18d2ed3f8bb",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "2d99bfc5-07d1-4749-80c8-e18d2ed3f8bb",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "3cecb6f8-99b4-45a4-a8c3-086e3a75bb1e-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "9e1276d8-5574-424a-b093-0bd89b45019e"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#3cecb6f8-99b4-45a4-a8c3-086e3a75bb1e-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Encounter starts before MP but ends during MP. Meets IPP/Denom."
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS819FHIRHHORAE",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "MedicationAdministration/0fbe515c-35d5-4eae-bf3c-5daab7e1c1f4"
+      }, {
+        "reference": "Encounter/eaab5a11-c1eb-417d-a141-a9e42c944b4c"
+      }, {
+        "reference": "Patient/9e1276d8-5574-424a-b093-0bd89b45019e"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/2d99bfc5-07d1-4749-80c8-e18d2ed3f8bb"
+    }
+  } ]
+}

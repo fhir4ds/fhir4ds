@@ -1,0 +1,33 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "e8c0da8e-ed47-425b-950c-988dc8aac0bc",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "08072023",
+      "code": "686924",
+      "display": "carvedilol 3.125 MG Oral Tablet"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/67779bc6-07ee-42cf-8ca7-e71302915dba"
+  },
+  "authoredOn": "2026-07-20T12:15:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/6fc42580-f730-4ecc-87fe-0bf1c4ee00b1"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "407563006",
+      "display": "Treatment not tolerated (situation)"
+    } ]
+  } ]
+}

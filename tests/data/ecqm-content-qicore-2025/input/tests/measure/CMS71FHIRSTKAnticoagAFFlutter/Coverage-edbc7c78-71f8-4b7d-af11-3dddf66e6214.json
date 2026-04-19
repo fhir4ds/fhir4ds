@@ -1,0 +1,14 @@
+{
+  "resourceType": "Coverage",
+  "id": "edbc7c78-71f8-4b7d-af11-3dddf66e6214",
+  "status": "active",
+  "beneficiary": {
+    "reference": "Patient/3b8d6a18-b4a3-4369-b33c-6a6daa6b5b4c"
+  },
+  "period": {
+    "start": "1955-05-23T08:00:00Z"
+  },
+  "payor": [ {
+    "reference": "Organization/84f2a33a-4804-47e5-9ff8-92fbdc7ecb79"
+  } ]
+}

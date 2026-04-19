@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "e04fb8a4-139a-4667-95fd-470185fdec05",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "170935008",
+      "display": "Full care by hospice (finding)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/26549e84-fbf3-43dc-8971-2f3baaf508d7"
+  },
+  "onsetDateTime": "2026-01-01T00:00:00.000Z"
+}

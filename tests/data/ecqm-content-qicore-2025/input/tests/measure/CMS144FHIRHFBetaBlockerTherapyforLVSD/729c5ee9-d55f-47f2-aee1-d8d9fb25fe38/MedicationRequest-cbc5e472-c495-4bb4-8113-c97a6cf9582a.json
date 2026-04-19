@@ -1,0 +1,33 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "cbc5e472-c495-4bb4-8113-c97a6cf9582a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "doNotPerform": true,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1999031",
+      "display": "24 HR metoprolol succinate 100 MG Extended Release Oral Capsule",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/729c5ee9-d55f-47f2-aee1-d8d9fb25fe38"
+  },
+  "authoredOn": "2026-05-15T11:50:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/123456"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "183932001",
+      "display": "Procedure contraindicated (situation)",
+      "userSelected": true
+    } ]
+  } ]
+}

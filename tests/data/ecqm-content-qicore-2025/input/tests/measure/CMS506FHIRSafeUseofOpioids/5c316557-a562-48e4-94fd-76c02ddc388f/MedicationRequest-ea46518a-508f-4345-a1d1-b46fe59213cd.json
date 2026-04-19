@@ -1,0 +1,33 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "ea46518a-508f-4345-a1d1-b46fe59213cd",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+      "code": "discharge",
+      "display": "Discharge",
+      "userSelected": true
+    } ]
+  } ],
+  "doNotPerform": false,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "863845",
+      "display": "Abuse-Deterrent morphine sulfate 100 MG / naltrexone hydrochloride 4 MG Extended Release Oral Capsule",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/5c316557-a562-48e4-94fd-76c02ddc388f"
+  },
+  "authoredOn": "2026-01-03T00:10:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/f0808f26-2d4e-4da8-8d7b-cc20eedde23e"
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "e80b1d58-e57e-4099-a363-54cb86bb654a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "6a53738b-82c3-42c1-934c-c35c0fc2bb71-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "854f73d5-2461-4c12-b214-c4a3ceecfe36"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#6a53738b-82c3-42c1-934c-c35c0fc2bb71-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Valid Referral during referral period (\"202x-01-01T00:00:00.000+00:00\") with status finished and intent order.  No eligible encounter.\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS50FHIRCRLReceiptofSpecialistReport",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/854f73d5-2461-4c12-b214-c4a3ceecfe36"
+  }, {
+    "reference": "ServiceRequest/4eab5756-1345-4045-bd85-7692f5ea89a1"
+  }, {
+    "reference": "Coverage/93c37770-cd99-419a-bcf9-1f4317fca848"
+  }, {
+    "reference": "Organization/cd2c04d5-ba9f-42e3-8472-8e1ebc708d3e"
+  }, {
+    "reference": "Practitioner/62c6b10e-8747-4f02-ab0b-b72b87a137ae"
+  } ]
+}

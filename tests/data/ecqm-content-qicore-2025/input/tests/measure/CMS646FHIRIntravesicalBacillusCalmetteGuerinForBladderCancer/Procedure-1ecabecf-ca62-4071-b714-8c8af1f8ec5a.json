@@ -1,0 +1,27 @@
+{
+  "resourceType": "Procedure",
+  "id": "1ecabecf-ca62-4071-b714-8c8af1f8ec5a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-02-01T08:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "254292007",
+      "display": "Tumor staging"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/8b5ba7de-6762-4bf2-a2b3-fba46594f026"
+  },
+  "performedPeriod": {
+    "start": "2026-04-01T08:00:00.000+00:00",
+    "end": "2026-04-01T08:15:00.000+00:00"
+  }
+}

@@ -330,15 +330,22 @@ from ...translator.fhirpath_builder import (
 def _is_quantity_expression(expr: SQLExpression) -> bool:
     """Check if an SQL expression is likely a Quantity value.
 
-    Detects parse_quantity() calls, CASE expressions with
-    parse_quantity branches, and expressions annotated with
+    Detects parse_quantity() calls, quantity UDF results, CASE expressions
+    with parse_quantity branches, and expressions annotated with
     result_type="Quantity" (e.g., correlated subqueries
     referencing Quantity-returning definitions).
     """
     if getattr(expr, 'result_type', None) == "Quantity":
         return True
-    if isinstance(expr, SQLFunctionCall) and expr.name == "parse_quantity":
-        return True
+    if isinstance(expr, SQLFunctionCall):
+        _QUANTITY_RETURNING_FUNCS = frozenset({
+            "parse_quantity", "quantityNegate", "quantityAbs",
+            "quantityAdd", "quantity_add", "quantitySubtract", "quantity_subtract",
+            "quantityMultiply", "quantityDivide", "quantityTruncatedDivide",
+            "quantityModulo", "quantityConvert", "quantity_convert",
+        })
+        if expr.name in _QUANTITY_RETURNING_FUNCS:
+            return True
     if isinstance(expr, SQLCase):
         for _, result in expr.when_clauses:
             if _is_quantity_expression(result):
@@ -462,8 +469,14 @@ class OperatorsMixin:
                 return True
             if isinstance(ts, Identifier) and ts.name == "Quantity":
                 return True
-        # Arithmetic on Quantity preserves Quantity type
-        if isinstance(node, BinaryExpression) and node.operator in ("+", "-", "*", "/"):
+        # Arithmetic on Quantity: for +/- both operands must be Quantity
+        # (DateTime + Quantity → DateTime, not Quantity per CQL §16.2).
+        # For */ a single Quantity operand preserves Quantity type.
+        if isinstance(node, BinaryExpression) and node.operator in ("+", "-"):
+            if (self._is_cql_quantity_expr(node.left, _depth + 1)
+                    and self._is_cql_quantity_expr(node.right, _depth + 1)):
+                return True
+        if isinstance(node, BinaryExpression) and node.operator in ("*", "/"):
             if self._is_cql_quantity_expr(node.left, _depth + 1):
                 return True
             if self._is_cql_quantity_expr(node.right, _depth + 1):
@@ -595,6 +608,15 @@ class OperatorsMixin:
             left = self.translate(expr.left, usage=ExprUsage.SCALAR)
             right = self.translate(expr.right, usage=ExprUsage.SCALAR)
 
+        # CQL §12.3: between — `X between low and high` → `X >= low and X <= high`
+        if operator == "between":
+            if isinstance(right, SQLBinaryOp) and right.operator.upper() == "AND":
+                return SQLBinaryOp(
+                    operator="AND",
+                    left=SQLBinaryOp(operator=">=", left=left, right=right.left),
+                    right=SQLBinaryOp(operator="<=", left=left, right=right.right),
+                )
+
         # Handle type cast operator (X as Quantity)
         # When casting to Quantity, wrap in parse_quantity for date arithmetic recognition
         if operator == "as":
@@ -608,6 +630,29 @@ class OperatorsMixin:
         # CQL convert converts values between types/units (e.g., days, hours)
         # Return operand as-is since our UDFs handle type coercion natively
         if operator == "convert":
+            # CQL convert: convert <value> to <type>
+            # Returns null on invalid input (§22.28-34).
+            # The right operand is a NamedTypeSpecifier with the target type.
+            target_type_name = getattr(expr.right, 'name', '').lower() if hasattr(expr, 'right') else ''
+            convert_type_map = {
+                'integer': 'INTEGER', 'decimal': 'DOUBLE', 'string': 'VARCHAR',
+                'boolean': 'BOOLEAN', 'date': 'DATE', 'datetime': 'TIMESTAMP',
+                'time': 'TIME', 'long': 'BIGINT',
+            }
+            target = convert_type_map.get(target_type_name)
+            if target:
+                if target_type_name == 'time':
+                    return SQLFunctionCall("ToTime", [left])
+                # CQL §22.28-34: DateTime/Date require ISO 8601 format (YYYY-MM-DD).
+                # DuckDB TRY_CAST is too lenient (accepts / separators), so validate first.
+                if target_type_name in ('datetime', 'date'):
+                    left_sql = left.to_sql()
+                    pattern = r"'\d{4}-\d{2}-\d{2}.*'"
+                    return SQLRaw(
+                        f"CASE WHEN typeof({left_sql}) = 'VARCHAR' AND NOT ({left_sql}) SIMILAR TO {pattern} "
+                        f"THEN NULL ELSE TRY_CAST(({left_sql}) AS {target}) END"
+                    )
+                return SQLCast(expression=left, target_type=target, try_cast=True)
             return left
 
         # Handle special operators
@@ -632,6 +677,9 @@ class OperatorsMixin:
                 else:
                     macro = "audit_or_all" if self.context.audit_or_strategy == "all" else "audit_or"
                     return SQLFunctionCall(name=macro, args=[left, right])
+            if operator == "xor":
+                # DuckDB doesn't support XOR keyword; use registered Xor() macro
+                return SQLFunctionCall(name="Xor", args=[left, right])
             sql_op = BINARY_OPERATOR_MAP.get(operator, operator.upper())
             return SQLBinaryOp(operator=sql_op, left=left, right=right)
 
@@ -647,8 +695,18 @@ class OperatorsMixin:
                 return SQLBinaryOp(operator="IS", left=left, right=SQLLiteral(value=False))
 
         if operator == "div":
-            # Integer division
-            return SQLFunctionCall(name="FLOOR", args=[SQLBinaryOp(operator="/", left=left, right=right)])
+            # CQL truncated divide: truncates toward zero (not floor toward -inf)
+            # CQL §16.4: division by zero returns null
+            # Check for Quantity operands
+            left_is_quantity = _is_quantity_expression(left) or self._is_cql_quantity_expr(expr.left)
+            right_is_quantity = _is_quantity_expression(right) or self._is_cql_quantity_expr(expr.right)
+            if left_is_quantity or right_is_quantity:
+                left_q = _ensure_parse_quantity(left)
+                right_q = _ensure_parse_quantity(right)
+                return SQLFunctionCall(name="quantityTruncatedDivide", args=[left_q, right_q])
+            safe_div = SQLBinaryOp(operator="/", left=left,
+                                   right=SQLFunctionCall(name="NULLIF", args=[right, SQLLiteral(value=0)]))
+            return SQLFunctionCall(name="TRUNC", args=[safe_div])
 
         if operator == "^":
             # Power
@@ -661,17 +719,40 @@ class OperatorsMixin:
             return self._translate_intersect_op(operator, left, right, expr)
         if operator == "except":
             # Row-producing operands -> SQL EXCEPT set operation
-            left_is_rows = isinstance(left, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept))
-            right_is_rows = isinstance(right, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept))
+            left_is_rows = isinstance(left, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect))
+            right_is_rows = isinstance(right, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect))
             if left_is_rows or right_is_rows:
                 left_op = SQLSubquery(query=left) if isinstance(left, SQLSelect) else left
                 right_op = SQLSubquery(query=right) if isinstance(right, SQLSelect) else right
                 return SQLExcept(operands=[left_op, right_op])
+            # CQL §19.14: X except null returns X
+            if isinstance(right, SQLNull):
+                return left
+            # CQL §19.14: null except X returns null
+            if isinstance(left, SQLNull):
+                return SQLNull()
+            # Interval operands → use intervalExcept UDF (CQL §19.12)
+            left_is_interval = self._is_fhir_interval_expression(left)
+            right_is_interval = self._is_fhir_interval_expression(right)
+            if left_is_interval or right_is_interval:
+                return SQLFunctionCall(name="intervalExcept", args=[left, right])
             # Fallback: CQL except for literal lists
-            # DuckDB doesn't have list_except; use list_filter with NOT list_contains
+            # Use list_filter with NOT list_contains to exclude right elements
             return SQLFunctionCall(
                 name="list_filter",
-                args=[left, SQLRaw(raw_sql=f"x -> NOT list_contains({right.to_sql()}, x)")],
+                args=[
+                    left,
+                    SQLLambda(
+                        param="_ex",
+                        body=SQLUnaryOp(
+                            operator="NOT",
+                            operand=SQLFunctionCall(
+                                name="list_contains",
+                                args=[right, SQLIdentifier(name="_ex")],
+                            ),
+                        ),
+                    ),
+                ],
             )
 
         # Interval operators - call UDFs
@@ -684,10 +765,114 @@ class OperatorsMixin:
         if operator == "during":
             return self._translate_during_op(operator, left, right, expr)
         if operator == "includes":
+            if self._is_list_operands(left, right, expr):
+                left_is_list = self._is_single_list_expr(left, getattr(expr, 'left', None))
+                right_is_list = self._is_single_list_expr(right, getattr(expr, 'right', None))
+                if left_is_list and not right_is_list:
+                    # List includes element → list_contains
+                    return SQLFunctionCall(name="list_contains", args=[left, right])
+                return SQLFunctionCall(name="list_has_all", args=[left, right])
             right_is_interval = self._is_fhir_interval_expression(right)
             if right_is_interval:
                 return SQLFunctionCall(name="intervalIncludes", args=[left, right])
             return SQLFunctionCall(name="intervalContains", args=[left, self._ensure_interval_varchar(right)])
+        if operator == "included in":
+            if self._is_list_operands(left, right, expr):
+                left_is_list = self._is_single_list_expr(left, getattr(expr, 'left', None))
+                right_is_list = self._is_single_list_expr(right, getattr(expr, 'right', None))
+                if right_is_list and not left_is_list:
+                    # Element included in list → list_contains
+                    return SQLFunctionCall(name="list_contains", args=[right, left])
+                return SQLFunctionCall(name="list_has_all", args=[right, left])
+            left_is_interval = self._is_fhir_interval_expression(left)
+            right_is_interval = self._is_fhir_interval_expression(right)
+            if left_is_interval:
+                l = self._unwrap_precision_wrapper(left)
+                r = self._unwrap_precision_wrapper(right) if right_is_interval else right
+                return SQLFunctionCall(name="intervalIncludedIn", args=[l, r])
+            if right_is_interval:
+                r = self._unwrap_precision_wrapper(right)
+                return SQLFunctionCall(name="intervalContains", args=[r, self._ensure_interval_varchar(left)])
+            return SQLFunctionCall(name="intervalContains", args=[right, self._ensure_interval_varchar(left)])
+        if operator == "properly includes":
+            if self._is_list_operands(left, right, expr):
+                left_is_list = self._is_single_list_expr(left, getattr(expr, 'left', None))
+                right_is_list = self._is_single_list_expr(right, getattr(expr, 'right', None))
+                if left_is_list and not right_is_list:
+                    # List properly includes element = contains AND len > 1
+                    # CQL §20.5: null containment check
+                    if isinstance(right, SQLNull) or (isinstance(right, SQLLiteral) and right.value is None):
+                        contains_check = SQLBinaryOp(
+                            operator="!=",
+                            left=SQLFunctionCall(name="len", args=[left]),
+                            right=SQLFunctionCall(name="list_count", args=[left]),
+                        )
+                    else:
+                        contains_check = SQLFunctionCall(name="list_contains", args=[left, right])
+                    return SQLBinaryOp(
+                        operator="AND",
+                        left=contains_check,
+                        right=SQLBinaryOp(
+                            operator=">",
+                            left=SQLFunctionCall(name="len", args=[left]),
+                            right=SQLLiteral(1),
+                        ),
+                    )
+                return SQLBinaryOp(
+                    operator="AND",
+                    left=SQLFunctionCall(name="list_has_all", args=[left, right]),
+                    right=SQLBinaryOp(
+                        operator=">",
+                        left=SQLFunctionCall(name="len", args=[left]),
+                        right=SQLFunctionCall(name="len", args=[right]),
+                    ),
+                )
+            right_is_interval = self._is_fhir_interval_expression(right)
+            if right_is_interval:
+                return SQLFunctionCall(name="intervalProperlyIncludes", args=[left, right])
+            return SQLFunctionCall(name="intervalProperlyContains", args=[left, self._ensure_interval_varchar(right)])
+        if operator == "properly included in":
+            if self._is_list_operands(left, right, expr):
+                left_is_list = self._is_single_list_expr(left, getattr(expr, 'left', None))
+                right_is_list = self._is_single_list_expr(right, getattr(expr, 'right', None))
+                if right_is_list and not left_is_list:
+                    # Element properly included in list = contains AND len > 1
+                    if isinstance(left, SQLNull) or (isinstance(left, SQLLiteral) and left.value is None):
+                        contains_check = SQLBinaryOp(
+                            operator="!=",
+                            left=SQLFunctionCall(name="len", args=[right]),
+                            right=SQLFunctionCall(name="list_count", args=[right]),
+                        )
+                    else:
+                        contains_check = SQLFunctionCall(name="list_contains", args=[right, left])
+                    return SQLBinaryOp(
+                        operator="AND",
+                        left=contains_check,
+                        right=SQLBinaryOp(
+                            operator=">",
+                            left=SQLFunctionCall(name="len", args=[right]),
+                            right=SQLLiteral(1),
+                        ),
+                    )
+                return SQLBinaryOp(
+                    operator="AND",
+                    left=SQLFunctionCall(name="list_has_all", args=[right, left]),
+                    right=SQLBinaryOp(
+                        operator=">",
+                        left=SQLFunctionCall(name="len", args=[right]),
+                        right=SQLFunctionCall(name="len", args=[left]),
+                    ),
+                )
+            left_is_interval = self._is_fhir_interval_expression(left)
+            right_is_interval = self._is_fhir_interval_expression(right)
+            if left_is_interval:
+                l = self._unwrap_precision_wrapper(left)
+                r = self._unwrap_precision_wrapper(right) if right_is_interval else right
+                return SQLFunctionCall(name="intervalProperlyIncludedIn", args=[l, r])
+            if right_is_interval:
+                r = self._unwrap_precision_wrapper(right)
+                return SQLFunctionCall(name="intervalProperlyContains", args=[r, self._ensure_interval_varchar(left)])
+            return SQLFunctionCall(name="intervalProperlyContains", args=[right, self._ensure_interval_varchar(left)])
         if operator == "before":
             return self._translate_before_op(operator, left, right, expr)
         if operator == "after":
@@ -732,20 +917,19 @@ class OperatorsMixin:
             if self._is_fhir_interval_expression(right):
                 _right_fn = "intervalStart" if _direction in ("before", "on or before") else "intervalEnd"
                 _right = SQLFunctionCall(name=_right_fn, args=[right])
-            # Truncate to precision
-            def _truncate_to_precision(expr, precision):
-                if precision == "day":
-                    return SQLCast(expression=expr, target_type="DATE")
-                elif precision in ("month", "year", "hour", "minute", "second"):
-                    return SQLFunctionCall(name="date_trunc", args=[SQLLiteral(value=precision), expr])
-                return expr
+            # Truncate to precision — delegate to the class-level method
+            # which handles casting string literals for date_trunc.
             return SQLBinaryOp(
                 operator=_op,
-                left=_truncate_to_precision(left, _precision),
-                right=_truncate_to_precision(_right, _precision),
+                left=self._truncate_to_precision(left, _precision),
+                right=self._truncate_to_precision(_right, _precision),
             )
         if operator == "meets":
             return SQLFunctionCall(name="intervalMeets", args=[left, right])
+        if operator == "meets before":
+            return SQLFunctionCall(name="intervalMeetsBefore", args=[left, right])
+        if operator == "meets after":
+            return SQLFunctionCall(name="intervalMeetsAfter", args=[left, right])
         if operator == "starts":
             return self._translate_starts_op(operator, left, right, expr)
         if operator == "ends":
@@ -849,13 +1033,34 @@ class OperatorsMixin:
             )
         # Check if left is a list/array-returning expression
         if _is_list_returning_sql(left):
+            # CQL §20.5: list contains null → true if list has null elements
+            if isinstance(right, SQLNull) or (isinstance(right, SQLLiteral) and right.value is None):
+                return SQLBinaryOp(
+                    operator="!=",
+                    left=SQLFunctionCall(name="len", args=[left]),
+                    right=SQLFunctionCall(name="list_count", args=[left]),
+                )
             return SQLFunctionCall(name="list_contains", args=[left, right])
+        # Interval contains point: when left is an interval-producing expression
+        if self._is_fhir_interval_expression(left) or (
+            isinstance(left, SQLFunctionCall) and left.name == "intervalFromBounds"
+        ):
+            return SQLFunctionCall(
+                name="intervalContains",
+                args=[left, self._ensure_interval_varchar(right)],
+            )
         # String contains: CQL 'left contains right' → contains(left, right)
         return SQLFunctionCall(name="system.contains", args=[left, right])
 
 
     def _translate_in_op(self, operator, left, right, expr, boolean_context) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
+        # CQL §20.10/§20.5: X in null_list → false (not null)
+        if isinstance(right, SQLNull) or (isinstance(right, SQLLiteral) and right.value is None):
+            return SQLLiteral(False)
+        # Do NOT short-circuit when left is null — list `in` has special
+        # null semantics: null in list → true if list has null elements.
+        # (This is handled by the list_has_null check below.)
         # Handle "X in <precision> of <interval>" (e.g., X in day of Y)
         # Parser produces: BinaryExpression(operator='in',
         #   left=X, right=BinaryExpression(operator='precision of', left=Literal(unit), right=interval))
@@ -968,6 +1173,14 @@ class OperatorsMixin:
             left = self.translate(expr.left, usage=ExprUsage.SCALAR)
             list_elements = [self.translate(e, usage=ExprUsage.SCALAR) for e in expr.right.elements]
             array = SQLArray(elements=list_elements)
+            # CQL §20.5/§20.10: null in list → true if list has null elements
+            if isinstance(left, SQLNull) or (isinstance(left, SQLLiteral) and left.value is None):
+                # len() counts nulls, list_count() skips them
+                return SQLBinaryOp(
+                    operator="!=",
+                    left=SQLFunctionCall(name="len", args=[array]),
+                    right=SQLFunctionCall(name="list_count", args=[array]),
+                )
             return SQLFunctionCall(
                 name="array_contains",
                 args=[array, left],
@@ -976,6 +1189,25 @@ class OperatorsMixin:
         if isinstance(expr.right, Interval):
             interval = self.translate(expr.right, usage=ExprUsage.SCALAR)
             if isinstance(interval, SQLInterval):
+                # If bounds are Quantity expressions, delegate to intervalContains UDF
+                # to avoid type mismatch between scalar and VARCHAR Quantity bounds
+                low_is_qty = _is_quantity_expression(interval.low) if interval.low else False
+                high_is_qty = _is_quantity_expression(interval.high) if interval.high else False
+                if low_is_qty or high_is_qty:
+                    # Build interval from bounds and use intervalContains
+                    low_bound = SQLCast(expression=interval.low, target_type="VARCHAR") if interval.low else SQLNull()
+                    high_bound = SQLCast(expression=interval.high, target_type="VARCHAR") if interval.high else SQLNull()
+                    interval_expr = SQLFunctionCall(
+                        name="intervalFromBounds",
+                        args=[
+                            low_bound, high_bound,
+                            SQLLiteral(value=interval.low_closed),
+                            SQLLiteral(value=interval.high_closed),
+                        ],
+                    )
+                    point_str = SQLCast(expression=left, target_type="VARCHAR")
+                    return SQLFunctionCall(name="intervalContains", args=[interval_expr, point_str])
+
                 # Generate BETWEEN syntax
                 low_sql = interval.low
                 high_sql = interval.high
@@ -991,7 +1223,10 @@ class OperatorsMixin:
                             else:
                                 high_sql = qty_val
                 # Handle closed/open bounds
-                if interval.low_closed and interval.high_closed:
+                # Check if either bound is null (unbounded interval)
+                low_is_null = isinstance(low_sql, SQLNull) or (isinstance(low_sql, SQLLiteral) and low_sql.value is None)
+                high_is_null = isinstance(high_sql, SQLNull) or (isinstance(high_sql, SQLLiteral) and high_sql.value is None)
+                if not low_is_null and not high_is_null and interval.low_closed and interval.high_closed:
                     # [a, b] -> x BETWEEN a AND b
                     return SQLBinaryOp(
                         operator="BETWEEN",
@@ -1005,17 +1240,19 @@ class OperatorsMixin:
                     # [a, b) -> x >= a AND x < b
                     # (a, b] -> x > a AND x <= b
                     conditions = []
-                    if interval.low:
+                    if not low_is_null and interval.low is not None:
                         op_low = ">=" if interval.low_closed else ">"
                         conditions.append(SQLBinaryOp(operator=op_low, left=left, right=low_sql))
-                    if interval.high:
+                    if not high_is_null and interval.high is not None:
                         op_high = "<=" if interval.high_closed else "<"
                         conditions.append(SQLBinaryOp(operator=op_high, left=left, right=high_sql))
                     if len(conditions) == 2:
                         return SQLBinaryOp(operator="AND", left=conditions[0], right=conditions[1])
                     elif len(conditions) == 1:
                         return conditions[0]
-                    return SQLLiteral(value=True)
+                    # Both bounds null: per CQL §19.14, if the interval is null, result is false.
+                    # Interval[null, null] with untyped nulls is a null interval (§5.4).
+                    return SQLLiteral(value=False)
         # Otherwise, regular IN operator.
         # When the right side is fhirpath_text (returns only the first
         # value), convert to list_contains so all values are checked.
@@ -1042,6 +1279,23 @@ class OperatorsMixin:
 
     def _translate_union_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
+        # CQL §19.31 / §20.29: If either argument is null, the result is null.
+        # For non-subquery operands, wrap with null check.
+        left_is_rows = isinstance(left, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect))
+        right_is_rows = isinstance(right, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect))
+        if not left_is_rows and not right_is_rows:
+            # Check if either side could be null (SQLNull or interval/literal)
+            if isinstance(left, SQLNull) or isinstance(right, SQLNull):
+                return SQLNull()
+
+        # CQL §19.31: Interval union — use intervalUnion UDF which returns
+        # null when intervals do not overlap or meet.
+        if not left_is_rows and not right_is_rows:
+            left_is_interval = self._is_fhir_interval_expression(left)
+            right_is_interval = self._is_fhir_interval_expression(right)
+            if left_is_interval and right_is_interval:
+                return SQLFunctionCall(name="intervalUnion", args=[left, right])
+
         # CQL union -> SQL UNION ALL (preserves duplicates)
         # Use the already-translated SCALAR operands but normalize for union.
         # Widening single-column selects to SELECT * ensures column parity.
@@ -1129,15 +1383,12 @@ class OperatorsMixin:
                     use_distinct = not self._check_union_disjointness(all_subqueries)
                     return SQLUnion(operands=all_subqueries, distinct=use_distinct)
 
-        # Case 5: One operand is a set operation (INTERSECT/EXCEPT)
-        # paired with a subquery or union. Wrap the set op so it
-        # can participate in the UNION.  When BOTH operands are set
-        # ops, fall through to jsonConcat to preserve any correlated
-        # references that require an outer FROM _patients wrapper.
+        # Case 5: One or both operands are set operations (INTERSECT/EXCEPT).
+        # Wrap each set op in SQLSubquery so it can participate in UNION.
         set_op_types = (SQLIntersect, SQLExcept)
         left_is_set = isinstance(left, set_op_types)
         right_is_set = isinstance(right, set_op_types)
-        if (left_is_set or right_is_set) and not (left_is_set and right_is_set):
+        if left_is_set or right_is_set:
             def _wrap_set_op(set_op):
                 """Wrap a set op in SQLSubquery, stripping patient_id correlation."""
                 normalized_ops = []
@@ -1182,12 +1433,46 @@ class OperatorsMixin:
                 use_distinct = not self._check_union_disjointness(operands)
                 return SQLUnion(operands=operands, distinct=use_distinct)
 
+        # Case 6: Both are SQL arrays (list literals) → use list_concat
+        if isinstance(left, SQLArray) and isinstance(right, SQLArray):
+            return SQLFunctionCall(
+                name='"Distinct"',
+                args=[SQLFunctionCall(name="list_concat", args=[left, right])],
+            )
+
+        # Case 6b: One array, one non-null scalar → use list_concat
+        if isinstance(left, SQLArray) or isinstance(right, SQLArray):
+            inner = SQLFunctionCall(
+                name='"Distinct"',
+                args=[SQLFunctionCall(name="list_concat", args=[left, right])],
+            )
+            # Null check on the non-array side
+            non_array = right if isinstance(left, SQLArray) else left
+            if isinstance(non_array, SQLNull):
+                return SQLNull()
+            return inner
+
         # Fallback: use jsonConcat UDF which handles scalars, lists, and JSON
-        # values from subqueries. Wrap in list_distinct for CQL dedup semantics.
-        return SQLFunctionCall(
-            name="list_distinct",
+        # values from subqueries. Wrap in order-preserving Distinct for CQL dedup.
+        # CQL §19.31 / §20.29: If either argument is null, result is null.
+        # For non-row operands, wrap in CASE WHEN to propagate runtime nulls.
+        inner = SQLFunctionCall(
+            name='"Distinct"',
             args=[SQLFunctionCall(name="jsonConcat", args=[left, right])],
         )
+        if not left_is_rows and not right_is_rows:
+            return SQLCase(
+                when_clauses=[(
+                    SQLBinaryOp(
+                        left=SQLBinaryOp(left=left, operator="IS NOT NULL", right=SQLRaw("")),
+                        operator="AND",
+                        right=SQLBinaryOp(left=right, operator="IS NOT NULL", right=SQLRaw("")),
+                    ),
+                    inner,
+                )],
+                else_clause=SQLNull(),
+            )
+        return inner
 
     def _translate_intersect_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
@@ -1206,27 +1491,8 @@ class OperatorsMixin:
         right_is_interval = (self._is_fhir_interval_expression(right) or isinstance(right, SQLInterval)
                              or isinstance(expr.right, CQLInterval))
         if left_is_interval or right_is_interval:
-            # Interval A intersect Interval B =
-            # intervalFromBounds(GREATEST(start(A), start(B)), LEAST(end(A), end(B)))
-            # Returns NULL when intervals don't overlap
-            a_start = SQLFunctionCall(name="intervalStart", args=[left])
-            a_end = SQLFunctionCall(name="intervalEnd", args=[left])
-            b_start = SQLFunctionCall(name="intervalStart", args=[right])
-            b_end = SQLFunctionCall(name="intervalEnd", args=[right])
-            new_start = SQLFunctionCall(name="GREATEST", args=[a_start, b_start])
-            new_end = SQLFunctionCall(name="LEAST", args=[a_end, b_end])
-            intersection = SQLFunctionCall(
-                name="intervalFromBounds",
-                args=[new_start, new_end, SQLLiteral(value=True), SQLLiteral(value=True)],
-            )
-            # Return NULL if no overlap (start > end)
-            return SQLCase(
-                when_clauses=[(
-                    SQLBinaryOp(operator="<=", left=new_start, right=new_end),
-                    intersection,
-                )],
-                else_clause=SQLNull(),
-            )
+            # Use intervalIntersect UDF for type-safe comparison of interval bounds
+            return SQLFunctionCall(name="intervalIntersect", args=[left, right])
         # Fallback: CQL intersect for literal lists -> list_intersect in DuckDB
         return SQLFunctionCall(name="list_intersect", args=[left, right])
 
@@ -1479,32 +1745,60 @@ class OperatorsMixin:
             return SQLFunctionCall(name="intervalIncludes", args=[right, left])
         return SQLFunctionCall(name="intervalContains", args=[right, self._ensure_interval_varchar(left)])
 
+    @staticmethod
+    def _unwrap_precision_wrapper(expr: SQLExpression) -> SQLExpression:
+        """Strip DATE_TRUNC / CAST wrappers added by precision-of translation.
+
+        When ``X on or after month of Interval[...]`` is parsed, the right
+        operand becomes ``DATE_TRUNC('month', intervalFromBounds(...))``.
+        For interval UDF calls we need the raw interval, not the truncated
+        form.
+        """
+        if isinstance(expr, SQLFunctionCall) and expr.name and expr.name.upper() == "DATE_TRUNC":
+            if len(expr.args) >= 2:
+                return expr.args[1]
+        if isinstance(expr, SQLCast):
+            return expr.expression
+        return expr
+
+    @staticmethod
+    def _point_as_interval(point: SQLExpression) -> SQLExpression:
+        """Wrap a point value as a degenerate interval [point, point].
+        
+        Used for before/after/on-or-before/on-or-after when comparing
+        non-temporal intervals (Quantity, Integer, Decimal) where SQL
+        comparison operators can't handle the VARCHAR values from
+        intervalStart/End.
+        """
+        cast_point = SQLCast(expression=point, target_type="VARCHAR")
+        return SQLFunctionCall(
+            name="intervalFromBounds",
+            args=[cast_point, cast_point, SQLLiteral(value=True), SQLLiteral(value=True)],
+        )
+
     def _translate_before_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
         left_is_interval = self._is_fhir_interval_expression(left)
         right_is_interval = self._is_fhir_interval_expression(right)
         if left_is_interval and right_is_interval:
             return SQLFunctionCall(name="intervalBefore", args=[left, right])
-        # Point before point → CAST(left AS TIMESTAMP) < CAST(right AS TIMESTAMP)
-        # Use TIMESTAMP to preserve sub-day precision for dateTime values
-        if not left_is_interval and not right_is_interval:
-            return SQLBinaryOp(
-                operator="<",
-                left=self._ensure_date_cast(left, "TIMESTAMP"),
-                right=self._ensure_date_cast(right, "TIMESTAMP"),
+        # Mixed interval/point: wrap point as degenerate interval and use UDF
+        if left_is_interval and not right_is_interval:
+            return SQLFunctionCall(
+                name="intervalBefore",
+                args=[left, self._point_as_interval(right)],
             )
-        # Interval before point → intervalEnd(left) < right
-        if left_is_interval:
-            return SQLBinaryOp(
-                operator="<",
-                left=self._ensure_date_cast(SQLFunctionCall(name="intervalEnd", args=[left]), "TIMESTAMP"),
-                right=self._ensure_date_cast(right, "TIMESTAMP"),
+        if right_is_interval and not left_is_interval:
+            return SQLFunctionCall(
+                name="intervalBefore",
+                args=[self._point_as_interval(left), right],
             )
-        # Point before interval → left < intervalStart(right)
+        # Point before point — infer cast from operand types (may be numeric)
+        cast_type = self._infer_cast_type_for_comparison(left, right)
         return SQLBinaryOp(
             operator="<",
-            left=self._ensure_date_cast(left, "TIMESTAMP"),
-            right=self._ensure_date_cast(SQLFunctionCall(name="intervalStart", args=[right]), "TIMESTAMP"),
+            left=self._ensure_date_cast(left, cast_type),
+            right=self._ensure_date_cast(right, cast_type),
         )
 
     def _translate_after_op(self, operator, left, right, expr) -> SQLExpression:
@@ -1513,26 +1807,23 @@ class OperatorsMixin:
         right_is_interval = self._is_fhir_interval_expression(right)
         if left_is_interval and right_is_interval:
             return SQLFunctionCall(name="intervalAfter", args=[left, right])
-        # Point after point → CAST(left AS TIMESTAMP) > CAST(right AS TIMESTAMP)
-        # Use TIMESTAMP to preserve sub-day precision for dateTime values
-        if not left_is_interval and not right_is_interval:
-            return SQLBinaryOp(
-                operator=">",
-                left=self._ensure_date_cast(left, "TIMESTAMP"),
-                right=self._ensure_date_cast(right, "TIMESTAMP"),
+        # Mixed interval/point: wrap point as degenerate interval and use UDF
+        if left_is_interval and not right_is_interval:
+            return SQLFunctionCall(
+                name="intervalAfter",
+                args=[left, self._point_as_interval(right)],
             )
-        # Interval after point → intervalStart(left) > right
-        if left_is_interval:
-            return SQLBinaryOp(
-                operator=">",
-                left=self._ensure_date_cast(SQLFunctionCall(name="intervalStart", args=[left]), "TIMESTAMP"),
-                right=self._ensure_date_cast(right, "TIMESTAMP"),
+        if right_is_interval and not left_is_interval:
+            return SQLFunctionCall(
+                name="intervalAfter",
+                args=[self._point_as_interval(left), right],
             )
-        # Point after interval → left > intervalEnd(right)
+        # Point after point — infer cast from operand types (may be numeric)
+        cast_type = self._infer_cast_type_for_comparison(left, right)
         return SQLBinaryOp(
             operator=">",
-            left=self._ensure_date_cast(left, "TIMESTAMP"),
-            right=self._ensure_date_cast(SQLFunctionCall(name="intervalEnd", args=[right]), "TIMESTAMP"),
+            left=self._ensure_date_cast(left, cast_type),
+            right=self._ensure_date_cast(right, cast_type),
         )
 
     def _translate_starts_op(self, operator, left, right, expr) -> SQLExpression:
@@ -2067,6 +2358,14 @@ class OperatorsMixin:
                 return SQLUnaryOp(operator="NOT", operand=_cc_result)
             return _cc_result
 
+        # CQL §12.1/§12.2: List equivalence requires element type compatibility.
+        # DuckDB implicitly coerces [1,2,3] = ['1','2','3'] to true; CQL does not.
+        if isinstance(left, SQLArray) and isinstance(right, SQLArray):
+            left_types = {type(e.value).__name__ for e in left.elements if isinstance(e, SQLLiteral)}
+            right_types = {type(e.value).__name__ for e in right.elements if isinstance(e, SQLLiteral)}
+            if left_types and right_types and left_types.isdisjoint(right_types):
+                return SQLLiteral(value=is_negated)
+
         equiv_case = SQLCase(
             when_clauses=[
                 (
@@ -2293,30 +2592,34 @@ class OperatorsMixin:
         # Date/DateTime arithmetic with Quantity, or Quantity ± Quantity
         # Pattern: date + quantity, date - quantity, quantity - quantity
         if operator in ("+", "-"):
-            # Check if either side is a quantity (parse_quantity function call)
-            left_is_quantity = isinstance(left, SQLFunctionCall) and left.name == "parse_quantity"
-            right_is_quantity = isinstance(right, SQLFunctionCall) and right.name == "parse_quantity"
+            # Check if either side is a quantity (parse_quantity function call or CQL AST)
+            left_is_quantity = _is_quantity_expression(left) or self._is_cql_quantity_expr(expr.left)
+            right_is_quantity = _is_quantity_expression(right) or self._is_cql_quantity_expr(expr.right)
 
             if left_is_quantity and right_is_quantity:
                 # Quantity ± Quantity — use unit-aware arithmetic UDFs
+                left_q = _ensure_parse_quantity(left)
+                right_q = _ensure_parse_quantity(right)
                 if operator == "+":
-                    return SQLFunctionCall(name="quantity_add", args=[left, right])
+                    return SQLFunctionCall(name="quantity_add", args=[left_q, right_q])
                 else:
-                    return SQLFunctionCall(name="quantity_subtract", args=[left, right])
+                    return SQLFunctionCall(name="quantity_subtract", args=[left_q, right_q])
 
             if right_is_quantity:
                 # date + quantity or date - quantity
                 # dateAddQuantity UDF expects VARCHAR inputs, returns VARCHAR
                 date_arg = SQLCast(expression=left, target_type="VARCHAR") if not isinstance(left, SQLLiteral) else left
+                right_q_json = right.args[0] if isinstance(right, SQLFunctionCall) and right.name == "parse_quantity" else right
                 if operator == "+":
-                    return SQLFunctionCall(name="dateAddQuantity", args=[date_arg, right.args[0]])
+                    return SQLFunctionCall(name="dateAddQuantity", args=[date_arg, right_q_json])
                 else:  # operator == "-"
-                    return SQLFunctionCall(name="dateSubtractQuantity", args=[date_arg, right.args[0]])
+                    return SQLFunctionCall(name="dateSubtractQuantity", args=[date_arg, right_q_json])
             elif left_is_quantity:
                 # quantity + date (swap order)
                 date_arg = SQLCast(expression=right, target_type="VARCHAR") if not isinstance(right, SQLLiteral) else right
+                left_q_json = left.args[0] if isinstance(left, SQLFunctionCall) and left.name == "parse_quantity" else left
                 if operator == "+":
-                    return SQLFunctionCall(name="dateAddQuantity", args=[date_arg, left.args[0]])
+                    return SQLFunctionCall(name="dateAddQuantity", args=[date_arg, left_q_json])
                 # quantity - date doesn't make sense, fall through
 
             # CQL Date/DateTime +/- Integer: per CQL spec, integer arithmetic on
@@ -2328,12 +2631,18 @@ class OperatorsMixin:
                     interval_lit = SQLIntervalLiteral(value=int(expr.right.value), unit="year")
                     return SQLBinaryOp(operator=operator, left=left, right=interval_lit)
 
-        # Quantity * scalar and Quantity / scalar arithmetic.
-        # parse_quantity returns VARCHAR; no quantity_multiply UDF exists, so
-        # build a new quantity JSON with the scaled value.
+        # Quantity * scalar and Quantity / scalar arithmetic, or Quantity * Quantity / Quantity / Quantity.
         if operator in ("*", "/"):
             left_is_quantity = _is_quantity_expression(left) or self._is_cql_quantity_expr(expr.left)
             right_is_quantity = _is_quantity_expression(right) or self._is_cql_quantity_expr(expr.right)
+            if left_is_quantity and right_is_quantity:
+                # Quantity * Quantity or Quantity / Quantity — use UDFs
+                left_q = _ensure_parse_quantity(left)
+                right_q = _ensure_parse_quantity(right)
+                if operator == "*":
+                    return SQLFunctionCall(name="quantityMultiply", args=[left_q, right_q])
+                else:
+                    return SQLFunctionCall(name="quantityDivide", args=[left_q, right_q])
             if left_is_quantity and not right_is_quantity:
                 scalar = SQLCast(expression=right, target_type="DOUBLE") if not isinstance(right, SQLLiteral) else right
                 return self._build_scaled_quantity(left, scalar, operator)
@@ -2429,6 +2738,22 @@ class OperatorsMixin:
                 )
                 return self._maybe_wrap_audit_comparison(result, operator, left, right)
 
+        # Type coercion for intervalStart/intervalEnd VARCHAR results compared
+        # with typed literals (integer, float).  The interval UDFs return VARCHAR
+        # but the point values may be numeric.
+        if operator in ("<", "<=", ">", ">=", "=", "!=", "<>"):
+            def _is_interval_start_end(e):
+                return isinstance(e, SQLFunctionCall) and e.name in ("intervalStart", "intervalEnd")
+
+            if _is_interval_start_end(left) or _is_interval_start_end(right):
+                cast_type = self._infer_cast_type_for_comparison(left, right)
+                if cast_type != "TIMESTAMP":
+                    # Numeric comparison — cast the intervalStart/End result
+                    if _is_interval_start_end(left):
+                        left = SQLCast(expression=left, target_type=cast_type, try_cast=True)
+                    if _is_interval_start_end(right):
+                        right = SQLCast(expression=right, target_type=cast_type, try_cast=True)
+
         # Standard binary operator
         sql_op = BINARY_OPERATOR_MAP.get(operator, operator)
 
@@ -2458,6 +2783,15 @@ class OperatorsMixin:
                 return False
             if _is_string_typed(left) or _is_string_typed(right):
                 return SQLBinaryOp(operator="||", left=left, right=right)
+
+        # Quantity arithmetic for mod (%) operator: route to quantityModulo UDF
+        if sql_op == "%":
+            left_is_quantity = _is_quantity_expression(left) or self._is_cql_quantity_expr(expr.left)
+            right_is_quantity = _is_quantity_expression(right) or self._is_cql_quantity_expr(expr.right)
+            if left_is_quantity or right_is_quantity:
+                left_q = _ensure_parse_quantity(left)
+                right_q = _ensure_parse_quantity(right)
+                return SQLFunctionCall(name="quantityModulo", args=[left_q, right_q])
 
         # Cast fhirpath_text results to DOUBLE for arithmetic operators
         if sql_op in ("+", "-", "*", "/", "%"):
@@ -2564,7 +2898,17 @@ class OperatorsMixin:
 
             # Handle DATE vs VARCHAR type mismatch: cast VARCHAR side to DATE
             def _is_date_typed(expr):
-                return isinstance(expr, SQLCast) and expr.target_type == "DATE"
+                if isinstance(expr, SQLCast) and expr.target_type == "DATE":
+                    return True
+                # CURRENT_DATE is DATE typed
+                if isinstance(expr, SQLRaw) and 'CURRENT_DATE' in expr.raw_sql:
+                    return True
+                if isinstance(expr, SQLIdentifier) and expr.name == 'CURRENT_DATE':
+                    return True
+                return False
+            def _is_date_udf(expr):
+                """dateAddQuantity/dateSubtractQuantity return VARCHAR date strings."""
+                return isinstance(expr, SQLFunctionCall) and expr.name in ('dateAddQuantity', 'dateSubtractQuantity')
             def _is_varchar_typed(expr):
                 if isinstance(expr, SQLCase):
                     return True
@@ -2575,6 +2919,24 @@ class OperatorsMixin:
                 right = SQLCast(expression=right, target_type="DATE", try_cast=True)
             elif _is_date_typed(right) and _is_varchar_typed(left):
                 left = SQLCast(expression=left, target_type="DATE", try_cast=True)
+            # dateAddQuantity/dateSubtractQuantity return VARCHAR; cast to DATE for comparisons
+            if _is_date_udf(left) and _is_date_typed(right):
+                left = SQLCast(expression=left, target_type="DATE", try_cast=True)
+            elif _is_date_udf(right) and _is_date_typed(left):
+                right = SQLCast(expression=right, target_type="DATE", try_cast=True)
+
+        # CQL §16.4: division by zero returns null — wrap the divisor with NULLIF
+        if sql_op == "/":
+            right = SQLFunctionCall(name="NULLIF", args=[right, SQLLiteral(value=0)])
+
+        # CQL §12.1/§12.2: List equality requires element type compatibility.
+        # DuckDB implicitly coerces [1,2,3] = ['1','2','3'] to true; CQL does not.
+        if sql_op in ("=", "!=") and isinstance(left, SQLArray) and isinstance(right, SQLArray):
+            left_types = {type(e.value).__name__ for e in left.elements if isinstance(e, SQLLiteral)}
+            right_types = {type(e.value).__name__ for e in right.elements if isinstance(e, SQLLiteral)}
+            if left_types and right_types and left_types.isdisjoint(right_types):
+                result = SQLLiteral(value=(sql_op == "!="))
+                return self._maybe_wrap_audit_comparison(result, operator, left, right)
 
         result = SQLBinaryOp(operator=sql_op, left=left, right=right, precedence=precedence)
         return self._maybe_wrap_audit_comparison(result, operator, left, right)
@@ -2626,6 +2988,9 @@ class OperatorsMixin:
             return SQLUnaryOp(operator="IS NOT FALSE", operand=operand, prefix=False)
 
         if operator == "-":
+            # CQL §16.8: Negate — for Quantity operands, use quantityNegate UDF
+            if _is_quantity_expression(operand) or self._is_cql_quantity_expr(expr.operand):
+                return SQLFunctionCall(name="quantityNegate", args=[_ensure_parse_quantity(operand)])
             return SQLUnaryOp(operator="-", operand=operand, prefix=True)
 
         if operator == "+":
@@ -2665,22 +3030,18 @@ class OperatorsMixin:
         if operator == "width of":
             return SQLFunctionCall(name="intervalWidth", args=[operand])
 
+        # CQL §19.22: point from — extracts the single point from a unit interval
+        if operator == "point from":
+            return SQLFunctionCall(name="pointFrom", args=[operand])
+
         # Ordinal operators: predecessor of, successor of
+        # CQL §22.25/§22.26: step size depends on type
+        # Integer: ±1, Decimal: ±10^-8, Long: ±1
         if operator == "predecessor of":
-            # predecessor of value -> value - 1
-            return SQLBinaryOp(
-                operator="-",
-                left=operand,
-                right=SQLLiteral(value=1),
-            )
+            return SQLFunctionCall(name="predecessorOf", args=[operand])
 
         if operator == "successor of":
-            # successor of value -> value + 1
-            return SQLBinaryOp(
-                operator="+",
-                left=operand,
-                right=SQLLiteral(value=1),
-            )
+            return SQLFunctionCall(name="successorOf", args=[operand])
 
         # Singleton from operator - extract single element from list
         if operator == "singleton from":

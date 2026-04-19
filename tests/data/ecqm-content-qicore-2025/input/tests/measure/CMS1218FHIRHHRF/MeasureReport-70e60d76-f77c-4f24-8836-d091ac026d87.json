@@ -1,0 +1,97 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "70e60d76-f77c-4f24-8836-d091ac026d87",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "d3fc7304-46ef-49c9-a150-b1fd0c4ddb40-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "23191b54-f639-47a2-88ad-dc7fabaec98a"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#d3fc7304-46ef-49c9-a150-b1fd0c4ddb40-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "2 encounters. Enc1: O2 after procedure Enc2: MV after end of procedure  Fails numerator because enc1 has no MV, and enc2 has no O2"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS1218FHIRHHRF",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 2
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 2
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Encounter/5bbcebea-8797-4215-89eb-9d5676302902"
+  }, {
+    "reference": "Procedure/8746e118-3528-4891-8990-7a1d80fced5c"
+  }, {
+    "reference": "Procedure/012bd184-d441-4762-8dff-2af41ba76e8f"
+  }, {
+    "reference": "Procedure/e5fd07ec-7544-427c-94fe-b96f50909b1f"
+  }, {
+    "reference": "Encounter/8557ebf3-06db-4f45-92cf-df4a20e99102"
+  }, {
+    "reference": "Procedure/e3eeb581-567e-4c43-8e43-20d1eb827134"
+  }, {
+    "reference": "Patient/23191b54-f639-47a2-88ad-dc7fabaec98a"
+  } ]
+}

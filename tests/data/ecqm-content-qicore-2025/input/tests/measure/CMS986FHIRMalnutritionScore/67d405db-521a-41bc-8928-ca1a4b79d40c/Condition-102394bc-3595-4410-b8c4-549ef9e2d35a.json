@@ -1,0 +1,46 @@
+{
+  "resourceType": "Condition",
+  "id": "102394bc-3595-4410-b8c4-549ef9e2d35a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "E44.0",
+      "display": "Moderate protein-calorie malnutrition",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/67d405db-521a-41bc-8928-ca1a4b79d40c"
+  },
+  "onsetPeriod": {
+    "start": "2026-07-01T08:00:00.000+00:00"
+  },
+  "recordedDate": "2026-07-01T11:00:00.000+00:00"
+}

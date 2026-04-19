@@ -1,0 +1,102 @@
+{
+  "resourceType": "Group",
+  "id": "CMS826FHIRHHPI",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS826FHIRHHPI"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/7f0a0909-3618-4bea-899e-0a12c8aed445",
+      "display": "Age17inEDAge18DayOfAdmitToIP DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7f0a0909-3618-4bea-899e-0a12c8aed445",
+      "display": "Age17inEDAge18DayOfAdmitToIP DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/39fd854c-e5c0-440e-a88d-1585af66cb1c",
+      "display": "Age17inEDAge18DayOfAdmitToIP DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/39fd854c-e5c0-440e-a88d-1585af66cb1c",
+      "display": "Age17inEDAge18DayOfAdmitToIP DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/56336dd0-efe8-4251-b599-dd3f47279d6d",
+      "display": "Age17StartOfIPHospitalizations IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/56336dd0-efe8-4251-b599-dd3f47279d6d",
+      "display": "Age17StartOfIPHospitalizations IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/865b3218-9d2a-4512-b76e-ed70c25324e6",
+      "display": "IPEncounterWithNewUnstageableNotPOAIndicator NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/865b3218-9d2a-4512-b76e-ed70c25324e6",
+      "display": "IPEncounterWithNewUnstageableNotPOAIndicator NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/73c1a7c6-2bcf-4e6d-b913-9125137da33a",
+      "display": "NewDTInjuryByExamGT72Hrs NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/73c1a7c6-2bcf-4e6d-b913-9125137da33a",
+      "display": "NewDTInjuryByExamGT72Hrs NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f43f3deb-0762-48f6-a8c5-81303d6cd681",
+      "display": "IPEncounterWithNewUnstageableNotPOAIndicator NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f43f3deb-0762-48f6-a8c5-81303d6cd681",
+      "display": "IPEncounterWithNewUnstageableNotPOAIndicator NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/599d4177-ae6e-4448-8b7d-9cfcdbdd9dc9",
+      "display": "NewDTInjuryByExamGT72Hrs NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/599d4177-ae6e-4448-8b7d-9cfcdbdd9dc9",
+      "display": "NewDTInjuryByExamGT72Hrs NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6e5ce204-2257-40d5-a356-13614de68783",
+      "display": "IPEncounterWithNewUnstageableNotPOAIndicator NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/6e5ce204-2257-40d5-a356-13614de68783",
+      "display": "IPEncounterWithNewUnstageableNotPOAIndicator NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bc28b32e-1c2f-457c-8c60-f36041a2519b",
+      "display": "IPEncounterWithNewUnstageableNotPOAIndicator NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bc28b32e-1c2f-457c-8c60-f36041a2519b",
+      "display": "IPEncounterWithNewUnstageableNotPOAIndicator NUMERPass"
+    }
+  } ]
+}

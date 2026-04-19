@@ -1,0 +1,86 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.600.791-20250325",
+  "meta": {
+    "versionId": "44",
+    "lastUpdated": "2025-03-25T01:12:16.000-04:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Institutes for Research Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-03-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-03-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.791",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.600.791"
+  } ],
+  "version": "20250325",
+  "name": "PatientDeclined",
+  "title": "Patient Declined",
+  "status": "active",
+  "date": "2025-03-25T01:12:16-04:00",
+  "publisher": "American Institutes for Research Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts indicating a reason for patient refusal.),(Data Element Scope: This value set may use a model element related to Negation Rationale.),(Inclusion Criteria: Includes concepts that identify a reason for refusing treatment.),(Exclusion Criteria: No exclusions.)",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "1296859006",
+        "display": "Procedure declined (situation)"
+      }, {
+        "code": "183945002",
+        "display": "Procedure declined for religious reason (situation)"
+      }, {
+        "code": "413311005",
+        "display": "Patient non-compliant - declined intervention / support (situation)"
+      }, {
+        "code": "895451009",
+        "display": "Referral to service declined by subject (situation)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:0efc10f0-d475-4d70-86ec-971423f6a792",
+    "timestamp": "2025-06-20T17:01:14-04:00",
+    "total": 3,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "183945002",
+      "display": "Procedure declined for religious reason (situation)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "413311005",
+      "display": "Patient non-compliant - declined intervention / support (situation)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "895451009",
+      "display": "Referral to service declined by subject (situation)"
+    } ]
+  }
+}

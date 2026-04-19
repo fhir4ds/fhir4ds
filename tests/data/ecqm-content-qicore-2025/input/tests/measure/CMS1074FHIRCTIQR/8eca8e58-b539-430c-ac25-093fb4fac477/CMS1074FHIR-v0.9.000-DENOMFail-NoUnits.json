@@ -1,0 +1,253 @@
+{
+  "resourceType": "Bundle",
+  "id": "denomfail-nounits",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/8eca8e58-b539-430c-ac25-093fb4fac477",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "8eca8e58-b539-430c-ac25-093fb4fac477",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient", "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2028-9",
+            "display": "Asian"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Asian"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-sex",
+        "valueCode": "248153007"
+      } ],
+      "identifier": [ {
+        "system": "http://hospital.smarthealthit.org",
+        "value": "999999995"
+      } ],
+      "name": [ {
+        "family": "NoUnits",
+        "given": [ "DENOMFail" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1985-06-12"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/8eca8e58-b539-430c-ac25-093fb4fac477"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/d70851f0-fdcf-4635-97de-c0cf6d31aca1",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "d70851f0-fdcf-4635-97de-c0cf6d31aca1",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183452005",
+          "display": "Emergency hospital admission"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/8eca8e58-b539-430c-ac25-093fb4fac477"
+      },
+      "period": {
+        "start": "2026-05-01T00:00:00Z",
+        "end": "2026-05-03T01:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/d70851f0-fdcf-4635-97de-c0cf6d31aca1"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/df5db173-92ef-48dd-b714-40fcbfea7e1e",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "df5db173-92ef-48dd-b714-40fcbfea7e1e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "imaging",
+          "display": "Imaging"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "96914-7",
+          "display": "CT dose and image quality category"
+        } ],
+        "text": "CT dose and image quality category"
+      },
+      "subject": {
+        "reference": "Patient/8eca8e58-b539-430c-ac25-093fb4fac477"
+      },
+      "encounter": {
+        "reference": "Encounter/d70851f0-fdcf-4635-97de-c0cf6d31aca1"
+      },
+      "effectiveDateTime": "2026-05-02T00:00:00Z",
+      "valueCodeableConcept": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "code": "LA31752-1",
+          "display": "Abdomen and Pelvis Low Dose"
+        } ]
+      },
+      "component": [ {
+        "code": {
+          "coding": [ {
+            "system": "http://loinc.org",
+            "code": "96912-1",
+            "display": "Calculated CT global noise"
+          } ]
+        },
+        "valueQuantity": {
+          "value": 63
+        }
+      }, {
+        "code": {
+          "coding": [ {
+            "system": "http://loinc.org",
+            "code": "96913-9",
+            "display": "Calculated CT size-adjusted dose"
+          } ]
+        },
+        "valueQuantity": {
+          "value": 597
+        }
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/df5db173-92ef-48dd-b714-40fcbfea7e1e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/9de489e4-b83b-4035-8376-275f259346db",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "9de489e4-b83b-4035-8376-275f259346db",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "e81d80e9-f01b-4adb-a982-5714d00b7e30-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "8eca8e58-b539-430c-ac25-093fb4fac477"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#e81d80e9-f01b-4adb-a982-5714d00b7e30-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient has valid CT scan but with missing units on the noise and dose"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS1074FHIRCTIQR",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/8eca8e58-b539-430c-ac25-093fb4fac477"
+      }, {
+        "reference": "Encounter/d70851f0-fdcf-4635-97de-c0cf6d31aca1"
+      }, {
+        "reference": "Observation/df5db173-92ef-48dd-b714-40fcbfea7e1e"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/9de489e4-b83b-4035-8376-275f259346db"
+    }
+  } ]
+}

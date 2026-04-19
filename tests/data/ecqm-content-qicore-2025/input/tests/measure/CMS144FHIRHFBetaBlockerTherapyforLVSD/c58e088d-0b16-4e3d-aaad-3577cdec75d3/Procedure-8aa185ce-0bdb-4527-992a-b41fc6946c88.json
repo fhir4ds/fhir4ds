@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "8aa185ce-0bdb-4527-992a-b41fc6946c88",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-01-31T08:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "232967006",
+      "display": "Implantation of left ventricular assist device (procedure)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c58e088d-0b16-4e3d-aaad-3577cdec75d3"
+  },
+  "performedPeriod": {
+    "start": "2026-09-30T08:00:00.000+00:00"
+  }
+}

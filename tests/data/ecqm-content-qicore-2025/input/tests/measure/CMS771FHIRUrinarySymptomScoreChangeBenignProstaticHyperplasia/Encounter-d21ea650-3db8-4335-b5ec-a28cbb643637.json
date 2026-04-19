@@ -1,0 +1,28 @@
+{
+  "resourceType": "Encounter",
+  "id": "d21ea650-3db8-4335-b5ec-a28cbb643637",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230301",
+      "code": "185465003",
+      "display": "Weekend visit (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/4d7a04b3-91ed-4035-85ef-0728bdf818ef"
+  },
+  "period": {
+    "start": "2026-07-01T08:00:00.000+00:00",
+    "end": "2026-07-01T09:15:00.000+00:00"
+  }
+}

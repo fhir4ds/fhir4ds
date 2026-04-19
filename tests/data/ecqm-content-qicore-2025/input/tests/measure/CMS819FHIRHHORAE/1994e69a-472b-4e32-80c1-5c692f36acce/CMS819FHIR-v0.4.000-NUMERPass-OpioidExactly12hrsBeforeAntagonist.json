@@ -1,0 +1,261 @@
+{
+  "resourceType": "Bundle",
+  "id": "627a80a15a0d870123c7253e",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/1994e69a-472b-4e32-80c1-5c692f36acce",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "1994e69a-472b-4e32-80c1-5c692f36acce",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "text": {
+        "status": "generated",
+        "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">Opioid exactly 12 hrs before Naloxone <b>NUMERPASS </b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Date of birth</td><td><span>14 November 1980</span></td></tr></tbody></table></div>"
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "1002-5",
+            "display": "American Indian or Alaska Native",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "American Indian or Alaska Native"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2135-2",
+            "display": "Hispanic or Latino",
+            "userSelected": true
+          }
+        }, {
+          "url": "text",
+          "valueString": "Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "627a80a15a0d870123c7253e"
+      } ],
+      "active": true,
+      "name": [ {
+        "use": "usual",
+        "family": "NUMERPass",
+        "given": [ "OpioidExactly12hrsBeforeAntagonist" ]
+      } ],
+      "gender": "female",
+      "birthDate": "1981-11-14"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/1994e69a-472b-4e32-80c1-5c692f36acce"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/67daed6d-f724-488c-82d0-08edc19c86c8",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "67daed6d-f724-488c-82d0-08edc19c86c8",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "IMP",
+        "display": "inpatient encounter"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://snomed.info/sct",
+          "code": "183452005"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/1994e69a-472b-4e32-80c1-5c692f36acce"
+      },
+      "period": {
+        "start": "2026-08-11T08:00:00.000+00:00",
+        "end": "2026-08-14T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/67daed6d-f724-488c-82d0-08edc19c86c8"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationAdministration/922ae883-33b3-4dcc-89b0-d99259ae253e",
+    "resource": {
+      "resourceType": "MedicationAdministration",
+      "id": "922ae883-33b3-4dcc-89b0-d99259ae253e",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+      },
+      "status": "completed",
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "code": "1010600"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/1994e69a-472b-4e32-80c1-5c692f36acce"
+      },
+      "effectivePeriod": {
+        "start": "2026-08-11T08:00:00.000+00:00",
+        "end": "2026-08-11T08:15:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationAdministration/922ae883-33b3-4dcc-89b0-d99259ae253e"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MedicationAdministration/4fecde35-1fa2-4b05-8822-dc3be6212106",
+    "resource": {
+      "resourceType": "MedicationAdministration",
+      "id": "4fecde35-1fa2-4b05-8822-dc3be6212106",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+      },
+      "status": "completed",
+      "medicationCodeableConcept": {
+        "coding": [ {
+          "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+          "version": "2022-04",
+          "code": "1659929",
+          "display": "1 ML naloxone hydrochloride 0.4 MG/ML Injection",
+          "userSelected": true
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/1994e69a-472b-4e32-80c1-5c692f36acce"
+      },
+      "effectivePeriod": {
+        "start": "2026-08-11T20:15:00.000+00:00"
+      },
+      "dosage": {
+        "route": {
+          "coding": [ {
+            "system": "http://snomed.info/sct",
+            "code": "34206005",
+            "display": "Subcutaneous route (qualifier value)",
+            "userSelected": true
+          } ]
+        },
+        "dose": {
+          "value": 0.4,
+          "unit": "mg",
+          "system": "http://unitsofmeasure.org",
+          "code": "mg"
+        }
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MedicationAdministration/4fecde35-1fa2-4b05-8822-dc3be6212106"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/d28ca183-a7af-44f8-84b9-431af2d93a15",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "d28ca183-a7af-44f8-84b9-431af2d93a15",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "2de83d19-340b-4019-aee7-9fb4ef828095-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "1994e69a-472b-4e32-80c1-5c692f36acce"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#2de83d19-340b-4019-aee7-9fb4ef828095-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Inpatient encounter where patient given opioid 8:15AM. Antagonist administration start time is 8:15PM, exactly 12 hours after opioid. Meets numerator criteria. "
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS819FHIRHHORAE",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 1
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 1
+        } ],
+        "measureScore": {
+          "value": 0.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/1994e69a-472b-4e32-80c1-5c692f36acce"
+      }, {
+        "reference": "Encounter/67daed6d-f724-488c-82d0-08edc19c86c8"
+      }, {
+        "reference": "MedicationAdministration/922ae883-33b3-4dcc-89b0-d99259ae253e"
+      }, {
+        "reference": "MedicationAdministration/4fecde35-1fa2-4b05-8822-dc3be6212106"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/d28ca183-a7af-44f8-84b9-431af2d93a15"
+    }
+  } ]
+}

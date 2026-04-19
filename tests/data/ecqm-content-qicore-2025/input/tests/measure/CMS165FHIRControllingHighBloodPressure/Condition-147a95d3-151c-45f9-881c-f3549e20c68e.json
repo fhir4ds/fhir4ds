@@ -1,0 +1,31 @@
+{
+  "resourceType": "Condition",
+  "id": "147a95d3-151c-45f9-881c-f3549e20c68e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "N18.5",
+      "display": "Chronic kidney disease, stage 5"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/0b9cb569-149a-4b47-a535-66b59a77bceb"
+  },
+  "onsetDateTime": "2026-06-30T23:59:59.000+00:00"
+}

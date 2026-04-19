@@ -1,0 +1,27 @@
+{
+  "resourceType": "Condition",
+  "id": "6c838bf3-55f1-4a3a-9920-8e300ee4f107",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2023-09",
+      "code": "66344007",
+      "display": "Recurrent major depression (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/e37040f5-da02-49eb-98a8-60d5235f8e1f"
+  },
+  "recordedDate": "2026-04-18T08:00:00.000+00:00"
+}

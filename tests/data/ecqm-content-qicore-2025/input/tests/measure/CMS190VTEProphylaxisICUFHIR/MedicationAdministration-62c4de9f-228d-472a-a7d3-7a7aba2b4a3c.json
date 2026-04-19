@@ -1,0 +1,22 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "62c4de9f-228d-472a-a7d3-7a7aba2b4a3c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1364435",
+      "display": "apixaban 2.5 MG Oral Tablet",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/0d48b3b3-c5f0-4955-810d-eb4f1b8714ca"
+  },
+  "effectivePeriod": {
+    "start": "2026-12-06T08:01:00.000+00:00"
+  }
+}

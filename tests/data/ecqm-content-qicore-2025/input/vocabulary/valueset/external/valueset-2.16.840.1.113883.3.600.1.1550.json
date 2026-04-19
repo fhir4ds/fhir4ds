@@ -1,0 +1,107 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.600.1.1550-20230216",
+  "meta": {
+    "versionId": "36",
+    "lastUpdated": "2024-08-09T13:49:01.000-04:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Institutes for Research Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-06"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2023-02-16"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1.1550",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.600.1.1550"
+  } ],
+  "version": "20230216",
+  "name": "FollowUpForBelowNormalBMI",
+  "title": "Follow Up for Below Normal BMI",
+  "status": "active",
+  "date": "2023-02-16T01:03:04-05:00",
+  "publisher": "American Institutes for Research Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts for follow-up with a body mass index (BMI) below normal measurement.),(Data Element Scope: This value set may use a model element related to Intervention or Procedure.),(Inclusion Criteria: Includes concepts that represent a follow-up for below normal body mass index (BMI).),(Exclusion Criteria: No exclusions.)",
+  "compose": {
+    "include": [ {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "concept": [ {
+        "code": "G0270",
+        "display": "Medical nutrition therapy; reassessment and subsequent intervention(s) following second referral in same year for change in diagnosis, medical condition or treatment regimen (including additional hours needed for renal disease), individual, face to face with the patient, each 15 minutes"
+      }, {
+        "code": "G0271",
+        "display": "Medical nutrition therapy, reassessment and subsequent intervention(s) following second referral in same year for change in diagnosis, medical condition, or treatment regimen (including additional hours needed for renal disease), group (2 or more individuals), each 30 minutes"
+      }, {
+        "code": "S9449",
+        "display": "Weight management classes, non-physician provider, per session"
+      }, {
+        "code": "S9451",
+        "display": "Exercise classes, non-physician provider, per session"
+      }, {
+        "code": "S9452",
+        "display": "Nutrition classes, non-physician provider, per session"
+      }, {
+        "code": "S9470",
+        "display": "Nutritional counseling, dietitian visit"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:a3fbfaf8-749c-4c03-bfe7-6c1f3cf26426",
+    "timestamp": "2025-06-20T16:55:43-04:00",
+    "total": 6,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "version": "2024",
+      "code": "G0270",
+      "display": "Medical nutrition therapy; reassessment and subsequent intervention(s) following second referral in same year for change in diagnosis, medical condition or treatment regimen (including additional hours needed for renal disease), individual, face to face with the patient, each 15 minutes"
+    }, {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "version": "2024",
+      "code": "G0271",
+      "display": "Medical nutrition therapy, reassessment and subsequent intervention(s) following second referral in same year for change in diagnosis, medical condition, or treatment regimen (including additional hours needed for renal disease), group (2 or more individuals), each 30 minutes"
+    }, {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "version": "2024",
+      "code": "S9449",
+      "display": "Weight management classes, non-physician provider, per session"
+    }, {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "version": "2024",
+      "code": "S9451",
+      "display": "Exercise classes, non-physician provider, per session"
+    }, {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "version": "2024",
+      "code": "S9452",
+      "display": "Nutrition classes, non-physician provider, per session"
+    }, {
+      "system": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "version": "2024",
+      "code": "S9470",
+      "display": "Nutritional counseling, dietitian visit"
+    } ]
+  }
+}

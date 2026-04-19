@@ -1,0 +1,32 @@
+{
+  "resourceType": "Condition",
+  "id": "acfae891-eb03-4443-9151-caa792373cef",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "resolved"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "109564008",
+      "display": "Dental caries associated with enamel hypomineralization (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/8b91c8d5-4fed-4be7-b930-ba922a502c05"
+  },
+  "onsetDateTime": "2026-12-31T23:59:59.000Z",
+  "abatementDateTime": "2026-12-31T23:59:59.000Z"
+}

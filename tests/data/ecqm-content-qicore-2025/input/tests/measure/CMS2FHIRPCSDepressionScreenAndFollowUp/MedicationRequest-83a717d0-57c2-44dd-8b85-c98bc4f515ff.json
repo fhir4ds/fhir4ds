@@ -1,0 +1,32 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "83a717d0-57c2-44dd-8b85-c98bc4f515ff",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "doNotPerform": false,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1000048",
+      "display": "doxepin 10 MG Oral Capsule",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/d2cde80b-5a6c-48e9-b38a-de938f019096"
+  },
+  "authoredOn": "2026-01-01T08:14:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/123456"
+  },
+  "dispenseRequest": {
+    "expectedSupplyDuration": {
+      "value": 30,
+      "system": "http://unitsofmeasure.org",
+      "code": "days"
+    }
+  }
+}

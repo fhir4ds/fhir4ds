@@ -1,0 +1,103 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "5c9ec8d4-0361-4e4e-8e71-a530baf0a692",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "21806013-a9b5-4181-9b82-c41793e758e5-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "f75e88bd-763c-45ee-9926-da176be47cd9"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#21806013-a9b5-4181-9b82-c41793e758e5-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Passes: IP, Fails DENOM  Pt is 27 years of age,  encounter dx of delivery of singleton, gravida, EGA @ 37 but the units are bad (not wk or weeks)\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS0334FHIRPCCesareanBirth",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/f75e88bd-763c-45ee-9926-da176be47cd9"
+  }, {
+    "reference": "Observation/c243f205-f821-451d-a14a-eb7801e46f9a"
+  }, {
+    "reference": "Observation/6f0dde04-70cf-4dea-b9da-c0225c457de3"
+  }, {
+    "reference": "Observation/9f985dc4-3cfc-4361-b8ed-b89c202ff8c3"
+  }, {
+    "reference": "Encounter/a91ff095-0bef-456b-9ace-2f53783129bb"
+  }, {
+    "reference": "Procedure/64da8db0-1853-4a78-8b38-669fdf1faeb7"
+  }, {
+    "reference": "Condition/16baabf7-8755-4f9b-9f37-91c0de0e6dda"
+  }, {
+    "reference": "Coverage/2d109a4f-237b-4d53-9f32-6f000eecd413"
+  }, {
+    "reference": "Organization/266d7528-a280-4d0a-b2d2-768cfbcc3bb2"
+  }, {
+    "reference": "Practitioner/e00597dd-eab7-47ce-b855-98a1d75e7f89"
+  } ]
+}

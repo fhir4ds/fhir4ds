@@ -1,0 +1,31 @@
+{
+  "resourceType": "Procedure",
+  "id": "660d455b-61bb-48b5-b52c-aea7866c22d4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2013-11-01T13:35:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "442410008",
+      "display": "Application of venous foot pump (procedure)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/39baa108-b124-4300-b71c-dc21cc509d64"
+  },
+  "performedDateTime": "2026-11-04T07:00:00.000+00:00",
+  "usedCode": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "229511001",
+      "display": "Application of graduated compression garment (procedure)",
+      "userSelected": true
+    } ]
+  } ]
+}

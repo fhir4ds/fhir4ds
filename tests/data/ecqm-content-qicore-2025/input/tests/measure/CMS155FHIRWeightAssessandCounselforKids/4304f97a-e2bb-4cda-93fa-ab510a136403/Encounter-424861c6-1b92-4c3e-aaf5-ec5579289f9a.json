@@ -1,0 +1,27 @@
+{
+  "resourceType": "Encounter",
+  "id": "424861c6-1b92-4c3e-aaf5-ec5579289f9a",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "698704008",
+      "display": "Home visit for rheumatology service (procedure)"
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/4304f97a-e2bb-4cda-93fa-ab510a136403"
+  },
+  "period": {
+    "start": "2026-12-31T00:00:00.000Z",
+    "end": "2026-12-31T23:59:59.000Z"
+  }
+}

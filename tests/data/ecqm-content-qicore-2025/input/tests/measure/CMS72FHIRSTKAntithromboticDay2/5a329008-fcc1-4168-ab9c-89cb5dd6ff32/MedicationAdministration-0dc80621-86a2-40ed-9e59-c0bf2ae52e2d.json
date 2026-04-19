@@ -1,0 +1,32 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "0dc80621-86a2-40ed-9e59-c0bf2ae52e2d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-06-01T09:00:00Z"
+  } ],
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1804799"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/5a329008-fcc1-4168-ab9c-89cb5dd6ff32"
+  },
+  "effectivePeriod": {
+    "start": "2026-06-01T09:00:00Z",
+    "end": "2026-06-01T23:15:00.000+00:00"
+  },
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1804799",
+      "display": "alteplase 100 MG Injection"
+    } ]
+  } ]
+}

@@ -1,0 +1,39 @@
+{
+  "resourceType": "Encounter",
+  "id": "a0fdff6f-dc68-4a76-bcf8-6cf72331aee5",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+  },
+  "status": "finished",
+  "class": {
+    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "code": "AMB",
+    "display": "ambulatory"
+  },
+  "type": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "183452005",
+      "display": "Emergency hospital admission (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "subject": {
+    "reference": "Patient/6b3b4271-63af-4a6b-a724-7009935b8820"
+  },
+  "period": {
+    "start": "2026-01-01T23:45:00.000+00:00",
+    "end": "2026-01-05T23:59:00.000+00:00"
+  },
+  "hospitalization": {
+    "dischargeDisposition": {
+      "coding": [ {
+        "system": "http://snomed.info/sct",
+        "code": "371828006",
+        "display": "Patient deceased during stay (discharge status = dead) (finding)",
+        "userSelected": true
+      } ]
+    }
+  }
+}

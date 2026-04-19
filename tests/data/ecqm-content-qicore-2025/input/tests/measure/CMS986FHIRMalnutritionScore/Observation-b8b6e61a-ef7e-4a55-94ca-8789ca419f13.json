@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "b8b6e61a-ef7e-4a55-94ca-8789ca419f13",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "98968-1",
+      "display": "Initial screening NRS_2002",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/568283da-a161-4cb8-85d0-e2ef32e60a11"
+  },
+  "effectiveDateTime": "2026-02-03T09:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "700361001",
+      "display": "Predicted inadequate nutrient intake (finding)",
+      "userSelected": true
+    } ]
+  }
+}

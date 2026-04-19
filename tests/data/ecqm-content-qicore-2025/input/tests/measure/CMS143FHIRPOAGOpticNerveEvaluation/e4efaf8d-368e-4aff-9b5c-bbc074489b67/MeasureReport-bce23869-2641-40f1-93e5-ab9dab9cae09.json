@@ -1,0 +1,97 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "bce23869-2641-40f1-93e5-ab9dab9cae09",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "d102af0d-d3b2-47de-9b91-4afc82cf54f8-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "e4efaf8d-368e-4aff-9b5c-bbc074489b67"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#d102af0d-d3b2-47de-9b91-4afc82cf54f8-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "Patient with glaucoma, office visit with both exams performed"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS143FHIRPOAGOpticNerveEvaluation",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 1.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/e4efaf8d-368e-4aff-9b5c-bbc074489b67"
+  }, {
+    "reference": "Condition/cfb1754d-1d4d-41c8-afce-81adb4d9306e"
+  }, {
+    "reference": "Observation/a94a66d2-7f85-4fa7-a41b-c505c6527446"
+  }, {
+    "reference": "Observation/2443907a-b03e-4e69-9e52-888a3e67038c"
+  }, {
+    "reference": "Encounter/3d44efff-da53-49dd-8e52-2fd9a9e60ae4"
+  }, {
+    "reference": "Coverage/f864599c-c7be-498b-bbd1-1256f759b7d4"
+  }, {
+    "reference": "Organization/62eb10ca-b388-4f09-896d-dbe173afdc8e"
+  } ]
+}

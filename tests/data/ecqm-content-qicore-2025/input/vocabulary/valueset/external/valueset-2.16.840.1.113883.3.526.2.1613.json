@@ -1,0 +1,131 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1613-20250125",
+  "meta": {
+    "versionId": "31",
+    "lastUpdated": "2025-01-25T01:09:35.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-01-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1613",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1613"
+  } ],
+  "version": "20250125",
+  "name": "TraumaticCataract",
+  "title": "Traumatic Cataract",
+  "status": "active",
+  "date": "2025-01-25T01:09:35-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of diagnoses for traumatic cataract.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of traumatic cataract, including concussion cataract.),(Exclusion Criteria: Excludes concepts that represent a diagnosis for 'unspecified eye.')",
+  "compose": {
+    "include": [ {
+      "system": "http://snomed.info/sct",
+      "concept": [ {
+        "code": "193598007",
+        "display": "Partial resolved traumatic cataract (disorder)"
+      }, {
+        "code": "231967008",
+        "display": "Concussion cataract (disorder)"
+      }, {
+        "code": "231968003",
+        "display": "Cataract following rupture of capsule (disorder)"
+      }, {
+        "code": "331781000119101",
+        "display": "Cataract of right eye due to and following trauma (disorder)"
+      }, {
+        "code": "337401000119107",
+        "display": "Cataract of left eye due to and following trauma (disorder)"
+      }, {
+        "code": "343191000119102",
+        "display": "Cataract of bilateral eyes due to and following trauma (disorder)"
+      }, {
+        "code": "34361001",
+        "display": "Traumatic cataract (disorder)"
+      }, {
+        "code": "8656007",
+        "display": "Total traumatic cataract (disorder)"
+      }, {
+        "code": "866114005",
+        "display": "Localized cataract opacities due to and following traumatic injury (disorder)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:ddc793d9-8893-4455-90d2-93283ac838c2",
+    "timestamp": "2025-06-20T16:53:40-04:00",
+    "total": 9,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "193598007",
+      "display": "Partial resolved traumatic cataract (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "231967008",
+      "display": "Concussion cataract (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "231968003",
+      "display": "Cataract following rupture of capsule (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "331781000119101",
+      "display": "Cataract of right eye due to and following trauma (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "337401000119107",
+      "display": "Cataract of left eye due to and following trauma (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "343191000119102",
+      "display": "Cataract of bilateral eyes due to and following trauma (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "34361001",
+      "display": "Traumatic cataract (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "8656007",
+      "display": "Total traumatic cataract (disorder)"
+    }, {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20230901",
+      "code": "866114005",
+      "display": "Localized cataract opacities due to and following traumatic injury (disorder)"
+    } ]
+  }
+}

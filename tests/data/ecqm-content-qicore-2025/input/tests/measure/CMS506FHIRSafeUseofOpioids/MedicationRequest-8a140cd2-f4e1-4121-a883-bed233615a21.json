@@ -1,0 +1,33 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "8a140cd2-f4e1-4121-a883-bed233615a21",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/medicationrequest-category",
+      "code": "discharge",
+      "display": "Discharge",
+      "userSelected": true
+    } ]
+  } ],
+  "doNotPerform": false,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1049604",
+      "display": "oxycodone hydrochloride 1 MG/ML Oral Solution",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/6b3b4271-63af-4a6b-a724-7009935b8820"
+  },
+  "authoredOn": "2026-01-01T23:50:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/adad5d67-19ad-4d2d-9895-c78ef2592bb8"
+  }
+}

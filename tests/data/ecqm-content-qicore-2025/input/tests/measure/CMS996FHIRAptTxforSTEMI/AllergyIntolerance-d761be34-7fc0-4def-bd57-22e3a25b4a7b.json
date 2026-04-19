@@ -1,0 +1,31 @@
+{
+  "resourceType": "AllergyIntolerance",
+  "id": "d761be34-7fc0-4def-bd57-22e3a25b4a7b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-allergyintolerance" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "2021-01",
+      "code": "10106",
+      "display": "streptokinase",
+      "userSelected": true
+    } ]
+  },
+  "patient": {
+    "reference": "Patient/e592576b-4078-4793-b3d2-0b7256f306a3"
+  },
+  "onsetPeriod": {
+    "start": "2026-10-09T08:30:00.000+00:00",
+    "end": "2026-10-09T10:15:00.000+00:00"
+  }
+}

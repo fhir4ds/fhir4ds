@@ -1,0 +1,36 @@
+{
+  "resourceType": "Observation",
+  "id": "8ca5e9fe-c4d9-4a0b-8eb9-29c756e413cb",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-simple-observation" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.76",
+      "code": "28568-4",
+      "display": "Physician Emergency department Note",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c8b6fa9c-0072-45ab-90dc-0b8be521fae4"
+  },
+  "effectiveDateTime": "2027-05-01T01:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "434081000124108",
+      "display": "Patient requires hospitalization (finding)",
+      "userSelected": true
+    } ]
+  }
+}

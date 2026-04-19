@@ -1,0 +1,38 @@
+{
+  "resourceType": "Organization",
+  "id": "62eb10ca-b388-4f09-896d-dbe173afdc8e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-organization" ]
+  },
+  "identifier": [ {
+    "use": "temp",
+    "system": "http://terminology.hl7.org/NamingSystem/USEIN",
+    "value": "48915164351354"
+  } ],
+  "active": true,
+  "type": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+      "code": "team",
+      "display": "Organizational team"
+    } ]
+  } ],
+  "name": "Good Healthcare, LLC",
+  "telecom": [ {
+    "system": "phone",
+    "value": "(+1) 901-683-7777"
+  }, {
+    "system": "fax",
+    "value": "(+1) 901-683-6622"
+  }, {
+    "system": "email",
+    "value": "BetterYourHealth@GoodHealthcare.com"
+  } ],
+  "address": [ {
+    "line": [ "3651 Wentrow Blvd, Suite 227" ],
+    "city": "Germantown",
+    "state": "TN",
+    "postalCode": "38138",
+    "country": "USA"
+  } ]
+}

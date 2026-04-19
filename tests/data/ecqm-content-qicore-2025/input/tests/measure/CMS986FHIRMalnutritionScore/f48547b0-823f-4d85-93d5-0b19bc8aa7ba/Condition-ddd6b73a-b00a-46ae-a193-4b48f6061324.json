@@ -1,0 +1,46 @@
+{
+  "resourceType": "Condition",
+  "id": "ddd6b73a-b00a-46ae-a193-4b48f6061324",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "T73.0XXA",
+      "display": "Starvation, initial encounter",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/f48547b0-823f-4d85-93d5-0b19bc8aa7ba"
+  },
+  "onsetPeriod": {
+    "start": "2026-07-01T08:00:00.000+00:00"
+  },
+  "recordedDate": "2026-07-01T11:00:00.000+00:00"
+}

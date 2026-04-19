@@ -1,0 +1,26 @@
+{
+  "resourceType": "Procedure",
+  "id": "fc3142f4-5fbf-4da6-bb6c-8b39fc83a2ac",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-03-26T13:35:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "424831005",
+      "display": "Application of foot pump (procedure)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/0b727e44-0d5a-413b-8114-ab9bb7cce80e"
+  },
+  "performedPeriod": {
+    "start": "2026-03-22T08:20:00.000+00:00",
+    "end": "2026-03-22T08:25:00.000+00:00"
+  }
+}

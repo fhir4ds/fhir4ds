@@ -1,0 +1,50 @@
+{
+  "resourceType": "Condition",
+  "id": "0447c49f-d6be-4037-9a84-0ec39f650f89",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "severity": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "24484000",
+      "display": "Severe (severity modifier) (qualifier value)"
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "134401001",
+      "display": "Left ventricular systolic dysfunction (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/442a40d5-a18e-434b-ad30-7760e73adac2"
+  },
+  "onsetPeriod": {
+    "start": "2026-04-14T14:41:00.000+00:00"
+  }
+}

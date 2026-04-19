@@ -1,0 +1,67 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.464.1003.1234-20230722",
+  "meta": {
+    "versionId": "5",
+    "lastUpdated": "2024-08-12T12:45:08.000-04:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Institutes for Research Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-27"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2023-07-22"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1234",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.464.1003.1234"
+  } ],
+  "version": "20230722",
+  "name": "PartialArthroplastyOfHip",
+  "title": "Partial Arthroplasty of Hip",
+  "status": "active",
+  "date": "2023-07-22T01:12:36-04:00",
+  "publisher": "American Institutes for Research Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts for Partial Arthroplasty of Hip.),(Data Element Scope: This value set may use a model element related to Procedure.),(Inclusion Criteria: Includes concepts that represent Partial Arthroplasty of Hip.),(Exclusion Criteria: No Exclusions.)",
+  "compose": {
+    "include": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "concept": [ {
+        "code": "27125",
+        "display": "Hemiarthroplasty, hip, partial (eg, femoral stem prosthesis, bipolar arthroplasty)"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:ca2d1ec1-1834-4d70-8e8c-4207c9da2b95",
+    "timestamp": "2025-06-20T17:02:25-04:00",
+    "total": 1,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://www.ama-assn.org/go/cpt",
+      "version": "2024",
+      "code": "27125",
+      "display": "Hemiarthroplasty, hip, partial (eg, femoral stem prosthesis, bipolar arthroplasty)"
+    } ]
+  }
+}

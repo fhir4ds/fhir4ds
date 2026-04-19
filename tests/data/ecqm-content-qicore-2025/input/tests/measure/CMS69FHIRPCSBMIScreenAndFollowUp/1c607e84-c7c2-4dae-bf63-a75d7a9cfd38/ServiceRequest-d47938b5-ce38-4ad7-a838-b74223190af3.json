@@ -1,0 +1,26 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "d47938b5-ce38-4ad7-a838-b74223190af3",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-12-30T23:58:00.000+00:00"
+  } ],
+  "status": "completed",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "182922004",
+      "display": "Dietary regime (regime/therapy)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1c607e84-c7c2-4dae-bf63-a75d7a9cfd38"
+  },
+  "authoredOn": "2024-12-31T08:00:00.000+00:00"
+}

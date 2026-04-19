@@ -1,0 +1,35 @@
+{
+  "resourceType": "Observation",
+  "id": "a6673a2f-9faa-4194-a64a-6a26dab43d1c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "75285-7",
+      "display": "Comparative nutrition assessment standards panel",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/b5c1bc9e-c944-4ea8-b570-640609906df3"
+  },
+  "effectiveDateTime": "2026-02-01T10:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "LA33704-0",
+      "display": "Moderately malnourished",
+      "userSelected": true
+    } ]
+  }
+}

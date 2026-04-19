@@ -1,0 +1,21 @@
+{
+  "resourceType": "Immunization",
+  "id": "276f5f52-fc7e-4185-8f43-e7c03e244c65",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-immunization" ]
+  },
+  "status": "completed",
+  "vaccineCode": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/cvx",
+      "code": "49",
+      "display": "Haemophilus influenzae type b vaccine, PRP-OMP conjugate"
+    } ]
+  },
+  "patient": {
+    "reference": "Patient/6b9e1f1b-90db-42f2-8591-f1a1858ca27a"
+  },
+  "occurrenceDateTime": "2025-01-02T00:00:00.000Z",
+  "recorded": "2025-01-02T00:00:00.000Z",
+  "primarySource": true
+}

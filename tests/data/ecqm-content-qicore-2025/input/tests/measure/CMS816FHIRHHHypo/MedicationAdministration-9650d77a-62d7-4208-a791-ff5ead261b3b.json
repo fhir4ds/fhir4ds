@@ -1,0 +1,22 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "9650d77a-62d7-4208-a791-ff5ead261b3b",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1653202",
+      "display": "3 ML insulin aspart, human 100 UNT/ML Pen Injector"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/1d298cf0-aa38-4943-ba4c-f7209cf59e63"
+  },
+  "effectivePeriod": {
+    "start": "2026-07-11T08:00:00Z",
+    "end": "2026-07-11T09:00:00Z"
+  }
+}

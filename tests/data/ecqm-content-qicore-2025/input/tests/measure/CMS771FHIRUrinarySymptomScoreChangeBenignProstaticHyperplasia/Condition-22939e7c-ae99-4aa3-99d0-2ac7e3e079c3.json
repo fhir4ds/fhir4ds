@@ -1,0 +1,45 @@
+{
+  "resourceType": "Condition",
+  "id": "22939e7c-ae99-4aa3-99d0-2ac7e3e079c3",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "N40.1",
+      "display": "Benign prostatic hyperplasia with lower urinary tract symptoms",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/836cdd6c-bc29-4752-9beb-c336d26f0ed2"
+  },
+  "onsetPeriod": {
+    "start": "2025-12-14T15:00:00.000+00:00"
+  }
+}

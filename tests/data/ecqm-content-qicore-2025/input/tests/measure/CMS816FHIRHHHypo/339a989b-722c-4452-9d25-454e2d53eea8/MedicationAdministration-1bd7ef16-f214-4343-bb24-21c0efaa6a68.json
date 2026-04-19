@@ -1,0 +1,22 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "1bd7ef16-f214-4343-bb24-21c0efaa6a68",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministration" ]
+  },
+  "status": "completed",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1652239",
+      "display": "Hypoglycemics Severe Hypoglycemia"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/339a989b-722c-4452-9d25-454e2d53eea8"
+  },
+  "effectivePeriod": {
+    "start": "2026-02-04T08:00:00Z",
+    "end": "2026-02-04T08:15:00Z"
+  }
+}

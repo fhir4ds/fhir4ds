@@ -1,0 +1,41 @@
+{
+  "resourceType": "Observation",
+  "id": "bea994bd-4d85-45df-af96-e05231cbc33d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "procedure",
+      "display": "Procedure"
+    } ]
+  }, {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "73832-8",
+      "display": "Adult depression screening assessment",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/d1fc6b6d-025e-446b-a941-e62a76217e28"
+  },
+  "effectiveDateTime": "2026-06-15T08:00:00.000+00:00",
+  "valueCodeableConcept": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "428181000124104",
+      "display": "Depression screening positive (finding)",
+      "userSelected": true
+    } ]
+  }
+}

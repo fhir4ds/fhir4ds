@@ -1,0 +1,35 @@
+{
+  "resourceType": "MedicationAdministration",
+  "id": "7f2d5f84-5e16-4e0f-a5b5-7065e4c089b2",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-mednotadministered" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-09-05T08:00:00.000+00:00"
+  } ],
+  "status": "not-done",
+  "statusReason": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "242990004",
+      "display": "Drug not available for administration (event)"
+    } ]
+  } ],
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "04012024",
+      "code": "1653484",
+      "display": "BCG, live, Tice strain 50 MG/ML Topical Suspension"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/40ac7a7f-5aa0-48d5-9dbf-289ad5ecf863"
+  },
+  "effectivePeriod": {
+    "start": "2026-09-05T08:00:00.000+00:00",
+    "end": "2026-09-05T08:00:00.000+00:00"
+  }
+}

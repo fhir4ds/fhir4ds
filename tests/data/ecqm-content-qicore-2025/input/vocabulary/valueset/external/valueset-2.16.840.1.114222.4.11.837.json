@@ -1,0 +1,43 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.114222.4.11.837",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2025-06-20T14:30:01.920-06:00"
+  },
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.837",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "2.16.840.1.114222.4.11.837"
+  } ],
+  "version": "20121025",
+  "name": "Ethnicity",
+  "title": "Ethnicity",
+  "status": "active",
+  "experimental": false,
+  "publisher": "NLM",
+  "expansion": {
+    "identifier": "urn:uuid:99a9135a-cb5f-40af-9c9d-f68a7d3ad67b",
+    "timestamp": "2025-06-20T16:59:07-04:00",
+    "total": 2,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "urn:oid:2.16.840.1.113883.6.238",
+      "version": "1.2",
+      "code": "2135-2",
+      "display": "Hispanic or Latino"
+    }, {
+      "system": "urn:oid:2.16.840.1.113883.6.238",
+      "version": "1.2",
+      "code": "2186-5",
+      "display": "Not Hispanic or Latino"
+    } ]
+  }
+}

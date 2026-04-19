@@ -1,0 +1,22 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "a9555250-4686-467e-b296-392198a76a81",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.72",
+      "code": "24320-4",
+      "display": "Basic metabolic 1998 panel - Serum or Plasma",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/6714818f-8aa6-4673-8c39-fd35e470461c"
+  },
+  "authoredOn": "2026-12-31T09:25:00.000+00:00"
+}

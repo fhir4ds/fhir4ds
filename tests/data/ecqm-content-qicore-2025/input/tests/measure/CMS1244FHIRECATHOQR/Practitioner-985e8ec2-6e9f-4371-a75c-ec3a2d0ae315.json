@@ -1,0 +1,15 @@
+{
+  "resourceType": "Practitioner",
+  "id": "985e8ec2-6e9f-4371-a75c-ec3a2d0ae315",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-practitioner" ]
+  },
+  "identifier": [ {
+    "system": "http://hl7.org/fhir/sid/us-npi",
+    "value": "9999999896"
+  } ],
+  "name": [ {
+    "family": "Evil",
+    "prefix": [ "Dr" ]
+  } ]
+}

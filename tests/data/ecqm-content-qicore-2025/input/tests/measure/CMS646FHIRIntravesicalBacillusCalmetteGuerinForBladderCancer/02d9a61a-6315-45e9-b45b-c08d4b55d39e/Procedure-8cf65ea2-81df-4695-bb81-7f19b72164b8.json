@@ -1,0 +1,28 @@
+{
+  "resourceType": "Procedure",
+  "id": "8cf65ea2-81df-4695-bb81-7f19b72164b8",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2026-08-30T08:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "169331000",
+      "display": "Combined radiotherapy (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/02d9a61a-6315-45e9-b45b-c08d4b55d39e"
+  },
+  "performedPeriod": {
+    "start": "2026-08-30T08:00:00.000+00:00",
+    "end": "2026-08-30T08:15:00.000+00:00"
+  }
+}

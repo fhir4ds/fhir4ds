@@ -1,0 +1,31 @@
+{
+  "resourceType": "Observation",
+  "id": "837140b2-a9f1-45ba-b882-1e7f5f0b15d4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "survey",
+      "display": "Survey",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.73",
+      "code": "58151-2",
+      "display": "Prior assessment Brief Interview for Mental Status (BIMS) summary score [MDSv3]",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/99f28510-d75f-48d3-9f36-69739bc27419"
+  },
+  "effectiveDateTime": "2026-03-31T08:03:00.000+00:00",
+  "issued": "2026-03-31T08:03:00.000+00:00",
+  "valueInteger": 26
+}

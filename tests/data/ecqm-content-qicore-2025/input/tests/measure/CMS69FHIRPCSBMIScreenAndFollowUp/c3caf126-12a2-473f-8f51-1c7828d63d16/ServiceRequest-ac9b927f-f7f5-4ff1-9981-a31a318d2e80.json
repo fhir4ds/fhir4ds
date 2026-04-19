@@ -1,0 +1,30 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "ac9b927f-f7f5-4ff1-9981-a31a318d2e80",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2022-03",
+      "code": "183515008",
+      "display": "Referral to physician (procedure)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/c3caf126-12a2-473f-8f51-1c7828d63d16"
+  },
+  "authoredOn": "2026-01-01T00:30:00.000+00:00",
+  "reasonCode": [ {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "E66.01",
+      "display": "Morbid (severe) obesity due to excess calories",
+      "userSelected": true
+    } ]
+  } ]
+}

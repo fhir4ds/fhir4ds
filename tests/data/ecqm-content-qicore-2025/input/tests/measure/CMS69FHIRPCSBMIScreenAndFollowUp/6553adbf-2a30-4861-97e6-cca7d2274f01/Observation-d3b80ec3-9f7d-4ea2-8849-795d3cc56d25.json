@@ -1,0 +1,33 @@
+{
+  "resourceType": "Observation",
+  "id": "d3b80ec3-9f7d-4ea2-8849-795d3cc56d25",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/core/StructureDefinition/us-core-bmi" ]
+  },
+  "status": "corrected",
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "code": "vital-signs",
+      "display": "Vital Signs"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "code": "39156-5",
+      "display": "Body mass index (BMI) [Ratio]",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/6553adbf-2a30-4861-97e6-cca7d2274f01"
+  },
+  "effectiveDateTime": "2026-01-01T00:30:00.000+00:00",
+  "valueQuantity": {
+    "value": 25,
+    "unit": "kg/m2",
+    "system": "http://unitsofmeasure.org",
+    "code": "kg/m2"
+  }
+}

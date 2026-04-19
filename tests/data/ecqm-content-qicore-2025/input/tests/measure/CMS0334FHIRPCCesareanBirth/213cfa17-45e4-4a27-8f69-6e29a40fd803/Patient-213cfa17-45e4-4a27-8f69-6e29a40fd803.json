@@ -1,0 +1,58 @@
+{
+  "resourceType": "Patient",
+  "id": "213cfa17-45e4-4a27-8f69-6e29a40fd803",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+  },
+  "text": {
+    "status": "generated",
+    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><div class=\"hapiHeaderText\">AgeLT8<b>IPOPFail</b></div><table class=\"hapiPropertyTable\"><tbody><tr><td>Identifier</td><td>5de8faa62ce8d02e536ae8f9871c680ddfb3801eebe589f1938c81dd0173f1aa</td></tr><tr><td>Date of birth</td><td><span>14 February 2005</span></td></tr></tbody></table></div>"
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "1002-5",
+        "display": "American Indian or Alaska Native",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "American Indian or Alaska Native"
+    } ]
+  }, {
+    "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+    "extension": [ {
+      "url": "ombCategory",
+      "valueCoding": {
+        "system": "urn:oid:2.16.840.1.113883.6.238",
+        "code": "2135-2",
+        "display": "Hispanic or Latino",
+        "userSelected": true
+      }
+    }, {
+      "url": "text",
+      "valueString": "Hispanic or Latino"
+    } ]
+  } ],
+  "identifier": [ {
+    "type": {
+      "coding": [ {
+        "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code": "MR"
+      } ]
+    },
+    "system": "https://bonnie-fhir.healthit.gov/",
+    "value": "63487c2d0968f80122540148"
+  } ],
+  "active": true,
+  "name": [ {
+    "use": "usual",
+    "family": "IPOPFail",
+    "given": [ "AgeLT8" ]
+  } ],
+  "gender": "female",
+  "birthDate": "2019-02-14"
+}

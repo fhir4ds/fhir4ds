@@ -20,6 +20,8 @@ def as_fn(ctx, coll, type_info):
     if not coll:
         return []
     if len(coll) > 1:
-        return []  # Per FHIRPath §5.8, return empty for non-singleton
+        raise ValueError(
+            f"as() requires a singleton input, got collection with {len(coll)} items"
+        )
     # as() requires exact type match (no subtype matching)
     return coll if TypeInfo.from_value(coll[0]).is_exact_type(type_info, model=model) else []

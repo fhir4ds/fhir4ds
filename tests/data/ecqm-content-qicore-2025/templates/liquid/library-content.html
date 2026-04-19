@@ -1,0 +1,31 @@
+{% if include.library.content.exists() %}
+  {%include section-header.html header='Library Content' %}
+  {% for content in Library.content %}
+    {% if content.contentType = 'text/cql' %}
+    <tr>
+      <th scope="row" class="row-header">CQL Content</th>
+      <td>
+        <pre class="content-container highlight language-cql" style="border: none;"><code class="language-cql">{{content.data.decode('base64')}}</code></pre>
+      </td>
+    </tr>
+    {% endif %}
+    {% if content.contentType = 'application/elm+xml' %}
+    <tr>
+      <th scope="row" class="row-header">ELM XML Content</th>
+      <td>
+        <pre class="content-container highlight language-cql"
+          style="border: none;"><code>{{'Encoded data (' + content.data.length().toString() + ' characters)'}}</code></pre>
+      </td>
+    </tr>
+    {% endif %}
+    {% if content.contentType = 'application/elm+json' %}
+    <tr>
+      <th scope="row" class="row-header">ELM JSON Content</th>
+      <td>
+        <pre class="content-container highlight language-cql"
+          style="border: none;"><code>{{'Encoded data (' + content.data.length().toString() + ' characters)'}}</code></pre>
+      </td>
+    </tr>
+    {% endif %}
+  {% endfor %}
+{% endif %}

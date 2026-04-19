@@ -1,0 +1,25 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "7277257b-48fd-44bd-967a-6b36c777a90d",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "doNotPerform": false,
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "code": "1014599",
+      "display": "acetaminophen 300 MG / oxycodone hydrochloride 10 MG Oral Tablet",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/dde136d4-fa51-4b59-9bef-21dc51caf3d5"
+  },
+  "authoredOn": "2026-01-03T00:15:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/9d8e6c59-e55c-445e-8eaf-4b7a6609dcef"
+  }
+}

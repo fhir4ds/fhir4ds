@@ -1,0 +1,29 @@
+{
+  "resourceType": "Task",
+  "id": "db23b65f-c3d3-4afd-8422-e072d29de0a4",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-taskrejected" ]
+  },
+  "status": "rejected",
+  "statusReason": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "code": "443390004",
+      "display": "Refusal of treatment by patient (situation)",
+      "userSelected": true
+    } ]
+  },
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/CodeSystem/task-code",
+      "code": "fulfill"
+    } ]
+  },
+  "focus": {
+    "reference": "MedicationRequest/42d9ea9d-e868-42ce-a90e-d68e2883a9e9"
+  },
+  "executionPeriod": {
+    "start": "2026-11-01T09:00:00Z",
+    "end": "2026-11-03T09:00:00.000+00:00"
+  }
+}

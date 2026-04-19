@@ -1,0 +1,41 @@
+{
+  "resourceType": "Condition",
+  "id": "9ea09f3d-00e6-4f60-8136-ed529de475de",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "I21.21",
+      "display": "ST elevation (STEMI) myocardial infarction involving left circumflex coronary artery",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/ae7150fa-283f-4689-abff-ca7f29101609"
+  },
+  "encounter": {
+    "reference": "Encounter/d452e31b-f0eb-4832-beee-ff49910fbb41"
+  },
+  "onsetPeriod": {
+    "start": "2026-10-09T05:00:00.000+00:00",
+    "end": "2026-10-09T17:00:00.000+00:00"
+  }
+}

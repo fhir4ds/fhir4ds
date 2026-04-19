@@ -1,0 +1,40 @@
+{
+  "resourceType": "Condition",
+  "id": "6fc08b4e-68e5-4679-bbb9-6ed91af0701f",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active"
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item"
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "213151004",
+      "display": "Heart transplant failure and rejection (disorder)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/faf3e31d-533a-484f-9b9d-4ded0c32c84f"
+  },
+  "recordedDate": "2026-02-14T14:41:00.000+00:00"
+}

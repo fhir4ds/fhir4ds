@@ -1,0 +1,29 @@
+{
+  "resourceType": "Observation",
+  "id": "d7657c7c-2c67-46b9-a281-c5fa7a6d1958",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-clinical-result" ]
+  },
+  "status": "final",
+  "category": [ {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/202303",
+      "code": "113024001",
+      "display": "Assessment and interpretation of higher cerebral function, cognitive testing (procedure)",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://loinc.org",
+      "version": "2.73",
+      "code": "32451-7"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/15b275f0-8540-4c32-8ab6-29e535dcea64"
+  },
+  "effectiveDateTime": "2026-12-16T14:33:00.000+00:00",
+  "valueBoolean": true
+}

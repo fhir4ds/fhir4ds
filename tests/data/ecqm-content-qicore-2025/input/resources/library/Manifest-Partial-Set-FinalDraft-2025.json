@@ -1,0 +1,387 @@
+{
+    "resourceType": "Library",
+    "id": "Manifest-Partial-Set-FinalDraft-2025",
+    "meta": {
+        "profile": [
+            "http://hl7.org/fhir/uv/crmi/StructureDefinition/crmi-manifestlibrary"
+        ]
+    },
+    "contained": [
+        {
+            "resourceType": "Parameters",
+            "id": "exp-params",
+            "parameter": [
+                {
+                    "name": "system-version",
+                    "valueCanonical": "http://snomed.info/sct|http://snomed.info/sct/731000124108/version/20230901"
+                },
+                {
+                    "name": "system-version",
+                    "valueCanonical": "http://loinc.org|2.76"
+                },
+                {
+                    "name": "system-version",
+                    "valueCanonical": "http://terminology.hl7.org/CodeSystem/v3-ActCode|9.0.0"
+                },
+                {
+                    "name": "system-version",
+                    "valueCanonical": "http://terminology.hl7.org/CodeSystem/v3-AdministrativeGender|3.0.0"
+                },
+                {
+                    "name": "system-version",
+                    "valueCanonical": "urn:oid:2.16.840.1.113883.6.238|1.2"
+                },
+                {
+                    "name": "system-version",
+                    "valueCanonical": "http://www.ama-assn.org/go/cpt|2024"
+                },
+                {
+                    "name": "system-version",
+                    "valueCanonical": "http://hl7.org/fhir/sid/cvx|20231102"
+                },
+                {
+                    "name": "system-version",
+                    "valueCanonical": "http://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets|2024"
+                },
+                {
+                    "name": "system-version",
+                    "valueCanonical": "http://hl7.org/fhir/sid/icd-10-cm|2024"
+                },
+                {
+                    "name": "system-version",
+                    "valueCanonical": "http://www.cms.gov/Medicare/Coding/ICD10|2024"
+                },
+                {
+                    "name": "system-version",
+                    "valueCanonical": "http://www.nlm.nih.gov/research/umls/rxnorm|01022024"
+                },
+                {
+                    "name": "system-version",
+                    "valueCanonical": "https://nahdo.org/sopt|9.2"
+                }
+            ]
+        },
+        {
+            "resourceType": "Parameters",
+            "id": "endpoints",
+            "parameter": [
+                {
+                    "name": "artifactEndpointConfiguration",
+                    "part": [
+                        {
+                            "name": "artifactRoute",
+                            "valueUri": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1167|20220820"
+                        },
+                        {
+                            "name": "endpointUri",
+                            "valueUri": "https://example.org/fhir/"
+                        }
+                    ]
+                },
+                {
+                    "name": "artifactEndpointConfiguration",
+                    "part": [
+                        {
+                            "name": "artifactRoute",
+                            "valueUri": "http://cts.nlm.nih.gov/fhir/"
+                        },
+                        {
+                            "name": "endpointUri",
+                            "valueUri": "https://uat-cts.nlm.nih.gov/fhir/"
+                        }
+                    ]
+                },
+                {
+                    "name": "artifactEndpointConfiguration",
+                    "part": [
+                        {
+                            "name": "artifactRoute",
+                            "valueUri": "http://terminology.hl7.org/"
+                        },
+                        {
+                            "name": "endpointUri",
+                            "valueUri": "https://tx.fhir.org/r4/"
+                        }
+                    ]
+                },
+                {
+                    "name": "artifactEndpointConfiguration",
+                    "part": [
+                        {
+                            "name": "artifactRoute",
+                            "valueUri": "http://hl7.org/fhir/"
+                        },
+                        {
+                            "name": "endpointUri",
+                            "valueUri": "https://tx.fhir.org/r4/"
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "extension": [
+        {
+            "url": "http://hl7.org/fhir/StructureDefinition/cqf-expansionParameters",
+            "valueReference": {
+                "reference": "#exp-params"
+            }
+        },
+        {
+            "url": "http://hl7.org/fhir/StructureDefinition/cqf-endpointConfiguration",
+            "valueReference": {
+                "reference": "#endpoints"
+            }
+        },
+        {
+            "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-softwaresystem",
+            "valueReference": {
+                "reference": "Device/cqf-tooling"
+            }
+        }
+    ],
+    "url": "http://hl7.org/fhir/us/cqfmeasures/Library/ecqm-update-qi-core-2025",
+    "identifier": [
+        {
+            "use": "official",
+            "system": "http://example.org/fhir/cqi/ecqm/Library/Identifier",
+            "value": "eCQM Update QI Core 2025"
+        }
+    ],
+    "version": "1.0.0-draft",
+    "name": "ECQMUpdateQICore2025",
+    "title": "eCQM Update QI Core 2025",
+    "status": "draft",
+    "experimental": true,
+    "type": {
+        "coding": [
+            {
+                "system": "http://terminology.hl7.org/CodeSystem/library-type",
+                "code": "asset-collection"
+            }
+        ]
+    },
+    "date": "2025-05-06",
+    "publisher": "Clinical Quality Information WG",
+    "contact": [
+        {
+            "telecom": [
+                {
+                    "system": "url",
+                    "value": "http://www.hl7.org/Special/committees/cqi"
+                }
+            ]
+        }
+    ],
+    "description": "This library is an example final draft of a version manifest (also referred to as an expansion profile) that specifies expansion rules for a set of value sets used for an example set of EP/EC measures.",
+    "jurisdiction": [
+        {
+            "coding": [
+                {
+                    "system": "urn:iso:std:iso:3166",
+                    "code": "US"
+                }
+            ]
+        }
+    ],
+    "purpose": "This library is defined to illustrate a Version Manifest in final draft status, as it would look at the end of an eCQM Annual Update cycle, approved on April 23rd, 2024. The latest available version of code systems used at that time is specified to provide stability for value set expansion during the testing and implementation phase. Terminology.HL7.org, in particular, was version 5.5.0 at the time, and FHIR code system versions are chosen from that release.",
+    "approvalDate": "2025-05-06",
+    "lastReviewDate": "2025-05-06",
+    "relatedArtifact": [
+        {
+            "type": "composed-of",
+            "display": "Preventive Care and Screening: Screening for Depression and Follow-Up PlanFHIR, 0.4.000",
+            "resource": "https://madie.cms.gov/Measure/CMS2FHIRPCSDepressionScreenAndFollowUp|0.4.001"
+        },
+        {
+            "type": "composed-of",
+            "display": "Preventive Care and Screening: Screening for High Blood Pressure and Follow-Up DocumentedFHIR, 0.3.000",
+            "resource": "https://madie.cms.gov/Measure/CMS22FHIRPCSBPScreeningFollowUp|0.3.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Documentation of Current Medications in the Medical RecordFHIR, 0.3.000",
+            "resource": "https://madie.cms.gov/Measure/CMS68FHIRDocumentationofCurrentMedications|0.3.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Anticoagulation Therapy for Atrial Fibrillation/FlutterFHIR, 0.3.002",
+            "resource": "https://madie.cms.gov/Library/CMS71FHIRSTKAnticoagAFFlutter|0.3.002"
+        },
+        {
+            "type": "composed-of",
+            "display": "Antithrombotic Therapy By End of Hospital Day 2FHIR, 0.7.002",
+            "resource": "https://madie.cms.gov/Measure/CMS72FHIRSTKAntithromboticDay2|0.7.002"
+        },
+        {
+            "type": "composed-of",
+            "display": "Discharged on Antithrombotic TherapyFHIR, 0.9.003",
+            "resource": "https://madie.cms.gov/Measure/CMS104FHIRSTKDCAntithrombotic|0.9.003"
+        },
+        {
+            "type": "composed-of",
+            "display": "Diabetes: Glycemic Status Assessment Greater Than 9%FHIR, 0.5.000",
+            "resource": "https://madie.cms.gov/Measure/CMS122FHIRDiabetesAssessGreaterThan9Percent|0.5.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Cervical Cancer ScreeningFHIR, 0.4.000",
+            "resource": "https://madie.cms.gov/Measure/CMS124FHIRCervicalCancerScreening|0.4.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Breast Cancer ScreeningFHIR, 0.4.000",
+            "resource": "https://madie.cms.gov/Measure/CMS125FHIRBreastCancerScreening|0.4.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Colorectal Cancer ScreeningFHIR, 0.4.000",
+            "resource": "https://madie.cms.gov/Measure/CMS130FHIRColorectalCancerScreening|0.4.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Cataracts: 20/40 or Better Visual Acuity within 90 Days Following Cataract SurgeryFHIR, 0.2.000",
+            "resource": "https://madie.cms.gov/Measure/CMS133FHIRCataracts2040BCVAwithin90Days|0.2.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Heart Failure (HF): Angiotensin-Converting Enzyme (ACE) Inhibitor or Angiotensin Receptor Blocker (ARB) or Angiotensin Receptor-Neprilysin Inhibitor (ARNI) Therapy for Left Ventricular Systolic Dysfunction (LVSD)FHIR, 0.4.000",
+            "resource": "https://madie.cms.gov/Measure/CMS135FHIRHFACEIorARBorARNIforLVSD|0.4.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Diabetic Retinopathy: Communication with the Physician Managing Ongoing Diabetes CareFHIR, 0.2.000",
+            "resource": "https://madie.cms.gov/Measure/CMS142FHIRDRCommunicationWithPhysicianManagingDiabetes|0.2.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Primary Open-Angle Glaucoma (POAG): Optic Nerve EvaluationFHIR, 0.2.000",
+            "resource": "https://madie.cms.gov/Measure/CMS143FHIRPOAGOpticNerveEvaluation|0.2.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Heart Failure (HF): Beta-Blocker Therapy for Left Ventricular Systolic Dysfunction (LVSD)FHIR, 1.5.000",
+            "resource": "https://madie.cms.gov/Measure/CMS144FHIRHFBetaBlockerTherapyforLVSD|1.5.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Coronary Artery Disease (CAD): Beta-Blocker Therapy-Prior Myocardial Infarction (MI) or Left Ventricular Systolic Dysfunction (LVEF less than or equal to 40%)FHIR, 0.4.000",
+            "resource": "https://madie.cms.gov/Measure/CMS145FHIRCADBetaBlockerTherapyPriorMIorLVSD|0.4.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Dementia: Cognitive AssessmentFHIR, 0.2.000",
+            "resource": "https://madie.cms.gov/Measure/CMS149FHIRDementiaCognitiveAssessment|0.2.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Depression Remission at Twelve MonthsFHIR, 0.3.000",
+            "resource": "https://madie.cms.gov/Measure/CMS159FHIRDepressionRemissionatTwelveMonths|0.3.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Controlling High Blood PressureFHIR, 0.3.000",
+            "resource": "https://madie.cms.gov/Measure/CMS165FHIRControllingHighBloodPressure|0.5.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Intensive Care Unit Venous Thromboembolism ProphylaxisFHIR, 0.3.001",
+            "resource": "https://madie.cms.gov/Measure/CMS190VTEProphylaxisICUFHIR|0.3.001"
+        },
+        {
+            "type": "composed-of",
+            "display": "Cesarean BirthFHIR, 0.6.000",
+            "resource": "https://madie.cms.gov/Measure/CMS0334FHIRPCCesareanBirth|0.6.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Safe Use of Opioids - Concurrent PrescribingFHIR, 0.3.007",
+            "resource": "https://madie.cms.gov/Measure/CMS506FHIRSafeUseofOpioids|0.3.007"
+        },
+        {
+            "type": "composed-of",
+            "display": "Bone Density Evaluation for Patients with Prostate Cancer and Receiving Androgen Deprivation TherapyFHIR, 1.5.000",
+            "resource": "https://madie.cms.gov/Measure/CMS645FHIRBoneDensityProstateCancerAndrogenDeprivationTherapy|1.5.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Intravesical Bacillus-Calmette-Guerin for Non-Muscle Invasive Bladder CancerFHIR, 1.5.000",
+            "resource": "https://madie.cms.gov/Measure/CMS646FHIRIntravesicalBacillusCalmetteGuerinForBladderCancer|1.5.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Urinary Symptom Score Change 6-12 Months After Diagnosis of Benign Prostatic HyperplasiaFHIR, 1.5.000",
+            "resource": "https://madie.cms.gov/Measure/CMS771FHIRUrinarySymptomScoreChangeBenignProstaticHyperplasia|1.5.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Hospital Harm - Severe HypoglycemiaFHIR, 0.3.000",
+            "resource": "https://madie.cms.gov/Measure/CMS816FHIRHHHypo|0.3.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Hospital Harm - Opioid-Related Adverse EventsFHIR, 0.4.000",
+            "resource": "https://madie.cms.gov/Measure/CMS819FHIRHHORAE|0.4.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Hospital Harm - Pressure InjuryFHIR, 0.3.000",
+            "resource": "https://madie.cms.gov/Measure/CMS826FHIRHHPI|0.3.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Hospital Harm -  Acute Kidney InjuryFHIR, 0.2.000",
+            "resource": "https://madie.cms.gov/Measure/CMS832HHAKIFHIR|0.2.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Hospital Harm - Severe HyperglycemiaFHIR, 0.3.000",
+            "resource": "https://madie.cms.gov/Measure/CMS871HHHyperFHIR|0.3.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Malnutrition Care ScoreFHIR, 0.3.003",
+            "resource": "https://madie.cms.gov/Measure/CMS986FHIRMalnutritionScore|0.3.003"
+        },
+        {
+            "type": "composed-of",
+            "display": "Hospital Harm – Falls with InjuryFHIR, 0.2.000",
+            "resource": "https://madie.cms.gov/Measure/CMS1017FHIRHHFI|0.2.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Severe Obstetric ComplicationsFHIR, 0.3.000",
+            "resource": "https://madie.cms.gov/Measure/CMS1028FHIRPCSevereOBComps|0.3.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Excessive Radiation Dose or Inadequate Image Quality for Diagnostic Computed Tomography in Adults - Facility IQR FHIR, 0.9.000",
+            "resource": "https://madie.cms.gov/Measure/CMS1074FHIRCTIQR|0.9.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Excessive Radiation Dose or Inadequate Image Quality for Diagnostic Computed Tomography in Adults - Facility OQR FHIR, 0.8.000",
+            "resource": "https://madie.cms.gov/Measure/CMS1206FHIRCTOQR|0.8.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Hospital Harm - Postoperative Respiratory FailureFHIR, 0.2.000",
+            "resource": "https://madie.cms.gov/Measure/CMS1218FHIRHHRF|0.2.000"
+        },
+        {
+            "type": "composed-of",
+            "display": "Emergency Care Access & Timeliness (HOQR)FHIR, 0.4.001",
+            "resource": "https://madie.cms.gov/Measure/CMS1244FHIRECATHOQR|0.4.001"
+        },
+        {
+            "type": "composed-of",
+            "display": "Emergency Care Access & Timeliness (REHQR)FHIR, 0.5.001",
+            "resource": "https://madie.cms.gov/Measure/CMS1264FHIRECATREHQR|0.5.001"
+        },
+        {
+            "type": "composed-of",
+            "display": "Core Clinical Data Elements HW Mortality FHIR, Draft based on 0.5.001",
+            "resource": "https://madie.cms.gov/Measure/CMSFHIR844HybridHospitalWideMortality|Draft based on 0.5.001"
+        }
+    ]
+}

@@ -1,0 +1,105 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "a46e613c-50d4-4401-94ba-0f6d4246f935",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "fcf6cd13-ddf3-41a0-97e5-888662714d21-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "9453e96c-c06a-469b-ab8f-e2cc32dc684c"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#fcf6cd13-ddf3-41a0-97e5-888662714d21-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "\"Term Newborn=0,  <42wks B4 Asse delivery.\nPreterm=0, rel date/time 1 hour after delivery Datetime.\nwith note of timing logic needed to constrain the rel date/time time to no later than the time of Asse delivery time, DENOM will Fail\n\"\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS0334FHIRPCCesareanBirth",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/9453e96c-c06a-469b-ab8f-e2cc32dc684c"
+  }, {
+    "reference": "Observation/201d0662-1506-4db1-aa4a-29b68cc767f5"
+  }, {
+    "reference": "Observation/2cd24089-0e48-4dbc-8533-4273bafddca8"
+  }, {
+    "reference": "Observation/5c1f392f-8ff2-4a1f-8555-a3480af8c821"
+  }, {
+    "reference": "Observation/b838fdb3-75cf-48c8-ac48-328993e792b4"
+  }, {
+    "reference": "Encounter/cc12a49f-05dc-4825-8308-d8b668936a2e"
+  }, {
+    "reference": "Procedure/e280e318-04be-494d-9939-a13f65ad25bc"
+  }, {
+    "reference": "Condition/b3c1ecdd-3e1e-4130-af66-4d04cd7d3349"
+  }, {
+    "reference": "Coverage/08cc46f9-8a7f-4094-8fcf-404af51c5db8"
+  }, {
+    "reference": "Organization/1aa94e29-b4b2-43d6-be03-753232708d97"
+  }, {
+    "reference": "Practitioner/6c2ce971-fb9f-427d-880b-c67e8b62aae1"
+  } ]
+}

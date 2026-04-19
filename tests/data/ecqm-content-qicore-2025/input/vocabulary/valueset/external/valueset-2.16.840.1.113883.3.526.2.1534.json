@@ -1,0 +1,187 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.526.2.1534-20250125",
+  "meta": {
+    "versionId": "32",
+    "lastUpdated": "2025-01-25T01:09:35.000-05:00",
+    "profile": [ "http://hl7.org/fhir/StructureDefinition/shareablevalueset", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/computable-valueset-cqfm", "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/publishable-valueset-cqfm" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-author",
+    "valueContactDetail": {
+      "name": "American Academy of Ophthalmology Author"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/resource-lastReviewDate",
+    "valueDate": "2025-01-25"
+  }, {
+    "url": "http://hl7.org/fhir/StructureDefinition/valueset-effectiveDate",
+    "valueDate": "2025-01-25"
+  } ],
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1534",
+  "identifier": [ {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:oid:2.16.840.1.113883.3.526.2.1534"
+  } ],
+  "version": "20250125",
+  "name": "CataractMatureOrHypermature",
+  "title": "Cataract Mature or Hypermature",
+  "status": "active",
+  "date": "2025-01-25T01:09:35-05:00",
+  "publisher": "American Academy of Ophthalmology Steward",
+  "jurisdiction": [ {
+    "extension": [ {
+      "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+      "valueCode": "unknown"
+    } ]
+  } ],
+  "purpose": "(Clinical Focus: The purpose of this value set is to represent concepts of a diagnosis of mature or hypermature cataract.),(Data Element Scope: This value set may use a model element related to Diagnosis.),(Inclusion Criteria: Includes concepts that represent a diagnosis of mature or hypermature cataract, including senile or intumescent cataract.),(Exclusion Criteria: Excludes concepts that represent a diagnosis for 'unspecified eye.')",
+  "compose": {
+    "include": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "concept": [ {
+        "code": "H25.011",
+        "display": "Cortical age-related cataract, right eye"
+      }, {
+        "code": "H25.012",
+        "display": "Cortical age-related cataract, left eye"
+      }, {
+        "code": "H25.013",
+        "display": "Cortical age-related cataract, bilateral"
+      }, {
+        "code": "H25.091",
+        "display": "Other age-related incipient cataract, right eye"
+      }, {
+        "code": "H25.092",
+        "display": "Other age-related incipient cataract, left eye"
+      }, {
+        "code": "H25.093",
+        "display": "Other age-related incipient cataract, bilateral"
+      }, {
+        "code": "H25.099",
+        "display": "Other age-related incipient cataract, unspecified eye"
+      }, {
+        "code": "H25.11",
+        "display": "Age-related nuclear cataract, right eye"
+      }, {
+        "code": "H25.12",
+        "display": "Age-related nuclear cataract, left eye"
+      }, {
+        "code": "H25.13",
+        "display": "Age-related nuclear cataract, bilateral"
+      }, {
+        "code": "H25.811",
+        "display": "Combined forms of age-related cataract, right eye"
+      }, {
+        "code": "H25.812",
+        "display": "Combined forms of age-related cataract, left eye"
+      }, {
+        "code": "H25.813",
+        "display": "Combined forms of age-related cataract, bilateral"
+      }, {
+        "code": "H25.89",
+        "display": "Other age-related cataract"
+      }, {
+        "code": "H25.9",
+        "display": "Unspecified age-related cataract"
+      }, {
+        "code": "H26.9",
+        "display": "Unspecified cataract"
+      } ]
+    } ]
+  },
+  "expansion": {
+    "identifier": "urn:uuid:217a084e-cb50-447e-9360-a70b80e4b6af",
+    "timestamp": "2025-06-20T16:54:43-04:00",
+    "total": 16,
+    "offset": 0,
+    "parameter": [ {
+      "name": "count",
+      "valueInteger": 1000
+    }, {
+      "name": "offset",
+      "valueInteger": 0
+    } ],
+    "contains": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.011",
+      "display": "Cortical age-related cataract, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.012",
+      "display": "Cortical age-related cataract, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.013",
+      "display": "Cortical age-related cataract, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.091",
+      "display": "Other age-related incipient cataract, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.092",
+      "display": "Other age-related incipient cataract, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.093",
+      "display": "Other age-related incipient cataract, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.099",
+      "display": "Other age-related incipient cataract, unspecified eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.11",
+      "display": "Age-related nuclear cataract, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.12",
+      "display": "Age-related nuclear cataract, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.13",
+      "display": "Age-related nuclear cataract, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.811",
+      "display": "Combined forms of age-related cataract, right eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.812",
+      "display": "Combined forms of age-related cataract, left eye"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.813",
+      "display": "Combined forms of age-related cataract, bilateral"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.89",
+      "display": "Other age-related cataract"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H25.9",
+      "display": "Unspecified age-related cataract"
+    }, {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "version": "2024",
+      "code": "H26.9",
+      "display": "Unspecified cataract"
+    } ]
+  }
+}

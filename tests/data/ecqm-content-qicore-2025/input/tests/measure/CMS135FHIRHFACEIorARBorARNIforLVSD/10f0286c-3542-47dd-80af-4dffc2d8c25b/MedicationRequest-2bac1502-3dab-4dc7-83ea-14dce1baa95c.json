@@ -1,0 +1,24 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "2bac1502-3dab-4dc7-83ea-14dce1baa95c",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationrequest" ]
+  },
+  "status": "completed",
+  "intent": "order",
+  "medicationCodeableConcept": {
+    "coding": [ {
+      "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "version": "04012024",
+      "code": "1091652",
+      "display": "azilsartan medoxomil 80 MG Oral Tablet"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/10f0286c-3542-47dd-80af-4dffc2d8c25b"
+  },
+  "authoredOn": "2026-02-03T08:00:00.000+00:00",
+  "requester": {
+    "reference": "Practitioner/bf3bd089-6873-4acd-8c62-4b9992b4216a"
+  }
+}

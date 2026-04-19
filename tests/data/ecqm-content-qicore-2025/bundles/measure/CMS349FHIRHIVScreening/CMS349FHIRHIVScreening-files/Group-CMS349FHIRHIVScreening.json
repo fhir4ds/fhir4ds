@@ -1,0 +1,372 @@
+{
+  "resourceType": "Group",
+  "id": "CMS349FHIRHIVScreening",
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/artifact-testArtifact",
+    "valueCanonical": "http://ecqi.healthit.gov/ecqms/Measure/CMS349FHIRHIVScreening"
+  } ],
+  "active": true,
+  "type": "person",
+  "actual": true,
+  "member": [ {
+    "entity": {
+      "reference": "Patient/0dd2c81f-19b8-495b-acdf-196a2207b376",
+      "display": "Age65Jan1 IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/0dd2c81f-19b8-495b-acdf-196a2207b376",
+      "display": "Age65Jan1 IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/18ad99cd-c0b1-48c9-ab0b-bb3ab66e1c18",
+      "display": "Age65Jan1 IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/18ad99cd-c0b1-48c9-ab0b-bb3ab66e1c18",
+      "display": "Age65Jan1 IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/90346970-2f5c-43aa-81ab-30e4f5d74830",
+      "display": "LabTestTooYoung NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/90346970-2f5c-43aa-81ab-30e4f5d74830",
+      "display": "LabTestTooYoung NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/af6febab-8963-49ea-86e4-72345024dc0b",
+      "display": "HIVDxJan2duringMP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/af6febab-8963-49ea-86e4-72345024dc0b",
+      "display": "HIVDxJan2duringMP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a05a0ed5-b57d-4ce6-adc8-b4b9ec0403ae",
+      "display": "NoEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/a05a0ed5-b57d-4ce6-adc8-b4b9ec0403ae",
+      "display": "NoEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/df21795c-3269-4d4c-9173-0089d65a75d5",
+      "display": "LabTestAge65relevantDatetime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/df21795c-3269-4d4c-9173-0089d65a75d5",
+      "display": "LabTestAge65relevantDatetime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/40677ab0-38af-4fe1-8cc0-bcd41c14d37d",
+      "display": "LabTestHIVDxBeforeMP NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/40677ab0-38af-4fe1-8cc0-bcd41c14d37d",
+      "display": "LabTestHIVDxBeforeMP NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/010e7c7c-3767-4d0c-8b1d-935c1e451ad0",
+      "display": "NoLabTest NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/010e7c7c-3767-4d0c-8b1d-935c1e451ad0",
+      "display": "NoLabTest NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7b9a4d0a-7465-45ac-932a-0aca2de75a3c",
+      "display": "Age64Dec31 IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/7b9a4d0a-7465-45ac-932a-0aca2de75a3c",
+      "display": "Age64Dec31 IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1d082b9c-26b3-4f59-b7f9-6f206c594506",
+      "display": "LabTestHIVDxDuringMPrelevantDatetime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1d082b9c-26b3-4f59-b7f9-6f206c594506",
+      "display": "LabTestHIVDxDuringMPrelevantDatetime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ffb7a0c4-fcef-46ff-9593-f3cebe574e21",
+      "display": "LabTestHIVDxDuringMPrelevantDatetime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/ffb7a0c4-fcef-46ff-9593-f3cebe574e21",
+      "display": "LabTestHIVDxDuringMPrelevantDatetime NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/35a14482-f089-4578-81ef-52dfebf9e77d",
+      "display": "LabTestBeforeBirth NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/35a14482-f089-4578-81ef-52dfebf9e77d",
+      "display": "LabTestBeforeBirth NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f24d0ae4-0daf-4f7e-85c8-679360f29219",
+      "display": "TwoLabBothInvalidTiming NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f24d0ae4-0daf-4f7e-85c8-679360f29219",
+      "display": "TwoLabBothInvalidTiming NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/720428de-44f9-48d8-86c9-262b6bd5fa46",
+      "display": "HIVDxStartsDuringMP  DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/720428de-44f9-48d8-86c9-262b6bd5fa46",
+      "display": "HIVDxStartsDuringMP  DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5e4b8bcc-7354-4513-8c9e-61c59bf7c2fc",
+      "display": "LabTestHIVDxDuringMPrelevantPeriod NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/5e4b8bcc-7354-4513-8c9e-61c59bf7c2fc",
+      "display": "LabTestHIVDxDuringMPrelevantPeriod NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/15d4c0f3-e862-4b06-9ed0-7a572b901aba",
+      "display": "Patient65StartMP IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/15d4c0f3-e862-4b06-9ed0-7a572b901aba",
+      "display": "Patient65StartMP IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/64e863bc-02b5-46cc-8c27-57df7cebfcaf",
+      "display": "HIVDxJan1duringMP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/64e863bc-02b5-46cc-8c27-57df7cebfcaf",
+      "display": "HIVDxJan1duringMP DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/74e4451c-12d0-4e5b-8f99-c9410766c3c4",
+      "display": "Age65Dec31 IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/74e4451c-12d0-4e5b-8f99-c9410766c3c4",
+      "display": "Age65Dec31 IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b8161404-686d-4ce4-b291-e7a02ffe7b7e",
+      "display": "HIVDxStartsBeforeMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b8161404-686d-4ce4-b291-e7a02ffe7b7e",
+      "display": "HIVDxStartsBeforeMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2f132a6c-2ec6-4553-9d90-d3e7dc19de26",
+      "display": "PatientTooOld IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/2f132a6c-2ec6-4553-9d90-d3e7dc19de26",
+      "display": "PatientTooOld IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e98529d7-5196-4523-bbc9-cbf48b5525d1",
+      "display": "NoHIVDiag DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e98529d7-5196-4523-bbc9-cbf48b5525d1",
+      "display": "NoHIVDiag DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bd10b739-a303-497c-8b23-e673bee363f5",
+      "display": "Age16InitialVisit DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/bd10b739-a303-497c-8b23-e673bee363f5",
+      "display": "Age16InitialVisit DENOMPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/050401cc-5f7b-432a-8194-11702adede21",
+      "display": "EncOverlapsMPEnd IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/050401cc-5f7b-432a-8194-11702adede21",
+      "display": "EncOverlapsMPEnd IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/161e8e14-fea4-47c4-b752-b90e047697ea",
+      "display": "InvalidEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/161e8e14-fea4-47c4-b752-b90e047697ea",
+      "display": "InvalidEncounter IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9b6c9156-c4b5-46a1-8d47-d2d4998f44d3",
+      "display": "HIVDxDec31BeforeMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/9b6c9156-c4b5-46a1-8d47-d2d4998f44d3",
+      "display": "HIVDxDec31BeforeMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8b1bcbaa-01df-486d-b243-9399e7515074",
+      "display": "TwoHIVDxBothInvalidTiming DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8b1bcbaa-01df-486d-b243-9399e7515074",
+      "display": "TwoHIVDxBothInvalidTiming DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8a599e2b-f25b-4912-8369-cda93caaf351",
+      "display": "TwoInvalidEncs IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8a599e2b-f25b-4912-8369-cda93caaf351",
+      "display": "TwoInvalidEncs IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8bc5cedd-f265-49c4-be8e-d6a0a12b3752",
+      "display": "LabTestAge65relevantPeriod NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/8bc5cedd-f265-49c4-be8e-d6a0a12b3752",
+      "display": "LabTestAge65relevantPeriod NUMERPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b46e3e19-548e-481a-93a1-57973055ffad",
+      "display": "HIVDxDec31BeforeMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/b46e3e19-548e-481a-93a1-57973055ffad",
+      "display": "HIVDxDec31BeforeMP DENEXPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/41abc473-f005-4664-aa67-773f9b2f77e7",
+      "display": "Age15Jan1 IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/41abc473-f005-4664-aa67-773f9b2f77e7",
+      "display": "Age15Jan1 IPPPass"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/198a8ffe-cd3f-45f7-931b-897796c67247",
+      "display": "LabTestTooOld NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/198a8ffe-cd3f-45f7-931b-897796c67247",
+      "display": "LabTestTooOld NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/243bc4d8-841e-4760-a65b-13013bf5204c",
+      "display": "EncOverlapsMPStart IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/243bc4d8-841e-4760-a65b-13013bf5204c",
+      "display": "EncOverlapsMPStart IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1d47538d-c090-48eb-8d0b-0ed7e86ebbfd",
+      "display": "HIVDxInvalid DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/1d47538d-c090-48eb-8d0b-0ed7e86ebbfd",
+      "display": "HIVDxInvalid DENEXFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e48db8cc-afd4-47ea-846c-ee4f3794e5ea",
+      "display": "AgeUnder15 IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e48db8cc-afd4-47ea-846c-ee4f3794e5ea",
+      "display": "AgeUnder15 IPPFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e2c3ca6d-c054-4245-b59c-12f83919cfaa",
+      "display": "LabTestAfterMP NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/e2c3ca6d-c054-4245-b59c-12f83919cfaa",
+      "display": "LabTestAfterMP NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f5a4440e-ff86-4d9a-807c-26dc21daad46",
+      "display": "LabTestInvalid NUMERFail"
+    }
+  }, {
+    "entity": {
+      "reference": "Patient/f5a4440e-ff86-4d9a-807c-26dc21daad46",
+      "display": "LabTestInvalid NUMERFail"
+    }
+  } ]
+}

@@ -1,0 +1,44 @@
+{
+  "resourceType": "Condition",
+  "id": "66b1bd64-0709-4947-bf4c-5c0d385e2789",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "version": "4.0.1",
+      "code": "inactive",
+      "display": "Inactive",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "provisional"
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "problem-list-item",
+      "display": "Problem List Item",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "2023-03",
+      "code": "110030002",
+      "display": "Concussion injury of brain (disorder)",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/206ebb0e-c9b8-42b7-843e-ef1fe0d7ade9"
+  },
+  "onsetDateTime": "2026-08-20T08:00:00.000+00:00",
+  "abatementDateTime": "2026-10-10T06:07:00.000+00:00"
+}

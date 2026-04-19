@@ -124,6 +124,7 @@ def _extract_type_from_choice_field(field_name: str) -> Optional[str]:
         "Quantity": "Quantity",
         "CodeableConcept": "CodeableConcept",
         "Coding": "Coding",
+        "Code": "code",
         "Range": "Range",
         "Ratio": "Ratio",
         "Period": "Period",
@@ -145,6 +146,11 @@ def _extract_type_from_choice_field(field_name: str) -> Optional[str]:
         "Extension": "Extension",
         # Special
         "Resource": "Resource",
+        "Base64Binary": "base64Binary",
+        "Markdown": "markdown",
+        "PositiveInt": "positiveInt",
+        "UnsignedInt": "unsignedInt",
+        "Id": "id",
     }
 
     # Try to match from longest suffix first (CodeableConcept before Coding)

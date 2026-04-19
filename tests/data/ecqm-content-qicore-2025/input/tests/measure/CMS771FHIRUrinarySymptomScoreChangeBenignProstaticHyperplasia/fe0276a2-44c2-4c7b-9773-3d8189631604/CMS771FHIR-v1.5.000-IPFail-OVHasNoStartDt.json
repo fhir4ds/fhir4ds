@@ -1,0 +1,309 @@
+{
+  "resourceType": "Bundle",
+  "id": "62a89f7131a203bdc723752b",
+  "type": "transaction",
+  "entry": [ {
+    "fullUrl": "https://madie.cms.gov/Patient/fe0276a2-44c2-4c7b-9773-3d8189631604",
+    "resource": {
+      "resourceType": "Patient",
+      "id": "fe0276a2-44c2-4c7b-9773-3d8189631604",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-patient" ]
+      },
+      "extension": [ {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2106-3",
+            "display": "White"
+          }
+        }, {
+          "url": "text",
+          "valueString": "White"
+        } ]
+      }, {
+        "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity",
+        "extension": [ {
+          "url": "ombCategory",
+          "valueCoding": {
+            "system": "urn:oid:2.16.840.1.113883.6.238",
+            "code": "2186-5",
+            "display": "Non Hispanic or Latino"
+          }
+        }, {
+          "url": "text",
+          "valueString": "Non Hispanic or Latino"
+        } ]
+      } ],
+      "identifier": [ {
+        "type": {
+          "coding": [ {
+            "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+            "code": "MR"
+          } ]
+        },
+        "system": "https://bonnie-fhir.healthit.gov/",
+        "value": "41654161684974312"
+      } ],
+      "name": [ {
+        "family": "IPFail",
+        "given": [ "OVHasNoStartDtP" ]
+      } ],
+      "gender": "male",
+      "birthDate": "1980-06-01"
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Patient/fe0276a2-44c2-4c7b-9773-3d8189631604"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Encounter/f8a40d79-20e0-45a3-80ce-bb82eb33b5ac",
+    "resource": {
+      "resourceType": "Encounter",
+      "id": "f8a40d79-20e0-45a3-80ce-bb82eb33b5ac",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-encounter" ]
+      },
+      "status": "finished",
+      "class": {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "AMB",
+        "display": "ambulatory"
+      },
+      "type": [ {
+        "coding": [ {
+          "system": "http://www.ama-assn.org/go/cpt",
+          "version": "2024",
+          "code": "99212"
+        } ]
+      } ],
+      "subject": {
+        "reference": "Patient/fe0276a2-44c2-4c7b-9773-3d8189631604"
+      },
+      "period": {
+        "end": "2026-02-01T09:30:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Encounter/f8a40d79-20e0-45a3-80ce-bb82eb33b5ac"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Condition/e69d6c1c-d2f3-4787-ad8a-c0456398a1a2",
+    "resource": {
+      "resourceType": "Condition",
+      "id": "e69d6c1c-d2f3-4787-ad8a-c0456398a1a2",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns" ]
+      },
+      "clinicalStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+          "code": "active",
+          "display": "active"
+        } ]
+      },
+      "verificationStatus": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+          "code": "confirmed",
+          "display": "Confirmed"
+        } ]
+      },
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+          "code": "problem-list-item",
+          "display": "Problem List Item"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://hl7.org/fhir/sid/icd-10-cm",
+          "version": "2024",
+          "code": "N40.1",
+          "display": "Benign prostatic hyperplasia with lower urinary tract symptoms"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/fe0276a2-44c2-4c7b-9773-3d8189631604"
+      },
+      "onsetPeriod": {
+        "start": "2025-07-01T08:00:00.000+00:00"
+      }
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Condition/e69d6c1c-d2f3-4787-ad8a-c0456398a1a2"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/926da269-004e-490c-ad04-340aaf59c674",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "926da269-004e-490c-ad04-340aaf59c674",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey",
+          "display": "Survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "80976-4",
+          "display": "International Prostate Symptom Score [IPSS]"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/fe0276a2-44c2-4c7b-9773-3d8189631604"
+      },
+      "effectiveDateTime": "2025-08-01T08:00:00.000+00:00",
+      "valueInteger": 2
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/926da269-004e-490c-ad04-340aaf59c674"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/Observation/e762177c-9e5c-4ac1-89b3-74db8fd35872",
+    "resource": {
+      "resourceType": "Observation",
+      "id": "e762177c-9e5c-4ac1-89b3-74db8fd35872",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-observation-screening-assessment" ]
+      },
+      "status": "final",
+      "category": [ {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "survey",
+          "display": "Survey"
+        } ]
+      } ],
+      "code": {
+        "coding": [ {
+          "system": "http://loinc.org",
+          "version": "2.76",
+          "code": "80976-4",
+          "display": "International Prostate Symptom Score [IPSS]"
+        } ]
+      },
+      "subject": {
+        "reference": "Patient/fe0276a2-44c2-4c7b-9773-3d8189631604"
+      },
+      "effectiveDateTime": "2026-07-01T08:00:00.000+00:00",
+      "valueInteger": 2
+    },
+    "request": {
+      "method": "PUT",
+      "url": "Observation/e762177c-9e5c-4ac1-89b3-74db8fd35872"
+    }
+  }, {
+    "fullUrl": "https://madie.cms.gov/MeasureReport/6f73785e-1efd-4866-a5ae-aa2d8fa36a94",
+    "resource": {
+      "resourceType": "MeasureReport",
+      "id": "6f73785e-1efd-4866-a5ae-aa2d8fa36a94",
+      "meta": {
+        "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+      },
+      "contained": [ {
+        "resourceType": "Parameters",
+        "id": "12e8689b-082e-4db5-883a-15fc482e8432-parameters",
+        "parameter": [ {
+          "name": "subject",
+          "valueString": "fe0276a2-44c2-4c7b-9773-3d8189631604"
+        } ]
+      } ],
+      "extension": [ {
+        "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+        "valueReference": {
+          "reference": "#12e8689b-082e-4db5-883a-15fc482e8432-parameters"
+        }
+      }, {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+        "valueMarkdown": "Patient with BPH Dx, Initial and Followup USS Assessment and OV which has no start date for Encounter Period"
+      } ],
+      "modifierExtension": [ {
+        "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+        "valueBoolean": true
+      } ],
+      "status": "complete",
+      "type": "individual",
+      "measure": "https://madie.cms.gov/Measure/CMS771FHIRUrinarySymptomScoreChangeBenignProstaticHyperplasia",
+      "period": {
+        "start": "2026-01-01",
+        "end": "2026-12-31"
+      },
+      "group": [ {
+        "id": "Group_1",
+        "population": [ {
+          "id": "InitialPopulation_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "initial-population",
+              "display": "Initial Population"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Denominator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator",
+              "display": "Denominator"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "DenominatorExclusion_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "denominator-exclusion",
+              "display": "Denominator Exclusion"
+            } ]
+          },
+          "count": 0
+        }, {
+          "id": "Numerator_1",
+          "code": {
+            "coding": [ {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+              "code": "numerator",
+              "display": "Numerator"
+            } ]
+          },
+          "count": 0
+        } ],
+        "measureScore": {
+          "value": 1.0
+        }
+      } ],
+      "evaluatedResource": [ {
+        "reference": "Patient/fe0276a2-44c2-4c7b-9773-3d8189631604"
+      }, {
+        "reference": "Encounter/f8a40d79-20e0-45a3-80ce-bb82eb33b5ac"
+      }, {
+        "reference": "Condition/e69d6c1c-d2f3-4787-ad8a-c0456398a1a2"
+      }, {
+        "reference": "Observation/926da269-004e-490c-ad04-340aaf59c674"
+      }, {
+        "reference": "Observation/e762177c-9e5c-4ac1-89b3-74db8fd35872"
+      } ]
+    },
+    "request": {
+      "method": "PUT",
+      "url": "MeasureReport/6f73785e-1efd-4866-a5ae-aa2d8fa36a94"
+    }
+  } ]
+}

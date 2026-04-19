@@ -1,0 +1,46 @@
+{
+  "resourceType": "Condition",
+  "id": "c82b4e01-ada3-48ad-b9c4-f0f9f3a348e3",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis" ]
+  },
+  "clinicalStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "code": "active",
+      "display": "Active",
+      "userSelected": true
+    } ]
+  },
+  "verificationStatus": {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "code": "confirmed",
+      "display": "Confirmed",
+      "userSelected": true
+    } ]
+  },
+  "category": [ {
+    "coding": [ {
+      "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+      "code": "encounter-diagnosis",
+      "display": "Encounter Diagnosis",
+      "userSelected": true
+    } ]
+  } ],
+  "code": {
+    "coding": [ {
+      "system": "http://hl7.org/fhir/sid/icd-10-cm",
+      "code": "G61.0",
+      "display": "Guillain-Barré syndrome",
+      "userSelected": true
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/7c224175-f689-4b7e-82ad-22175d5238b7"
+  },
+  "onsetPeriod": {
+    "start": "2026-04-10T08:00:00.000+00:00"
+  },
+  "recordedDate": "2026-04-10T08:05:00.000+00:00"
+}

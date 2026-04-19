@@ -1,0 +1,109 @@
+{
+  "resourceType": "MeasureReport",
+  "id": "ae58910b-1a13-45ce-8f36-8ea2cc43938e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/test-case-cqfm" ]
+  },
+  "contained": [ {
+    "resourceType": "Parameters",
+    "id": "5ee15944-b829-4bc0-a848-8c9b5310f429-parameters",
+    "parameter": [ {
+      "name": "subject",
+      "valueString": "f25baf5f-2980-416c-a8ef-3b9e42d751c3"
+    } ]
+  } ],
+  "extension": [ {
+    "url": "http://hl7.org/fhir/StructureDefinition/cqf-inputParameters",
+    "valueReference": {
+      "reference": "#5ee15944-b829-4bc0-a848-8c9b5310f429-parameters"
+    }
+  }, {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-testCaseDescription",
+    "valueMarkdown": "\"Patient receives antithrombotic in = 2 days after IP encounter starts.\nglobal.\"\"Hospitalization\"\" =(IP)\"\n"
+  } ],
+  "modifierExtension": [ {
+    "url": "http://hl7.org/fhir/us/cqfmeasures/StructureDefinition/cqfm-isTestCase",
+    "valueBoolean": true
+  } ],
+  "status": "complete",
+  "type": "individual",
+  "measure": "https://madie.cms.gov/Measure/CMS72FHIRSTKAntithromboticDay2",
+  "period": {
+    "start": "2026-01-01",
+    "end": "2026-12-31"
+  },
+  "group": [ {
+    "id": "Group_1",
+    "population": [ {
+      "id": "InitialPopulation_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "initial-population",
+          "display": "Initial Population"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "Denominator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator",
+          "display": "Denominator"
+        } ]
+      },
+      "count": 1
+    }, {
+      "id": "DenominatorExclusion_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exclusion",
+          "display": "Denominator Exclusion"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "Numerator_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "numerator",
+          "display": "Numerator"
+        } ]
+      },
+      "count": 0
+    }, {
+      "id": "DenominatorException_1",
+      "code": {
+        "coding": [ {
+          "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+          "code": "denominator-exception",
+          "display": "Denominator Exception"
+        } ]
+      },
+      "count": 0
+    } ],
+    "measureScore": {
+      "value": 0.0
+    }
+  } ],
+  "evaluatedResource": [ {
+    "reference": "Patient/f25baf5f-2980-416c-a8ef-3b9e42d751c3"
+  }, {
+    "reference": "Encounter/e0fbf62d-56d4-45ee-9a6f-8b222f0ec1d7"
+  }, {
+    "reference": "Claim/5ca62962b8484628b8de1ec5"
+  }, {
+    "reference": "MedicationAdministration/c7f2fb32-c669-429e-997f-f1c5f1af0b8e"
+  }, {
+    "reference": "Coverage/ee8b6d67-6518-4159-9e5c-0f6d8baa46a2"
+  }, {
+    "reference": "Condition/8f849699-c0b8-4eb4-b7b8-a1fae9b7a9f3"
+  }, {
+    "reference": "Organization/7058eca7-b6eb-43a9-9b77-a7f912749b3d"
+  }, {
+    "reference": "Practitioner/837a7d50-302b-4f5c-815a-728b4c695969"
+  } ]
+}

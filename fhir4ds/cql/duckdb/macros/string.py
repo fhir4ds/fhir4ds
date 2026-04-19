@@ -58,23 +58,61 @@ def registerStringMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # ============================================
 
     # Substring with index conversion: CQL uses 0-based, DuckDB uses 1-based
+    # CQL §17.7: if startIndex < 0 or > Length(s), result is null
     # 2-argument version: Substring(s, start) -> from position to end
     con.execute(
         "CREATE MACRO IF NOT EXISTS Substring(s, start) AS "
-        "system.substring(s, start + 1)"
+        "CASE WHEN s IS NULL OR start IS NULL OR start < 0 THEN NULL "
+        "ELSE system.substring(s, start + 1) END"
     )
 
     # 3-argument version: SubstringLen(s, start, length)
     con.execute(
         "CREATE MACRO IF NOT EXISTS SubstringLen(s, start, len) AS "
-        "system.substring(s, start + 1, len)"
+        "CASE WHEN s IS NULL OR start IS NULL OR start < 0 THEN NULL "
+        "ELSE system.substring(s, start + 1, len) END"
     )
 
-    # IndexOf: CQL returns -1 if not found, 0-based index if found
-    # DuckDB STRPOS returns 0 if not found, 1-based index if found
+    # NOTE: CQL IndexOf is a LIST operation (§20.13), not a string operation.
+    # String position finding is PositionOf (§17.11), translated directly by
+    # the translator to strpos().  The list IndexOf macro is in list.py.
+
+    # Indexer: CQL §17.6 — character at position (0-based)
     con.execute(
-        "CREATE MACRO IF NOT EXISTS IndexOf(s, pattern) AS "
-        "CASE WHEN system.strpos(s, pattern) = 0 THEN -1 ELSE system.strpos(s, pattern) - 1 END"
+        "CREATE MACRO IF NOT EXISTS Indexer(s, idx) AS "
+        "CASE WHEN s IS NULL OR idx IS NULL THEN NULL "
+        "WHEN idx < 0 OR idx >= system.length(s) THEN NULL "
+        "ELSE system.substring(s, idx + 1, 1) END"
+    )
+
+    # Matches: CQL §17.8 — test if string matches a regex pattern
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS Matches(s, pattern) AS "
+        "CASE WHEN s IS NULL OR pattern IS NULL THEN NULL "
+        "ELSE regexp_matches(s, pattern) END"
+    )
+
+    # ReplaceMatches: CQL §17.13 — replace regex matches in string
+    # CQL uses Java regex replacement: \$ = literal $, \\ = literal \
+    # DuckDB's regexp_replace treats \$ as empty; convert CQL escapes first.
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS ReplaceMatches(s, pattern, replacement) AS "
+        "CASE WHEN s IS NULL OR pattern IS NULL OR replacement IS NULL THEN NULL "
+        "ELSE regexp_replace(s, pattern, replace(replace(replacement, '\\$', '$'), '\\\\', '\\'), 'g') END"
+    )
+
+    # Concatenate: CQL §17.1 — if any argument is null, result is null
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS Concatenate(s1, s2) AS "
+        "CASE WHEN s1 IS NULL OR s2 IS NULL THEN NULL ELSE s1 || s2 END"
+    )
+
+    # LastPositionOf: CQL §17.7 — last position of pattern in string (0-based)
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS LastPositionOf(pattern, s) AS "
+        "CASE WHEN s IS NULL OR pattern IS NULL THEN NULL "
+        "WHEN system.strpos(system.reverse(s), system.reverse(pattern)) = 0 THEN -1 "
+        "ELSE system.length(s) - system.strpos(system.reverse(s), system.reverse(pattern)) - system.length(pattern) + 1 END"
     )
 
 

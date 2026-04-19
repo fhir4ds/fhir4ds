@@ -1,0 +1,21 @@
+{
+  "resourceType": "ServiceRequest",
+  "id": "539c7ccc-6948-4c2a-840f-3b8bbc7c3bfe",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicerequest" ]
+  },
+  "status": "active",
+  "intent": "order",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "456381000124102",
+      "display": "Injection of leuprolide acetate for twelve month period (regime/therapy)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/7d6436cb-995e-4672-b5bb-04cb996b2949"
+  },
+  "authoredOn": "2026-04-04T08:00:00.000+00:00"
+}

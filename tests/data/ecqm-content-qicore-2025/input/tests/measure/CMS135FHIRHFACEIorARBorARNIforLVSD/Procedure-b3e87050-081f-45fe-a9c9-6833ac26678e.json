@@ -1,0 +1,27 @@
+{
+  "resourceType": "Procedure",
+  "id": "b3e87050-081f-45fe-a9c9-6833ac26678e",
+  "meta": {
+    "profile": [ "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedure" ]
+  },
+  "extension": [ {
+    "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",
+    "valueDateTime": "2025-08-04T08:00:00.000+00:00"
+  } ],
+  "status": "completed",
+  "code": {
+    "coding": [ {
+      "system": "http://snomed.info/sct",
+      "version": "http://snomed.info/sct/731000124108/version/20240301",
+      "code": "174803001",
+      "display": "Revision of transplantation of heart and lung (procedure)"
+    } ]
+  },
+  "subject": {
+    "reference": "Patient/ed37e316-c721-4a98-91d7-862f5ece7187"
+  },
+  "performedPeriod": {
+    "start": "2025-12-31T23:59:59.999+00:00",
+    "end": "2026-01-01T01:30:00.000+00:00"
+  }
+}

@@ -100,8 +100,24 @@ class IntervalMixin:
         def _is_numeric_literal(e: SQLExpression) -> bool:
             return isinstance(e, SQLLiteral) and isinstance(e.value, (int, float))
 
+        def _is_time_or_quantity_literal(e: SQLExpression) -> bool:
+            """Detect time strings, Quantity JSON, and parse_quantity() calls that can't be CAST AS DATE."""
+            if isinstance(e, SQLFunctionCall) and e.name == "parse_quantity":
+                return True
+            if isinstance(e, SQLLiteral) and isinstance(e.value, str):
+                v = e.value
+                # Time strings: "10:00:00.000", "T10:00"
+                if v.startswith('T') or (len(v) <= 16 and ':' in v and '-' not in v):
+                    return True
+                # Quantity JSON
+                if v.startswith('{') and '"value"' in v:
+                    return True
+            return False
+
         all_bounds = [left_start, left_end, right_start, right_end]
         if any(_is_numeric_literal(b) for b in all_bounds if b is not None):
+            return None
+        if any(_is_time_or_quantity_literal(b) for b in all_bounds if b is not None):
             return None
 
         # Ensure interval bounds from fhirpath UDFs are cast to DATE
@@ -300,6 +316,10 @@ class IntervalMixin:
             # intervalFromBounds() always produces an interval
             if expr.name == "intervalFromBounds":
                 return True
+            # DATE_TRUNC(precision, interval_expr) wraps an interval when
+            # precision-of is applied — check the inner argument.
+            if expr.name and expr.name.upper() == "DATE_TRUNC" and len(expr.args) >= 2:
+                return self._is_fhir_interval_expression(expr.args[1])
             return False
         # CASE expressions from ToInterval: check THEN/ELSE branches
         if isinstance(expr, SQLCase):
@@ -308,6 +328,53 @@ class IntervalMixin:
                     return True
             if expr.else_clause and self._is_fhir_interval_expression(expr.else_clause):
                 return True
+        # CAST wrapping an interval expression (e.g., CAST(intervalFromBounds(...) AS DATE))
+        if isinstance(expr, SQLCast):
+            return self._is_fhir_interval_expression(expr.expression)
+        return False
+
+    @staticmethod
+    def _is_single_list_expr(sql_expr: SQLExpression, cql_expr) -> bool:
+        """Return True when a single operand represents a CQL list."""
+        from ...parser.ast_nodes import ListExpression
+        from ...translator.types import SQLArray
+        if isinstance(sql_expr, SQLArray):
+            return True
+        if isinstance(cql_expr, ListExpression):
+            return True
+        if isinstance(sql_expr, SQLFunctionCall) and sql_expr.name in (
+            'list_filter', 'list_concat', 'list_distinct', 'list_sort',
+            'list_transform', 'Distinct', 'Tail',
+        ):
+            return True
+        return False
+
+    @staticmethod
+    def _is_list_operands(left: SQLExpression, right: SQLExpression, expr) -> bool:
+        """Return True when at least one operand represents a CQL list (not interval).
+
+        Used to route ``includes`` / ``included in`` / ``properly includes`` /
+        ``properly included in`` to DuckDB list functions instead of interval
+        UDFs.  The detection looks at the translated SQL (SQLArray) and falls
+        back to the CQL AST node types.
+        """
+        from ...parser.ast_nodes import ListExpression, Interval
+        from ...translator.types import SQLArray
+        # If either side is an SQLArray or a CQL ListExpression, this is
+        # a list operation (CQL overloads these operators for both types).
+        if isinstance(left, SQLArray) or isinstance(right, SQLArray):
+            return True
+        if hasattr(expr, 'left') and isinstance(expr.left, ListExpression):
+            return True
+        if hasattr(expr, 'right') and isinstance(expr.right, ListExpression):
+            return True
+        # If neither side is an interval, but both look like arrays, treat as list
+        if hasattr(expr, 'left') and hasattr(expr, 'right'):
+            if not isinstance(expr.left, Interval) and not isinstance(expr.right, Interval):
+                if isinstance(left, SQLFunctionCall) and left.name in ('list_filter', 'list_concat', 'list_distinct'):
+                    return True
+                if isinstance(right, SQLFunctionCall) and right.name in ('list_filter', 'list_concat', 'list_distinct'):
+                    return True
         return False
 
     def _extract_interval_bounds(
