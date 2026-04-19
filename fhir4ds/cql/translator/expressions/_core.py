@@ -118,6 +118,13 @@ class CoreMixin:
             return SQLLiteral(value=value)
 
         if isinstance(value, (int, float)):
+            # CQL §2.2: Integer is 32-bit signed [-2^31, 2^31-1]
+            if isinstance(value, int) and not isinstance(value, bool):
+                if getattr(lit, 'type', None) == "Integer" and (value > 2147483647 or value < -2147483648):
+                    raise ValueError(
+                        f"Integer literal {value} out of range for CQL Integer type "
+                        f"[-2147483648, 2147483647]"
+                    )
             # Handle special numeric values
             if isinstance(value, float):
                 if value == float("inf"):

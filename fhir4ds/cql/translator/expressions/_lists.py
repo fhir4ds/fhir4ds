@@ -122,6 +122,9 @@ class ListsMixin:
 
         # Detect typed-null bounds at the AST level:
         # ``null as Integer`` parses as BinaryExpression(op='as', left=Literal(null))
+        # CQL §5.4 distinguishes null intervals from intervals with null boundaries.
+        # Only TYPED null bounds (``null as <Type>``) produce unbounded intervals;
+        # untyped ``Interval[null, null]`` evaluates to a null interval.
         def _is_typed_null_ast(ast_node):
             """Return True if the AST node is ``null as <Type>``."""
             return (isinstance(ast_node, BinaryExpression)

@@ -33,6 +33,11 @@ WITH _patients AS
                    CAST(fhirpath_date(r.resource, 'birthDate') AS DATE) AS birth_date
    FROM resources r
    WHERE r.resourceType = 'Patient'),
+     "Location" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Location'),
      "Encounter: Encounter Inpatient" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -68,11 +73,6 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Encounter'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292')),
-     "Location" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Location'),
      "MedicationAdministration: Opioids, All" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource

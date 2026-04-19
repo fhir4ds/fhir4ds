@@ -1499,6 +1499,22 @@ class CQLParser:
                 unit_token = self.advance()
                 unit = unit_token.value
                 return Quantity(value=value, unit=unit)
+            # CQL §2.3: standalone Decimal has max 28 integer digits and 8 fractional digits.
+            # Validation only applies to Decimal literals, not Quantity values.
+            raw_decimal = token.value.lstrip('+').lstrip('-')
+            if '.' in raw_decimal:
+                int_part, frac_part = raw_decimal.split('.', 1)
+                if len(frac_part) > 8:
+                    raise ValueError(
+                        f"Decimal literal '{token.value}' exceeds maximum 8 fractional digits "
+                        f"(CQL §2.3)"
+                    )
+                int_digits = int_part.lstrip('0') or '0'
+                if len(int_digits) > 28:
+                    raise ValueError(
+                        f"Decimal literal '{token.value}' exceeds maximum 28 integer digits "
+                        f"(CQL §2.3)"
+                    )
             return Literal(value=value, type="Decimal")
         elif token.type == TokenType.STRING:
             return Literal(value=token.value, type="String")

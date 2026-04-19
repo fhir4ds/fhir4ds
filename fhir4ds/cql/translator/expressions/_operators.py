@@ -592,6 +592,13 @@ class OperatorsMixin:
         if operator == "is" and isinstance(expr.right, (NamedTypeSpecifier, IntervalTypeSpecifier)):
             return self._translate_is_type_check(expr)
 
+        # CQL §12.1: Tuple equality/inequality requires element-wise comparison
+        # with three-valued null propagation.  DuckDB JSON comparison would treat
+        # {"Name":null} as a concrete value, breaking CQL semantics.
+        if operator in ("=", "!=", "not equal", "equal"):
+            if isinstance(expr.left, TupleExpression) and isinstance(expr.right, TupleExpression):
+                return self._translate_tuple_comparison(expr, operator)
+
         # Parser workaround for temporal operators with precision:
         # The parser sometimes mis-parses:
         #   X on or before day of end of "MAP" and Y
@@ -1275,6 +1282,62 @@ class OperatorsMixin:
             )
         sql_op = BINARY_OPERATOR_MAP.get(operator, operator)
         return SQLBinaryOp(operator=sql_op, left=left, right=right)
+
+
+    def _translate_tuple_comparison(self, expr: "BinaryExpression", operator: str) -> "SQLExpression":
+        """Translate tuple = / != with CQL §12.1 null propagation.
+
+        CQL tuple equality per element:
+          both null  → true
+          one null   → null  (uncertainty)
+          both present → normal =
+        AND-chain gives: false if ANY mismatch, null if no mismatch but uncertainty.
+        """
+        left_tup = expr.left
+        right_tup = expr.right
+
+        left_elems = {e.name: e for e in left_tup.elements}
+        right_elems = {e.name: e for e in right_tup.elements}
+        all_names = sorted(set(left_elems.keys()) | set(right_elems.keys()))
+
+        comparisons: list["SQLExpression"] = []
+        for name in all_names:
+            le = left_elems.get(name)
+            re = right_elems.get(name)
+            if le and re:
+                lv = self.translate(le.type, boolean_context=False)
+                rv = self.translate(re.type, boolean_context=False)
+                # CQL: both null → true, one null → null, both present → =
+                elem_cmp = SQLCase(
+                    when_clauses=[
+                        (SQLBinaryOp(operator="AND",
+                                     left=SQLRaw(f"({lv.to_sql()}) IS NULL"),
+                                     right=SQLRaw(f"({rv.to_sql()}) IS NULL")),
+                         SQLLiteral(value=True)),
+                        (SQLBinaryOp(operator="OR",
+                                     left=SQLRaw(f"({lv.to_sql()}) IS NULL"),
+                                     right=SQLRaw(f"({rv.to_sql()}) IS NULL")),
+                         SQLNull()),
+                    ],
+                    else_clause=SQLBinaryOp(operator="=", left=lv, right=rv),
+                )
+                comparisons.append(elem_cmp)
+            else:
+                comparisons.append(SQLLiteral(value=False))
+
+        if not comparisons:
+            result: "SQLExpression" = SQLLiteral(value=True)
+        elif len(comparisons) == 1:
+            result = comparisons[0]
+        else:
+            result = comparisons[0]
+            for c in comparisons[1:]:
+                result = SQLBinaryOp(operator="AND", left=result, right=c)
+
+        if operator in ("!=", "not equal"):
+            result = SQLFunctionCall(name="NOT", args=[result])
+
+        return result
 
 
     def _translate_union_op(self, operator, left, right, expr) -> SQLExpression:
