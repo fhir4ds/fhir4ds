@@ -41,6 +41,13 @@ WITH _patients AS
    WHERE r.resourceType = 'Procedure'
      AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''428191000124101'').exists()')
      AND fhirpath_text(r.resource, 'status') = 'not-done'),
+     "Encounter: Encounter to Document Medications" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1.1834')),
      "Procedure: Documentation of current medications (procedure)" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -51,13 +58,6 @@ WITH _patients AS
           OR fhirpath_text(r.resource, 'status') != 'not-done')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
-     "Encounter: Encounter to Document Medications" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1.1834')),
      "Coverage: Payer Type" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,

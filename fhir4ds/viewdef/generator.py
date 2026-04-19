@@ -656,27 +656,38 @@ class SQLGenerator:
         """Validate that where clause paths can evaluate to boolean.
 
         Per SQL-on-FHIR v2 spec, where paths must resolve to boolean values.
-        Paths that clearly resolve to non-boolean types (simple property paths
-        without comparison operators) should be rejected.
+        Compound property paths (e.g., name.family) without boolean operators
+        are clearly non-boolean and should be rejected. Single-segment paths
+        (e.g., active) may refer to boolean elements and are allowed through.
         """
         boolean_indicators = {'=', '!=', '<', '>', '<=', '>=', 'and', 'or', 'not',
                               'contains', 'in', 'exists', 'empty', 'is', 'as',
                               'matches', 'startsWith', 'endsWith', 'hasValue',
                               'true', 'false', '~', '!~'}
 
+        def _is_clearly_non_boolean(path: str) -> bool:
+            """Return True if the path clearly cannot resolve to boolean."""
+            tokens = set(path.split())
+            # Has boolean indicators or function calls → could be boolean
+            if tokens & boolean_indicators or '(' in path:
+                return False
+            # Compound property path (contains dots) → likely non-boolean
+            # e.g., "name.family" is a string path
+            if '.' in path:
+                return True
+            # Single segment (e.g., "active") → might be a boolean element
+            return False
+
         def _check_where(selects: List['Select'], path: str = "select") -> None:
             for i, sel in enumerate(selects):
                 if sel.where:
                     for w in sel.where:
                         wp = w.get("path", "") if isinstance(w, dict) else ""
-                        if wp:
-                            tokens = set(wp.split())
-                            # A path with no boolean indicators is likely non-boolean
-                            if not tokens & boolean_indicators and '(' not in wp:
-                                raise ValidationError(
-                                    f"{path}[{i}].where: Path '{wp}' does not appear "
-                                    f"to resolve to a boolean value"
-                                )
+                        if wp and _is_clearly_non_boolean(wp):
+                            raise ValidationError(
+                                f"{path}[{i}].where: Path '{wp}' does not appear "
+                                f"to resolve to a boolean value"
+                            )
                 if sel.select:
                     _check_where(sel.select, f"{path}[{i}].select")
                 if sel.unionAll:
@@ -686,13 +697,11 @@ class SQLGenerator:
         if hasattr(view_definition, 'where') and view_definition.where:
             for w in view_definition.where:
                 wp = w.get("path", "") if isinstance(w, dict) else ""
-                if wp:
-                    tokens = set(wp.split())
-                    if not tokens & boolean_indicators and '(' not in wp:
-                        raise ValidationError(
-                            f"Root where: Path '{wp}' does not appear "
-                            f"to resolve to a boolean value"
-                        )
+                if wp and _is_clearly_non_boolean(wp):
+                    raise ValidationError(
+                        f"Root where: Path '{wp}' does not appear "
+                        f"to resolve to a boolean value"
+                    )
 
         _check_where(view_definition.select)
 
@@ -968,6 +977,7 @@ class SQLGenerator:
         self._validate_unique_column_names(view_definition)
         self._validate_foreach_mutual_exclusion(view_definition.select)
         self._validate_union_all_columns(view_definition.select)
+        self._validate_where_paths(view_definition)
         self._alias_counter = 0
         self._constant_resolver = ConstantResolver.from_view_definition(view_definition)
 

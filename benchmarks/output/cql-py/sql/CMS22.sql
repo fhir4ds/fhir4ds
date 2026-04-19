@@ -6,95 +6,95 @@ SELECT DISTINCT _outer.patient_ref AS patient_id FROM resources AS _outer WHERE 
 _patient_demographics AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, CAST(fhirpath_date(r.resource, 'birthDate') AS DATE) AS birth_date FROM resources r WHERE r.resourceType = 'Patient'
 ),
-"ServiceRequest: Recommendation to Increase Physical Activity (servicenotrequested)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1518') AND fhirpath_bool(r.resource, 'doNotPerform')
-),
-"ServiceRequest: 12 lead EKG panel (servicenotrequested)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent FROM resources r WHERE r.resourceType = 'ServiceRequest' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''34534-8'').exists()') AND fhirpath_bool(r.resource, 'doNotPerform')
-),
-"ServiceRequest: Laboratory Tests for Hypertension" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1482') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
-),
-"ServiceRequest: Follow Up Within 4 Weeks" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1578') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
-),
-"ServiceRequest: Referral to Primary Care or Alternate Provider (servicenotrequested)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1580') AND fhirpath_bool(r.resource, 'doNotPerform')
-),
-"ServiceRequest: Referral or Counseling for Alcohol Consumption" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1583') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
-),
-"ServiceRequest: Lifestyle Recommendation" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1581') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
-),
-"MedicationRequest: Pharmacologic Therapy for Hypertension (medicationnotrequested)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.1577') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.1577'))) AND fhirpath_bool(r.resource, 'doNotPerform')
-),
-"ServiceRequest: Dietary Recommendations (servicenotrequested)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1515') AND fhirpath_bool(r.resource, 'doNotPerform')
-),
-"ServiceRequest: EKG study (servicenotrequested)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent FROM resources r WHERE r.resourceType = 'ServiceRequest' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''11524-6'').exists()') AND fhirpath_bool(r.resource, 'doNotPerform')
-),
-"ServiceRequest: Recommendation to Increase Physical Activity" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1518') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
-),
-"ServiceRequest: 12 lead EKG panel" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent FROM resources r WHERE r.resourceType = 'ServiceRequest' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''34534-8'').exists()') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
-),
-"ServiceRequest: Weight Reduction Recommended (servicenotrequested)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1510') AND fhirpath_bool(r.resource, 'doNotPerform')
-),
-"ServiceRequest: Lifestyle Recommendation (servicenotrequested)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1581') AND fhirpath_bool(r.resource, 'doNotPerform')
-),
-"Observation: Systolic blood pressure (observationcancelled)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''8480-6'').exists()')
-),
-"ServiceRequest: Referral to Primary Care or Alternate Provider" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1580') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
-),
-"ServiceRequest: EKG study" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent FROM resources r WHERE r.resourceType = 'ServiceRequest' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''11524-6'').exists()') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
-),
-"ServiceRequest: Dietary Recommendations" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1515') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
-),
-"Encounter: Encounter to Screen for Blood Pressure" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1920')
-),
-"Observation: Diastolic blood pressure (observationcancelled)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''8462-4'').exists()')
-),
-"ServiceRequest: Follow Up Within 6 Months (servicenotrequested)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1108.125') AND fhirpath_bool(r.resource, 'doNotPerform')
-),
-"MedicationRequest: Pharmacologic Therapy for Hypertension" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.1577') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.1577'))) AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
-),
 "ServiceRequest: Weight Reduction Recommended" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1510') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
-),
-"ServiceRequest: Laboratory Tests for Hypertension (servicenotrequested)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1482') AND fhirpath_bool(r.resource, 'doNotPerform')
-),
-"Observation (us-core-blood-pressure)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, COALESCE(fhirpath_number(r.resource, 'component.where(code.coding.code = ''8462-4'').valueQuantity.value'), fhirpath_number(r.resource, 'component.where(code.coding.code = ''8480-6'').valueQuantity.value')) AS value FROM resources r WHERE r.resourceType = 'Observation'
-),
-"ServiceRequest: Follow Up Within 4 Weeks (servicenotrequested)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1578') AND fhirpath_bool(r.resource, 'doNotPerform')
-),
-"Condition: Diagnosis of Hypertension (qicore-condition-problems-health-concerns)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.263') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
 ),
 "Observation: Blood pressure panel with all children optional (observationcancelled)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''85354-9'').exists()')
 ),
+"ServiceRequest: 12 lead EKG panel" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent FROM resources r WHERE r.resourceType = 'ServiceRequest' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''34534-8'').exists()') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
+),
+"Condition: Diagnosis of Hypertension (qicore-condition-problems-health-concerns)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.263') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
+),
+"Observation: Systolic blood pressure (observationcancelled)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''8480-6'').exists()')
+),
+"ServiceRequest: Referral to Primary Care or Alternate Provider (servicenotrequested)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1580') AND fhirpath_bool(r.resource, 'doNotPerform')
+),
+"Observation (us-core-blood-pressure)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, COALESCE(fhirpath_number(r.resource, 'component.where(code.coding.code = ''8462-4'').valueQuantity.value'), fhirpath_number(r.resource, 'component.where(code.coding.code = ''8480-6'').valueQuantity.value')) AS value FROM resources r WHERE r.resourceType = 'Observation'
+),
+"ServiceRequest: Referral to Primary Care or Alternate Provider" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1580') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
+),
+"Encounter: Encounter to Screen for Blood Pressure" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1920')
+),
+"ServiceRequest: EKG study (servicenotrequested)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent FROM resources r WHERE r.resourceType = 'ServiceRequest' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''11524-6'').exists()') AND fhirpath_bool(r.resource, 'doNotPerform')
+),
+"ServiceRequest: Lifestyle Recommendation (servicenotrequested)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1581') AND fhirpath_bool(r.resource, 'doNotPerform')
+),
+"ServiceRequest: EKG study" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent FROM resources r WHERE r.resourceType = 'ServiceRequest' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''11524-6'').exists()') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
+),
+"ServiceRequest: Lifestyle Recommendation" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1581') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
+),
+"ServiceRequest: Follow Up Within 6 Months (servicenotrequested)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1108.125') AND fhirpath_bool(r.resource, 'doNotPerform')
+),
+"MedicationRequest: Pharmacologic Therapy for Hypertension (medicationnotrequested)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.1577') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.1577'))) AND fhirpath_bool(r.resource, 'doNotPerform')
+),
 "ServiceRequest: Follow Up Within 6 Months" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1108.125') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
 ),
+"MedicationRequest: Pharmacologic Therapy for Hypertension" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.1577') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.1577'))) AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
+),
+"Observation: Diastolic blood pressure (observationcancelled)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''8462-4'').exists()')
+),
+"ServiceRequest: Recommendation to Increase Physical Activity (servicenotrequested)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1518') AND fhirpath_bool(r.resource, 'doNotPerform')
+),
 "ServiceRequest: Referral or Counseling for Alcohol Consumption (servicenotrequested)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1583') AND fhirpath_bool(r.resource, 'doNotPerform')
+),
+"ServiceRequest: Recommendation to Increase Physical Activity" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1518') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
+),
+"ServiceRequest: Laboratory Tests for Hypertension (servicenotrequested)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1482') AND fhirpath_bool(r.resource, 'doNotPerform')
+),
+"ServiceRequest: Follow Up Within 4 Weeks (servicenotrequested)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1578') AND fhirpath_bool(r.resource, 'doNotPerform')
+),
+"ServiceRequest: Referral or Counseling for Alcohol Consumption" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1583') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
+),
+"ServiceRequest: Laboratory Tests for Hypertension" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1482') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
+),
+"ServiceRequest: Dietary Recommendations (servicenotrequested)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1515') AND fhirpath_bool(r.resource, 'doNotPerform')
+),
+"ServiceRequest: Follow Up Within 4 Weeks" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1578') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
+),
+"ServiceRequest: Weight Reduction Recommended (servicenotrequested)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1510') AND fhirpath_bool(r.resource, 'doNotPerform')
+),
+"ServiceRequest: 12 lead EKG panel (servicenotrequested)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent FROM resources r WHERE r.resourceType = 'ServiceRequest' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''34534-8'').exists()') AND fhirpath_bool(r.resource, 'doNotPerform')
+),
+"ServiceRequest: Dietary Recommendations" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1515') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
 ),
 "Coverage: Payer Type" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'type') AS "type" FROM resources r WHERE r.resourceType = 'Coverage' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591')

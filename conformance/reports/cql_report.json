@@ -797,8 +797,7 @@
       {
         "name": "LnNeg1",
         "result": {
-          "passed": false,
-          "reason": "Invalid Input Error: Python exception occurred while executing the UDF: ValueError: Ln is undefined for argument -1.0 (must be > 0)\n\nAt:\n  /mnt/d/fhir4ds/fhir4ds/cql/duckdb/udf/math.py(78): mathLn\n  /mnt/d/fhir4ds/conformance/scripts/run_cql.py(365): run_test\n  /mnt/d/fhir4ds/conformance/scripts/run_cql.py(415): main\n  /mnt/d/fhir4ds/conformance/scripts/run_cql.py(436): <module>\n"
+          "passed": true
         }
       },
       {

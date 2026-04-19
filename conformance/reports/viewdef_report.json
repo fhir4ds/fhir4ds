@@ -823,8 +823,7 @@
       {
         "name": "where with path resolving to not boolean",
         "result": {
-          "passed": false,
-          "reason": "Expected error but query succeeded"
+          "passed": true
         }
       }
     ]

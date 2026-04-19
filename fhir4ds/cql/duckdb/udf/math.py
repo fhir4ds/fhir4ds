@@ -69,13 +69,15 @@ def mathExp(x: float | None) -> float | None:
 def mathLn(x: float | None) -> float | None:
     """CQL Ln(x) - natural logarithm (§16.12).
 
-    Ln is defined only for x > 0. For x <= 0 the result is undefined,
-    which per the CQL spec manifests as a runtime error.
+    Ln(0) results in negative infinity → runtime error.
+    Ln(negative) is undefined → returns null.
     """
     if x is None:
         return None
-    if x <= 0:
-        raise ValueError(f"Ln is undefined for argument {x} (must be > 0)")
+    if x == 0 or x == -0.0:
+        raise ValueError("Ln(0) results in negative infinity")
+    if x < 0:
+        return None
     return math.log(x)
 
 
