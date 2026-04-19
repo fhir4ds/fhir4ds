@@ -486,6 +486,19 @@ def cqlMessage(source, condition, code, severity, message) -> str:
     return source
 
 
+def cqlTimezoneOffset(value) -> float | None:
+    """CQL §18.12: Extract timezone offset in decimal hours from a datetime string."""
+    if value is None:
+        return None
+    import re
+    s = str(value)
+    m = re.search(r'([+-])(\d{2}):(\d{2})$', s)
+    if not m:
+        return None
+    sign = 1 if m.group(1) == '+' else -1
+    return float(sign * (int(m.group(2)) + int(m.group(3)) / 60.0))
+
+
 def registerMathUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     """Register all math UDFs."""
     con.create_function("mathAbs", mathAbs, null_handling="special")
@@ -504,6 +517,7 @@ def registerMathUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("LowBoundary", lowBoundary, null_handling="special")
     con.create_function("CQLPrecision", cqlPrecision, null_handling="special")
     con.create_function("CQLMessage", cqlMessage, null_handling="special")
+    con.create_function("cqlTimezoneOffset", cqlTimezoneOffset, null_handling="special")
 
 
 __all__ = [

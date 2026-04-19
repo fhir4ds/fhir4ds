@@ -1272,6 +1272,11 @@ class CQLParser:
             if self.peek().type == TokenType.FROM:
                 return self._parse_component_extraction()
 
+        # timezoneoffset from X — CQL §18.12 component extraction
+        if self.match(TokenType.TIMEZONE_FROM):
+            if self.peek().type == TokenType.FROM:
+                return self._parse_component_extraction()
+
         # Duration between: years between X and Y (singular or plural + BETWEEN)
         # But NOT "month of" or "year of" which are precision specifiers for temporal operators
         if self.match(TokenType.YEAR, TokenType.YEARS, TokenType.MONTH, TokenType.MONTHS,

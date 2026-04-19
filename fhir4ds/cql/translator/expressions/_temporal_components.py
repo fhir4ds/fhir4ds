@@ -158,12 +158,12 @@ class DateComponentMixin:
         operand = self.translate(node.operand, boolean_context=False)
         component_lower = node.component.lower()
 
-        # Handle timezoneoffset specially - return 0 as placeholder
-        # NOTE: DuckDB doesn't expose timezone offsets from FHIR dateTime values.
-        # A custom UDF would be needed for proper implementation.
+        # Handle timezoneoffset — extract offset from datetime string via UDF
         if component_lower == 'timezoneoffset':
-            # Return 0 as placeholder (timezone handling varies by implementation)
-            return SQLLiteral(value=0)
+            return SQLFunctionCall(
+                name="cqlTimezoneOffset",
+                args=[SQLCast(expression=operand, target_type="VARCHAR")],
+            )
 
         # Handle 'date from X' - extract date portion from datetime
         if component_lower == 'date':

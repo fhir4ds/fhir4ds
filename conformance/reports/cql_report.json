@@ -345,22 +345,19 @@
       {
         "name": "Multi",
         "result": {
-          "passed": false,
-          "reason": "Binder Error: No function matches the given name and argument types 'list_concat(\"NULL\"[], INTEGER)'. You might need to add explicit type casts.\n\tCandidate functions:\n\tlist_concat([ANY[]...]) -> ANY[]\n\n\nLINE 1: SELECT list_reduce(list_prepend(NULL, (SELECT * FROM unnest([1...\n               ^"
+          "passed": true
         }
       },
       {
         "name": "MegaMulti",
         "result": {
-          "passed": false,
-          "reason": "Binder Error: No function matches the given name and argument types 'list_concat(INTEGER[], INTEGER)'. You might need to add explicit type casts.\n\tCandidate functions:\n\tlist_concat([ANY[]...]) -> ANY[]\n\n\nLINE 1: SELECT list_reduce(list_prepend(0, (SELECT * FROM unnest([1, 2...\n               ^"
+          "passed": true
         }
       },
       {
         "name": "MegaMultiDistinct",
         "result": {
-          "passed": false,
-          "reason": "Binder Error: No function matches the given name and argument types 'list_distinct(INTEGER)'. You might need to add explicit type casts.\n\tCandidate functions:\n\tlist_distinct(T[]) -> T[]\n\n\nLINE 1: SELECT list_reduce(list_prepend(1, list_distinct((SELECT * FROM unnest([1, 2, 2, 1]) AS X WHERE...\n                                           ^"
+          "passed": true
         }
       }
     ]
@@ -3524,8 +3521,7 @@
       {
         "name": "DateTimeComponentFromTimezone2",
         "result": {
-          "passed": false,
-          "reason": "Line 2, Column 37: Unexpected token in library: FROM 'from'"
+          "passed": true
         }
       },
       {
@@ -9057,8 +9053,7 @@
       {
         "name": "Multi-Source",
         "result": {
-          "passed": false,
-          "reason": "Parser Error: syntax error at or near \"4\"\n\nLINE 1: ... * FROM unnest([1, 2, 3]) AS B WHERE EXISTS (SELECT 1 FROM 4 AS C WHERE C.patient_id = B.patient_id))), (_agg_x, _agg_y...\n                                                                      ^"
+          "passed": true
         }
       }
     ]

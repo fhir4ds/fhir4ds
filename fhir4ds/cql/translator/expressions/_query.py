@@ -1545,6 +1545,7 @@ class QueryMixin:
 
         # Handle multi-source queries (source is a list)
         _multi_source_done = False  # set True when multi-source handler builds the full result
+        _multi_source_info = []  # (alias, from_sql) tuples for aggregate handler
         if isinstance(node.source, list):
             # For multi-source queries, translate each source and cross-join
             # This is a simplification - proper handling needs correlated subqueries
@@ -1690,6 +1691,11 @@ class QueryMixin:
                             _sec_from_sql = SQLFunctionCall(name="unnest", args=[_sec_from_sql])
 
                     _sec_infos.append((_sec_alias, _sec_from_sql, _sec_cte_name, _sec_expr_node))
+
+                # Save multi-source info for aggregate handler
+                _multi_source_info.append((alias, source_expr))
+                for _sa, _sf, _, _ in _sec_infos:
+                    _multi_source_info.append((_sa, _sf))
 
                 # Capture RETURN expression from the outer from-query node
                 if node.return_clause:
@@ -2948,51 +2954,113 @@ class QueryMixin:
             accum_name = agg.identifier   # accumulator variable name (e.g., "Result")
             source_list = result
 
-            # Apply distinct/all modifiers
-            if agg.distinct:
-                source_list = SQLFunctionCall(name="list_distinct", args=[source_list])
+            # ── Multi-source + aggregate: recursive CTE fold ──────────
+            # DuckDB's list_reduce can't handle multi-source aggregates because
+            # the lambda only has (acc, elem) params but the body references
+            # aliases from ALL sources.  Use a recursive CTE that cross-joins
+            # all sources and folds row-by-row.
+            if len(_multi_source_info) > 1:
+                # Translate the starting value
+                starting_sql = None
+                if agg.starting is not None:
+                    starting_sql = self.translate(agg.starting, usage=ExprUsage.SCALAR)
 
-            # Translate the starting value
-            starting_sql = None
-            if agg.starting is not None:
-                starting_sql = self.translate(agg.starting, usage=ExprUsage.SCALAR)
+                # Build cross-join FROM clause for all sources
+                _all_from_parts = []
+                for idx, (_ms_alias, _ms_from) in enumerate(_multi_source_info):
+                    # Extract the array expression for proper column-named unnest
+                    if isinstance(_ms_from, SQLFunctionCall) and _ms_from.name == "unnest":
+                        _arr_sql = _ms_from.args[0].to_sql()
+                    elif isinstance(_ms_from, SQLArray):
+                        _arr_sql = _ms_from.to_sql()
+                    else:
+                        # Scalar or other expression: wrap in single-element array
+                        _arr_sql = f"[{_ms_from.to_sql()}]"
+                    _all_from_parts.append(f"unnest({_arr_sql}) AS __t{idx}({_ms_alias})")
 
-            # Translate the aggregation expression as a lambda body
-            # The body references both the accumulator and the iteration alias
-            _agg_lambda_x = f"_agg_x"  # accumulator param
-            _agg_lambda_y = f"_agg_y"  # element param
+                _xj_from = " CROSS JOIN ".join(_all_from_parts)
+                _distinct_kw = "DISTINCT " if agg.distinct else ""
+                _all_aliases = [a for a, _ in _multi_source_info]
 
-            self.context.push_scope()
-            try:
-                self.context.add_alias(accum_name, ast_expr=SQLIdentifier(name=_agg_lambda_x))
-                if alias:
-                    self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_agg_lambda_y))
-                agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
-            finally:
-                self.context.pop_scope()
+                # Translate the aggregate body with proper alias mappings
+                self.context.push_scope()
+                try:
+                    self.context.add_alias(
+                        accum_name,
+                        ast_expr=SQLRaw("__fold.__acc"),
+                    )
+                    for _ms_alias, _ in _multi_source_info:
+                        self.context.add_alias(
+                            _ms_alias,
+                            ast_expr=SQLRaw(f"__xjn.{_ms_alias}"),
+                        )
+                    agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
+                finally:
+                    self.context.pop_scope()
 
-            # Build list_reduce call
-            if starting_sql is not None:
-                # Prepend starting value so list_reduce uses it as initial accumulator
-                source_with_start = SQLFunctionCall(
-                    name="list_prepend",
-                    args=[starting_sql, source_list],
-                )
-                result = SQLFunctionCall(
-                    name="list_reduce",
-                    args=[source_with_start, SQLLambda2(params=[_agg_lambda_x, _agg_lambda_y], body=agg_body)],
+                _body_sql = agg_body.to_sql()
+                _start_sql = starting_sql.to_sql() if starting_sql else "NULL"
+
+                result = SQLRaw(
+                    f"(WITH RECURSIVE __xj AS ("
+                    f"SELECT {_distinct_kw}{', '.join(_all_aliases)} FROM "
+                    f"(SELECT * FROM {_xj_from}) __src"
+                    f"), __xjn AS ("
+                    f"SELECT ROW_NUMBER() OVER () AS __rn, * FROM __xj"
+                    f"), __fold(__acc, __rn) AS ("
+                    f"SELECT CAST({_start_sql} AS BIGINT), CAST(0 AS BIGINT) "
+                    f"UNION ALL "
+                    f"SELECT {_body_sql}, __xjn.__rn "
+                    f"FROM __fold JOIN __xjn ON __xjn.__rn = __fold.__rn + 1"
+                    f") SELECT __acc FROM __fold ORDER BY __rn DESC LIMIT 1)"
                 )
             else:
-                # No starting value — per CQL §19.27, accumulator is initialized to null.
-                # Prepend NULL as initial value for list_reduce.
-                source_with_null = SQLFunctionCall(
-                    name="list_prepend",
-                    args=[SQLNull(), source_list],
-                )
-                result = SQLFunctionCall(
-                    name="list_reduce",
-                    args=[source_with_null, SQLLambda2(params=[_agg_lambda_x, _agg_lambda_y], body=agg_body)],
-                )
+                # ── Single-source aggregate: list_reduce pattern ──────────
+                # Apply distinct/all modifiers
+                if agg.distinct:
+                    source_list = SQLFunctionCall(name="list_distinct", args=[source_list])
+
+                # Translate the starting value
+                starting_sql = None
+                if agg.starting is not None:
+                    starting_sql = self.translate(agg.starting, usage=ExprUsage.SCALAR)
+
+                # Translate the aggregation expression as a lambda body
+                # The body references both the accumulator and the iteration alias
+                _agg_lambda_x = f"_agg_x"  # accumulator param
+                _agg_lambda_y = f"_agg_y"  # element param
+
+                self.context.push_scope()
+                try:
+                    self.context.add_alias(accum_name, ast_expr=SQLIdentifier(name=_agg_lambda_x))
+                    if alias:
+                        self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_agg_lambda_y))
+                    agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
+                finally:
+                    self.context.pop_scope()
+
+                # Build list_reduce call
+                if starting_sql is not None:
+                    # Prepend starting value so list_reduce uses it as initial accumulator
+                    source_with_start = SQLFunctionCall(
+                        name="list_prepend",
+                        args=[starting_sql, source_list],
+                    )
+                    result = SQLFunctionCall(
+                        name="list_reduce",
+                        args=[source_with_start, SQLLambda2(params=[_agg_lambda_x, _agg_lambda_y], body=agg_body)],
+                    )
+                else:
+                    # No starting value — per CQL §19.27, accumulator is initialized to null.
+                    # Prepend NULL as initial value for list_reduce.
+                    source_with_null = SQLFunctionCall(
+                        name="list_prepend",
+                        args=[SQLNull(), source_list],
+                    )
+                    result = SQLFunctionCall(
+                        name="list_reduce",
+                        args=[source_with_null, SQLLambda2(params=[_agg_lambda_x, _agg_lambda_y], body=agg_body)],
+                    )
 
         # For boolean context, check if result exists
         if usage == ExprUsage.BOOLEAN:

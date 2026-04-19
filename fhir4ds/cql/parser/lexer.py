@@ -682,6 +682,7 @@ KEYWORDS: dict[str, TokenType] = {
     "Time": TokenType.TIME_TYPE,  # Time type
     "time": TokenType.TIME_FROM,  # time() function
     "timezone": TokenType.TIMEZONE_FROM,
+    "timezoneoffset": TokenType.TIMEZONE_FROM,
     "DateComponent": TokenType.DATE_COMPONENT,
     "dateComponent": TokenType.DATE_COMPONENT,
     "datecomponent": TokenType.DATE_COMPONENT,

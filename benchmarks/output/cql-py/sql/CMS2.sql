@@ -6,8 +6,14 @@ SELECT DISTINCT _outer.patient_ref AS patient_id FROM resources AS _outer WHERE 
 _patient_demographics AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, CAST(fhirpath_date(r.resource, 'birthDate') AS DATE) AS birth_date FROM resources r WHERE r.resourceType = 'Patient'
 ),
-"Observation: Adolescent depression screening assessment" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''73831-0'').exists()')
+"Observation: Adult depression screening assessment (observationcancelled)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''73832-8'').exists()')
+),
+"Encounter: Telephone Visits" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1080')
+),
+"Observation: Adult depression screening assessment" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''73832-8'').exists()')
 ),
 "MedicationRequest: Adolescent Depression Medications" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1567') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1567'))) AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
@@ -18,35 +24,29 @@ SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resourc
 "Encounter: Physical Therapy Evaluation" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1022')
 ),
-"ServiceRequest: Referral for Adolescent Depression" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1570') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
-),
-"Observation: Adolescent depression screening assessment (observationcancelled)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''73831-0'').exists()')
-),
-"Encounter: Telephone Visits" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1080')
-),
 "Procedure: Follow Up for Adolescent Depression" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1569') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
-),
-"Condition: Bipolar Disorder (qicore-condition-problems-health-concerns)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.67.1.101.1.128') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
 ),
 "Procedure: Follow Up for Adult Depression" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1568') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
 ),
-"Observation: Adult depression screening assessment" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''73832-8'').exists()')
+"Observation: Adolescent depression screening assessment (observationcancelled)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''73831-0'').exists()')
+),
+"Observation: Adolescent depression screening assessment" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''73831-0'').exists()')
 ),
 "Encounter: Encounter to Screen for Depression" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1916')
 ),
+"ServiceRequest: Referral for Adolescent Depression" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1570') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
+),
 "MedicationRequest: Adult Depression Medications" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1566') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1566'))) AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
 ),
-"Observation: Adult depression screening assessment (observationcancelled)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''73832-8'').exists()')
+"Condition: Bipolar Disorder (qicore-condition-problems-health-concerns)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.67.1.101.1.128') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
 ),
 "Coverage: Payer Type" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'type') AS "type" FROM resources r WHERE r.resourceType = 'Coverage' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591')
