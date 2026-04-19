@@ -922,8 +922,8 @@ class FunctionsMixin:
         return SQLRaw(raw_sql=f"TRY(LN({args[0].to_sql()}))")
 
     def _translate_ln(self, args: list) -> SQLExpression:
-        """Translate CQL Ln — wraps in TRY() for invalid input (negative numbers)."""
-        return SQLRaw(raw_sql=f"TRY(LN({args[0].to_sql()}))")
+        """Translate CQL Ln (§16.12) — uses UDF that raises on invalid input."""
+        return SQLFunctionCall(name="mathLn", args=args)
 
     def _translate_power(self, args: list) -> SQLExpression:
         """Translate CQL Power to DuckDB POW."""
@@ -960,10 +960,17 @@ class FunctionsMixin:
         return SQLNull()
 
     def _translate_message(self, args: list) -> SQLExpression:
-        """Translate CQL Message — return the source value."""
-        if args:
-            return args[0]
-        return SQLNull()
+        """Translate CQL Message (§22.15) — return source or raise on Error severity.
+
+        Message(source, condition, code, severity, message) — if severity is
+        the literal 'Error', raise at runtime via the CQLMessage UDF.
+        """
+        if not args:
+            return SQLNull()
+        # Check if severity (arg index 3) is the literal 'Error'
+        if len(args) >= 4 and isinstance(args[3], SQLLiteral) and args[3].value == 'Error':
+            return SQLFunctionCall(name="CQLMessage", args=args)
+        return args[0]
 
     def _translate_quantity_constructor(self, args: list) -> SQLExpression:
         """Translate CQL Quantity(value, unit) constructor."""
@@ -1007,6 +1014,8 @@ class FunctionsMixin:
             type_arg = func.arguments[0]
             if isinstance(type_arg, (NamedTypeSpecifier, Identifier)):
                 type_name = type_arg.name.lower()
+                if type_name == "boolean":
+                    raise ValueError("The Maximum operator is not defined for type Boolean")
                 val = _MAX_VALUES.get(type_name)
                 if val is not None:
                     return SQLLiteral(value=val)
@@ -1026,6 +1035,8 @@ class FunctionsMixin:
             type_arg = func.arguments[0]
             if isinstance(type_arg, (NamedTypeSpecifier, Identifier)):
                 type_name = type_arg.name.lower()
+                if type_name == "boolean":
+                    raise ValueError("The Minimum operator is not defined for type Boolean")
                 val = _MIN_VALUES.get(type_name)
                 if val is not None:
                     return SQLLiteral(value=val)

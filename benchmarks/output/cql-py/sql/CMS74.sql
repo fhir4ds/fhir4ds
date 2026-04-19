@@ -60,6 +60,36 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Coverage'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591')),
+     "Condition: Hospice Diagnosis (qicore-condition-encounter-diagnosis)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Condition'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165')
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')),
+     "Condition: Hospice Diagnosis (qicore-condition-problems-health-concerns)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Condition'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165')
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
+     "Procedure: Hospice Care Ambulatory" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Procedure'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584')
+     AND (fhirpath_text(r.resource, 'status') IS NULL
+          OR fhirpath_text(r.resource, 'status') != 'not-done')
+     AND (json_extract(r.resource, '$.meta.profile') IS NULL
+          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
+     "Observation: Hospice care [Minimum Data Set]" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Observation'
+     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''45755-6'').exists()')),
      "ServiceRequest: Hospice Care Ambulatory" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -68,13 +98,6 @@ WITH _patients AS
      AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))),
-     "Condition: Hospice Diagnosis (qicore-condition-encounter-diagnosis)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165')
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')),
      "Encounter: Hospice Encounter" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -87,29 +110,6 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Encounter'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307')),
-     "Procedure: Hospice Care Ambulatory" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Procedure'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584')
-     AND (fhirpath_text(r.resource, 'status') IS NULL
-          OR fhirpath_text(r.resource, 'status') != 'not-done')
-     AND (json_extract(r.resource, '$.meta.profile') IS NULL
-          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
-     "Condition: Hospice Diagnosis (qicore-condition-problems-health-concerns)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165')
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
-     "Observation: Hospice care [Minimum Data Set]" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Observation'
-     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''45755-6'').exists()')),
      "Hospice.Has Hospice Services" AS
   (SELECT p.patient_id
    FROM _patients AS p

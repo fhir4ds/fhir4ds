@@ -155,7 +155,7 @@ class ExpressionTranslator(
             "ceiling": "CEIL",
             "floor": "FLOOR",
             "sqrt": "SQRT",
-            "exp": "EXP",
+            "exp": "mathExp",
             "nullif": "NULLIF",
             "median": "MEDIAN",
             "mode": "MODE",

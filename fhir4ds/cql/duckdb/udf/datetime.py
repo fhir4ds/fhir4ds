@@ -601,8 +601,7 @@ def dateAddQuantity(date_val: str | None, quantity_json: str | None) -> str | No
 
         return result.isoformat()
     except (orjson.JSONDecodeError, ValueError, TypeError, OverflowError) as e:
-        _logger.warning("UDF dateAddQuantity failed: %s", e)
-        return None
+        raise ValueError(f"DateTime arithmetic overflow: {e}") from e
 
 
 def dateSubtractQuantity(date_val: str | None, quantity_json: str | None) -> str | None:
@@ -625,8 +624,7 @@ def dateSubtractQuantity(date_val: str | None, quantity_json: str | None) -> str
         negated_json = orjson.dumps(data).decode("utf-8")
         return dateAddQuantity(date_val, negated_json)
     except (orjson.JSONDecodeError, ValueError, TypeError) as e:
-        _logger.warning("UDF dateSubtractQuantity failed: %s", e)
-        return None
+        raise ValueError(f"DateTime arithmetic overflow: {e}") from e
 
 
 # ========================================

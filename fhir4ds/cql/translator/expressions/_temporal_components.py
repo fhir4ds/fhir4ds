@@ -38,6 +38,15 @@ class DateComponentMixin:
         if not args:
             return SQLNull()
 
+        # Validate year bounds (1-9999) for literal year values
+        year_arg = args[0]
+        if isinstance(year_arg, SQLLiteral) and isinstance(year_arg.value, int):
+            if year_arg.value < 1 or year_arg.value > 9999:
+                raise ValueError(
+                    f"The year {year_arg.value} falls outside the accepted "
+                    f"bounds of 0001-9999"
+                )
+
         if len(args) == 1:
             year = args[0]
             if isinstance(year, SQLLiteral) and isinstance(year.value, int):

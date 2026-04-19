@@ -652,15 +652,13 @@
       {
         "name": "Exp1000",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
         "name": "Exp1000D",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
@@ -775,15 +773,13 @@
       {
         "name": "Ln0",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
         "name": "LnNeg0",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
@@ -801,7 +797,8 @@
       {
         "name": "LnNeg1",
         "result": {
-          "passed": true
+          "passed": false,
+          "reason": "Invalid Input Error: Python exception occurred while executing the UDF: ValueError: Ln is undefined for argument -1.0 (must be > 0)\n\nAt:\n  /mnt/d/fhir4ds/fhir4ds/cql/duckdb/udf/math.py(78): mathLn\n  /mnt/d/fhir4ds/conformance/scripts/run_cql.py(365): run_test\n  /mnt/d/fhir4ds/conformance/scripts/run_cql.py(415): main\n  /mnt/d/fhir4ds/conformance/scripts/run_cql.py(436): <module>\n"
         }
       },
       {
@@ -855,8 +852,7 @@
       {
         "name": "BooleanMinValue",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
@@ -898,8 +894,7 @@
       {
         "name": "BooleanMaxValue",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
@@ -1189,8 +1184,7 @@
       {
         "name": "PredecessorUnderflowT",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
@@ -1443,8 +1437,7 @@
       {
         "name": "SuccessorOverflowT",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
@@ -2918,8 +2911,7 @@
       {
         "name": "DateTimeAddInvalidYears",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
@@ -4606,8 +4598,7 @@
       {
         "name": "DateTimeSubtractInvalidYears",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
@@ -4861,8 +4852,7 @@
       {
         "name": "TestMessageError",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       }
     ]
@@ -7216,15 +7206,13 @@
       {
         "name": "DateTimeWidth",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
         "name": "TimeWidth",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
@@ -9836,15 +9824,13 @@
       {
         "name": "DateTimeUpperBoundExcept",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
         "name": "DateTimeLowerBoundExcept",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
@@ -9918,29 +9904,25 @@
       {
         "name": "TimeUpperBoundHours",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
         "name": "TimeUpperBoundMinutes",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
         "name": "TimeUpperBoundSeconds",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {
         "name": "TimeUpperBoundMillis",
         "result": {
-          "passed": false,
-          "reason": "Expected error but evaluation succeeded"
+          "passed": true
         }
       },
       {

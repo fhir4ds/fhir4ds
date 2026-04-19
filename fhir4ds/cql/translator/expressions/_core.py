@@ -141,6 +141,29 @@ class CoreMixin:
         if value.startswith("@"):
             value = value[1:]
 
+        # Time-only literal (T-prefixed) — validate components
+        if value.startswith("T") or value.startswith("t"):
+            time_str = value[1:]
+            parts = time_str.split(':')
+            if len(parts) >= 1:
+                h = int(parts[0])
+                if h > 23:
+                    raise ValueError(f"Invalid time literal: hour {h} exceeds 23")
+            if len(parts) >= 2:
+                m = int(parts[1])
+                if m > 59:
+                    raise ValueError(f"Invalid time literal: minute {m} exceeds 59")
+            if len(parts) >= 3:
+                sec_parts = parts[2].split('.')
+                s = int(sec_parts[0])
+                if s > 59:
+                    raise ValueError(f"Invalid time literal: second {s} exceeds 59")
+                if len(sec_parts) > 1 and len(sec_parts[1]) > 3:
+                    raise ValueError(
+                        f"Invalid time literal: millisecond value {sec_parts[1]} "
+                        f"exceeds maximum precision"
+                    )
+
         # Replace T with space for DuckDB
         value = value.replace("T", " ").strip()
 
@@ -166,13 +189,36 @@ class CoreMixin:
         """Translate a CQL Time literal to SQL TIME."""
         value = t.value
         # CQL format: @T12:30:00 or @T14:00
-        # DuckDB format: TIME '12:30:00'
 
         # Remove @T prefix if present
         if value.startswith("@T"):
             value = value[2:]
         elif value.startswith("T"):
             value = value[1:]
+
+        # Validate time components per ISO 8601
+        parts = value.split(':')
+        if len(parts) >= 1:
+            h = int(parts[0])
+            if h > 23:
+                raise ValueError(f"Invalid time literal: hour {h} exceeds 23")
+        if len(parts) >= 2:
+            m = int(parts[1])
+            if m > 59:
+                raise ValueError(f"Invalid time literal: minute {m} exceeds 59")
+        if len(parts) >= 3:
+            sec_parts = parts[2].split('.')
+            s = int(sec_parts[0])
+            if s > 59:
+                raise ValueError(f"Invalid time literal: second {s} exceeds 59")
+            if len(sec_parts) > 1:
+                ms_str = sec_parts[1]
+                if len(ms_str) > 3:
+                    ms_val = int(ms_str)
+                    if ms_val > 999:
+                        raise ValueError(
+                            f"Invalid time literal: millisecond value {ms_val} exceeds 999"
+                        )
 
         return SQLFunctionCall(
             name="CAST",

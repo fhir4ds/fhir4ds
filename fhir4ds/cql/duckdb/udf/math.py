@@ -54,23 +54,40 @@ def mathSqrt(x: float | None) -> float | None:
 
 
 def mathExp(x: float | None) -> float | None:
-    """CQL Exp(x)."""
+    """CQL Exp(x) (§16.6).
+
+    If the result overflows (positive infinity), raise an error.
+    """
     if x is None:
         return None
-    return math.exp(x)
+    result = math.exp(x)
+    if math.isinf(result):
+        raise ValueError(f"Exp({x}) results in overflow (positive infinity)")
+    return result
 
 
 def mathLn(x: float | None) -> float | None:
-    """CQL Ln(x) - natural logarithm."""
-    if x is None or x <= 0:
+    """CQL Ln(x) - natural logarithm (§16.12).
+
+    Ln is defined only for x > 0. For x <= 0 the result is undefined,
+    which per the CQL spec manifests as a runtime error.
+    """
+    if x is None:
         return None
+    if x <= 0:
+        raise ValueError(f"Ln is undefined for argument {x} (must be > 0)")
     return math.log(x)
 
 
 def mathLog(x: float | None, base: float = 10) -> float | None:
-    """CQL Log(x, base)."""
-    if x is None or x <= 0 or base is None or base <= 0 or base == 1:
+    """CQL Log(x, base) (§16.11).
+
+    Undefined for x <= 0, base <= 0, or base == 1.
+    """
+    if x is None or base is None:
         return None
+    if x <= 0 or base <= 0 or base == 1:
+        raise ValueError(f"Log is undefined for x={x}, base={base}")
     return math.log(x, base)
 
 
@@ -121,7 +138,10 @@ def predecessorOf(x) -> str | float | int | None:
             ms = int(s_parts[1].ljust(3, '0')[:3]) if len(s_parts) > 1 else 0
             total_ms = ((h * 60 + m) * 60 + s) * 1000 + ms - 1
             if total_ms < 0:
-                return None
+                raise ValueError(
+                    "The result of the predecessor operation precedes "
+                    "the minimum value allowed for type Time"
+                )
             rh, rem = divmod(total_ms, 3600000)
             rm, rem = divmod(rem, 60000)
             rs, rms = divmod(rem, 1000)
@@ -185,6 +205,12 @@ def successorOf(x) -> str | float | int | None:
             s = int(s_parts[0])
             ms = int(s_parts[1].ljust(3, '0')[:3]) if len(s_parts) > 1 else 0
             total_ms = ((h * 60 + m) * 60 + s) * 1000 + ms + 1
+            # Maximum time is T23:59:59.999 = 86399999 ms
+            if total_ms > 86399999:
+                raise ValueError(
+                    "The result of the successor operation exceeds "
+                    "the maximum value allowed for type Time"
+                )
             rh, rem = divmod(total_ms, 3600000)
             rm, rem = divmod(rem, 60000)
             rs, rms = divmod(rem, 1000)
@@ -451,6 +477,13 @@ def cqlPrecision(value) -> int | None:
         return len(s)
 
 
+def cqlMessage(source, condition, code, severity, message) -> str:
+    """CQL Message (§22.15) — raise runtime error when severity is 'Error'."""
+    if severity == 'Error':
+        raise ValueError(f"{code}: {message}")
+    return source
+
+
 def registerMathUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     """Register all math UDFs."""
     con.create_function("mathAbs", mathAbs, null_handling="special")
@@ -468,6 +501,7 @@ def registerMathUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("HighBoundary", highBoundary, null_handling="special")
     con.create_function("LowBoundary", lowBoundary, null_handling="special")
     con.create_function("CQLPrecision", cqlPrecision, null_handling="special")
+    con.create_function("CQLMessage", cqlMessage, null_handling="special")
 
 
 __all__ = [

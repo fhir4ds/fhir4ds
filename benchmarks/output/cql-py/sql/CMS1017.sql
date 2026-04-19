@@ -6,47 +6,47 @@ SELECT DISTINCT _outer.patient_ref AS patient_id FROM resources AS _outer WHERE 
 _patient_demographics AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, CAST(fhirpath_date(r.resource, 'birthDate') AS DATE) AS birth_date FROM resources r WHERE r.resourceType = 'Patient'
 ),
-"Encounter: Emergency Department Visit" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292')
-),
-"Condition (qicore-condition-problems-health-concerns)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
-),
-"MedicationRequest: Antidepressants" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.163') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.163'))) AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
-),
-"MedicationRequest: Antihypertensives" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.164') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.164'))) AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
-),
-"Claim" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Claim'
-),
-"Observation (us-core-bmi)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation'
-),
-"Condition (qicore-condition-encounter-diagnosis)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
-),
-"MedicationRequest: Opioids" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.120') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.120'))) AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
+"MedicationRequest: Diuretics" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.170') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.170'))) AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
 ),
 "MedicationAdministration: Anticoagulants for All Indications" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationAdministration' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.22') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.22'))) AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministrationnotdone'))
 ),
+"Condition (qicore-condition-encounter-diagnosis)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
+),
+"Condition (qicore-condition-problems-health-concerns)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
+),
 "MedicationRequest: Central Nervous System Depressants" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.134') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.134'))) AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
-),
-"AdverseEvent: Inpatient Falls" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'AdverseEvent' AND in_valueset(r.resource, 'event', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1147.171')
-),
-"MedicationRequest: Diuretics" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.170') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.170'))) AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
 ),
 "Encounter: Observation Services" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143')
 ),
+"MedicationRequest: Antidepressants" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.163') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.163'))) AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
+),
+"Encounter: Emergency Department Visit" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292')
+),
+"Claim" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Claim'
+),
+"MedicationRequest: Antihypertensives" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.164') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.164'))) AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
+),
 "MedicationRequest: Anticoagulants for All Indications" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.22') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.22'))) AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
+),
+"AdverseEvent: Inpatient Falls" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'AdverseEvent' AND in_valueset(r.resource, 'event', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1147.171')
+),
+"MedicationRequest: Opioids" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationRequest' AND (in_valueset(r.resource, 'medicationCodeableConcept', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.120') OR EXISTS (SELECT '1' FROM resources AS m WHERE m.resourceType = 'Medication' AND LIST_EXTRACT(STR_SPLIT(fhirpath_text(r.resource, 'medicationReference.reference'), '/'), -1) = fhirpath_text(m.resource, 'id') AND in_valueset(m.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1248.120'))) AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
+),
+"Observation (us-core-bmi)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation'
 ),
 "Coverage: Payer Type" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'type') AS "type" FROM resources r WHERE r.resourceType = 'Coverage' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591')

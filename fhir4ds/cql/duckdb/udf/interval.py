@@ -414,8 +414,9 @@ def pointFrom(interval: str | None) -> str | None:
 
 
 def intervalWidth(interval: str | None) -> str | None:
-    """Get the width of an interval (days for dates, numeric difference for numbers).
-    
+    """Get the width of an interval (numeric difference for integer/decimal/quantity).
+
+    CQL §19.25: For date/time intervals, the width operator is not defined.
     Returns a JSON quantity string for quantity intervals, numeric string otherwise.
     """
     iv = _parse_interval(interval)
@@ -425,33 +426,44 @@ def intervalWidth(interval: str | None) -> str | None:
     low = iv["low"]
     high = iv["high"]
 
-    # Check if the raw bounds are quantity JSON — return quantity width
+    # CQL §19.25: "For date/time intervals, this operator is not defined."
+    if isinstance(low, (datetime, date)) or isinstance(high, (datetime, date)):
+        raise ValueError(
+            "The Width operator is not defined for date/time intervals. "
+            "Use 'duration in' instead (CQL §19.25)."
+        )
+    # Check the raw JSON bounds for time strings (parsed to ms integers)
     try:
         raw = orjson.loads(interval)
         raw_low = raw.get("low") or raw.get("start")
-        if isinstance(raw_low, str) and raw_low.strip().startswith('{') and '"value"' in raw_low:
-            import json as _json
-            q = _json.loads(raw_low)
-            unit = q.get("unit") or q.get("code") or "1"
-            width_val = float(high) - float(low)
-            return _json.dumps({"value": width_val, "unit": unit, "code": unit})
+        if isinstance(raw_low, str):
+            rl = raw_low.strip()
+            # Time string: T-prefixed or HH:MM:SS pattern
+            if rl.startswith('T') or rl.startswith('t') or (
+                len(rl) >= 5 and rl[2:3] == ':' and rl[:2].isdigit()
+            ):
+                raise ValueError(
+                    "The Width operator is not defined for time intervals. "
+                    "Use 'duration in' instead (CQL §19.25)."
+                )
+            # Quantity JSON — return quantity width
+            if rl.startswith('{') and '"value"' in rl:
+                import json as _json
+                q = _json.loads(rl)
+                unit = q.get("unit") or q.get("code") or "1"
+                width_val = float(high) - float(low)
+                return _json.dumps({"value": width_val, "unit": unit, "code": unit})
+    except ValueError:
+        raise
     except Exception:
         pass
 
     # Numeric intervals
     if isinstance(low, (int, float)) and isinstance(high, (int, float)):
         result = high - low
-        if isinstance(result, float):
-            return str(result)
         return str(result)
 
-    # Convert to date for calculation
-    if isinstance(low, datetime):
-        low = low.date()
-    if isinstance(high, datetime):
-        high = high.date()
-
-    return str((high - low).days)
+    return str(high - low)
 
 
 def intervalContains(interval: str | None, point: str | None) -> bool | None:
