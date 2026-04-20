@@ -18,6 +18,7 @@ from ...translator.types import (
     SQLExpression,
     SQLFunctionCall,
     SQLIdentifier,
+    SQLInterval,
     SQLLiteral,
     SQLNull,
     SQLRaw,
@@ -180,11 +181,13 @@ class TemporalUtilsMixin:
                     return "BIGINT"
                 if isinstance(expr.value, float):
                     return "DOUBLE"
-                # Decimal-like string literals (e.g., '2.5' from CQL decimal)
-                if isinstance(expr.value, str):
+                # Decimal-like string literals (e.g., '2.5' from CQL decimal).
+                # Only match strings containing a decimal point to avoid
+                # misclassifying ISO 8601 year strings like '2012' as numeric.
+                if isinstance(expr.value, str) and '.' in expr.value:
                     try:
                         float(expr.value)
-                        return "DOUBLE" if '.' in expr.value else "BIGINT"
+                        return "DOUBLE"
                     except (ValueError, TypeError):
                         pass
             if isinstance(expr, SQLCast):
@@ -224,26 +227,49 @@ class TemporalUtilsMixin:
     def _ensure_date_cast(self, expr: SQLExpression, target_type: str = "DATE") -> SQLExpression:
         """Wrap a VARCHAR-returning expression in CAST(... AS <target_type>).
 
-        fhirpath_date, fhirpath_text, COALESCE of those, intervalStart/End,
-        and dateAddQuantity/dateSubtractQuantity all return VARCHAR in DuckDB.
-        When used in temporal comparisons they need a CAST.
+        For temporal types (DATE/TIMESTAMP), we now cast to VARCHAR to preserve
+        precision information in ISO 8601 format.  For numeric types (BIGINT,
+        DOUBLE), the original cast behaviour is preserved.
 
         Args:
             expr: The SQL expression to potentially wrap.
-            target_type: "DATE" (default) or "TIMESTAMP" for sub-day precision.
+            target_type: "DATE", "TIMESTAMP", "VARCHAR", "BIGINT", "DOUBLE", etc.
         """
         if expr is None or isinstance(expr, SQLNull):
             return expr
+
+        # Temporal types → VARCHAR to preserve precision
+        if target_type in ("DATE", "TIMESTAMP"):
+            target_type = "VARCHAR"
+
         if isinstance(expr, SQLCast):
+            # If already cast to DATE or TIMESTAMP, re-cast to VARCHAR
+            if expr.target_type in ("DATE", "TIMESTAMP"):
+                return SQLCast(expression=expr.expression, target_type="VARCHAR")
             return expr  # already cast — respect existing type
         if isinstance(expr, SQLRaw):
             raw = expr.raw_sql
             if raw.startswith("DATE ") or raw.startswith("TIMESTAMP "):
                 return expr  # already typed
         if isinstance(expr, SQLLiteral):
-            if isinstance(expr.value, str) and len(expr.value) >= 8:
-                return SQLCast(expression=expr, target_type=target_type)
+            if isinstance(expr.value, str):
+                if target_type == "VARCHAR":
+                    return expr  # already a string literal, no cast needed
+                if len(expr.value) >= 8:
+                    return SQLCast(expression=expr, target_type=target_type)
+                return expr  # short string — no cast needed
         if isinstance(expr, SQLFunctionCall):
+            if target_type == "VARCHAR":
+                # Many UDFs already return VARCHAR; skip redundant cast
+                fn_lower = (expr.name or "").lower()
+                if fn_lower in (
+                    "dateaddquantity", "datesubtractquantity",
+                    "intervalstart", "intervalend",
+                    "cqlsameoafter", "cqlsameorbefore", "cqlbefore", "cqlafter",
+                    "cqldatetimeadd", "cqldatetimesubtract",
+                    "fhirpath_date", "fhirpath_text",
+                ):
+                    return expr
             return SQLCast(expression=expr, target_type=target_type)
         if isinstance(expr, (SQLSubquery, SQLSelect)):
             return SQLCast(expression=expr, target_type=target_type)
@@ -255,6 +281,18 @@ class TemporalUtilsMixin:
                 )
             return SQLCast(expression=expr, target_type=target_type)
         return expr
+
+    @staticmethod
+    def _cast_for_interval_arithmetic(expr: SQLExpression) -> SQLExpression:
+        """Cast a temporal VARCHAR to TIMESTAMP for INTERVAL arithmetic.
+
+        DuckDB requires TIMESTAMP (not VARCHAR) for ``+ INTERVAL`` /
+        ``- INTERVAL`` operations.  This wraps the expression in an explicit
+        CAST(... AS TIMESTAMP) so the arithmetic succeeds.
+        """
+        if isinstance(expr, SQLCast) and expr.target_type == "TIMESTAMP":
+            return expr
+        return SQLCast(expression=expr, target_type="TIMESTAMP")
 
     @staticmethod
     def _parse_temporal_operator_components(operator: str) -> dict | None:
@@ -328,15 +366,19 @@ class TemporalUtilsMixin:
         }
 
     def _truncate_to_precision(self, expr: SQLExpression, precision: str) -> SQLExpression:
-        """
-        Truncate an expression to the specified precision.
+        """Truncate a temporal expression to the specified precision.
+
+        CQL §18.2: DateTime values are compared at the finest common precision.
+        Truncation is done via LEFT() on VARCHAR ISO 8601 strings, ensuring
+        consistent format regardless of whether the input was originally a
+        TIMESTAMP or a precision-preserving VARCHAR literal.
 
         Args:
             expr: The SQL expression to truncate.
             precision: The precision level (e.g., 'day', 'hour', 'month').
 
         Returns:
-            SQL expression for the truncated value.
+            SQL expression for the truncated value as VARCHAR.
         """
         precision_lower = precision.lower()
 
@@ -344,10 +386,24 @@ class TemporalUtilsMixin:
         # extract the start point before truncating to a date/time precision.
         expr = self._unwrap_interval_case(expr)
 
-        # Interval-returning functions (intervalFromBounds etc.) produce JSON
-        # VARCHAR, not temporal values — truncation is meaningless for them.
-        # Return them as-is; callers using interval UDFs handle precision
-        # internally.
+        # Interval expressions: truncate each bound individually so that
+        # precision-qualified comparisons (e.g., "included in day of Interval")
+        # compare at the correct precision.
+        if isinstance(expr, SQLInterval):
+            new_low = (
+                self._truncate_to_precision(expr.low, precision)
+                if expr.low and not isinstance(expr.low, SQLNull)
+                else expr.low
+            )
+            new_high = (
+                self._truncate_to_precision(expr.high, precision)
+                if expr.high and not isinstance(expr.high, SQLNull)
+                else expr.high
+            )
+            return SQLInterval(
+                low=new_low, high=new_high,
+                low_closed=expr.low_closed, high_closed=expr.high_closed,
+            )
         if isinstance(expr, SQLFunctionCall):
             fn_lower = (expr.name or "").lower()
             if fn_lower in (
@@ -356,20 +412,42 @@ class TemporalUtilsMixin:
             ):
                 return expr
 
-        if precision_lower == "day":
-            # DuckDB doesn't support DATE(expr) for casting - use CAST(expr AS DATE)
-            return SQLCast(expression=expr, target_type="DATE")
-        elif precision_lower in ("year", "month", "week", "hour", "minute", "second", "millisecond"):
-            # date_trunc requires a typed temporal argument; cast string
-            # literals so DuckDB can resolve the correct overload.
-            expr = self._cast_for_date_trunc(expr, precision_lower)
-            return SQLFunctionCall(
-                name="DATE_TRUNC",
-                args=[SQLLiteral(value=precision_lower), expr],
-            )
-        else:
-            # Unknown precision - return as-is
-            return expr
+        # Map CQL precision names to ISO 8601 string lengths.
+        # Normalize space→T ensures consistent format from TIMESTAMP casts.
+        # Time values ('T' prefix) have different lengths than DateTime.
+        precision_lengths_dt = {
+            'year': 4,          # YYYY
+            'month': 7,         # YYYY-MM
+            'week': 10,         # YYYY-MM-DD (week → truncate to day)
+            'day': 10,          # YYYY-MM-DD
+            'hour': 13,         # YYYY-MM-DDTHH
+            'minute': 16,       # YYYY-MM-DDTHH:MM
+            'second': 19,       # YYYY-MM-DDTHH:MM:SS
+            'millisecond': 23,  # YYYY-MM-DDTHH:MM:SS.mmm
+        }
+        precision_lengths_time = {
+            'hour': 3,          # THH
+            'minute': 6,        # THH:MM
+            'second': 9,        # THH:MM:SS
+            'millisecond': 13,  # THH:MM:SS.mmm
+        }
+
+        dt_length = precision_lengths_dt.get(precision_lower)
+        time_length = precision_lengths_time.get(precision_lower)
+
+        if dt_length:
+            varchar_expr = f"REPLACE(CAST(({expr.to_sql()}) AS VARCHAR), ' ', 'T')"
+            if time_length:
+                # Must handle both Time and DateTime values
+                return SQLRaw(
+                    f"CASE WHEN SUBSTR({varchar_expr}, 1, 1) = 'T' "
+                    f"THEN LEFT({varchar_expr}, {time_length}) "
+                    f"ELSE LEFT({varchar_expr}, {dt_length}) END"
+                )
+            return SQLRaw(f"LEFT({varchar_expr}, {dt_length})")
+
+        # Unknown precision - return as-is
+        return expr
 
     @staticmethod
     def _cast_for_date_trunc(expr: SQLExpression, precision: str) -> SQLExpression:

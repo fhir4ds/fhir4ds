@@ -450,6 +450,48 @@ class OperatorsMixin:
             args=[result_expr, SQLLiteral(operator), left_sql, right_sql, path_expr, target_expr],
         )
 
+    def _is_temporal_cql_expr(self, node, _depth: int = 0) -> bool:
+        """Check if a CQL AST node evaluates to a DateTime, Date, or Time type.
+
+        CQL §12.3: Date, DateTime, and Time comparison uses precision-aware
+        semantics. This helper detects temporal expressions so that <, <=, >,
+        >= operators route through precision-aware UDFs.
+        """
+        if _depth > 4:
+            return False
+        if isinstance(node, DateTimeLiteral):
+            return True
+        if isinstance(node, FunctionRef) and node.name in ("DateTime", "Date", "Time", "ToDateTime", "ToDate", "ToTime"):
+            return True
+        # Arithmetic on DateTime: DateTime + Quantity → DateTime
+        if isinstance(node, BinaryExpression) and node.operator in ("+", "-"):
+            if self._is_temporal_cql_expr(node.left, _depth + 1):
+                return True
+        # Property of a temporal expression (e.g., x.period.start)
+        if isinstance(node, Identifier):
+            meta = self.context.definition_meta.get(node.name)
+            if meta and meta.sql_result_type in ("DateTime", "Date", "Time", "TIMESTAMP", "DATE"):
+                return True
+        return False
+
+    def _is_duration_between_expr(self, node, _depth: int = 0) -> bool:
+        """Check if a CQL AST node is a DurationBetween or DifferenceBetween expression.
+
+        CQL §22.21: These may return uncertainty intervals (VARCHAR), so
+        arithmetic on them needs uncertainty-aware UDFs.
+        """
+        if _depth > 4:
+            return False
+        if isinstance(node, (DurationBetween, DifferenceBetween)):
+            return True
+        # Arithmetic on duration results propagates uncertainty
+        if isinstance(node, BinaryExpression) and node.operator in ("+", "-", "*"):
+            return (self._is_duration_between_expr(node.left, _depth + 1) or
+                    self._is_duration_between_expr(node.right, _depth + 1))
+        # The parser may absorb comparison into DurationBetween's right operand,
+        # but that's handled separately.
+        return False
+
     def _is_cql_quantity_expr(self, node, _depth: int = 0) -> bool:
         """Check if a CQL AST node is expected to evaluate to a Quantity.
 
@@ -907,10 +949,12 @@ class OperatorsMixin:
                     _interval_lit = SQLIntervalLiteral(value=_qty_val, unit=_qty_unit)
                     _cast_type = self._temporal_target_type(_qty_unit)
                     _right_cast = self._ensure_date_cast(right, _cast_type)
+                    # INTERVAL arithmetic requires TIMESTAMP — cast VARCHAR back
+                    _right_ts = SQLCast(expression=_right_cast, target_type="TIMESTAMP")
                     if _direction in ("after", "on or after"):
-                        _offset_right = SQLBinaryOp(operator="+", left=_right_cast, right=_interval_lit)
+                        _offset_right = SQLBinaryOp(operator="+", left=_right_ts, right=_interval_lit)
                     else:
-                        _offset_right = SQLBinaryOp(operator="-", left=_right_cast, right=_interval_lit)
+                        _offset_right = SQLBinaryOp(operator="-", left=_right_ts, right=_interval_lit)
                     _boundary_expr = self._truncate_to_precision(
                         self._ensure_date_cast(_boundary_expr, _cast_type), _precision)
                     _offset_right = self._truncate_to_precision(_offset_right, _precision)
@@ -919,17 +963,37 @@ class OperatorsMixin:
                 _op = "<" if _direction == "before" else "<="
             else:
                 _op = ">" if _direction == "after" else ">="
-            # Resolve FHIR interval on right side: extract appropriate bound
+            # Resolve FHIR intervals: extract appropriate bounds for comparison.
+            # For "on or after": start(left) >= end(right)
+            # For "on or before": end(left) <= start(right)
+            _left = left
             _right = right
+            if self._is_fhir_interval_expression(left):
+                if _direction in ("before", "on or before"):
+                    _left = SQLFunctionCall(name="intervalEnd", args=[left])
+                else:
+                    _left = SQLFunctionCall(name="intervalStart", args=[left])
             if self._is_fhir_interval_expression(right):
-                _right_fn = "intervalStart" if _direction in ("before", "on or before") else "intervalEnd"
-                _right = SQLFunctionCall(name=_right_fn, args=[right])
-            # Truncate to precision — delegate to the class-level method
-            # which handles casting string literals for date_trunc.
-            return SQLBinaryOp(
-                operator=_op,
-                left=self._truncate_to_precision(left, _precision),
-                right=self._truncate_to_precision(_right, _precision),
+                if _direction in ("before", "on or before"):
+                    _right = SQLFunctionCall(name="intervalStart", args=[right])
+                else:
+                    _right = SQLFunctionCall(name="intervalEnd", args=[right])
+            # Use precision-qualified UDFs — handles timezone normalization
+            # and returns null when operand precision < target precision.
+            _udf_map = {
+                "before": "cqlBeforeP",
+                "on or before": "cqlSameOrBeforeP",
+                "after": "cqlAfterP",
+                "on or after": "cqlSameOrAfterP",
+            }
+            _udf_name = _udf_map.get(_direction, "cqlSameOrBeforeP")
+            return SQLFunctionCall(
+                name=_udf_name,
+                args=[
+                    SQLCast(expression=_left, target_type="VARCHAR"),
+                    SQLCast(expression=_right, target_type="VARCHAR"),
+                    SQLLiteral(value=_precision),
+                ],
             )
         if operator == "meets":
             return SQLFunctionCall(name="intervalMeets", args=[left, right])
@@ -1856,8 +1920,20 @@ class OperatorsMixin:
                 name="intervalBefore",
                 args=[self._point_as_interval(left), right],
             )
-        # Point before point — infer cast from operand types (may be numeric)
+        # Point before point — use precision-aware UDF for temporal,
+        # standard SQL operator for numeric (CQL §19.9).
         cast_type = self._infer_cast_type_for_comparison(left, right)
+        if cast_type in ("TIMESTAMP", "DATE"):
+            # Temporal: use precision-aware cqlBefore UDF that handles
+            # partial-precision ISO 8601 strings and returns NULL for
+            # uncertain comparisons per CQL §18.4.
+            return SQLFunctionCall(
+                name="cqlBefore",
+                args=[
+                    SQLCast(expression=left, target_type="VARCHAR"),
+                    SQLCast(expression=right, target_type="VARCHAR"),
+                ],
+            )
         return SQLBinaryOp(
             operator="<",
             left=self._ensure_date_cast(left, cast_type),
@@ -1881,8 +1957,17 @@ class OperatorsMixin:
                 name="intervalAfter",
                 args=[self._point_as_interval(left), right],
             )
-        # Point after point — infer cast from operand types (may be numeric)
+        # Point after point — use precision-aware UDF for temporal,
+        # standard SQL operator for numeric (CQL §19.10).
         cast_type = self._infer_cast_type_for_comparison(left, right)
+        if cast_type in ("TIMESTAMP", "DATE"):
+            return SQLFunctionCall(
+                name="cqlAfter",
+                args=[
+                    SQLCast(expression=left, target_type="VARCHAR"),
+                    SQLCast(expression=right, target_type="VARCHAR"),
+                ],
+            )
         return SQLBinaryOp(
             operator=">",
             left=self._ensure_date_cast(left, cast_type),
@@ -2600,22 +2685,16 @@ class OperatorsMixin:
                             # Build: boundary(left) = right ± INTERVAL, truncated to precision
                             boundary_expr = SQLFunctionCall(name=_boundary_fn, args=[left])
                             interval_lit = SQLIntervalLiteral(value=int(_qty_val), unit=_qty_unit)
-                            # Cast right to TIMESTAMP to support INTERVAL arithmetic
-                            # (fhirpath_text returns VARCHAR which can't be added to INTERVAL)
-                            _cast_type = self._temporal_target_type(_qty_unit)
-                            right_cast = self._ensure_date_cast(right, _cast_type)
+                            # Cast right to TIMESTAMP for INTERVAL arithmetic
+                            right_ts = SQLCast(expression=right, target_type="TIMESTAMP")
                             if _direction == "after":
-                                offset_right = SQLBinaryOp(operator="+", left=right_cast, right=interval_lit)
+                                offset_right = SQLBinaryOp(operator="+", left=right_ts, right=interval_lit)
                             else:
-                                offset_right = SQLBinaryOp(operator="-", left=right_cast, right=interval_lit)
-                            # Apply precision truncation
-                            if _precision and _precision.lower() == "day":
-                                boundary_expr = SQLCast(expression=boundary_expr, target_type="DATE")
-                                offset_right = SQLCast(expression=offset_right, target_type="DATE")
-                            elif _precision and _precision.lower() in ("month", "year"):
-                                trunc_fn = "date_trunc"
-                                boundary_expr = SQLFunctionCall(name=trunc_fn, args=[SQLLiteral(value=_precision.lower()), boundary_expr])
-                                offset_right = SQLFunctionCall(name=trunc_fn, args=[SQLLiteral(value=_precision.lower()), offset_right])
+                                offset_right = SQLBinaryOp(operator="-", left=right_ts, right=interval_lit)
+                            # Apply precision truncation via VARCHAR LEFT()
+                            if _precision:
+                                boundary_expr = self._truncate_to_precision(boundary_expr, _precision)
+                                offset_right = self._truncate_to_precision(offset_right, _precision)
                             else:
                                 # No explicit precision — use temporal target type
                                 # based on the interval unit (TIMESTAMP for sub-day)
@@ -2651,6 +2730,21 @@ class OperatorsMixin:
         within_temporal = self._parse_within_operator(operator)
         if within_temporal is not None:
             return self._translate_within_operator(within_temporal, left, right)
+
+        # CQL §22.21: Arithmetic on DurationBetween results (which may be
+        # uncertainty intervals as VARCHAR). Use uncertainty-aware UDFs.
+        if operator in ("+", "-", "*"):
+            left_is_duration = self._is_duration_between_expr(expr.left)
+            right_is_duration = self._is_duration_between_expr(expr.right)
+            if left_is_duration or right_is_duration:
+                udf_map = {"+": "cqlUncertainAdd", "-": "cqlUncertainSubtract", "*": "cqlUncertainMultiply"}
+                return SQLFunctionCall(
+                    name=udf_map[operator],
+                    args=[
+                        SQLCast(expression=left, target_type="VARCHAR"),
+                        SQLCast(expression=right, target_type="VARCHAR"),
+                    ],
+                )
 
         # Date/DateTime arithmetic with Quantity, or Quantity ± Quantity
         # Pattern: date + quantity, date - quantity, quantity - quantity
@@ -2713,6 +2807,34 @@ class OperatorsMixin:
                 if operator == "*":
                     scalar = SQLCast(expression=left, target_type="DOUBLE") if not isinstance(left, SQLLiteral) else left
                     return self._build_scaled_quantity(right, scalar, "*")
+
+        # CQL §12.3: For Date, DateTime, and Time values, comparison operators
+        # use precision-aware semantics (compare at min precision, NULL if uncertain).
+        # Route <, <=, >, >=, = through precision-aware UDFs when operands are temporal.
+        if operator in ("<", "<=", ">", ">=", "=", "!=", "<>"):
+            if self._is_temporal_cql_expr(expr.left) or self._is_temporal_cql_expr(expr.right):
+                _udf_map = {
+                    "<": "cqlBefore",
+                    ">": "cqlAfter",
+                    "<=": "cqlSameOrBefore",
+                    ">=": "cqlSameOrAfter",
+                    "=": "cqlDateTimeEqual",
+                    "!=": "cqlDateTimeEqual",  # negate below
+                    "<>": "cqlDateTimeEqual",  # negate below
+                }
+                udf_name = _udf_map.get(operator)
+                if udf_name:
+                    result = SQLFunctionCall(
+                        name=udf_name,
+                        args=[
+                            SQLCast(expression=left, target_type="VARCHAR"),
+                            SQLCast(expression=right, target_type="VARCHAR"),
+                        ],
+                    )
+                    if operator in ("!=", "<>"):
+                        # NOT cqlDateTimeEqual(...) — but preserve null propagation
+                        result = SQLRaw(f"CASE WHEN {result.to_sql()} IS NULL THEN NULL WHEN {result.to_sql()} THEN false ELSE true END")
+                    return result
 
         # Quantity comparison: use unit-aware quantity_compare when either
         # side is a Quantity expression (parse_quantity call or CASE with
@@ -2959,34 +3081,9 @@ class OperatorsMixin:
             elif _is_numeric_literal(left) and _needs_numeric_cast(right):
                 right = _safe_numeric_cast(right)
 
-            # Handle DATE vs VARCHAR type mismatch: cast VARCHAR side to DATE
-            def _is_date_typed(expr):
-                if isinstance(expr, SQLCast) and expr.target_type == "DATE":
-                    return True
-                # CURRENT_DATE is DATE typed
-                if isinstance(expr, SQLRaw) and 'CURRENT_DATE' in expr.raw_sql:
-                    return True
-                if isinstance(expr, SQLIdentifier) and expr.name == 'CURRENT_DATE':
-                    return True
-                return False
-            def _is_date_udf(expr):
-                """dateAddQuantity/dateSubtractQuantity return VARCHAR date strings."""
-                return isinstance(expr, SQLFunctionCall) and expr.name in ('dateAddQuantity', 'dateSubtractQuantity')
-            def _is_varchar_typed(expr):
-                if isinstance(expr, SQLCase):
-                    return True
-                if isinstance(expr, SQLFunctionCall) and expr.name in ('intervalStart', 'intervalEnd', 'fhirpath_text'):
-                    return True
-                return False
-            if _is_date_typed(left) and _is_varchar_typed(right):
-                right = SQLCast(expression=right, target_type="DATE", try_cast=True)
-            elif _is_date_typed(right) and _is_varchar_typed(left):
-                left = SQLCast(expression=left, target_type="DATE", try_cast=True)
-            # dateAddQuantity/dateSubtractQuantity return VARCHAR; cast to DATE for comparisons
-            if _is_date_udf(left) and _is_date_typed(right):
-                left = SQLCast(expression=left, target_type="DATE", try_cast=True)
-            elif _is_date_udf(right) and _is_date_typed(left):
-                right = SQLCast(expression=right, target_type="DATE", try_cast=True)
+            # Handle DATE vs VARCHAR type mismatch — with VARCHAR-based datetime
+            # representation, both sides should remain VARCHAR strings for comparison.
+            # No CAST needed since ISO 8601 strings compare correctly as VARCHAR.
 
         # CQL §16.4: division by zero returns null — wrap the divisor with NULLIF
         if sql_op == "/":

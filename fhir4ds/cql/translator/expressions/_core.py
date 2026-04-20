@@ -139,10 +139,16 @@ class CoreMixin:
         return SQLLiteral(value=str(value))
 
     def _translate_date_time_literal(self, dt: DateTimeLiteral, boolean_context: bool = False) -> SQLExpression:
-        """Translate a CQL DateTime literal to SQL TIMESTAMP."""
+        """Translate a CQL DateTime literal to SQL VARCHAR preserving precision.
+
+        CQL §18.2: DateTime precision is determined by the number of specified
+        components.  We emit the original ISO 8601 string so downstream
+        precision-aware UDFs (cqlSameOrBefore, cqlDateTimeAdd, etc.) can infer
+        precision from the string format.  E.g. '@2014' → '2014' (year precision),
+        '@2014-01' → '2014-01' (month precision).
+        """
         value = dt.value
         # CQL format: @2024-01-15T12:30:00 or @2024-01-15 or @2024
-        # DuckDB format: TIMESTAMP '2024-01-15 12:30:00' or '2024-01-15'
 
         # Remove @ prefix if present
         if value.startswith("@"):
@@ -171,25 +177,11 @@ class CoreMixin:
                         f"exceeds maximum precision"
                     )
 
-        # Replace T with space for DuckDB
-        value = value.replace("T", " ").strip()
+        # Preserve ISO 8601 format with 'T' separator (not space).
+        # This keeps precision information intact for downstream UDFs.
+        value = value.strip()
 
-        # Year-only (e.g. "2014") → make_timestamp for correct TIMESTAMP type
-        if len(value) == 4 and value.isdigit():
-            return SQLFunctionCall(
-                name="make_timestamp",
-                args=[
-                    SQLLiteral(value=int(value)),
-                    SQLLiteral(value=1), SQLLiteral(value=1),
-                    SQLLiteral(value=0), SQLLiteral(value=0), SQLLiteral(value=0),
-                ],
-            )
-
-        # Year-month only (e.g. "2014-01") → pad to full date
-        if len(value) <= 7 and value.count("-") == 1:
-            value = value + "-01"
-
-        # Return as string literal - DuckDB can parse ISO date/datetime strings
+        # Return as VARCHAR literal preserving original precision
         return SQLLiteral(value=value)
 
     def _translate_time_literal(self, t: TimeLiteral, boolean_context: bool = False) -> SQLExpression:

@@ -57,38 +57,67 @@ class TemporalComparisonMixin:
             pattern_as = f"same {precision} as"
 
             if operator == pattern_before:
-                # same day or before -> DATE(x) <= DATE(y)
-                left_truncated = self._truncate_to_precision(left, precision)
-                right_truncated = self._truncate_to_precision(right, precision)
-                return SQLBinaryOp(operator="<=", left=left_truncated, right=right_truncated)
+                # CQL §19.16: Compare at specified precision with timezone
+                # normalization. Returns null if either operand is coarser than
+                # the specified precision (uncertain per CQL §18.4).
+                return SQLFunctionCall(
+                    name="cqlSameOrBeforeP",
+                    args=[
+                        SQLCast(expression=left, target_type="VARCHAR"),
+                        SQLCast(expression=right, target_type="VARCHAR"),
+                        SQLLiteral(value=precision),
+                    ],
+                )
 
             if operator == pattern_after:
-                # same day or after -> DATE(x) >= DATE(y)
-                left_truncated = self._truncate_to_precision(left, precision)
-                right_truncated = self._truncate_to_precision(right, precision)
-                return SQLBinaryOp(operator=">=", left=left_truncated, right=right_truncated)
+                return SQLFunctionCall(
+                    name="cqlSameOrAfterP",
+                    args=[
+                        SQLCast(expression=left, target_type="VARCHAR"),
+                        SQLCast(expression=right, target_type="VARCHAR"),
+                        SQLLiteral(value=precision),
+                    ],
+                )
 
             if operator == pattern_as:
-                # same day as -> DATE(x) = DATE(y)
-                left_truncated = self._truncate_to_precision(left, precision)
-                right_truncated = self._truncate_to_precision(right, precision)
-                return SQLBinaryOp(operator="=", left=left_truncated, right=right_truncated)
+                return SQLFunctionCall(
+                    name="cqlSameAsP",
+                    args=[
+                        SQLCast(expression=left, target_type="VARCHAR"),
+                        SQLCast(expression=right, target_type="VARCHAR"),
+                        SQLLiteral(value=precision),
+                    ],
+                )
 
-        # Handle generic "same or before/after" without precision (use day as default)
+        # Handle generic "same or before/after" without precision.
+        # CQL §19.15-16: compare at minimum precision of both operands,
+        # returning null when precision is insufficient to determine ordering.
         if operator == "same or before":
-            left_truncated = self._truncate_to_precision(left, "day")
-            right_truncated = self._truncate_to_precision(right, "day")
-            return SQLBinaryOp(operator="<=", left=left_truncated, right=right_truncated)
+            return SQLFunctionCall(
+                name="cqlSameOrBefore",
+                args=[
+                    SQLCast(expression=left, target_type="VARCHAR"),
+                    SQLCast(expression=right, target_type="VARCHAR"),
+                ],
+            )
 
         if operator == "same or after":
-            left_truncated = self._truncate_to_precision(left, "day")
-            right_truncated = self._truncate_to_precision(right, "day")
-            return SQLBinaryOp(operator=">=", left=left_truncated, right=right_truncated)
+            return SQLFunctionCall(
+                name="cqlSameOrAfter",
+                args=[
+                    SQLCast(expression=left, target_type="VARCHAR"),
+                    SQLCast(expression=right, target_type="VARCHAR"),
+                ],
+            )
 
         if operator == "same as":
-            left_truncated = self._truncate_to_precision(left, "day")
-            right_truncated = self._truncate_to_precision(right, "day")
-            return SQLBinaryOp(operator="=", left=left_truncated, right=right_truncated)
+            return SQLFunctionCall(
+                name="cqlDateTimeEqual",
+                args=[
+                    SQLCast(expression=left, target_type="VARCHAR"),
+                    SQLCast(expression=right, target_type="VARCHAR"),
+                ],
+            )
 
         # Fallback: pass through as-is (should not reach here normally)
         return SQLBinaryOp(operator="=", left=left, right=right)
@@ -176,14 +205,8 @@ class TemporalComparisonMixin:
                         l = left if left_is_interval else self._point_as_interval(left)
                         r = right if right_is_interval else self._point_as_interval(right)
                         return SQLFunctionCall(name="intervalOnOrBefore", args=[l, r])
-                    left_bound = SQLCast(
-                        expression=SQLFunctionCall(name="intervalEnd", args=[left]),
-                        target_type="TIMESTAMP",
-                    ) if left_is_interval else left
-                    right_bound = SQLCast(
-                        expression=SQLFunctionCall(name="intervalStart", args=[right]),
-                        target_type="TIMESTAMP",
-                    ) if right_is_interval else right
+                    left_bound = SQLFunctionCall(name="intervalEnd", args=[left]) if left_is_interval else left
+                    right_bound = SQLFunctionCall(name="intervalStart", args=[right]) if right_is_interval else right
                     left_val = self._truncate_to_precision(left_bound, precision)
                     right_val = self._truncate_to_precision(right_bound, precision)
                     return SQLBinaryOp(operator="<=", left=left_val, right=right_val)
@@ -201,6 +224,16 @@ class TemporalComparisonMixin:
 
         op = "<" if getattr(right, 'is_exclusive_boundary', False) else "<="
         cast_type = self._infer_cast_type_for_comparison(left, right)
+        if cast_type in ("TIMESTAMP", "DATE"):
+            # CQL §19.15: SameOrBefore with precision-awareness
+            udf_name = "cqlBefore" if op == "<" else "cqlSameOrBefore"
+            return SQLFunctionCall(
+                name=udf_name,
+                args=[
+                    SQLCast(expression=left, target_type="VARCHAR"),
+                    SQLCast(expression=right, target_type="VARCHAR"),
+                ],
+            )
         return SQLBinaryOp(
             operator=op,
             left=self._ensure_date_cast(left, cast_type),
@@ -230,14 +263,8 @@ class TemporalComparisonMixin:
                         l = left if left_is_interval else self._point_as_interval(left)
                         r = right if right_is_interval else self._point_as_interval(right)
                         return SQLFunctionCall(name="intervalOnOrAfter", args=[l, r])
-                    left_bound = SQLCast(
-                        expression=SQLFunctionCall(name="intervalStart", args=[left]),
-                        target_type="TIMESTAMP",
-                    ) if left_is_interval else left
-                    right_bound = SQLCast(
-                        expression=SQLFunctionCall(name="intervalEnd", args=[right]),
-                        target_type="TIMESTAMP",
-                    ) if right_is_interval else right
+                    left_bound = SQLFunctionCall(name="intervalStart", args=[left]) if left_is_interval else left
+                    right_bound = SQLFunctionCall(name="intervalEnd", args=[right]) if right_is_interval else right
                     left_val = self._truncate_to_precision(left_bound, precision)
                     right_val = self._truncate_to_precision(right_bound, precision)
                     return SQLBinaryOp(operator=">=", left=left_val, right=right_val)
@@ -253,6 +280,14 @@ class TemporalComparisonMixin:
             return SQLFunctionCall(name="intervalOnOrAfter", args=[l, r])
 
         cast_type = self._infer_cast_type_for_comparison(left, right)
+        if cast_type in ("TIMESTAMP", "DATE"):
+            return SQLFunctionCall(
+                name="cqlSameOrAfter",
+                args=[
+                    SQLCast(expression=left, target_type="VARCHAR"),
+                    SQLCast(expression=right, target_type="VARCHAR"),
+                ],
+            )
         return SQLBinaryOp(
             operator=">=",
             left=self._ensure_date_cast(left, cast_type),
@@ -390,17 +425,20 @@ class TemporalComparisonMixin:
         right_for_compare = self._ensure_date_cast(right_for_compare, cast_type)
         boundary_func = self._ensure_date_cast(boundary_func, cast_type)
 
+        # For INTERVAL arithmetic (+/-), DuckDB requires TIMESTAMP, not VARCHAR.
+        right_for_arithmetic = self._cast_for_interval_arithmetic(right_for_compare)
+
         if before_or_after in ("on or after", "after"):
             if less_or_more == "exact":
                 # Exact offset: boundary = right + quantity
-                target = SQLBinaryOp(operator="+", left=right_for_compare, right=interval_literal)
+                target = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
                 if precision:
                     target = self._truncate_to_precision(target, precision)
                 return SQLBinaryOp(operator="=", left=boundary_func, right=target)
             elif less_or_more == "or less":
                 # start >= right AND start <= right + quantity
                 lower_bound = right_for_compare
-                upper_bound = SQLBinaryOp(operator="+", left=right_for_compare, right=interval_literal)
+                upper_bound = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
 
                 if precision:
                     lower_bound = self._truncate_to_precision(lower_bound, precision)
@@ -415,7 +453,7 @@ class TemporalComparisonMixin:
                 )
             else:  # or more
                 # start >= right + quantity
-                threshold = SQLBinaryOp(operator="+", left=right_for_compare, right=interval_literal)
+                threshold = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
                 if precision:
                     threshold = self._truncate_to_precision(threshold, precision)
                 return SQLBinaryOp(operator="<=", left=threshold, right=boundary_func)
@@ -423,14 +461,14 @@ class TemporalComparisonMixin:
         else:  # on or before / before
             if less_or_more == "exact":
                 # Exact offset: boundary = right - quantity
-                target = SQLBinaryOp(operator="-", left=right_for_compare, right=interval_literal)
+                target = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
                 if precision:
                     target = self._truncate_to_precision(target, precision)
                 return SQLBinaryOp(operator="=", left=boundary_func, right=target)
             elif less_or_more == "or less":
                 # start <= right AND start >= right - quantity
                 upper_bound = right_for_compare
-                lower_bound = SQLBinaryOp(operator="-", left=right_for_compare, right=interval_literal)
+                lower_bound = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
 
                 if precision:
                     lower_bound = self._truncate_to_precision(lower_bound, precision)
@@ -445,7 +483,7 @@ class TemporalComparisonMixin:
                 )
             else:  # or more
                 # start <= right - quantity
-                threshold = SQLBinaryOp(operator="-", left=right_for_compare, right=interval_literal)
+                threshold = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
                 if precision:
                     threshold = self._truncate_to_precision(threshold, precision)
                 return SQLBinaryOp(operator="<=", left=boundary_func, right=threshold)
@@ -535,24 +573,23 @@ class TemporalComparisonMixin:
         right_for_compare = self._ensure_date_cast(right_for_compare, cast_type)
         interval_point_for_compare = self._ensure_date_cast(interval_point_for_compare, cast_type)
 
+        # For INTERVAL arithmetic (+/-), DuckDB requires TIMESTAMP, not VARCHAR.
+        right_for_arithmetic = self._cast_for_interval_arithmetic(right_for_compare)
+
         if before_or_after in ("on or after", "after"):
             if less_or_more == "exact":
-                # Exact offset: interval_point = right + quantity
-                target = SQLBinaryOp(operator="+", left=right_for_compare, right=interval_literal)
+                target = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
                 if precision:
                     target = self._truncate_to_precision(target, precision)
                 return SQLBinaryOp(operator="=", left=interval_point_for_compare, right=target)
             elif less_or_more == "or less":
-                # start >= right AND start <= right + quantity
-                # i.e., interval_point BETWEEN right AND right + quantity
                 lower_bound = right_for_compare
-                upper_bound = SQLBinaryOp(operator="+", left=right_for_compare, right=interval_literal)
+                upper_bound = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
 
                 if precision:
                     lower_bound = self._truncate_to_precision(lower_bound, precision)
                     upper_bound = self._truncate_to_precision(upper_bound, precision)
 
-                # "after" is exclusive (>), "on or after" is inclusive (>=)
                 lower_op = "<" if before_or_after == "after" else "<="
                 return SQLBinaryOp(
                     operator="AND",
@@ -560,30 +597,25 @@ class TemporalComparisonMixin:
                     right=SQLBinaryOp(operator="<=", left=interval_point_for_compare, right=upper_bound),
                 )
             else:  # or more
-                # interval_point >= right + quantity
-                threshold = SQLBinaryOp(operator="+", left=right_for_compare, right=interval_literal)
+                threshold = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
                 if precision:
                     threshold = self._truncate_to_precision(threshold, precision)
                 return SQLBinaryOp(operator="<=", left=threshold, right=interval_point_for_compare)
 
         else:  # on or before / before
             if less_or_more == "exact":
-                # Exact offset: interval_point = right - quantity
-                target = SQLBinaryOp(operator="-", left=right_for_compare, right=interval_literal)
+                target = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
                 if precision:
                     target = self._truncate_to_precision(target, precision)
                 return SQLBinaryOp(operator="=", left=interval_point_for_compare, right=target)
             elif less_or_more == "or less":
-                # interval_point <= right AND interval_point >= right - quantity
-                # i.e., interval_point BETWEEN right - quantity AND right
                 upper_bound = right_for_compare
-                lower_bound = SQLBinaryOp(operator="-", left=right_for_compare, right=interval_literal)
+                lower_bound = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
 
                 if precision:
                     lower_bound = self._truncate_to_precision(lower_bound, precision)
                     upper_bound = self._truncate_to_precision(upper_bound, precision)
 
-                # "before" is exclusive (<), "on or before" is inclusive (<=)
                 upper_op = "<" if before_or_after == "before" else "<="
                 return SQLBinaryOp(
                     operator="AND",
@@ -591,8 +623,7 @@ class TemporalComparisonMixin:
                     right=SQLBinaryOp(operator=upper_op, left=interval_point_for_compare, right=upper_bound),
                 )
             else:  # or more
-                # interval_point <= right - quantity
-                threshold = SQLBinaryOp(operator="-", left=right_for_compare, right=interval_literal)
+                threshold = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
                 if precision:
                     threshold = self._truncate_to_precision(threshold, precision)
                 return SQLBinaryOp(operator="<=", left=interval_point_for_compare, right=threshold)
@@ -635,15 +666,16 @@ class TemporalComparisonMixin:
             left_cmp = self._ensure_date_cast(left, cast_type)
             right_cmp = self._ensure_date_cast(right, cast_type)
 
+        # For INTERVAL arithmetic, DuckDB requires TIMESTAMP, not VARCHAR.
+        right_for_arithmetic = self._cast_for_interval_arithmetic(right_cmp)
+
         # "before" and "on or before" both mean left <= right
         # "after" and "on or after" both mean left >= right
         is_before = direction in ("before", "on or before")
 
         if is_before:
             if constraint == "or less":
-                # "A N or less before B" → B - N <= A < B  (exclusive for "before")
-                # "A N or less on or before B" → B - N <= A <= B  (inclusive)
-                lower = SQLBinaryOp(operator="-", left=right_cmp, right=interval_literal)
+                lower = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
                 upper_op = "<" if direction == "before" else "<="
                 return SQLBinaryOp(
                     operator="AND",
@@ -651,15 +683,12 @@ class TemporalComparisonMixin:
                     right=SQLBinaryOp(operator=upper_op, left=left_cmp, right=right_cmp),
                 )
             else:
-                # "A N or more before B" → A <= B - N
-                threshold = SQLBinaryOp(operator="-", left=right_cmp, right=interval_literal)
+                threshold = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
                 return SQLBinaryOp(operator="<=", left=left_cmp, right=threshold)
         else:
             # after / on or after
             if constraint == "or less":
-                # "A N or less after B" → B < A <= B + N  (exclusive for "after")
-                # "A N or less on or after B" → B <= A <= B + N  (inclusive)
-                upper = SQLBinaryOp(operator="+", left=right_cmp, right=interval_literal)
+                upper = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
                 lower_op = "<" if direction == "after" else "<="
                 return SQLBinaryOp(
                     operator="AND",
@@ -667,8 +696,7 @@ class TemporalComparisonMixin:
                     right=SQLBinaryOp(operator="<=", left=left_cmp, right=upper),
                 )
             else:
-                # "A N or more after B" → A >= B + N
-                threshold = SQLBinaryOp(operator="+", left=right_cmp, right=interval_literal)
+                threshold = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
                 return SQLBinaryOp(operator=">=", left=left_cmp, right=threshold)
 
     def _translate_within_operator(
@@ -689,8 +717,10 @@ class TemporalComparisonMixin:
         left_cmp = self._ensure_date_cast(left, cast_type)
         right_cmp = self._ensure_date_cast(right, cast_type)
 
-        lower = SQLBinaryOp(operator="-", left=right_cmp, right=interval_literal)
-        upper = SQLBinaryOp(operator="+", left=right_cmp, right=interval_literal)
+        right_for_arithmetic = self._cast_for_interval_arithmetic(right_cmp)
+
+        lower = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
+        upper = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
 
         return SQLBinaryOp(
             operator="AND",

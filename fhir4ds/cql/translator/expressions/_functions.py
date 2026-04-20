@@ -1042,6 +1042,28 @@ class FunctionsMixin:
                     return SQLLiteral(value=val)
         return SQLNull()
 
+    def _translate_precision_pre(self, func, translator) -> "Optional[SQLExpression]":
+        """Pre-translate CQL Precision() — preserve raw Decimal trailing zeros.
+
+        CQL §22.24: Precision returns the number of digits of precision.
+        For Decimal literals, trailing zeros are significant:
+        Precision(1.58700) = 5, not 3.
+        """
+        from ...parser.ast_nodes import Literal as _ASTLiteral
+        if func.arguments:
+            arg = func.arguments[0]
+            # Decimal literal with raw_str: pass the raw string to preserve
+            # trailing zeros that Python float() would strip.
+            if (isinstance(arg, _ASTLiteral)
+                    and getattr(arg, 'type', None) == 'Decimal'
+                    and getattr(arg, 'raw_str', None)):
+                return SQLFunctionCall(
+                    name="CQLPrecision",
+                    args=[SQLLiteral(value=arg.raw_str)],
+                )
+        # Fall through: let the normal rename handle it
+        return None
+
     def _translate_collapse(self, args: list) -> SQLExpression:
         """Translate CQL Collapse to collapse_intervals UDF."""
         arg = args[0]
@@ -1183,11 +1205,17 @@ class FunctionsMixin:
             # Only apply regex when input is a string literal; non-string inputs (TIMESTAMP, DATE) use TRY_CAST.
             if name_lower in ('todatetime', 'todate'):
                 arg_sql = args[0].to_sql()
-                # Both ToDate and ToDateTime accept ISO 8601 strings starting with YYYY-MM-DD
+                # CQL §22.22: ToDateTime preserves input precision.
+                # A day-precision Date becomes a day-precision DateTime.
+                # Since we use VARCHAR ISO 8601 for all datetimes, just
+                # validate format and pass through (no TRY_CAST to TIMESTAMP).
+                # Normalize 'Z' timezone suffix to '+00:00' for consistency.
                 pattern = r"'\d{4}-\d{2}-\d{2}.*'"
                 return SQLRaw(
                     f"CASE WHEN typeof({arg_sql}) = 'VARCHAR' AND NOT ({arg_sql}) SIMILAR TO {pattern} "
-                    f"THEN NULL ELSE TRY_CAST(({arg_sql}) AS {target_type}) END"
+                    f"THEN NULL ELSE CASE WHEN ({arg_sql}) LIKE '%Z' "
+                    f"THEN LEFT(CAST(({arg_sql}) AS VARCHAR), LENGTH(CAST(({arg_sql}) AS VARCHAR)) - 1) || '+00:00' "
+                    f"ELSE CAST(({arg_sql}) AS VARCHAR) END END"
                 )
             # Use TRY_CAST to avoid Conversion Errors.
             return SQLCast(expression=args[0], target_type=target_type, try_cast=True)

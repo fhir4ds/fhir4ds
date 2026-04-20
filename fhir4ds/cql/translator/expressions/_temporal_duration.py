@@ -34,22 +34,11 @@ class DurationMixin:
     def _translate_duration_between(self, node: DurationBetween, boolean_context: bool = False) -> SQLExpression:
         """Handle AST node: years between X and Y.
 
-        The parser sometimes absorbs a trailing ``in Interval[low, high]`` into
-        ``operand_right`` as ``BinaryExpression(operator='in', left=actual_right,
-        right=Interval)``.  When this happens we extract the real right operand
-        and wrap the duration result in a SQL BETWEEN.
+        CQL §22.21: DurationBetween may return uncertainty intervals when
+        operand precision is coarser than the unit being measured.
+        Uses cqlDurationBetween UDF (returns VARCHAR: int string or interval JSON).
         """
         from ...parser.ast_nodes import BinaryExpression as CQLBinaryExpr, Interval as CQLInterval
-        precision_map = {
-            'year': 'YearsBetween',      # Macro
-            'month': 'MonthsBetween',    # Macro
-            'week': 'weeksBetween',      # UDF
-            'day': 'DaysBetween',        # Macro
-            'hour': 'HoursBetween',      # Macro
-            'minute': 'MinutesBetween',  # Macro
-            'second': 'SecondsBetween',  # Macro
-            'millisecond': 'millisecondsBetween',  # UDF
-        }
 
         # Detect absorbed "in Interval" on the right operand
         trailing_interval = None
@@ -68,8 +57,16 @@ class DurationMixin:
 
         left = self.translate(node.operand_left, usage=ExprUsage.SCALAR)
         right = self.translate(actual_right, usage=ExprUsage.SCALAR)
-        func_name = precision_map.get(node.precision.lower(), 'DaysBetween')
-        duration_expr = SQLFunctionCall(name=func_name, args=[left, right])
+        unit = node.precision.lower()
+        # Use uncertainty-aware UDF that returns VARCHAR (int or interval JSON)
+        duration_expr = SQLFunctionCall(
+            name="cqlDurationBetween",
+            args=[
+                SQLCast(expression=left, target_type="VARCHAR"),
+                SQLCast(expression=right, target_type="VARCHAR"),
+                SQLLiteral(value=unit),
+            ],
+        )
 
         if trailing_interval is not None:
             low = self.translate(trailing_interval.low, usage=ExprUsage.SCALAR)
@@ -83,10 +80,14 @@ class DurationMixin:
         if trailing_comparison is not None:
             cmp_op, cmp_right_node = trailing_comparison
             cmp_right = self.translate(cmp_right_node, usage=ExprUsage.SCALAR)
-            return SQLBinaryOp(
-                operator=BINARY_OPERATOR_MAP.get(cmp_op, cmp_op),
-                left=duration_expr,
-                right=cmp_right,
+            # Use uncertainty-aware comparison for three-valued logic
+            return SQLFunctionCall(
+                name="cqlUncertainCompare",
+                args=[
+                    duration_expr,
+                    SQLCast(expression=cmp_right, target_type="VARCHAR"),
+                    SQLLiteral(value=cmp_op),
+                ],
             )
 
         return duration_expr
@@ -141,7 +142,25 @@ class DurationMixin:
         return duration_sql
 
     def _translate_difference_between(self, node: DifferenceBetween, boolean_context: bool = False) -> SQLExpression:
-        """Handle AST node: difference in years between X and Y."""
+        """Handle AST node: difference in years between X and Y.
+
+        CQL §22.22: DifferenceBetween counts calendar boundary crossings,
+        unlike DurationBetween which counts whole periods. Uses differenceIn*
+        UDFs which return integers.
+
+        Handles parser bug where trailing comparison operators are absorbed
+        into the right operand (e.g., ``difference in months between X and Y > 5``).
+        """
+        from ...parser.ast_nodes import BinaryExpression as CQLBinaryExpr
+
+        # Detect absorbed comparison operators (< 24, >= 10, etc.)
+        trailing_comparison = None
+        actual_right = node.operand_right
+        if (isinstance(actual_right, CQLBinaryExpr)
+                and actual_right.operator in ('<', '<=', '>', '>=', '=', '!=')):
+            trailing_comparison = (actual_right.operator, actual_right.right)
+            actual_right = actual_right.left
+
         precision_map = {
             'year': 'differenceInYears',
             'month': 'differenceInMonths',
@@ -153,12 +172,19 @@ class DurationMixin:
             'millisecond': 'differenceInMilliseconds',
         }
         left = self.translate(node.operand_left, usage=ExprUsage.SCALAR)
-        right = self.translate(node.operand_right, usage=ExprUsage.SCALAR)
+        right = self.translate(actual_right, usage=ExprUsage.SCALAR)
         func_name = precision_map.get(node.precision.lower(), 'differenceInDays')
-        # The differenceIn* UDFs expect VARCHAR arguments; cast DATE/TIMESTAMP to VARCHAR
         left = SQLCast(expression=left, target_type="VARCHAR")
         right = SQLCast(expression=right, target_type="VARCHAR")
-        return SQLFunctionCall(name=func_name, args=[left, right])
+        diff_expr = SQLFunctionCall(name=func_name, args=[left, right])
+
+        if trailing_comparison is not None:
+            cmp_op, cmp_right_node = trailing_comparison
+            cmp_right = self.translate(cmp_right_node, usage=ExprUsage.SCALAR)
+            sql_cmp_op = {"<": "<", "<=": "<=", ">": ">", ">=": ">=", "=": "=", "!=": "!="}.get(cmp_op, cmp_op)
+            return SQLBinaryOp(operator=sql_cmp_op, left=diff_expr, right=cmp_right)
+
+        return diff_expr
 
     def _translate_duration_between_func(self, name: str, args: List[SQLExpression]) -> SQLExpression:
         """Translate a duration between function call."""

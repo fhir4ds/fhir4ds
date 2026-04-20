@@ -1520,7 +1520,7 @@ class CQLParser:
                         f"Decimal literal '{token.value}' exceeds maximum 28 integer digits "
                         f"(CQL §2.3)"
                     )
-            return Literal(value=value, type="Decimal")
+            return Literal(value=value, type="Decimal", raw_str=token.value)
         elif token.type == TokenType.STRING:
             return Literal(value=token.value, type="String")
         elif token.type == TokenType.TRUE:

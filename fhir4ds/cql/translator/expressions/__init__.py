@@ -165,15 +165,22 @@ class ExpressionTranslator(
             "populationstddev": "STDDEV_POP",
             "stddevpop": "STDDEV_POP",
             "distinct": "list_distinct",
-            "precision": "CQLPrecision",
         }
         for cql, sql in _RENAMES.items():
             registry.register_rename(cql, sql)
 
+        # Precision needs special handling to preserve trailing zeros in Decimal
+        # literals (CQL §22.24).  When the argument is a Decimal literal with
+        # raw_str, pass the raw string so the UDF counts actual fractional digits.
+        # The pre_translate intercepts Decimal literals; the rename provides the
+        # fallback for all other types (DateTime, Time, etc.).
+        registry.register_pre_translate("precision", self._translate_precision_pre)
+        registry.register_rename("precision", "CQLPrecision")
+
         # === SQL keywords that must not have parentheses ===
         from ...translator.types import SQLRaw
-        registry.register("today", lambda args, ctx: SQLRaw(raw_sql="CURRENT_DATE"), arity=0)
-        registry.register("now", lambda args, ctx: SQLRaw(raw_sql="CURRENT_TIMESTAMP"), arity=0)
+        registry.register("today", lambda args, ctx: SQLRaw(raw_sql="CAST(CURRENT_DATE AS VARCHAR)"), arity=0)
+        registry.register("now", lambda args, ctx: SQLRaw(raw_sql="REPLACE(CAST(CURRENT_TIMESTAMP AS VARCHAR), ' ', 'T')"), arity=0)
         registry.register("timeofday", lambda args, ctx: SQLRaw(raw_sql="CURRENT_TIME"), arity=0)
 
         # === Parameterized translations: need arg manipulation ===

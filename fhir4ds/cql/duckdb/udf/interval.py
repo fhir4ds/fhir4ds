@@ -132,13 +132,19 @@ def _parse_interval_bound(value: Any) -> Any:
                     return float(q["value"])
             except (JSONDecodeError, TypeError, ValueError):
                 pass
-        # Time-only values: HH:MM:SS or HH:MM:SS.mmm
-        if ':' in stripped and '-' not in stripped and not stripped.startswith('{'):
+        # Time-only values: full (HH:MM:SS) or partial (THH, THH:MM)
+        # Partial time strings arise from precision truncation (e.g., "hour of @T10:30")
+        if ((':' in stripped and '-' not in stripped and not stripped.startswith('{'))
+                or (stripped.startswith('T') and len(stripped) >= 3 and stripped[1:3].isdigit())):
             from datetime import time as _time_type
+            t_str = stripped.lstrip('T').strip()
             try:
-                t_str = stripped.lstrip('T').strip()
+                # Pad partial time strings: 'HH' → 'HH:00:00', 'HH:MM' → 'HH:MM:00'
+                if len(t_str) == 2 and t_str.isdigit():
+                    t_str = f"{t_str}:00:00"
+                elif len(t_str) == 5 and t_str[2] == ':':
+                    t_str = f"{t_str}:00"
                 t = _time_type.fromisoformat(t_str)
-                # Convert to total microseconds for numeric comparison
                 return t.hour * 3600000 + t.minute * 60000 + t.second * 1000 + t.microsecond // 1000
             except (ValueError, TypeError):
                 pass
@@ -175,11 +181,17 @@ def _parse_point(value: str | None) -> Any:
                 return float(q["value"])
         except (JSONDecodeError, TypeError, ValueError):
             pass
-    # Time-only values: HH:MM:SS or HH:MM:SS.mmm (no date component)
-    if ':' in stripped and '-' not in stripped and not stripped.startswith('{'):
+    # Time-only values: full (HH:MM:SS) or partial (THH, THH:MM)
+    if ((':' in stripped and '-' not in stripped and not stripped.startswith('{'))
+            or (stripped.startswith('T') and len(stripped) >= 3 and stripped[1:3].isdigit())):
         from datetime import time as _time_type
+        t_str = stripped.lstrip('T').strip()
         try:
-            t_str = stripped.lstrip('T').strip()
+            # Pad partial time strings
+            if len(t_str) == 2 and t_str.isdigit():
+                t_str = f"{t_str}:00:00"
+            elif len(t_str) == 5 and t_str[2] == ':':
+                t_str = f"{t_str}:00"
             # Normalize fractional seconds
             if '.' in t_str:
                 base, frac = t_str.split('.', 1)
@@ -267,7 +279,12 @@ def _parse_interval(value: str) -> dict | None:
 
 
 def _parse_date_or_datetime(value: str | date | datetime | None) -> date | datetime | None:
-    """Parse date or datetime from ISO string."""
+    """Parse date or datetime from ISO string.
+
+    Handles partial-precision ISO 8601 strings (year-only, year-month)
+    by padding to full date.  Precision information is lost — callers
+    that need precision should use the dedicated cql* UDFs instead.
+    """
     if not value:
         return None
     if isinstance(value, datetime):
@@ -279,7 +296,16 @@ def _parse_date_or_datetime(value: str | date | datetime | None) -> date | datet
         return None
     try:
         # Normalize partial fractional seconds (.4 → .400000) for Python 3.10 compat
-        val = value
+        val = value.strip()
+
+        # Handle partial-precision ISO 8601 strings
+        # Year-only: '2014' → date(2014, 1, 1)
+        if len(val) == 4 and val.isdigit():
+            return date(int(val), 1, 1)
+        # Year-month: '2014-01' → date(2014, 1, 1)
+        if len(val) == 7 and val[4] == '-' and val[:4].isdigit() and val[5:7].isdigit():
+            return date(int(val[:4]), int(val[5:7]), 1)
+
         if '.' in val:
             # Find the fractional part and pad to 6 digits
             dot_idx = val.rindex('.')
@@ -563,6 +589,64 @@ def _normalize_for_compare(a, b):
     comparison is done at the precision of the less precise operand. So when one is
     a date and the other is a datetime, we truncate the datetime to date precision.
     """
+    # Helper: convert a CQL Time string to millis-since-midnight
+    def _time_str_to_millis(s: str) -> int | None:
+        from datetime import time as _time_type
+        stripped = s.strip().lstrip('T')
+        try:
+            # Pad partial time strings
+            if len(stripped) == 2 and stripped.isdigit():
+                stripped = f"{stripped}:00:00"
+            elif len(stripped) == 5 and stripped[2] == ':':
+                stripped = f"{stripped}:00"
+            if '.' in stripped:
+                base, frac = stripped.split('.', 1)
+                frac = frac.ljust(6, '0')[:6]
+                stripped = f"{base}.{frac}"
+            t = _time_type.fromisoformat(stripped)
+            return t.hour * 3600000 + t.minute * 60000 + t.second * 1000 + t.microsecond // 1000
+        except (ValueError, TypeError):
+            return None
+
+    # Handle Time strings (start with 'T' or look like HH:MM:SS)
+    def _is_time_str(v) -> bool:
+        if not isinstance(v, str):
+            return False
+        s = v.strip()
+        # Full: T10:00:00, 10:00:00; Partial: T10, T10:00
+        return (s.startswith('T') and len(s) >= 3 and s[1:3].isdigit()) or (
+            len(s) >= 5 and s[2] == ':' and s[:2].isdigit()
+        )
+
+    # Coerce Time strings to millis for comparison with int time-millis
+    if _is_time_str(a):
+        m = _time_str_to_millis(a)
+        if m is not None:
+            a = m
+    if _is_time_str(b):
+        m = _time_str_to_millis(b)
+        if m is not None:
+            b = m
+
+    # Coerce unparsed strings to date/datetime objects first
+    if isinstance(a, str) and not isinstance(b, str):
+        parsed = _parse_date_or_datetime(a)
+        if parsed is not None:
+            a = parsed
+    if isinstance(b, str) and not isinstance(a, str):
+        parsed = _parse_date_or_datetime(b)
+        if parsed is not None:
+            b = parsed
+    # If both are still strings, try to parse both
+    if isinstance(a, str) and isinstance(b, str):
+        pa = _parse_date_or_datetime(a)
+        pb = _parse_date_or_datetime(b)
+        if pa is not None and pb is not None:
+            a, b = pa, pb
+        else:
+            # Fall back to string comparison for ISO 8601
+            return a, b
+
     # Guard: incompatible types (e.g. datetime vs int) cannot be compared.
     # Coerce the int to a date (treating it as a year) when the other is a date/datetime,
     # but only for valid year values (1-9999). Large ints are time-millis or other non-year values.

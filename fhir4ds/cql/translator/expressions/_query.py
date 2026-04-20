@@ -1146,6 +1146,23 @@ class QueryMixin:
             type_name = f"Interval<{expr.right.point_type.name}>"
         else:
             type_name = expr.right.name
+
+        # Strip FHIR/CQL namespace prefix for type matching
+        bare_type = type_name.split(".")[-1] if "." in type_name else type_name
+
+        # --- Strategy 0: Compile-time type resolution for InstanceExpression ---
+        # When the left operand is an InstanceExpression with a known type,
+        # resolve the `is` check at compile time.  CQL §2.1: Vocabulary is a
+        # supertype of ValueSet and CodeSystem.
+        from ...parser.ast_nodes import InstanceExpression as _InstExpr
+        if isinstance(expr.left, _InstExpr):
+            instance_type = expr.left.type.split(".")[-1] if "." in expr.left.type else expr.left.type
+            _VOCABULARY_TYPES = {"ValueSet", "CodeSystem"}
+            if bare_type == "Vocabulary" and instance_type in _VOCABULARY_TYPES:
+                return SQLLiteral(value=True)
+            if instance_type == bare_type:
+                return SQLLiteral(value=True)
+
         left = self.translate(expr.left, usage=ExprUsage.SCALAR)
         resource_expr = left
 
@@ -1510,6 +1527,23 @@ class QueryMixin:
             resolved = registry.resolve_named_profile(type_name)
             if resolved is not None:
                 type_name = resolved[0]
+
+        # --- Strategy 3b: CQL Vocabulary abstract type (§2.1) ---
+        # Vocabulary is a supertype of ValueSet and CodeSystem.
+        if bare_type == "Vocabulary":
+            resource_type_expr = SQLFunctionCall(
+                name="json_extract_string",
+                args=[resource_expr, SQLLiteral("$.resourceType")],
+            )
+            return SQLBinaryOp(
+                operator="OR",
+                left=SQLBinaryOp(
+                    operator="=", left=resource_type_expr, right=SQLLiteral("ValueSet"),
+                ),
+                right=SQLBinaryOp(
+                    operator="=", left=resource_type_expr, right=SQLLiteral("CodeSystem"),
+                ),
+            )
 
         # --- Strategy 4: FHIR resource types ---
         resource_type_expr = SQLFunctionCall(

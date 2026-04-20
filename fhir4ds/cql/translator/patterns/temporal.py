@@ -803,28 +803,35 @@ class TemporalTranslator:
         expr: SQLExpression,
         precision: str,
     ) -> SQLExpression:
-        """
-        Truncate an expression to the specified precision.
+        """Truncate a temporal expression to the specified precision.
 
-        Args:
-            expr: The SQL expression to truncate.
-            precision: The precision level (e.g., 'day', 'hour', 'month').
-
-        Returns:
-            SQL expression for the truncated value.
+        Uses LEFT() on VARCHAR ISO 8601 strings for consistent handling
+        of both full-precision TIMESTAMP and partial-precision VARCHAR inputs.
         """
         precision_lower = precision.lower()
 
-        if precision_lower == "day":
-            return SQLCast(expression=expr, target_type="DATE")
-        elif precision_lower in PRECISION_TRUNCATE_FUNCTIONS:
-            return SQLFunctionCall(
-                name="DATE_TRUNC",
-                args=[SQLLiteral(precision_lower), expr],
-            )
-        else:
-            # Unknown precision - return as-is
-            return expr
+        precision_lengths_dt = {
+            'year': 4, 'month': 7, 'week': 10, 'day': 10,
+            'hour': 13, 'minute': 16, 'second': 19, 'millisecond': 23,
+        }
+        precision_lengths_time = {
+            'hour': 3, 'minute': 6, 'second': 9, 'millisecond': 13,
+        }
+
+        dt_length = precision_lengths_dt.get(precision_lower)
+        time_length = precision_lengths_time.get(precision_lower)
+        if dt_length:
+            varchar_expr = f"REPLACE(CAST(({expr.to_sql()}) AS VARCHAR), ' ', 'T')"
+            if time_length:
+                return SQLRaw(
+                    f"CASE WHEN SUBSTR({varchar_expr}, 1, 1) = 'T' "
+                    f"THEN LEFT({varchar_expr}, {time_length}) "
+                    f"ELSE LEFT({varchar_expr}, {dt_length}) END"
+                )
+            return SQLRaw(f"LEFT({varchar_expr}, {dt_length})")
+
+        # Unknown precision - return as-is
+        return expr
 
 
 __all__ = [

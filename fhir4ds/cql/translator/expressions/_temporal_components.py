@@ -16,6 +16,7 @@ from ...translator.types import (
     SQLLiteral,
     SQLNull,
     SQLRaw,
+    SQLUnaryOp,
 )
 
 
@@ -31,9 +32,12 @@ class DateComponentMixin:
         """Translate a DateTime constructor.
 
         CQL §22.5: DateTime(year, month?, day?, hour?, minute?, second?, millisecond?, timezoneOffset?)
-        All components are Integer.  When a single non-literal arg is supplied it
-        is typically a date/datetime expression routed here via ToDateTime — cast
-        to TIMESTAMP instead of wrapping in make_timestamp which expects integers.
+        All components are Integer.
+
+        Emits VARCHAR ISO 8601 strings preserving precision based on the number
+        of provided components.  When all args are integer literals, we can
+        build the string at compile time.  Otherwise, we use printf() to
+        build it at runtime.
         """
         if not args:
             return SQLNull()
@@ -47,83 +51,145 @@ class DateComponentMixin:
                     f"bounds of 0001-9999"
                 )
 
+        # Check if all provided args are integer literals — if so, emit a
+        # compile-time ISO 8601 string literal preserving precision.
+        all_literal = all(isinstance(a, SQLLiteral) and isinstance(a.value, (int, float)) for a in args[:min(len(args), 7)])
+        if all_literal and len(args) <= 8:
+            vals = [int(a.value) for a in args[:min(len(args), 7)]]
+            n = len(vals)
+            if n == 1:
+                iso = f"{vals[0]:04d}"
+            elif n == 2:
+                iso = f"{vals[0]:04d}-{vals[1]:02d}"
+            elif n == 3:
+                iso = f"{vals[0]:04d}-{vals[1]:02d}-{vals[2]:02d}"
+            elif n == 4:
+                iso = f"{vals[0]:04d}-{vals[1]:02d}-{vals[2]:02d}T{vals[3]:02d}"
+            elif n == 5:
+                iso = f"{vals[0]:04d}-{vals[1]:02d}-{vals[2]:02d}T{vals[3]:02d}:{vals[4]:02d}"
+            elif n == 6:
+                iso = f"{vals[0]:04d}-{vals[1]:02d}-{vals[2]:02d}T{vals[3]:02d}:{vals[4]:02d}:{vals[5]:02d}"
+            else:
+                iso = f"{vals[0]:04d}-{vals[1]:02d}-{vals[2]:02d}T{vals[3]:02d}:{vals[4]:02d}:{vals[5]:02d}.{vals[6]:03d}"
+
+            # Handle timezone offset (8th arg) — may be SQLLiteral(+N) or
+            # SQLUnaryOp('-', SQLLiteral(N)) for negative offsets.
+            if len(args) > 7:
+                tz_val = None
+                tz_arg = args[7]
+                if isinstance(tz_arg, SQLLiteral) and isinstance(tz_arg.value, (int, float)):
+                    tz_val = float(tz_arg.value)
+                elif isinstance(tz_arg, SQLUnaryOp) and tz_arg.operator == '-':
+                    inner = tz_arg.operand
+                    if isinstance(inner, SQLLiteral) and isinstance(inner.value, (int, float)):
+                        tz_val = -float(inner.value)
+                if tz_val is not None:
+                    sign = '+' if tz_val >= 0 else '-'
+                    abs_h = abs(tz_val)
+                    tz_h = int(abs_h)
+                    tz_m = int((abs_h - tz_h) * 60)
+                    iso += f"{sign}{tz_h:02d}:{tz_m:02d}"
+
+            return SQLLiteral(value=iso)
+
+        # Non-literal args: fall back to runtime printf()
         if len(args) == 1:
             year = args[0]
             if isinstance(year, SQLLiteral) and isinstance(year.value, int):
-                return SQLFunctionCall(
-                    name="make_timestamp",
-                    args=[year, SQLLiteral(value=1), SQLLiteral(value=1),
-                          SQLLiteral(value=0), SQLLiteral(value=0), SQLLiteral(value=0)],
-                )
+                return SQLLiteral(value=f"{year.value:04d}")
             # Non-integer single arg: pass through as-is (already a date/datetime/string)
             return year
 
-        # Pad missing components with defaults
+        # Build runtime string using printf
         year = args[0]
         month = args[1] if len(args) > 1 else SQLLiteral(value=1)
         day = args[2] if len(args) > 2 else SQLLiteral(value=1)
+
+        # Determine format based on number of args for correct precision
+        if len(args) == 2:
+            return SQLRaw(
+                f"printf('%04d-%02d', {year.to_sql()}, {month.to_sql()})"
+            )
+        if len(args) == 3:
+            return SQLRaw(
+                f"printf('%04d-%02d-%02d', {year.to_sql()}, {month.to_sql()}, {day.to_sql()})"
+            )
+
         hour = args[3] if len(args) > 3 else SQLLiteral(value=0)
         minute = args[4] if len(args) > 4 else SQLLiteral(value=0)
         second = args[5] if len(args) > 5 else SQLLiteral(value=0)
 
-        # CQL §22.5: Handle optional millisecond component (7th arg).
-        # DuckDB make_timestamp accepts fractional seconds, so combine
-        # second + millisecond/1000.0 into the seconds parameter.
-        if len(args) > 6:
-            millisecond = args[6]
-            second = SQLBinaryOp(
-                operator="+",
-                left=SQLCast(expression=second, target_type="DOUBLE"),
-                right=SQLBinaryOp(
-                    operator="/",
-                    left=SQLCast(expression=millisecond, target_type="DOUBLE"),
-                    right=SQLLiteral(value=1000.0),
-                ),
+        if len(args) <= 6:
+            n = len(args)
+            if n == 4:
+                return SQLRaw(
+                    f"printf('%04d-%02d-%02dT%02d', {year.to_sql()}, {month.to_sql()}, {day.to_sql()}, {hour.to_sql()})"
+                )
+            if n == 5:
+                return SQLRaw(
+                    f"printf('%04d-%02d-%02dT%02d:%02d', {year.to_sql()}, {month.to_sql()}, {day.to_sql()}, {hour.to_sql()}, {minute.to_sql()})"
+                )
+            return SQLRaw(
+                f"printf('%04d-%02d-%02dT%02d:%02d:%02d', {year.to_sql()}, {month.to_sql()}, {day.to_sql()}, {hour.to_sql()}, {minute.to_sql()}, {second.to_sql()})"
             )
 
-        # CQL §22.5: Handle optional 8th arg — timezoneOffset (decimal hours).
-        # Append the offset string so downstream UDFs can parse it timezone-aware.
-        ts_expr = SQLFunctionCall(
-            name="make_timestamp",
-            args=[year, month, day, hour, minute, second],
-        )
+        # 7+ args: milliseconds
+        millisecond = args[6]
+        base = f"printf('%04d-%02d-%02dT%02d:%02d:%02d.%03d', {year.to_sql()}, {month.to_sql()}, {day.to_sql()}, {hour.to_sql()}, {minute.to_sql()}, {second.to_sql()}, {millisecond.to_sql()})"
+
         if len(args) > 7:
             tz_offset = args[7]
-            # Build: CAST(make_timestamp(...) AS VARCHAR) || printf('%+03.0f:00', CAST(offset AS DOUBLE))
             return SQLRaw(
-                f"(CAST({ts_expr.to_sql()} AS VARCHAR) || printf('%+03.0f:00', CAST({tz_offset.to_sql()} AS DOUBLE)))"
+                f"({base} || printf('%+03.0f:00', CAST({tz_offset.to_sql()} AS DOUBLE)))"
             )
 
-        return ts_expr
+        return SQLRaw(base)
 
     def _translate_date_constructor(self, args: List[SQLExpression]) -> SQLExpression:
         """Translate a Date constructor.
 
         CQL §22.26: Date(year, month?, day?) — all Integer components.
-        When a single non-literal arg is supplied it is typically a
-        date/datetime expression routed here via ToDate — cast to DATE
-        instead of wrapping in make_date which expects integers.
+        Emits VARCHAR ISO 8601 date strings preserving precision.
         """
         if not args:
             return SQLNull()
 
+        all_literal = all(isinstance(a, SQLLiteral) and isinstance(a.value, int) for a in args)
+        if all_literal:
+            vals = [a.value for a in args]
+            n = len(vals)
+            if n == 1:
+                return SQLLiteral(value=f"{vals[0]:04d}")
+            elif n == 2:
+                return SQLLiteral(value=f"{vals[0]:04d}-{vals[1]:02d}")
+            else:
+                return SQLLiteral(value=f"{vals[0]:04d}-{vals[1]:02d}-{vals[2]:02d}")
+
         if len(args) == 1:
             year = args[0]
             if isinstance(year, SQLLiteral) and isinstance(year.value, int):
-                return SQLFunctionCall(
-                    name="make_date",
-                    args=[year, SQLLiteral(value=1), SQLLiteral(value=1)],
-                )
-            # Non-integer single arg: pass through as-is (already a date/datetime/string)
-            return year
+                return SQLLiteral(value=f"{year.value:04d}")
+            # CQL §22.6: date from DateTime — extract date portion.
+            # When the parser emits FunctionRef(name='date', args=[datetime_expr]),
+            # treat 1-arg non-integer call as "date from X" extraction.
+            if isinstance(year, SQLLiteral) and isinstance(year.value, str) and len(year.value) > 4:
+                # DateTime/Date literal: extract first 10 chars (YYYY-MM-DD)
+                return SQLLiteral(value=year.value[:10])
+            # Non-literal expression: use LEFT() to extract date portion
+            return SQLRaw(
+                f"LEFT(REPLACE(CAST(({year.to_sql()}) AS VARCHAR), ' ', 'T'), 10)"
+            )
 
         year = args[0]
         month = args[1] if len(args) > 1 else SQLLiteral(value=1)
         day = args[2] if len(args) > 2 else SQLLiteral(value=1)
 
-        return SQLFunctionCall(
-            name="make_date",
-            args=[year, month, day],
+        if len(args) == 2:
+            return SQLRaw(
+                f"printf('%04d-%02d', {year.to_sql()}, {month.to_sql()})"
+            )
+        return SQLRaw(
+            f"printf('%04d-%02d-%02d', {year.to_sql()}, {month.to_sql()}, {day.to_sql()})"
         )
 
     def _translate_time_constructor(self, args: List[SQLExpression]) -> SQLExpression:
@@ -144,17 +210,13 @@ class DateComponentMixin:
         return args[0] if args else SQLNull()
 
     def _translate_date_component(self, node: DateComponent, boolean_context: bool = False) -> SQLExpression:
-        """Handle: year from @2024-01-15, date from dateTime, timezoneoffset from dateTime"""
-        component_map = {
-            'year': 'Year',
-            'month': 'Month',
-            'day': 'Day',
-            'hour': 'Hour',
-            'minute': 'Minute',
-            'second': 'Second',
-            'millisecond': 'Millisecond',
-            'timezoneoffset': None,  # Handled specially below
-        }
+        """Handle: year from @2024-01-15, date from dateTime, timezoneoffset from dateTime.
+
+        CQL §22.6: Component extraction from partial-precision datetimes
+        returns null when the component is not specified.  We extract
+        components via SUBSTRING on the VARCHAR ISO 8601 representation
+        to correctly handle partial-precision values.
+        """
         operand = self.translate(node.operand, boolean_context=False)
         component_lower = node.component.lower()
 
@@ -165,9 +227,64 @@ class DateComponentMixin:
                 args=[SQLCast(expression=operand, target_type="VARCHAR")],
             )
 
-        # Handle 'date from X' - extract date portion from datetime
+        # Handle 'date from X' - extract date portion (first 10 chars of ISO string)
         if component_lower == 'date':
-            return SQLCast(expression=operand, target_type="DATE")
+            return SQLRaw(
+                f"LEFT(REPLACE(CAST(({operand.to_sql()}) AS VARCHAR), ' ', 'T'), 10)"
+            )
 
-        func_name = component_map.get(component_lower, 'Year')
-        return SQLFunctionCall(name=func_name, args=[operand])
+        # Map component names to (start_position, length, min_string_length)
+        # for SUBSTRING extraction from ISO 8601 VARCHAR strings.
+        # min_string_length: minimum input string length for this component to exist
+        component_positions = {
+            'year':        (1, 4, 4),    # YYYY
+            'month':       (6, 2, 7),    # YYYY-MM
+            'day':         (9, 2, 10),   # YYYY-MM-DD
+            'hour':        (12, 2, 13),  # YYYY-MM-DDTHH
+            'minute':      (15, 2, 16),  # YYYY-MM-DDTHH:MM
+            'second':      (18, 2, 19),  # YYYY-MM-DDTHH:MM:SS
+            'millisecond': (21, 3, 23),  # YYYY-MM-DDTHH:MM:SS.mmm
+        }
+
+        pos_info = component_positions.get(component_lower)
+        if pos_info:
+            start, length, min_len = pos_info
+            # Normalize space→T and extract; return NULL if string too short
+            # (component not specified per CQL §22.6).
+            # Use SUBSTR (not Substring) to avoid conflict with CQL Substring macro.
+            # CQL Time values look like 'T23:20:15.555' — different positions than DateTime.
+            varchar_expr = f"REPLACE(CAST(({operand.to_sql()}) AS VARCHAR), ' ', 'T')"
+
+            # Time-specific component positions
+            time_positions = {
+                'hour':        (2, 2, 3),    # THH
+                'minute':      (5, 2, 6),    # THH:MM
+                'second':      (8, 2, 9),    # THH:MM:SS
+                'millisecond': (11, 3, 13),  # THH:MM:SS.mmm
+            }
+
+            time_pos = time_positions.get(component_lower)
+            if time_pos:
+                t_start, t_length, t_min_len = time_pos
+                # If first char is 'T' → CQL Time value; use Time positions.
+                # DateTimes never start with 'T' (they start with a year digit).
+                return SQLRaw(
+                    f"CASE "
+                    f"WHEN SUBSTR({varchar_expr}, 1, 1) = 'T' "
+                    f"THEN CASE WHEN LENGTH({varchar_expr}) >= {t_min_len} "
+                    f"     THEN CAST(SUBSTR({varchar_expr}, {t_start}, {t_length}) AS INTEGER) "
+                    f"     ELSE NULL END "
+                    f"WHEN LENGTH({varchar_expr}) >= {min_len} "
+                    f"THEN CAST(SUBSTR({varchar_expr}, {start}, {length}) AS INTEGER) "
+                    f"ELSE NULL END"
+                )
+            else:
+                # year/month/day — only applicable to DateTime/Date, not Time
+                return SQLRaw(
+                    f"CASE WHEN LENGTH({varchar_expr}) >= {min_len} "
+                    f"THEN CAST(SUBSTR({varchar_expr}, {start}, {length}) AS INTEGER) "
+                    f"ELSE NULL END"
+                )
+
+        # Fallback for unknown components
+        return SQLFunctionCall(name="Year", args=[operand])

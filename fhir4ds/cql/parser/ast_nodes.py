@@ -219,6 +219,7 @@ class Literal(Expression):
 
     value: Any
     type: Optional[str] = None
+    raw_str: Optional[str] = None
 
 
 @dataclass
