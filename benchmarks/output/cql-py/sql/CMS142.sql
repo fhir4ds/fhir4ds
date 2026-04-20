@@ -44,19 +44,30 @@ WITH _patients AS
      _patient_demographics AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
-                   CAST(fhirpath_date(r.resource, 'birthDate') AS DATE) AS birth_date
+                   CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date
    FROM resources r
    WHERE r.resourceType = 'Patient'),
-     "Communication: Macular edema absent (situation)" AS
+     "Encounter: Ophthalmological Services" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1285')),
+     "Condition: Diabetic Retinopathy (qicore-condition-problems-health-concerns)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Condition'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.327')
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
+     "Communication: Macular edema absent (situation) (communicationnotdone)" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
    WHERE r.resourceType = 'Communication'
      AND in_valueset(r.resource, 'category', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1391')
-     AND (fhirpath_text(r.resource, 'status') IS NULL
-          OR fhirpath_text(r.resource, 'status') != 'not-done')
-     AND (json_extract(r.resource, '$.meta.profile') IS NULL
-          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone'))),
+     AND fhirpath_text(r.resource, 'status') = 'not-done'),
      "Communication: Macular Edema Findings Present" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -67,13 +78,13 @@ WITH _patients AS
           OR fhirpath_text(r.resource, 'status') != 'not-done')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone'))),
-     "Condition: Diabetic Retinopathy (qicore-condition-encounter-diagnosis)" AS
+     "Encounter: Care Services in Long-Term Residential Facility" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
    FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.327')
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')),
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1014')),
      "Communication: Level of Severity of Retinopathy Findings (communicationnotdone)" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -81,6 +92,20 @@ WITH _patients AS
    WHERE r.resourceType = 'Communication'
      AND in_valueset(r.resource, 'category', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1283')
      AND fhirpath_text(r.resource, 'status') = 'not-done'),
+     "Communication: Macular Edema Findings Present (communicationnotdone)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Communication'
+     AND in_valueset(r.resource, 'category', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1320')
+     AND fhirpath_text(r.resource, 'status') = 'not-done'),
+     "Encounter: Outpatient Consultation" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1008')),
      "Communication: Level of Severity of Retinopathy Findings" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -91,20 +116,6 @@ WITH _patients AS
           OR fhirpath_text(r.resource, 'status') != 'not-done')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone'))),
-     "Condition: Diabetic Retinopathy (qicore-condition-problems-health-concerns)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.327')
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
-     "Encounter: Outpatient Consultation" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1008')),
      "Observation: Macular Exam" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -113,41 +124,16 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Observation'
      AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1251')),
-     "Encounter: Care Services in Long-Term Residential Facility" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1014')),
-     "Encounter: Nursing Facility Visit" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1012')),
-     "Encounter: Ophthalmological Services" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1285')),
-     "Communication: Macular Edema Findings Present (communicationnotdone)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Communication'
-     AND in_valueset(r.resource, 'category', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1320')
-     AND fhirpath_text(r.resource, 'status') = 'not-done'),
-     "Communication: Macular edema absent (situation) (communicationnotdone)" AS
+     "Communication: Macular edema absent (situation)" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
    WHERE r.resourceType = 'Communication'
      AND in_valueset(r.resource, 'category', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.2.1391')
-     AND fhirpath_text(r.resource, 'status') = 'not-done'),
+     AND (fhirpath_text(r.resource, 'status') IS NULL
+          OR fhirpath_text(r.resource, 'status') != 'not-done')
+     AND (json_extract(r.resource, '$.meta.profile') IS NULL
+          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-communicationnotdone'))),
      "Encounter: Office Visit" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -155,6 +141,20 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Encounter'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001')),
+     "Condition: Diabetic Retinopathy (qicore-condition-encounter-diagnosis)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Condition'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.327')
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')),
+     "Encounter: Nursing Facility Visit" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1012')),
      "Coverage: Payer Type" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -224,8 +224,8 @@ WITH _patients AS
       UNION SELECT patient_id,
                    RESOURCE
       FROM "Encounter: Nursing Facility Visit") AS QualifyingEncounter
-   WHERE CAST(intervalStart(fhirpath_text(QualifyingEncounter.resource, 'period')) AS DATE) >= CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS DATE)
-     AND CAST(intervalEnd(fhirpath_text(QualifyingEncounter.resource, 'period')) AS DATE) <= CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS DATE)
+   WHERE CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(QualifyingEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+     AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(QualifyingEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
      AND fhirpath_text(QualifyingEncounter.resource, 'status') = 'finished'
      AND NOT fhirpath_bool(QualifyingEncounter.resource, 'class.where(system=''http://terminology.hl7.org/CodeSystem/v3-ActCode'' and code=''VR'').exists()')),
      "Diabetic Retinopathy Encounter" AS
@@ -240,22 +240,22 @@ WITH _patients AS
            UNION SELECT patient_id,
                         RESOURCE
            FROM "Condition: Diabetic Retinopathy (qicore-condition-encounter-diagnosis)") AS DiabeticRetinopathy
-        WHERE CAST(intervalStart(CASE
-                                     WHEN fhirpath_text(DiabeticRetinopathy.resource, 'abatementDateTime') IS NOT NULL THEN intervalFromBounds(COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')), fhirpath_text(DiabeticRetinopathy.resource, 'abatementDateTime'), TRUE, TRUE)
-                                     WHEN COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')) IS NOT NULL THEN CASE
-                                                                                                                                                                                                                                                                     WHEN fhirpath_bool(DiabeticRetinopathy.resource, 'clinicalStatus.coding.where(code=''active'' or code=''recurrence'' or code=''relapse'').exists()') THEN intervalFromBounds(COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, TRUE)
-                                                                                                                                                                                                                                                                     ELSE intervalFromBounds(COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, FALSE)
-                                                                                                                                                                                                                                                                 END
-                                     ELSE NULL
-                                 END) AS DATE) <= COALESCE(CAST(intervalEnd(fhirpath_text(ValidQualifyingEncounter.resource, 'period')) AS DATE), CAST('9999-12-31' AS DATE))
-          AND COALESCE(CAST(intervalEnd(CASE
-                                            WHEN fhirpath_text(DiabeticRetinopathy.resource, 'abatementDateTime') IS NOT NULL THEN intervalFromBounds(COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')), fhirpath_text(DiabeticRetinopathy.resource, 'abatementDateTime'), TRUE, TRUE)
-                                            WHEN COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')) IS NOT NULL THEN CASE
-                                                                                                                                                                                                                                                                            WHEN fhirpath_bool(DiabeticRetinopathy.resource, 'clinicalStatus.coding.where(code=''active'' or code=''recurrence'' or code=''relapse'').exists()') THEN intervalFromBounds(COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, TRUE)
-                                                                                                                                                                                                                                                                            ELSE intervalFromBounds(COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, FALSE)
-                                                                                                                                                                                                                                                                        END
-                                            ELSE NULL
-                                        END) AS DATE), CAST('9999-12-31' AS DATE)) >= CAST(intervalStart(fhirpath_text(ValidQualifyingEncounter.resource, 'period')) AS DATE)
+        WHERE CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                       WHEN fhirpath_text(DiabeticRetinopathy.resource, 'abatementDateTime') IS NOT NULL THEN intervalFromBounds(COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')), fhirpath_text(DiabeticRetinopathy.resource, 'abatementDateTime'), TRUE, TRUE)
+                                                       WHEN COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')) IS NOT NULL THEN CASE
+                                                                                                                                                                                                                                                                                       WHEN fhirpath_bool(DiabeticRetinopathy.resource, 'clinicalStatus.coding.where(code=''active'' or code=''recurrence'' or code=''relapse'').exists()') THEN intervalFromBounds(COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, TRUE)
+                                                                                                                                                                                                                                                                                       ELSE intervalFromBounds(COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, FALSE)
+                                                                                                                                                                                                                                                                                   END
+                                                       ELSE NULL
+                                                   END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(ValidQualifyingEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10))
+          AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(CASE
+                                                              WHEN fhirpath_text(DiabeticRetinopathy.resource, 'abatementDateTime') IS NOT NULL THEN intervalFromBounds(COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')), fhirpath_text(DiabeticRetinopathy.resource, 'abatementDateTime'), TRUE, TRUE)
+                                                              WHEN COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')) IS NOT NULL THEN CASE
+                                                                                                                                                                                                                                                                                              WHEN fhirpath_bool(DiabeticRetinopathy.resource, 'clinicalStatus.coding.where(code=''active'' or code=''recurrence'' or code=''relapse'').exists()') THEN intervalFromBounds(COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, TRUE)
+                                                                                                                                                                                                                                                                                              ELSE intervalFromBounds(COALESCE(fhirpath_text(DiabeticRetinopathy.resource, 'onsetDateTime'), fhirpath_text(DiabeticRetinopathy.resource, 'onsetPeriod.start'), fhirpath_text(DiabeticRetinopathy.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, FALSE)
+                                                                                                                                                                                                                                                                                          END
+                                                              ELSE NULL
+                                                          END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10)) >= CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(ValidQualifyingEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
           AND (fhirpath_bool(DiabeticRetinopathy.resource, 'clinicalStatus.coding.where(system=''http://terminology.hl7.org/CodeSystem/condition-clinical'' and code=''active'').exists()')
                OR fhirpath_bool(DiabeticRetinopathy.resource, 'clinicalStatus.coding.where(system=''http://terminology.hl7.org/CodeSystem/condition-clinical'' and code=''recurrence'').exists()')
                OR fhirpath_bool(DiabeticRetinopathy.resource, 'clinicalStatus.coding.where(system=''http://terminology.hl7.org/CodeSystem/condition-clinical'' and code=''relapse'').exists()'))
@@ -267,35 +267,35 @@ WITH _patients AS
   (SELECT p.patient_id
    FROM _patients AS p
    WHERE EXTRACT(YEAR
-                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) - EXTRACT(YEAR
-                                                                              FROM
-                                                                                (SELECT _pd.birth_date
-                                                                                 FROM _patient_demographics AS _pd
-                                                                                 WHERE _pd.patient_id = p.patient_id
-                                                                                 LIMIT 1)) - CASE
-                                                                                                 WHEN EXTRACT(MONTH
-                                                                                                              FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(MONTH
-                                                                                                                                                                           FROM
-                                                                                                                                                                             (SELECT _pd.birth_date
-                                                                                                                                                                              FROM _patient_demographics AS _pd
-                                                                                                                                                                              WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                              LIMIT 1))
-                                                                                                      OR EXTRACT(MONTH
-                                                                                                                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) = EXTRACT(MONTH
-                                                                                                                                                                              FROM
-                                                                                                                                                                                (SELECT _pd.birth_date
-                                                                                                                                                                                 FROM _patient_demographics AS _pd
-                                                                                                                                                                                 WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                                 LIMIT 1))
-                                                                                                      AND EXTRACT(DAY
-                                                                                                                  FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(DAY
-                                                                                                                                                                               FROM
-                                                                                                                                                                                 (SELECT _pd.birth_date
-                                                                                                                                                                                  FROM _patient_demographics AS _pd
-                                                                                                                                                                                  WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                                  LIMIT 1)) THEN 1
-                                                                                                 ELSE 0
-                                                                                             END >= 18
+                 FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) - EXTRACT(YEAR
+                                                                                                                                                                    FROM TRY_CAST(
+                                                                                                                                                                                    (SELECT _pd.birth_date
+                                                                                                                                                                                     FROM _patient_demographics AS _pd
+                                                                                                                                                                                     WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                     LIMIT 1) AS TIMESTAMP)) - CASE
+                                                                                                                                                                                                                   WHEN EXTRACT(MONTH
+                                                                                                                                                                                                                                FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                   FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                   (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                    FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                    WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                    LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                        OR EXTRACT(MONTH
+                                                                                                                                                                                                                                   FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) = EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                      FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                      (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                       FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                       WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                       LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                        AND EXTRACT(DAY
+                                                                                                                                                                                                                                    FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(DAY
+                                                                                                                                                                                                                                                                                                                                                                                       FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                       (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                        FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                        WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                        LIMIT 1) AS TIMESTAMP)) THEN 1
+                                                                                                                                                                                                                   ELSE 0
+                                                                                                                                                                                                               END >= 18
      AND EXISTS
        (SELECT 1
         FROM "Diabetic Retinopathy Encounter" AS sub
@@ -309,9 +309,9 @@ WITH _patients AS
         FROM
           (SELECT *
            FROM "Diabetic Retinopathy Encounter") AS EncounterDiabeticRetinopathy
-        WHERE CAST(fhirpath_text(LevelOfSeverityCommunicated.resource, 'sent') AS TIMESTAMP) > CAST(intervalStart(fhirpath_text(EncounterDiabeticRetinopathy.resource, 'period')) AS TIMESTAMP)
-          AND CAST(fhirpath_text(LevelOfSeverityCommunicated.resource, 'sent') AS DATE) >= CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS DATE)
-          AND CAST(fhirpath_text(LevelOfSeverityCommunicated.resource, 'sent') AS DATE) <= CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS DATE)
+        WHERE cqlAfter(CAST(fhirpath_text(LevelOfSeverityCommunicated.resource, 'sent') AS VARCHAR), CAST(intervalStart(fhirpath_text(EncounterDiabeticRetinopathy.resource, 'period')) AS VARCHAR))
+          AND CAST(LEFT(REPLACE(CAST(fhirpath_text(LevelOfSeverityCommunicated.resource, 'sent') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+          AND CAST(LEFT(REPLACE(CAST(fhirpath_text(LevelOfSeverityCommunicated.resource, 'sent') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
           AND EncounterDiabeticRetinopathy.patient_id = LevelOfSeverityCommunicated.patient_id)),
      "Macular Edema Absence Communicated" AS
   (SELECT *
@@ -322,9 +322,9 @@ WITH _patients AS
         FROM
           (SELECT *
            FROM "Diabetic Retinopathy Encounter") AS EncounterDiabeticRetinopathy
-        WHERE CAST(fhirpath_text(MacularEdemaAbsentCommunicated.resource, 'sent') AS TIMESTAMP) > CAST(intervalStart(fhirpath_text(EncounterDiabeticRetinopathy.resource, 'period')) AS TIMESTAMP)
-          AND CAST(fhirpath_text(MacularEdemaAbsentCommunicated.resource, 'sent') AS DATE) >= CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS DATE)
-          AND CAST(fhirpath_text(MacularEdemaAbsentCommunicated.resource, 'sent') AS DATE) <= CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS DATE)
+        WHERE cqlAfter(CAST(fhirpath_text(MacularEdemaAbsentCommunicated.resource, 'sent') AS VARCHAR), CAST(intervalStart(fhirpath_text(EncounterDiabeticRetinopathy.resource, 'period')) AS VARCHAR))
+          AND CAST(LEFT(REPLACE(CAST(fhirpath_text(MacularEdemaAbsentCommunicated.resource, 'sent') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+          AND CAST(LEFT(REPLACE(CAST(fhirpath_text(MacularEdemaAbsentCommunicated.resource, 'sent') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
           AND EncounterDiabeticRetinopathy.patient_id = MacularEdemaAbsentCommunicated.patient_id)),
      "Macular Edema Presence Communicated" AS
   (SELECT *
@@ -335,9 +335,9 @@ WITH _patients AS
         FROM
           (SELECT *
            FROM "Diabetic Retinopathy Encounter") AS EncounterDiabeticRetinopathy
-        WHERE CAST(fhirpath_text(MacularEdemaPresentCommunicated.resource, 'sent') AS TIMESTAMP) > CAST(intervalStart(fhirpath_text(EncounterDiabeticRetinopathy.resource, 'period')) AS TIMESTAMP)
-          AND CAST(fhirpath_text(MacularEdemaPresentCommunicated.resource, 'sent') AS DATE) >= CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS DATE)
-          AND CAST(fhirpath_text(MacularEdemaPresentCommunicated.resource, 'sent') AS DATE) <= CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS DATE)
+        WHERE cqlAfter(CAST(fhirpath_text(MacularEdemaPresentCommunicated.resource, 'sent') AS VARCHAR), CAST(intervalStart(fhirpath_text(EncounterDiabeticRetinopathy.resource, 'period')) AS VARCHAR))
+          AND CAST(LEFT(REPLACE(CAST(fhirpath_text(MacularEdemaPresentCommunicated.resource, 'sent') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+          AND CAST(LEFT(REPLACE(CAST(fhirpath_text(MacularEdemaPresentCommunicated.resource, 'sent') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
           AND EncounterDiabeticRetinopathy.patient_id = MacularEdemaPresentCommunicated.patient_id)),
      "Macular Exam Performed" AS
   (SELECT *

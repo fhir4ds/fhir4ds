@@ -729,16 +729,13 @@ def build_patient_demographics_cte() -> Tuple[str, SQLSelect, Dict[str, ColumnIn
         ),
         SQLQualifiedIdentifier(parts=["r", "resource"]),
         SQLAlias(
-            expr=SQLCast(
-                expression=SQLFunctionCall(
+            expr=SQLFunctionCall(
                     name="fhirpath_date",
                     args=[
                         SQLQualifiedIdentifier(parts=["r", "resource"]),
                         SQLLiteral("birthDate")
                     ]
                 ),
-                target_type="DATE",
-            ),
             alias="birth_date"
         ),
     ]
@@ -748,7 +745,7 @@ def build_patient_demographics_cte() -> Tuple[str, SQLSelect, Dict[str, ColumnIn
         "birth_date": ColumnInfo(
             column_name="birth_date",
             fhirpath="birthDate",
-            sql_type="DATE",
+            sql_type="VARCHAR",
             is_choice_type=False,
         ),
     }

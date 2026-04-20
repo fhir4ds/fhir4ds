@@ -22,48 +22,9 @@ WITH _patients AS
      _patient_demographics AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
-                   CAST(fhirpath_date(r.resource, 'birthDate') AS DATE) AS birth_date
+                   CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date
    FROM resources r
    WHERE r.resourceType = 'Patient'),
-     "Encounter: Radiation Treatment Management" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1026')),
-     "Encounter: Audio Visual Telehealth Encounter" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.1444.5.215')),
-     "Condition: Cancer (qicore-condition-problems-health-concerns)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'abatementDateTime') AS abatement_date,
-                   fhirpath_text(r.resource, 'onsetDateTime') AS onset_date,
-                   fhirpath_text(r.resource, 'recordedDate') AS recorded_date
-   FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1010')
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
-     "Observation: Standardized Pain Assessment Tool" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status,
-                   fhirpath_text(r.resource, 'value') AS value
-   FROM resources r
-   WHERE r.resourceType = 'Observation'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1028')),
-     "Encounter: Office Visit" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001')),
      "Procedure: Chemotherapy Administration" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -75,6 +36,45 @@ WITH _patients AS
           OR fhirpath_text(r.resource, 'status') != 'not-done')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
+     "Encounter: Radiation Treatment Management" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1026')),
+     "Condition: Cancer (qicore-condition-problems-health-concerns)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'abatementDateTime') AS abatement_date,
+                   fhirpath_text(r.resource, 'onsetDateTime') AS onset_date,
+                   fhirpath_text(r.resource, 'recordedDate') AS recorded_date
+   FROM resources r
+   WHERE r.resourceType = 'Condition'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1010')
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
+     "Encounter: Office Visit" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001')),
+     "Encounter: Audio Visual Telehealth Encounter" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.1444.5.215')),
+     "Observation: Standardized Pain Assessment Tool" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status,
+                   fhirpath_text(r.resource, 'value') AS value
+   FROM resources r
+   WHERE r.resourceType = 'Observation'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1028')),
      "Encounter: Encounter Inpatient" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -93,7 +93,7 @@ WITH _patients AS
   (SELECT *
    FROM "Encounter: Encounter Inpatient" AS EncounterInpatient
    WHERE EncounterInpatient.status = 'finished'
-     AND CAST(intervalEnd(fhirpath_text(EncounterInpatient.resource, 'period')) AS DATE) BETWEEN CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE) AND COALESCE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE), CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE))),
+     AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(EncounterInpatient.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) BETWEEN CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))),
      "SDE.SDE Ethnicity" AS
   (SELECT p.patient_id,
           list_transform(from_json(fhirpath(
@@ -172,35 +172,35 @@ WITH _patients AS
                                                                                                                                                                  END
                               ELSE NULL
                           END, fhirpath_text(FaceToFaceOrTelehealthEncounter.resource, 'period'))
-     AND CAST(CAST(intervalEnd(fhirpath_text(FaceToFaceOrTelehealthEncounter.resource, 'period')) AS DATE) - INTERVAL '30 day' AS DATE) <= CAST(intervalStart(CASE
-                                                                                                                                                                  WHEN fhirpath_text(ChemoBeforeEncounter.resource, 'performed') IS NULL THEN NULL
-                                                                                                                                                                  WHEN starts_with(LTRIM(fhirpath_text(ChemoBeforeEncounter.resource, 'performed')), '{') THEN fhirpath_text(ChemoBeforeEncounter.resource, 'performed')
-                                                                                                                                                                  ELSE intervalFromBounds(fhirpath_text(ChemoBeforeEncounter.resource, 'performed'), fhirpath_text(ChemoBeforeEncounter.resource, 'performed'), TRUE, TRUE)
-                                                                                                                                                              END) AS DATE)
-     AND CAST(intervalStart(CASE
-                                WHEN fhirpath_text(ChemoBeforeEncounter.resource, 'performed') IS NULL THEN NULL
-                                WHEN starts_with(LTRIM(fhirpath_text(ChemoBeforeEncounter.resource, 'performed')), '{') THEN fhirpath_text(ChemoBeforeEncounter.resource, 'performed')
-                                ELSE intervalFromBounds(fhirpath_text(ChemoBeforeEncounter.resource, 'performed'), fhirpath_text(ChemoBeforeEncounter.resource, 'performed'), TRUE, TRUE)
-                            END) AS DATE) <= CAST(CAST(intervalEnd(fhirpath_text(FaceToFaceOrTelehealthEncounter.resource, 'period')) AS DATE) AS DATE)
-     AND CAST(CAST(intervalEnd(fhirpath_text(FaceToFaceOrTelehealthEncounter.resource, 'period')) AS DATE) AS DATE) <= CAST(intervalStart(CASE
-                                                                                                                                              WHEN fhirpath_text(ChemoAfterEncounter.resource, 'performed') IS NULL THEN NULL
-                                                                                                                                              WHEN starts_with(LTRIM(fhirpath_text(ChemoAfterEncounter.resource, 'performed')), '{') THEN fhirpath_text(ChemoAfterEncounter.resource, 'performed')
-                                                                                                                                              ELSE intervalFromBounds(fhirpath_text(ChemoAfterEncounter.resource, 'performed'), fhirpath_text(ChemoAfterEncounter.resource, 'performed'), TRUE, TRUE)
-                                                                                                                                          END) AS DATE)
-     AND CAST(intervalStart(CASE
-                                WHEN fhirpath_text(ChemoAfterEncounter.resource, 'performed') IS NULL THEN NULL
-                                WHEN starts_with(LTRIM(fhirpath_text(ChemoAfterEncounter.resource, 'performed')), '{') THEN fhirpath_text(ChemoAfterEncounter.resource, 'performed')
-                                ELSE intervalFromBounds(fhirpath_text(ChemoAfterEncounter.resource, 'performed'), fhirpath_text(ChemoAfterEncounter.resource, 'performed'), TRUE, TRUE)
-                            END) AS DATE) <= CAST(CAST(intervalEnd(fhirpath_text(FaceToFaceOrTelehealthEncounter.resource, 'period')) AS DATE) + INTERVAL '30 day' AS DATE)
-     AND NOT CAST(intervalStart(CASE
-                                    WHEN fhirpath_text(ChemoAfterEncounter.resource, 'performed') IS NULL THEN NULL
-                                    WHEN starts_with(LTRIM(fhirpath_text(ChemoAfterEncounter.resource, 'performed')), '{') THEN fhirpath_text(ChemoAfterEncounter.resource, 'performed')
-                                    ELSE intervalFromBounds(fhirpath_text(ChemoAfterEncounter.resource, 'performed'), fhirpath_text(ChemoAfterEncounter.resource, 'performed'), TRUE, TRUE)
-                                END) AS DATE) = CAST(intervalStart(CASE
-                                                                       WHEN fhirpath_text(ChemoBeforeEncounter.resource, 'performed') IS NULL THEN NULL
-                                                                       WHEN starts_with(LTRIM(fhirpath_text(ChemoBeforeEncounter.resource, 'performed')), '{') THEN fhirpath_text(ChemoBeforeEncounter.resource, 'performed')
-                                                                       ELSE intervalFromBounds(fhirpath_text(ChemoBeforeEncounter.resource, 'performed'), fhirpath_text(ChemoBeforeEncounter.resource, 'performed'), TRUE, TRUE)
-                                                                   END) AS DATE)
+     AND LEFT(REPLACE(CAST(REPLACE(CAST(CAST(CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(FaceToFaceOrTelehealthEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP) - INTERVAL '30 day' AS VARCHAR), ' ', 'T') AS VARCHAR), ' ', 'T'), 10) <= CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                                                                                                                                                                                                                                                                                            WHEN fhirpath_text(ChemoBeforeEncounter.resource, 'performed') IS NULL THEN NULL
+                                                                                                                                                                                                                                                                                                                            WHEN starts_with(LTRIM(fhirpath_text(ChemoBeforeEncounter.resource, 'performed')), '{') THEN fhirpath_text(ChemoBeforeEncounter.resource, 'performed')
+                                                                                                                                                                                                                                                                                                                            ELSE intervalFromBounds(fhirpath_text(ChemoBeforeEncounter.resource, 'performed'), fhirpath_text(ChemoBeforeEncounter.resource, 'performed'), TRUE, TRUE)
+                                                                                                                                                                                                                                                                                                                        END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+     AND CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                  WHEN fhirpath_text(ChemoBeforeEncounter.resource, 'performed') IS NULL THEN NULL
+                                                  WHEN starts_with(LTRIM(fhirpath_text(ChemoBeforeEncounter.resource, 'performed')), '{') THEN fhirpath_text(ChemoBeforeEncounter.resource, 'performed')
+                                                  ELSE intervalFromBounds(fhirpath_text(ChemoBeforeEncounter.resource, 'performed'), fhirpath_text(ChemoBeforeEncounter.resource, 'performed'), TRUE, TRUE)
+                                              END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= LEFT(REPLACE(CAST(CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(FaceToFaceOrTelehealthEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS VARCHAR), ' ', 'T'), 10)
+     AND LEFT(REPLACE(CAST(CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(FaceToFaceOrTelehealthEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS VARCHAR), ' ', 'T'), 10) <= CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                                                                                                                                                                                                                 WHEN fhirpath_text(ChemoAfterEncounter.resource, 'performed') IS NULL THEN NULL
+                                                                                                                                                                                                                                                 WHEN starts_with(LTRIM(fhirpath_text(ChemoAfterEncounter.resource, 'performed')), '{') THEN fhirpath_text(ChemoAfterEncounter.resource, 'performed')
+                                                                                                                                                                                                                                                 ELSE intervalFromBounds(fhirpath_text(ChemoAfterEncounter.resource, 'performed'), fhirpath_text(ChemoAfterEncounter.resource, 'performed'), TRUE, TRUE)
+                                                                                                                                                                                                                                             END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+     AND CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                  WHEN fhirpath_text(ChemoAfterEncounter.resource, 'performed') IS NULL THEN NULL
+                                                  WHEN starts_with(LTRIM(fhirpath_text(ChemoAfterEncounter.resource, 'performed')), '{') THEN fhirpath_text(ChemoAfterEncounter.resource, 'performed')
+                                                  ELSE intervalFromBounds(fhirpath_text(ChemoAfterEncounter.resource, 'performed'), fhirpath_text(ChemoAfterEncounter.resource, 'performed'), TRUE, TRUE)
+                                              END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= LEFT(REPLACE(CAST(REPLACE(CAST(CAST(CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(FaceToFaceOrTelehealthEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP) + INTERVAL '30 day' AS VARCHAR), ' ', 'T') AS VARCHAR), ' ', 'T'), 10)
+     AND NOT cqlSameAsP(CAST(CASE
+                                 WHEN fhirpath_text(ChemoAfterEncounter.resource, 'performed') IS NULL THEN NULL
+                                 WHEN starts_with(LTRIM(fhirpath_text(ChemoAfterEncounter.resource, 'performed')), '{') THEN fhirpath_text(ChemoAfterEncounter.resource, 'performed')
+                                 ELSE intervalFromBounds(fhirpath_text(ChemoAfterEncounter.resource, 'performed'), fhirpath_text(ChemoAfterEncounter.resource, 'performed'), TRUE, TRUE)
+                             END AS VARCHAR), CAST(CASE
+                                                       WHEN fhirpath_text(ChemoBeforeEncounter.resource, 'performed') IS NULL THEN NULL
+                                                       WHEN starts_with(LTRIM(fhirpath_text(ChemoBeforeEncounter.resource, 'performed')), '{') THEN fhirpath_text(ChemoBeforeEncounter.resource, 'performed')
+                                                       ELSE intervalFromBounds(fhirpath_text(ChemoBeforeEncounter.resource, 'performed'), fhirpath_text(ChemoBeforeEncounter.resource, 'performed'), TRUE, TRUE)
+                                                   END AS VARCHAR), 'day')
      AND intervalIncludes(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE), fhirpath_text(FaceToFaceOrTelehealthEncounter.resource, 'period'))
      AND fhirpath_text(FaceToFaceOrTelehealthEncounter.resource, 'status') = 'finished'
      AND ChemoBeforeEncounter.patient_id = FaceToFaceOrTelehealthEncounter.patient_id
@@ -278,26 +278,26 @@ WITH _patients AS
           (SELECT *
            FROM "Standard Pain Assessment with Result") AS PainAssessed
         WHERE CASE
-                  WHEN fhirpath_bool(RadiationManagementEncounter.resource, 'type.coding.where(system=''http://www.ama-assn.org/go/cpt'' and code=''77427'').exists()') THEN CAST(intervalStart(fhirpath_text(RadiationManagementEncounter.resource, 'period')) AS DATE) - INTERVAL '6 day' <= CAST(intervalStart(CASE
-                                                                                                                                                                                                                                                                                                                      WHEN fhirpath_text(PainAssessed.resource, 'effective') IS NULL THEN NULL
-                                                                                                                                                                                                                                                                                                                      WHEN starts_with(LTRIM(fhirpath_text(PainAssessed.resource, 'effective')), '{') THEN fhirpath_text(PainAssessed.resource, 'effective')
-                                                                                                                                                                                                                                                                                                                      ELSE intervalFromBounds(fhirpath_text(PainAssessed.resource, 'effective'), fhirpath_text(PainAssessed.resource, 'effective'), TRUE, TRUE)
-                                                                                                                                                                                                                                                                                                                  END) AS DATE)
-                       AND CAST(intervalStart(CASE
-                                                  WHEN fhirpath_text(PainAssessed.resource, 'effective') IS NULL THEN NULL
-                                                  WHEN starts_with(LTRIM(fhirpath_text(PainAssessed.resource, 'effective')), '{') THEN fhirpath_text(PainAssessed.resource, 'effective')
-                                                  ELSE intervalFromBounds(fhirpath_text(PainAssessed.resource, 'effective'), fhirpath_text(PainAssessed.resource, 'effective'), TRUE, TRUE)
-                                              END) AS DATE) <= CAST(intervalStart(fhirpath_text(RadiationManagementEncounter.resource, 'period')) AS DATE)
-                  ELSE CAST(intervalStart(CASE
-                                              WHEN fhirpath_text(PainAssessed.resource, 'effective') IS NULL THEN NULL
-                                              WHEN starts_with(LTRIM(fhirpath_text(PainAssessed.resource, 'effective')), '{') THEN fhirpath_text(PainAssessed.resource, 'effective')
-                                              ELSE intervalFromBounds(fhirpath_text(PainAssessed.resource, 'effective'), fhirpath_text(PainAssessed.resource, 'effective'), TRUE, TRUE)
-                                          END) AS DATE) >= CAST(intervalStart(fhirpath_text(RadiationManagementEncounter.resource, 'period')) AS DATE)
-                       AND CAST(intervalEnd(CASE
-                                                WHEN fhirpath_text(PainAssessed.resource, 'effective') IS NULL THEN NULL
-                                                WHEN starts_with(LTRIM(fhirpath_text(PainAssessed.resource, 'effective')), '{') THEN fhirpath_text(PainAssessed.resource, 'effective')
-                                                ELSE intervalFromBounds(fhirpath_text(PainAssessed.resource, 'effective'), fhirpath_text(PainAssessed.resource, 'effective'), TRUE, TRUE)
-                                            END) AS DATE) <= COALESCE(CAST(intervalEnd(fhirpath_text(RadiationManagementEncounter.resource, 'period')) AS DATE), CAST('9999-12-31' AS DATE))
+                  WHEN fhirpath_bool(RadiationManagementEncounter.resource, 'type.coding.where(system=''http://www.ama-assn.org/go/cpt'' and code=''77427'').exists()') THEN LEFT(REPLACE(CAST(REPLACE(CAST(CAST(CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(RadiationManagementEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP) - INTERVAL '6 day' AS VARCHAR), ' ', 'T') AS VARCHAR), ' ', 'T'), 10) <= CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              WHEN fhirpath_text(PainAssessed.resource, 'effective') IS NULL THEN NULL
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              WHEN starts_with(LTRIM(fhirpath_text(PainAssessed.resource, 'effective')), '{') THEN fhirpath_text(PainAssessed.resource, 'effective')
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              ELSE intervalFromBounds(fhirpath_text(PainAssessed.resource, 'effective'), fhirpath_text(PainAssessed.resource, 'effective'), TRUE, TRUE)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+                       AND CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                                    WHEN fhirpath_text(PainAssessed.resource, 'effective') IS NULL THEN NULL
+                                                                    WHEN starts_with(LTRIM(fhirpath_text(PainAssessed.resource, 'effective')), '{') THEN fhirpath_text(PainAssessed.resource, 'effective')
+                                                                    ELSE intervalFromBounds(fhirpath_text(PainAssessed.resource, 'effective'), fhirpath_text(PainAssessed.resource, 'effective'), TRUE, TRUE)
+                                                                END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(RadiationManagementEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+                  ELSE CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                                WHEN fhirpath_text(PainAssessed.resource, 'effective') IS NULL THEN NULL
+                                                                WHEN starts_with(LTRIM(fhirpath_text(PainAssessed.resource, 'effective')), '{') THEN fhirpath_text(PainAssessed.resource, 'effective')
+                                                                ELSE intervalFromBounds(fhirpath_text(PainAssessed.resource, 'effective'), fhirpath_text(PainAssessed.resource, 'effective'), TRUE, TRUE)
+                                                            END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(RadiationManagementEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+                       AND CAST(LEFT(REPLACE(CAST(intervalEnd(CASE
+                                                                  WHEN fhirpath_text(PainAssessed.resource, 'effective') IS NULL THEN NULL
+                                                                  WHEN starts_with(LTRIM(fhirpath_text(PainAssessed.resource, 'effective')), '{') THEN fhirpath_text(PainAssessed.resource, 'effective')
+                                                                  ELSE intervalFromBounds(fhirpath_text(PainAssessed.resource, 'effective'), fhirpath_text(PainAssessed.resource, 'effective'), TRUE, TRUE)
+                                                              END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(RadiationManagementEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10))
               END
           AND PainAssessed.patient_id = RadiationManagementEncounter.patient_id))
 SELECT p.patient_id,

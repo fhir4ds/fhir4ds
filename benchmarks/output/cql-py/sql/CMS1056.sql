@@ -22,7 +22,7 @@ WITH _patients AS
      _patient_demographics AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
-                   CAST(fhirpath_date(r.resource, 'birthDate') AS DATE) AS birth_date
+                   CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date
    FROM resources r
    WHERE r.resourceType = 'Patient'),
      "Observation: CT dose and image quality category" AS
@@ -49,7 +49,7 @@ WITH _patients AS
   (SELECT *
    FROM "Encounter: Encounter Inpatient" AS EncounterInpatient
    WHERE EncounterInpatient.status = 'finished'
-     AND CAST(intervalEnd(fhirpath_text(EncounterInpatient.resource, 'period')) AS DATE) BETWEEN CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE) AND COALESCE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE), CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE))),
+     AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(EncounterInpatient.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) BETWEEN CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))),
      "SDE.SDE Ethnicity" AS
   (SELECT p.patient_id,
           list_transform(from_json(fhirpath(
@@ -97,75 +97,75 @@ WITH _patients AS
      "Patients with Qualifying CTScan" AS
   (SELECT *
    FROM "Observation: CT dose and image quality category" AS CTScanResult
-   WHERE CAST(intervalEnd(CASE
-                              WHEN fhirpath_text(CTScanResult.resource, 'effective') IS NOT NULL
-                                   AND (typeof(fhirpath_text(CTScanResult.resource, 'effective')) = 'TIMESTAMP'
-                                        OR typeof(fhirpath_text(CTScanResult.resource, 'effective')) = 'TIMESTAMP WITH TIME ZONE'
-                                        OR typeof(fhirpath_text(CTScanResult.resource, 'effective')) = 'VARCHAR'
-                                        AND NOT starts_with(LTRIM(CAST(fhirpath_text(CTScanResult.resource, 'effective') AS VARCHAR)), '{')) THEN intervalFromBounds(fhirpath_text(CTScanResult.resource, 'effective'), fhirpath_text(CTScanResult.resource, 'effective'), TRUE, TRUE)
-                              WHEN CASE
-                                       WHEN starts_with(LTRIM(fhirpath_text(CTScanResult.resource, 'effective')), '{') THEN json_extract_string(fhirpath_text(CTScanResult.resource, 'effective'), '$.start') IS NOT NULL
-                                            OR json_extract_string(fhirpath_text(CTScanResult.resource, 'effective'), '$.end') IS NOT NULL
-                                       ELSE FALSE
-                                   END THEN fhirpath_text(CTScanResult.resource, 'effective')
-                              WHEN CASE
-                                       WHEN starts_with(LTRIM(fhirpath_text(CTScanResult.resource, 'effective')), '{') THEN json_extract_string(fhirpath_text(CTScanResult.resource, 'effective'), '$.value') IS NOT NULL
-                                       ELSE FALSE
-                                   END THEN intervalFromBounds(CAST(dateAddQuantity(CAST(fhirpath_text(
-                                                                                                         (SELECT _pd.resource
-                                                                                                          FROM _patient_demographics AS _pd
-                                                                                                          WHERE _pd.patient_id = CTScanResult.patient_id
-                                                                                                          LIMIT 1), 'birthDate') AS VARCHAR), fhirpath_text(CTScanResult.resource, 'effective')) AS VARCHAR), CAST(dateAddQuantity(CAST(dateAddQuantity(CAST(fhirpath_text(
-                                                                                                                                                                                                                                                                             (SELECT _pd.resource
-                                                                                                                                                                                                                                                                              FROM _patient_demographics AS _pd
-                                                                                                                                                                                                                                                                              WHERE _pd.patient_id = CTScanResult.patient_id
-                                                                                                                                                                                                                                                                              LIMIT 1), 'birthDate') AS VARCHAR), fhirpath_text(CTScanResult.resource, 'effective')) AS VARCHAR), '{"value": 1.0, "unit": "year", "system": "http://unitsofmeasure.org"}') AS VARCHAR), TRUE, FALSE)
-                              WHEN starts_with(LTRIM(fhirpath_text(CTScanResult.resource, 'effective')), '{')
-                                   AND (json_extract_string(fhirpath_text(CTScanResult.resource, 'effective'), '$.low') IS NOT NULL
-                                        OR json_extract_string(fhirpath_text(CTScanResult.resource, 'effective'), '$.high') IS NOT NULL) THEN intervalFromBounds(CAST(dateAddQuantity(CAST(fhirpath_text(
-                                                                                                                                                                                                           (SELECT _pd.resource
-                                                                                                                                                                                                            FROM _patient_demographics AS _pd
-                                                                                                                                                                                                            WHERE _pd.patient_id = CTScanResult.patient_id
-                                                                                                                                                                                                            LIMIT 1), 'birthDate') AS VARCHAR), fhirpath_text(CTScanResult.resource, 'effective.low')) AS VARCHAR), CAST(dateAddQuantity(CAST(dateAddQuantity(CAST(fhirpath_text(
-                                                                                                                                                                                                                                                                                                                                                                                   (SELECT _pd.resource
-                                                                                                                                                                                                                                                                                                                                                                                    FROM _patient_demographics AS _pd
-                                                                                                                                                                                                                                                                                                                                                                                    WHERE _pd.patient_id = CTScanResult.patient_id
-                                                                                                                                                                                                                                                                                                                                                                                    LIMIT 1), 'birthDate') AS VARCHAR), fhirpath_text(CTScanResult.resource, 'effective.high')) AS VARCHAR), '{"value": 1.0, "unit": "year", "system": "http://unitsofmeasure.org"}') AS VARCHAR), TRUE, FALSE)
-                              WHEN starts_with(LTRIM(fhirpath_text(CTScanResult.resource, 'effective')), '{')
-                                   AND (json_extract_string(fhirpath_text(CTScanResult.resource, 'effective'), '$.event') IS NOT NULL
-                                        OR json_extract_string(fhirpath_text(CTScanResult.resource, 'effective'), '$.repeat') IS NOT NULL) THEN CQLMessage(NULL, TRUE, 'NOT_IMPLEMENTED', 'Error', 'Calculation of an interval from a Timing value is not supported')
-                              ELSE NULL
-                          END) AS DATE) BETWEEN CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE) AND COALESCE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE), CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE))
+   WHERE CAST(LEFT(REPLACE(CAST(intervalEnd(CASE
+                                                WHEN fhirpath_text(CTScanResult.resource, 'effective') IS NOT NULL
+                                                     AND (typeof(fhirpath_text(CTScanResult.resource, 'effective')) = 'TIMESTAMP'
+                                                          OR typeof(fhirpath_text(CTScanResult.resource, 'effective')) = 'TIMESTAMP WITH TIME ZONE'
+                                                          OR typeof(fhirpath_text(CTScanResult.resource, 'effective')) = 'VARCHAR'
+                                                          AND NOT starts_with(LTRIM(CAST(fhirpath_text(CTScanResult.resource, 'effective') AS VARCHAR)), '{')) THEN intervalFromBounds(fhirpath_text(CTScanResult.resource, 'effective'), fhirpath_text(CTScanResult.resource, 'effective'), TRUE, TRUE)
+                                                WHEN CASE
+                                                         WHEN starts_with(LTRIM(fhirpath_text(CTScanResult.resource, 'effective')), '{') THEN json_extract_string(fhirpath_text(CTScanResult.resource, 'effective'), '$.start') IS NOT NULL
+                                                              OR json_extract_string(fhirpath_text(CTScanResult.resource, 'effective'), '$.end') IS NOT NULL
+                                                         ELSE FALSE
+                                                     END THEN fhirpath_text(CTScanResult.resource, 'effective')
+                                                WHEN CASE
+                                                         WHEN starts_with(LTRIM(fhirpath_text(CTScanResult.resource, 'effective')), '{') THEN json_extract_string(fhirpath_text(CTScanResult.resource, 'effective'), '$.value') IS NOT NULL
+                                                         ELSE FALSE
+                                                     END THEN intervalFromBounds(CAST(dateAddQuantity(CAST(fhirpath_text(
+                                                                                                                           (SELECT _pd.resource
+                                                                                                                            FROM _patient_demographics AS _pd
+                                                                                                                            WHERE _pd.patient_id = CTScanResult.patient_id
+                                                                                                                            LIMIT 1), 'birthDate') AS VARCHAR), fhirpath_text(CTScanResult.resource, 'effective')) AS VARCHAR), CAST(dateAddQuantity(CAST(dateAddQuantity(CAST(fhirpath_text(
+                                                                                                                                                                                                                                                                                               (SELECT _pd.resource
+                                                                                                                                                                                                                                                                                                FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                WHERE _pd.patient_id = CTScanResult.patient_id
+                                                                                                                                                                                                                                                                                                LIMIT 1), 'birthDate') AS VARCHAR), fhirpath_text(CTScanResult.resource, 'effective')) AS VARCHAR), '{"value": 1.0, "unit": "year", "system": "http://unitsofmeasure.org"}') AS VARCHAR), TRUE, FALSE)
+                                                WHEN starts_with(LTRIM(fhirpath_text(CTScanResult.resource, 'effective')), '{')
+                                                     AND (json_extract_string(fhirpath_text(CTScanResult.resource, 'effective'), '$.low') IS NOT NULL
+                                                          OR json_extract_string(fhirpath_text(CTScanResult.resource, 'effective'), '$.high') IS NOT NULL) THEN intervalFromBounds(CAST(dateAddQuantity(CAST(fhirpath_text(
+                                                                                                                                                                                                                             (SELECT _pd.resource
+                                                                                                                                                                                                                              FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                              WHERE _pd.patient_id = CTScanResult.patient_id
+                                                                                                                                                                                                                              LIMIT 1), 'birthDate') AS VARCHAR), fhirpath_text(CTScanResult.resource, 'effective.low')) AS VARCHAR), CAST(dateAddQuantity(CAST(dateAddQuantity(CAST(fhirpath_text(
+                                                                                                                                                                                                                                                                                                                                                                                                     (SELECT _pd.resource
+                                                                                                                                                                                                                                                                                                                                                                                                      FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                      WHERE _pd.patient_id = CTScanResult.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                      LIMIT 1), 'birthDate') AS VARCHAR), fhirpath_text(CTScanResult.resource, 'effective.high')) AS VARCHAR), '{"value": 1.0, "unit": "year", "system": "http://unitsofmeasure.org"}') AS VARCHAR), TRUE, FALSE)
+                                                WHEN starts_with(LTRIM(fhirpath_text(CTScanResult.resource, 'effective')), '{')
+                                                     AND (json_extract_string(fhirpath_text(CTScanResult.resource, 'effective'), '$.event') IS NOT NULL
+                                                          OR json_extract_string(fhirpath_text(CTScanResult.resource, 'effective'), '$.repeat') IS NOT NULL) THEN CQLMessage(NULL, TRUE, 'NOT_IMPLEMENTED', 'Error', 'Calculation of an interval from a Timing value is not supported')
+                                                ELSE NULL
+                                            END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) BETWEEN CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))
      AND EXTRACT(YEAR
-                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) - EXTRACT(YEAR
-                                                                              FROM
-                                                                                (SELECT _pd.birth_date
-                                                                                 FROM _patient_demographics AS _pd
-                                                                                 WHERE _pd.patient_id = CTScanResult.patient_id
-                                                                                 LIMIT 1)) - CASE
-                                                                                                 WHEN EXTRACT(MONTH
-                                                                                                              FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(MONTH
-                                                                                                                                                                           FROM
-                                                                                                                                                                             (SELECT _pd.birth_date
-                                                                                                                                                                              FROM _patient_demographics AS _pd
-                                                                                                                                                                              WHERE _pd.patient_id = CTScanResult.patient_id
-                                                                                                                                                                              LIMIT 1))
-                                                                                                      OR EXTRACT(MONTH
-                                                                                                                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) = EXTRACT(MONTH
-                                                                                                                                                                              FROM
-                                                                                                                                                                                (SELECT _pd.birth_date
-                                                                                                                                                                                 FROM _patient_demographics AS _pd
-                                                                                                                                                                                 WHERE _pd.patient_id = CTScanResult.patient_id
-                                                                                                                                                                                 LIMIT 1))
-                                                                                                      AND EXTRACT(DAY
-                                                                                                                  FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(DAY
-                                                                                                                                                                               FROM
-                                                                                                                                                                                 (SELECT _pd.birth_date
-                                                                                                                                                                                  FROM _patient_demographics AS _pd
-                                                                                                                                                                                  WHERE _pd.patient_id = CTScanResult.patient_id
-                                                                                                                                                                                  LIMIT 1)) THEN 1
-                                                                                                 ELSE 0
-                                                                                             END >= 18),
+                 FROM TRY_CAST(CAST('2026-01-01T00:00:00.000' AS VARCHAR) AS TIMESTAMP)) - EXTRACT(YEAR
+                                                                                                   FROM TRY_CAST(
+                                                                                                                   (SELECT _pd.birth_date
+                                                                                                                    FROM _patient_demographics AS _pd
+                                                                                                                    WHERE _pd.patient_id = CTScanResult.patient_id
+                                                                                                                    LIMIT 1) AS TIMESTAMP)) - CASE
+                                                                                                                                                  WHEN EXTRACT(MONTH
+                                                                                                                                                               FROM TRY_CAST(CAST('2026-01-01T00:00:00.000' AS VARCHAR) AS TIMESTAMP)) < EXTRACT(MONTH
+                                                                                                                                                                                                                                                 FROM TRY_CAST(
+                                                                                                                                                                                                                                                                 (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                  FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                  WHERE _pd.patient_id = CTScanResult.patient_id
+                                                                                                                                                                                                                                                                  LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                       OR EXTRACT(MONTH
+                                                                                                                                                                  FROM TRY_CAST(CAST('2026-01-01T00:00:00.000' AS VARCHAR) AS TIMESTAMP)) = EXTRACT(MONTH
+                                                                                                                                                                                                                                                    FROM TRY_CAST(
+                                                                                                                                                                                                                                                                    (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                     FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                     WHERE _pd.patient_id = CTScanResult.patient_id
+                                                                                                                                                                                                                                                                     LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                       AND EXTRACT(DAY
+                                                                                                                                                                   FROM TRY_CAST(CAST('2026-01-01T00:00:00.000' AS VARCHAR) AS TIMESTAMP)) < EXTRACT(DAY
+                                                                                                                                                                                                                                                     FROM TRY_CAST(
+                                                                                                                                                                                                                                                                     (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                      FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                      WHERE _pd.patient_id = CTScanResult.patient_id
+                                                                                                                                                                                                                                                                      LIMIT 1) AS TIMESTAMP)) THEN 1
+                                                                                                                                                  ELSE 0
+                                                                                                                                              END >= 18),
      "Initial Population" AS
   (SELECT p.patient_id
    FROM _patients AS p

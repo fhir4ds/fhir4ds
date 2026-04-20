@@ -45,47 +45,50 @@ WITH _patients AS
      _patient_demographics AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
-                   CAST(fhirpath_date(r.resource, 'birthDate') AS DATE) AS birth_date
+                   CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date
    FROM resources r
    WHERE r.resourceType = 'Patient'),
+     "Procedure: Health behavior assessment, or re-assessment (ie, health-focused clinical interview, behavioral observations, clinical decision making)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Procedure'
+     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://www.ama-assn.org/go/cpt'' and code=''96156'').exists()')
+     AND (fhirpath_text(r.resource, 'status') IS NULL
+          OR fhirpath_text(r.resource, 'status') != 'not-done')
+     AND (json_extract(r.resource, '$.meta.profile') IS NULL
+          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
+     "Procedure: Psychological or neuropsychological test administration and scoring by physician or other qualified health care professional, two or more tests, any method; first 30 minutes" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Procedure'
+     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://www.ama-assn.org/go/cpt'' and code=''96136'').exists()')
+     AND (fhirpath_text(r.resource, 'status') IS NULL
+          OR fhirpath_text(r.resource, 'status') != 'not-done')
+     AND (json_extract(r.resource, '$.meta.profile') IS NULL
+          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
+     "Procedure: Psychotherapy for crisis; first 60 minutes" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Procedure'
+     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://www.ama-assn.org/go/cpt'' and code=''90839'').exists()')
+     AND (fhirpath_text(r.resource, 'status') IS NULL
+          OR fhirpath_text(r.resource, 'status') != 'not-done')
+     AND (json_extract(r.resource, '$.meta.profile') IS NULL
+          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
      "Encounter: Preventive Care, Established Office Visit, 0 to 17" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
    WHERE r.resourceType = 'Encounter'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1024')),
-     "Procedure: Developmental test administration (including assessment of fine and/or gross motor, language, cognitive level, social, memory and/or executive functions by standardized developmental instruments when performed), by physician or other qualified health care professional, with interpretation and report; first hour" AS
+     "Encounter" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
-   WHERE r.resourceType = 'Procedure'
-     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://www.ama-assn.org/go/cpt'' and code=''96112'').exists()')
-     AND (fhirpath_text(r.resource, 'status') IS NULL
-          OR fhirpath_text(r.resource, 'status') != 'not-done')
-     AND (json_extract(r.resource, '$.meta.profile') IS NULL
-          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
-     "Encounter: Psych Visit Diagnostic Evaluation" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1492')),
-     "Procedure: Psychological or neuropsychological test administration and scoring by technician, two or more tests, any method; first 30 minutes" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Procedure'
-     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://www.ama-assn.org/go/cpt'' and code=''96138'').exists()')
-     AND (fhirpath_text(r.resource, 'status') IS NULL
-          OR fhirpath_text(r.resource, 'status') != 'not-done')
-     AND (json_extract(r.resource, '$.meta.profile') IS NULL
-          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
-     "Encounter: Preventive Care Services Established Office Visit, 18 and Up" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1025')),
+   WHERE r.resourceType = 'Encounter'),
      "ServiceRequest: Referral" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -97,43 +100,32 @@ WITH _patients AS
      AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1046')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))),
-     "Task: Consultant Report" AS
+     "Procedure: Psychological or neuropsychological test administration and scoring by technician, two or more tests, any method; first 30 minutes" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
-   WHERE r.resourceType = 'Task'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.121.12.1006')),
+   WHERE r.resourceType = 'Procedure'
+     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://www.ama-assn.org/go/cpt'' and code=''96138'').exists()')
+     AND (fhirpath_text(r.resource, 'status') IS NULL
+          OR fhirpath_text(r.resource, 'status') != 'not-done')
+     AND (json_extract(r.resource, '$.meta.profile') IS NULL
+          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
+     "Procedure: Developmental test administration (including assessment of fine and/or gross motor, language, cognitive level, social, memory and/or executive functions by standardized developmental instruments when performed), by physician or other qualified health care professional, with interpretation and report; first hour" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Procedure'
+     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://www.ama-assn.org/go/cpt'' and code=''96112'').exists()')
+     AND (fhirpath_text(r.resource, 'status') IS NULL
+          OR fhirpath_text(r.resource, 'status') != 'not-done')
+     AND (json_extract(r.resource, '$.meta.profile') IS NULL
+          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
      "Encounter: Behavioral/Neuropsych Assessment" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
    WHERE r.resourceType = 'Encounter'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1023')),
-     "Procedure: Health behavior assessment, or re-assessment (ie, health-focused clinical interview, behavioral observations, clinical decision making)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Procedure'
-     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://www.ama-assn.org/go/cpt'' and code=''96156'').exists()')
-     AND (fhirpath_text(r.resource, 'status') IS NULL
-          OR fhirpath_text(r.resource, 'status') != 'not-done')
-     AND (json_extract(r.resource, '$.meta.profile') IS NULL
-          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
-     "Encounter" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'),
-     "Procedure: Psychotherapy for crisis; first 60 minutes" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Procedure'
-     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://www.ama-assn.org/go/cpt'' and code=''90839'').exists()')
-     AND (fhirpath_text(r.resource, 'status') IS NULL
-          OR fhirpath_text(r.resource, 'status') != 'not-done')
-     AND (json_extract(r.resource, '$.meta.profile') IS NULL
-          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
      "Procedure: Psych Visit Diagnostic Evaluation" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -144,12 +136,18 @@ WITH _patients AS
           OR fhirpath_text(r.resource, 'status') != 'not-done')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
-     "Encounter: Preventive Care Services, Initial Office Visit, 0 to 17" AS
+     "Encounter: Preventive Care Services Established Office Visit, 18 and Up" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
    WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1022')),
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1025')),
+     "Task: Consultant Report" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Task'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.121.12.1006')),
      "Procedure: Behavioral/Neuropsych Assessment" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -160,34 +158,36 @@ WITH _patients AS
           OR fhirpath_text(r.resource, 'status') != 'not-done')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
-     "Encounter: Ophthalmological Services" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1285')),
-     "Procedure: Psychological or neuropsychological test administration and scoring by physician or other qualified health care professional, two or more tests, any method; first 30 minutes" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Procedure'
-     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://www.ama-assn.org/go/cpt'' and code=''96136'').exists()')
-     AND (fhirpath_text(r.resource, 'status') IS NULL
-          OR fhirpath_text(r.resource, 'status') != 'not-done')
-     AND (json_extract(r.resource, '$.meta.profile') IS NULL
-          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
      "Encounter: Office Visit" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
    WHERE r.resourceType = 'Encounter'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001')),
+     "Encounter: Psych Visit Diagnostic Evaluation" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1492')),
+     "Encounter: Preventive Care Services, Initial Office Visit, 0 to 17" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1022')),
      "Encounter: Preventive Care Services Initial Office Visit, 18 and Up" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
    WHERE r.resourceType = 'Encounter'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1023')),
+     "Encounter: Ophthalmological Services" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1285')),
      "Coverage: Payer Type" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -246,8 +246,11 @@ WITH _patients AS
       FROM "ServiceRequest: Referral" AS ReferralOrder
       WHERE array_contains(['active', 'completed'], ReferralOrder.status)
         AND ReferralOrder.intent = 'order'
-        AND CAST(fhirpath_text(ReferralOrder.resource, 'authoredOn') AS DATE) >= CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS DATE)
-        AND CAST(fhirpath_text(ReferralOrder.resource, 'authoredOn') AS DATE) <= CAST(make_date(Year(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)), 10, 31) AS DATE)
+        AND CAST(LEFT(REPLACE(CAST(fhirpath_text(ReferralOrder.resource, 'authoredOn') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+        AND CAST(LEFT(REPLACE(CAST(fhirpath_text(ReferralOrder.resource, 'authoredOn') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(printf('%04d-%02d-%02d', CASE
+                                                                                                                                                                                      WHEN LENGTH(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T')) >= 4 THEN CAST(SUBSTR(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 1, 4) AS INTEGER)
+                                                                                                                                                                                      ELSE NULL
+                                                                                                                                                                                  END, 10, 31) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
         AND ReferralOrder.patient_id = p.patient_id
       ORDER BY fhirpath_text(ReferralOrder.resource, 'authoredOn') ASC NULLS LAST, json_extract_string(ReferralOrder.resource, '$.id') ASC NULLS LAST
       LIMIT 1) AS RESOURCE
@@ -278,16 +281,16 @@ WITH _patients AS
            FROM "Encounter: Preventive Care, Established Office Visit, 0 to 17") AS ValidEncounter
         WHERE ValidEncounter.patient_id = p.patient_id
           AND fhirpath_text(ValidEncounter.resource, 'status') = 'finished'
-          AND CAST(intervalStart(CASE
-                                     WHEN fhirpath_text(ValidEncounter.resource, 'period') IS NULL THEN NULL
-                                     WHEN starts_with(LTRIM(fhirpath_text(ValidEncounter.resource, 'period')), '{') THEN fhirpath_text(ValidEncounter.resource, 'period')
-                                     ELSE intervalFromBounds(fhirpath_text(ValidEncounter.resource, 'period'), fhirpath_text(ValidEncounter.resource, 'period'), TRUE, TRUE)
-                                 END) AS DATE) >= CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS DATE)
-          AND CAST(intervalEnd(CASE
-                                   WHEN fhirpath_text(ValidEncounter.resource, 'period') IS NULL THEN NULL
-                                   WHEN starts_with(LTRIM(fhirpath_text(ValidEncounter.resource, 'period')), '{') THEN fhirpath_text(ValidEncounter.resource, 'period')
-                                   ELSE intervalFromBounds(fhirpath_text(ValidEncounter.resource, 'period'), fhirpath_text(ValidEncounter.resource, 'period'), TRUE, TRUE)
-                               END) AS DATE) <= CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS DATE))),
+          AND CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                       WHEN fhirpath_text(ValidEncounter.resource, 'period') IS NULL THEN NULL
+                                                       WHEN starts_with(LTRIM(fhirpath_text(ValidEncounter.resource, 'period')), '{') THEN fhirpath_text(ValidEncounter.resource, 'period')
+                                                       ELSE intervalFromBounds(fhirpath_text(ValidEncounter.resource, 'period'), fhirpath_text(ValidEncounter.resource, 'period'), TRUE, TRUE)
+                                                   END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+          AND CAST(LEFT(REPLACE(CAST(intervalEnd(CASE
+                                                     WHEN fhirpath_text(ValidEncounter.resource, 'period') IS NULL THEN NULL
+                                                     WHEN starts_with(LTRIM(fhirpath_text(ValidEncounter.resource, 'period')), '{') THEN fhirpath_text(ValidEncounter.resource, 'period')
+                                                     ELSE intervalFromBounds(fhirpath_text(ValidEncounter.resource, 'period'), fhirpath_text(ValidEncounter.resource, 'period'), TRUE, TRUE)
+                                                 END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))),
      "Has Encounter from DRCs during Measurement Period" AS
   (SELECT p.patient_id
    FROM _patients AS p
@@ -303,8 +306,8 @@ WITH _patients AS
              OR fhirpath_bool(EncDRC.resource, 'type.coding.where(system=''http://www.ama-assn.org/go/cpt'' and code=''96156'').exists()')) AS Encounter
         WHERE Encounter.patient_id = p.patient_id
           AND fhirpath_text(Encounter.resource, 'status') = 'finished'
-          AND CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS DATE) >= CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS DATE)
-          AND CAST(intervalEnd(fhirpath_text(Encounter.resource, 'period')) AS DATE) <= CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS DATE))),
+          AND CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+          AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(Encounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))),
      "Has Encounter from Valuesets during Measurement Period" AS
   (SELECT p.patient_id
    FROM _patients AS p
@@ -337,8 +340,8 @@ WITH _patients AS
            FROM "Encounter: Psych Visit Diagnostic Evaluation") AS Encounter
         WHERE Encounter.patient_id = p.patient_id
           AND fhirpath_text(Encounter.resource, 'status') = 'finished'
-          AND CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS DATE) >= CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS DATE)
-          AND CAST(intervalEnd(fhirpath_text(Encounter.resource, 'period')) AS DATE) <= CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS DATE))),
+          AND CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+          AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(Encounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))),
      "Has Intervention during Measurement Period" AS
   (SELECT p.patient_id
    FROM _patients AS p
@@ -371,16 +374,16 @@ WITH _patients AS
               FROM "Procedure: Developmental test administration (including assessment of fine and/or gross motor, language, cognitive level, social, memory and/or executive functions by standardized developmental instruments when performed), by physician or other qualified health care professional, with interpretation and report; first hour") AS _union
            WHERE fhirpath_text(RESOURCE, 'status') IN ('completed')) AS ValidIntervention
         WHERE ValidIntervention.patient_id = p.patient_id
-          AND CAST(intervalStart(CASE
-                                     WHEN fhirpath_text(ValidIntervention.resource, 'performed') IS NULL THEN NULL
-                                     WHEN starts_with(LTRIM(fhirpath_text(ValidIntervention.resource, 'performed')), '{') THEN fhirpath_text(ValidIntervention.resource, 'performed')
-                                     ELSE intervalFromBounds(fhirpath_text(ValidIntervention.resource, 'performed'), fhirpath_text(ValidIntervention.resource, 'performed'), TRUE, TRUE)
-                                 END) AS DATE) >= CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS DATE)
-          AND CAST(intervalEnd(CASE
-                                   WHEN fhirpath_text(ValidIntervention.resource, 'performed') IS NULL THEN NULL
-                                   WHEN starts_with(LTRIM(fhirpath_text(ValidIntervention.resource, 'performed')), '{') THEN fhirpath_text(ValidIntervention.resource, 'performed')
-                                   ELSE intervalFromBounds(fhirpath_text(ValidIntervention.resource, 'performed'), fhirpath_text(ValidIntervention.resource, 'performed'), TRUE, TRUE)
-                               END) AS DATE) <= CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS DATE))),
+          AND CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                       WHEN fhirpath_text(ValidIntervention.resource, 'performed') IS NULL THEN NULL
+                                                       WHEN starts_with(LTRIM(fhirpath_text(ValidIntervention.resource, 'performed')), '{') THEN fhirpath_text(ValidIntervention.resource, 'performed')
+                                                       ELSE intervalFromBounds(fhirpath_text(ValidIntervention.resource, 'performed'), fhirpath_text(ValidIntervention.resource, 'performed'), TRUE, TRUE)
+                                                   END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+          AND CAST(LEFT(REPLACE(CAST(intervalEnd(CASE
+                                                     WHEN fhirpath_text(ValidIntervention.resource, 'performed') IS NULL THEN NULL
+                                                     WHEN starts_with(LTRIM(fhirpath_text(ValidIntervention.resource, 'performed')), '{') THEN fhirpath_text(ValidIntervention.resource, 'performed')
+                                                     ELSE intervalFromBounds(fhirpath_text(ValidIntervention.resource, 'performed'), fhirpath_text(ValidIntervention.resource, 'performed'), TRUE, TRUE)
+                                                 END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))),
      "Initial Population" AS
   (SELECT p.patient_id
    FROM _patients AS p
@@ -410,9 +413,9 @@ WITH _patients AS
                (SELECT *
                 FROM "First Referral during First 10 Months of Measurement Period") AS FirstReferral
              WHERE json_extract_string(FirstReferral.resource, '$.ID') IN list_transform(from_json(fhirpath(ConsultantReportObtained.resource, 'basedOn'), '["VARCHAR"]'), _lt_Task -> LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Task, 'reference'), '/'), -1))
-               AND CAST(intervalEnd(fhirpath_text(ConsultantReportObtained.resource, 'executionPeriod')) AS TIMESTAMP) > CAST(json_extract_string(FirstReferral.resource, '$.AuthorDate') AS TIMESTAMP)
+               AND CAST(intervalEnd(fhirpath_text(ConsultantReportObtained.resource, 'executionPeriod')) AS VARCHAR) > CAST(json_extract_string(FirstReferral.resource, '$.AuthorDate') AS VARCHAR)
                AND fhirpath_text(ConsultantReportObtained.resource, 'status') = 'completed'
-               AND CAST(intervalEnd(fhirpath_text(ConsultantReportObtained.resource, 'executionPeriod')) AS DATE) BETWEEN CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE) AND COALESCE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE), CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE))
+               AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(ConsultantReportObtained.resource, 'executionPeriod')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) BETWEEN CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))
                AND FirstReferral.patient_id = ConsultantReportObtained.patient_id))),
      "Numerator" AS
   (SELECT *

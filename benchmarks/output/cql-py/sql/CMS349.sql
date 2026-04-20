@@ -48,7 +48,7 @@ WITH _patients AS
      _patient_demographics AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
-                   CAST(fhirpath_date(r.resource, 'birthDate') AS DATE) AS birth_date
+                   CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date
    FROM resources r
    WHERE r.resourceType = 'Patient'),
      "Encounter: Preventive Care, Established Office Visit, 0 to 17" AS
@@ -58,13 +58,6 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Encounter'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1024')),
-     "Encounter: Preventive Care Services - Established Office Visit, 18 and Up" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1025')),
      "Condition: HIV (qicore-condition-encounter-diagnosis)" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -72,6 +65,19 @@ WITH _patients AS
    WHERE r.resourceType = 'Condition'
      AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.120.12.1003')
      AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')),
+     "Observation: Human Immunodeficiency Virus (HIV) Laboratory Test Codes (Ab and Ag)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Observation'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1056.50')),
+     "Encounter: Preventive Care Services - Established Office Visit, 18 and Up" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1025')),
      "Condition: HIV (qicore-condition-problems-health-concerns)" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -79,25 +85,6 @@ WITH _patients AS
    WHERE r.resourceType = 'Condition'
      AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.120.12.1003')
      AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
-     "Encounter: Preventive Care Services, Initial Office Visit, 0 to 17" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1022')),
-     "Observation: Human Immunodeficiency Virus (HIV) Laboratory Test Codes (Ab and Ag)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Observation'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1056.50')),
-     "Observation: HIV 1 and 2 tests - Meaningful Use set" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Observation'
-     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''75622-1'').exists()')),
      "Encounter: Office Visit" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -105,6 +92,19 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Encounter'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001')),
+     "Observation: HIV 1 and 2 tests - Meaningful Use set" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Observation'
+     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''75622-1'').exists()')),
+     "Encounter: Preventive Care Services, Initial Office Visit, 0 to 17" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1022')),
      "Encounter: Preventive Care Services-Initial Office Visit, 18 and Up" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -130,7 +130,7 @@ WITH _patients AS
   (SELECT *
    FROM "Encounter: Encounter Inpatient" AS EncounterInpatient
    WHERE EncounterInpatient.status = 'finished'
-     AND CAST(intervalEnd(fhirpath_text(EncounterInpatient.resource, 'period')) AS DATE) BETWEEN CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE) AND COALESCE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE), CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE))),
+     AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(EncounterInpatient.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) BETWEEN CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))),
      "SDE.SDE Ethnicity" AS
   (SELECT p.patient_id,
           list_transform(from_json(fhirpath(
@@ -188,14 +188,14 @@ WITH _patients AS
                         RESOURCE
            FROM "Condition: HIV (qicore-condition-encounter-diagnosis)") AS HIVDiagnosis
         WHERE HIVDiagnosis.patient_id = p.patient_id
-          AND CAST(intervalStart(CASE
-                                     WHEN fhirpath_text(HIVDiagnosis.resource, 'abatementDateTime') IS NOT NULL THEN intervalFromBounds(COALESCE(fhirpath_text(HIVDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HIVDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HIVDiagnosis.resource, 'recordedDate')), fhirpath_text(HIVDiagnosis.resource, 'abatementDateTime'), TRUE, TRUE)
-                                     WHEN COALESCE(fhirpath_text(HIVDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HIVDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HIVDiagnosis.resource, 'recordedDate')) IS NOT NULL THEN CASE
-                                                                                                                                                                                                                                                WHEN fhirpath_bool(HIVDiagnosis.resource, 'clinicalStatus.coding.where(code=''active'' or code=''recurrence'' or code=''relapse'').exists()') THEN intervalFromBounds(COALESCE(fhirpath_text(HIVDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HIVDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HIVDiagnosis.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, TRUE)
-                                                                                                                                                                                                                                                ELSE intervalFromBounds(COALESCE(fhirpath_text(HIVDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HIVDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HIVDiagnosis.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, FALSE)
-                                                                                                                                                                                                                                            END
-                                     ELSE NULL
-                                 END) AS TIMESTAMP) < CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS DATE)
+          AND intervalStart(CASE
+                                WHEN fhirpath_text(HIVDiagnosis.resource, 'abatementDateTime') IS NOT NULL THEN intervalFromBounds(COALESCE(fhirpath_text(HIVDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HIVDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HIVDiagnosis.resource, 'recordedDate')), fhirpath_text(HIVDiagnosis.resource, 'abatementDateTime'), TRUE, TRUE)
+                                WHEN COALESCE(fhirpath_text(HIVDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HIVDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HIVDiagnosis.resource, 'recordedDate')) IS NOT NULL THEN CASE
+                                                                                                                                                                                                                                           WHEN fhirpath_bool(HIVDiagnosis.resource, 'clinicalStatus.coding.where(code=''active'' or code=''recurrence'' or code=''relapse'').exists()') THEN intervalFromBounds(COALESCE(fhirpath_text(HIVDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HIVDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HIVDiagnosis.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, TRUE)
+                                                                                                                                                                                                                                           ELSE intervalFromBounds(COALESCE(fhirpath_text(HIVDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HIVDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HIVDiagnosis.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, FALSE)
+                                                                                                                                                                                                                                       END
+                                ELSE NULL
+                            END) < CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
           AND NOT fhirpath_bool(HIVDiagnosis.resource, 'verificationStatus.coding.where(system=''http://terminology.hl7.org/CodeSystem/condition-ver-status'' and code=''refuted'').exists()'))),
      "Has HIV Test Performed" AS
   (SELECT p.patient_id
@@ -212,56 +212,56 @@ WITH _patients AS
         WHERE HIVTest.patient_id = p.patient_id
           AND fhirpath_text(HIVTest.resource, 'value') IS NOT NULL
           AND EXTRACT(YEAR
-                      FROM CAST(intervalStart(CASE
-                                                  WHEN fhirpath_text(HIVTest.resource, 'effective') IS NULL THEN NULL
-                                                  WHEN starts_with(LTRIM(fhirpath_text(HIVTest.resource, 'effective')), '{') THEN fhirpath_text(HIVTest.resource, 'effective')
-                                                  ELSE intervalFromBounds(fhirpath_text(HIVTest.resource, 'effective'), fhirpath_text(HIVTest.resource, 'effective'), TRUE, TRUE)
-                                              END) AS DATE)) - EXTRACT(YEAR
-                                                                       FROM
-                                                                         (SELECT _pd.birth_date
-                                                                          FROM _patient_demographics AS _pd
-                                                                          WHERE _pd.patient_id = HIVTest.patient_id
-                                                                          LIMIT 1)) - CASE
-                                                                                          WHEN EXTRACT(MONTH
-                                                                                                       FROM CAST(intervalStart(CASE
-                                                                                                                                   WHEN fhirpath_text(HIVTest.resource, 'effective') IS NULL THEN NULL
-                                                                                                                                   WHEN starts_with(LTRIM(fhirpath_text(HIVTest.resource, 'effective')), '{') THEN fhirpath_text(HIVTest.resource, 'effective')
-                                                                                                                                   ELSE intervalFromBounds(fhirpath_text(HIVTest.resource, 'effective'), fhirpath_text(HIVTest.resource, 'effective'), TRUE, TRUE)
-                                                                                                                               END) AS DATE)) < EXTRACT(MONTH
-                                                                                                                                                        FROM
-                                                                                                                                                          (SELECT _pd.birth_date
-                                                                                                                                                           FROM _patient_demographics AS _pd
-                                                                                                                                                           WHERE _pd.patient_id = HIVTest.patient_id
-                                                                                                                                                           LIMIT 1))
-                                                                                               OR EXTRACT(MONTH
-                                                                                                          FROM CAST(intervalStart(CASE
-                                                                                                                                      WHEN fhirpath_text(HIVTest.resource, 'effective') IS NULL THEN NULL
-                                                                                                                                      WHEN starts_with(LTRIM(fhirpath_text(HIVTest.resource, 'effective')), '{') THEN fhirpath_text(HIVTest.resource, 'effective')
-                                                                                                                                      ELSE intervalFromBounds(fhirpath_text(HIVTest.resource, 'effective'), fhirpath_text(HIVTest.resource, 'effective'), TRUE, TRUE)
-                                                                                                                                  END) AS DATE)) = EXTRACT(MONTH
-                                                                                                                                                           FROM
-                                                                                                                                                             (SELECT _pd.birth_date
-                                                                                                                                                              FROM _patient_demographics AS _pd
-                                                                                                                                                              WHERE _pd.patient_id = HIVTest.patient_id
-                                                                                                                                                              LIMIT 1))
-                                                                                               AND EXTRACT(DAY
-                                                                                                           FROM CAST(intervalStart(CASE
-                                                                                                                                       WHEN fhirpath_text(HIVTest.resource, 'effective') IS NULL THEN NULL
-                                                                                                                                       WHEN starts_with(LTRIM(fhirpath_text(HIVTest.resource, 'effective')), '{') THEN fhirpath_text(HIVTest.resource, 'effective')
-                                                                                                                                       ELSE intervalFromBounds(fhirpath_text(HIVTest.resource, 'effective'), fhirpath_text(HIVTest.resource, 'effective'), TRUE, TRUE)
-                                                                                                                                   END) AS DATE)) < EXTRACT(DAY
-                                                                                                                                                            FROM
-                                                                                                                                                              (SELECT _pd.birth_date
-                                                                                                                                                               FROM _patient_demographics AS _pd
-                                                                                                                                                               WHERE _pd.patient_id = HIVTest.patient_id
-                                                                                                                                                               LIMIT 1)) THEN 1
-                                                                                          ELSE 0
-                                                                                      END BETWEEN 15 AND 65
-          AND CAST(intervalStart(CASE
-                                     WHEN fhirpath_text(HIVTest.resource, 'effective') IS NULL THEN NULL
-                                     WHEN starts_with(LTRIM(fhirpath_text(HIVTest.resource, 'effective')), '{') THEN fhirpath_text(HIVTest.resource, 'effective')
-                                     ELSE intervalFromBounds(fhirpath_text(HIVTest.resource, 'effective'), fhirpath_text(HIVTest.resource, 'effective'), TRUE, TRUE)
-                                 END) AS TIMESTAMP) < CAST('2026-12-31T23:59:59.999' AS TIMESTAMP)
+                      FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                                             WHEN fhirpath_text(HIVTest.resource, 'effective') IS NULL THEN NULL
+                                                                             WHEN starts_with(LTRIM(fhirpath_text(HIVTest.resource, 'effective')), '{') THEN fhirpath_text(HIVTest.resource, 'effective')
+                                                                             ELSE intervalFromBounds(fhirpath_text(HIVTest.resource, 'effective'), fhirpath_text(HIVTest.resource, 'effective'), TRUE, TRUE)
+                                                                         END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) - EXTRACT(YEAR
+                                                                                                                                               FROM TRY_CAST(
+                                                                                                                                                               (SELECT _pd.birth_date
+                                                                                                                                                                FROM _patient_demographics AS _pd
+                                                                                                                                                                WHERE _pd.patient_id = HIVTest.patient_id
+                                                                                                                                                                LIMIT 1) AS TIMESTAMP)) - CASE
+                                                                                                                                                                                              WHEN EXTRACT(MONTH
+                                                                                                                                                                                                           FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                                                                                                                                                                                                                                  WHEN fhirpath_text(HIVTest.resource, 'effective') IS NULL THEN NULL
+                                                                                                                                                                                                                                                                  WHEN starts_with(LTRIM(fhirpath_text(HIVTest.resource, 'effective')), '{') THEN fhirpath_text(HIVTest.resource, 'effective')
+                                                                                                                                                                                                                                                                  ELSE intervalFromBounds(fhirpath_text(HIVTest.resource, 'effective'), fhirpath_text(HIVTest.resource, 'effective'), TRUE, TRUE)
+                                                                                                                                                                                                                                                              END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                    FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                    (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                     FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                     WHERE _pd.patient_id = HIVTest.patient_id
+                                                                                                                                                                                                                                                                                                                                                     LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                   OR EXTRACT(MONTH
+                                                                                                                                                                                                              FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                                                                                                                                                                                                                                     WHEN fhirpath_text(HIVTest.resource, 'effective') IS NULL THEN NULL
+                                                                                                                                                                                                                                                                     WHEN starts_with(LTRIM(fhirpath_text(HIVTest.resource, 'effective')), '{') THEN fhirpath_text(HIVTest.resource, 'effective')
+                                                                                                                                                                                                                                                                     ELSE intervalFromBounds(fhirpath_text(HIVTest.resource, 'effective'), fhirpath_text(HIVTest.resource, 'effective'), TRUE, TRUE)
+                                                                                                                                                                                                                                                                 END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) = EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                       FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                       (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                        FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                        WHERE _pd.patient_id = HIVTest.patient_id
+                                                                                                                                                                                                                                                                                                                                                        LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                   AND EXTRACT(DAY
+                                                                                                                                                                                                               FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                                                                                                                                                                                                                                      WHEN fhirpath_text(HIVTest.resource, 'effective') IS NULL THEN NULL
+                                                                                                                                                                                                                                                                      WHEN starts_with(LTRIM(fhirpath_text(HIVTest.resource, 'effective')), '{') THEN fhirpath_text(HIVTest.resource, 'effective')
+                                                                                                                                                                                                                                                                      ELSE intervalFromBounds(fhirpath_text(HIVTest.resource, 'effective'), fhirpath_text(HIVTest.resource, 'effective'), TRUE, TRUE)
+                                                                                                                                                                                                                                                                  END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(DAY
+                                                                                                                                                                                                                                                                                                                                        FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                        (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                         FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                         WHERE _pd.patient_id = HIVTest.patient_id
+                                                                                                                                                                                                                                                                                                                                                         LIMIT 1) AS TIMESTAMP)) THEN 1
+                                                                                                                                                                                              ELSE 0
+                                                                                                                                                                                          END BETWEEN 15 AND 65
+          AND intervalStart(CASE
+                                WHEN fhirpath_text(HIVTest.resource, 'effective') IS NULL THEN NULL
+                                WHEN starts_with(LTRIM(fhirpath_text(HIVTest.resource, 'effective')), '{') THEN fhirpath_text(HIVTest.resource, 'effective')
+                                ELSE intervalFromBounds(fhirpath_text(HIVTest.resource, 'effective'), fhirpath_text(HIVTest.resource, 'effective'), TRUE, TRUE)
+                            END) < CAST('2026-12-31T23:59:59.999' AS VARCHAR)
           AND (fhirpath_text(HIVTest.resource, 'status') = 'final'
                OR fhirpath_text(HIVTest.resource, 'status') = 'amended'
                OR fhirpath_text(HIVTest.resource, 'status') = 'corrected'))),
@@ -271,11 +271,11 @@ WITH _patients AS
      "Patient Expired" AS
   (SELECT p.patient_id
    FROM _patients AS p
-   WHERE CAST(fhirpath_text(
-                              (SELECT _pd.resource
-                               FROM _patient_demographics AS _pd
-                               WHERE _pd.patient_id = p.patient_id
-                               LIMIT 1), 'deceased') AS TIMESTAMP) <= CAST('2026-12-31T23:59:59.999' AS TIMESTAMP)),
+   WHERE cqlSameOrBefore(CAST(fhirpath_text(
+                                              (SELECT _pd.resource
+                                               FROM _patient_demographics AS _pd
+                                               WHERE _pd.patient_id = p.patient_id
+                                               LIMIT 1), 'deceased') AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR))),
      "Denominator Exceptions" AS
   (SELECT *
    FROM "Patient Expired"),
@@ -297,42 +297,42 @@ WITH _patients AS
       UNION SELECT patient_id,
                    RESOURCE
       FROM "Encounter: Office Visit") AS Encounter
-   WHERE CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS DATE) >= CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS DATE)
-     AND CAST(intervalEnd(fhirpath_text(Encounter.resource, 'period')) AS DATE) <= CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS DATE)
+   WHERE CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+     AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(Encounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
      AND fhirpath_text(Encounter.resource, 'status') = 'finished'),
      "Initial Population" AS
   (SELECT p.patient_id
    FROM _patients AS p
    WHERE EXTRACT(YEAR
-                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) - EXTRACT(YEAR
-                                                                              FROM
-                                                                                (SELECT _pd.birth_date
-                                                                                 FROM _patient_demographics AS _pd
-                                                                                 WHERE _pd.patient_id = p.patient_id
-                                                                                 LIMIT 1)) - CASE
-                                                                                                 WHEN EXTRACT(MONTH
-                                                                                                              FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(MONTH
-                                                                                                                                                                           FROM
-                                                                                                                                                                             (SELECT _pd.birth_date
-                                                                                                                                                                              FROM _patient_demographics AS _pd
-                                                                                                                                                                              WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                              LIMIT 1))
-                                                                                                      OR EXTRACT(MONTH
-                                                                                                                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) = EXTRACT(MONTH
-                                                                                                                                                                              FROM
-                                                                                                                                                                                (SELECT _pd.birth_date
-                                                                                                                                                                                 FROM _patient_demographics AS _pd
-                                                                                                                                                                                 WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                                 LIMIT 1))
-                                                                                                      AND EXTRACT(DAY
-                                                                                                                  FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(DAY
-                                                                                                                                                                               FROM
-                                                                                                                                                                                 (SELECT _pd.birth_date
-                                                                                                                                                                                  FROM _patient_demographics AS _pd
-                                                                                                                                                                                  WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                                  LIMIT 1)) THEN 1
-                                                                                                 ELSE 0
-                                                                                             END BETWEEN 15 AND 65
+                 FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) - EXTRACT(YEAR
+                                                                                                                                                                    FROM TRY_CAST(
+                                                                                                                                                                                    (SELECT _pd.birth_date
+                                                                                                                                                                                     FROM _patient_demographics AS _pd
+                                                                                                                                                                                     WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                     LIMIT 1) AS TIMESTAMP)) - CASE
+                                                                                                                                                                                                                   WHEN EXTRACT(MONTH
+                                                                                                                                                                                                                                FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                   FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                   (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                    FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                    WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                    LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                        OR EXTRACT(MONTH
+                                                                                                                                                                                                                                   FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) = EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                      FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                      (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                       FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                       WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                       LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                        AND EXTRACT(DAY
+                                                                                                                                                                                                                                    FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(DAY
+                                                                                                                                                                                                                                                                                                                                                                                       FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                       (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                        FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                        WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                        LIMIT 1) AS TIMESTAMP)) THEN 1
+                                                                                                                                                                                                                   ELSE 0
+                                                                                                                                                                                                               END BETWEEN 15 AND 65
      AND EXISTS
        (SELECT 1
         FROM "Qualifying Encounters" AS sub

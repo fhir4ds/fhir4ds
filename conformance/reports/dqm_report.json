@@ -55,7 +55,8 @@
       {
         "name": "Full Logic Accuracy",
         "result": {
-          "passed": true
+          "passed": false,
+          "reason": "Accuracy: 64.6%"
         }
       }
     ]
@@ -85,7 +86,8 @@
       {
         "name": "Full Logic Accuracy",
         "result": {
-          "passed": true
+          "passed": false,
+          "reason": "Accuracy: 58.5%"
         }
       }
     ]
@@ -258,7 +260,8 @@
       {
         "name": "Full Logic Accuracy",
         "result": {
-          "passed": true
+          "passed": false,
+          "reason": "Accuracy: 80.6%"
         }
       }
     ]
@@ -308,7 +311,8 @@
       {
         "name": "Full Logic Accuracy",
         "result": {
-          "passed": true
+          "passed": false,
+          "reason": "Accuracy: 46.9%"
         }
       }
     ]
@@ -398,7 +402,8 @@
       {
         "name": "Full Logic Accuracy",
         "result": {
-          "passed": true
+          "passed": false,
+          "reason": "Accuracy: 92.6%"
         }
       }
     ]
@@ -458,7 +463,8 @@
       {
         "name": "Full Logic Accuracy",
         "result": {
-          "passed": true
+          "passed": false,
+          "reason": "Accuracy: 96.4%"
         }
       }
     ]

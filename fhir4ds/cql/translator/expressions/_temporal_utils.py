@@ -280,7 +280,28 @@ class TemporalUtilsMixin:
                     target_type=target_type,
                 )
             return SQLCast(expression=expr, target_type=target_type)
-        return expr
+        # Catch-all: wrap any unhandled expression type (e.g., SQLBinaryOp
+        # from INTERVAL arithmetic) in a CAST to the target type.
+        if target_type == "VARCHAR":
+            return SQLCast(expression=expr, target_type="VARCHAR")
+        return SQLCast(expression=expr, target_type=target_type)
+
+    @staticmethod
+    def _timestamp_arith_to_varchar(expr: SQLExpression) -> SQLExpression:
+        """Convert TIMESTAMP arithmetic result (e.g. TIMESTAMP ± INTERVAL) to VARCHAR.
+
+        DuckDB ``CAST(TIMESTAMP AS VARCHAR)`` uses a space separator
+        (``2014-01-01 00:00:00``).  This replaces it with ``T`` to
+        produce ISO 8601 (``2014-01-01T00:00:00``).
+        """
+        return SQLFunctionCall(
+            name="REPLACE",
+            args=[
+                SQLCast(expression=expr, target_type="VARCHAR"),
+                SQLLiteral(" "),
+                SQLLiteral("T"),
+            ],
+        )
 
     @staticmethod
     def _cast_for_interval_arithmetic(expr: SQLExpression) -> SQLExpression:
@@ -436,15 +457,28 @@ class TemporalUtilsMixin:
         time_length = precision_lengths_time.get(precision_lower)
 
         if dt_length:
-            varchar_expr = f"REPLACE(CAST(({expr.to_sql()}) AS VARCHAR), ' ', 'T')"
+            # Build AST nodes instead of calling .to_sql() to avoid premature
+            # placeholder resolution during translation.
+            replace_expr = SQLFunctionCall(
+                name="REPLACE",
+                args=[SQLCast(expr, "VARCHAR"), SQLLiteral(' '), SQLLiteral('T')],
+            )
             if time_length:
                 # Must handle both Time and DateTime values
-                return SQLRaw(
-                    f"CASE WHEN SUBSTR({varchar_expr}, 1, 1) = 'T' "
-                    f"THEN LEFT({varchar_expr}, {time_length}) "
-                    f"ELSE LEFT({varchar_expr}, {dt_length}) END"
+                return SQLCase(
+                    when_clauses=[
+                        (
+                            SQLBinaryOp(
+                                operator="=",
+                                left=SQLFunctionCall(name="SUBSTR", args=[replace_expr, SQLLiteral(1), SQLLiteral(1)]),
+                                right=SQLLiteral('T'),
+                            ),
+                            SQLFunctionCall(name="LEFT", args=[replace_expr, SQLLiteral(time_length)]),
+                        ),
+                    ],
+                    else_clause=SQLFunctionCall(name="LEFT", args=[replace_expr, SQLLiteral(dt_length)]),
                 )
-            return SQLRaw(f"LEFT({varchar_expr}, {dt_length})")
+            return SQLFunctionCall(name="LEFT", args=[replace_expr, SQLLiteral(dt_length)])
 
         # Unknown precision - return as-is
         return expr

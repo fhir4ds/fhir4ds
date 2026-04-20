@@ -31,16 +31,9 @@ WITH _patients AS
      _patient_demographics AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
-                   CAST(fhirpath_date(r.resource, 'birthDate') AS DATE) AS birth_date
+                   CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date
    FROM resources r
    WHERE r.resourceType = 'Patient'),
-     "Encounter: Encounter to Document Medications" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1.1834')),
      "Procedure: Documentation of current medications (procedure) (procedurenotdone)" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -48,6 +41,13 @@ WITH _patients AS
    WHERE r.resourceType = 'Procedure'
      AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''428191000124101'').exists()')
      AND fhirpath_text(r.resource, 'status') = 'not-done'),
+     "Encounter: Encounter to Document Medications" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.600.1.1834')),
      "Procedure: Documentation of current medications (procedure)" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -113,8 +113,8 @@ WITH _patients AS
   (SELECT *
    FROM "Encounter: Encounter to Document Medications" AS ValidEncounter
    WHERE ValidEncounter.status = 'finished'
-     AND CAST(intervalStart(fhirpath_text(ValidEncounter.resource, 'period')) AS DATE) >= CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS DATE)
-     AND CAST(intervalEnd(fhirpath_text(ValidEncounter.resource, 'period')) AS DATE) <= CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS DATE)),
+     AND CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(ValidEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+     AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(ValidEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)),
      "Denominator Exceptions" AS
   (SELECT *
    FROM "Qualifying Encounter During Day of Measurement Period" AS QualifyingEncounter

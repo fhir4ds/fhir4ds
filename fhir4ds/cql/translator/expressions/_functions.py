@@ -169,8 +169,15 @@ class FunctionsMixin:
                     distinct=inner_query.distinct,
                 )
 
+            # For numeric aggregates, wrap the column in TRY_CAST(... AS DOUBLE)
+            # to handle VARCHAR sources (e.g., cqlDurationBetween returns VARCHAR).
+            agg_col = col_ref
+            if agg_func in ("SUM", "AVG", "MIN", "MAX", "MEDIAN",
+                            "STDDEV_SAMP", "STDDEV_POP", "VAR_SAMP", "VAR_POP"):
+                agg_col = SQLCast(expression=col_ref, target_type="DOUBLE", try_cast=True)
+
             result = SQLSubquery(query=SQLSelect(
-                columns=[SQLFunctionCall(name=agg_func, args=[col_ref])],
+                columns=[SQLFunctionCall(name=agg_func, args=[agg_col])],
                 from_clause=SQLAlias(
                     expr=SQLSubquery(query=inner_query),
                     alias="_agg",
@@ -727,15 +734,21 @@ class FunctionsMixin:
         if not args:
             return SQLLiteral(value=None)
 
-        has_date_cast = any(
-            isinstance(a, SQLCast) and a.target_type == "DATE" for a in args
-        )
-        has_non_date = any(
-            not (isinstance(a, SQLCast) and a.target_type == "DATE") for a in args
-        )
-        if has_date_cast and has_non_date:
+        # Always cast fhirpath_date() (returns DATE) to VARCHAR for type
+        # compatibility — CQL datetime literals are now VARCHAR ISO 8601 strings.
+        # This avoids "Cannot mix VARCHAR and DATE in COALESCE" errors.
+        def _needs_varchar_cast(a):
+            if isinstance(a, SQLFunctionCall):
+                fn = (a.name or "").lower()
+                if fn == "fhirpath_date":
+                    return True
+            if isinstance(a, SQLCast) and a.target_type == "DATE":
+                return True
+            return False
+
+        if any(_needs_varchar_cast(a) for a in args):
             args = [
-                a.expression if (isinstance(a, SQLCast) and a.target_type == "DATE") else a
+                SQLCast(expression=a, target_type="VARCHAR") if _needs_varchar_cast(a) else a
                 for a in args
             ]
 
@@ -1145,6 +1158,9 @@ class FunctionsMixin:
                 low_sql = SQLBinaryOp(operator="+", left=low_sql, right=SQLLiteral(value=1))
             if not interval_elem.high_closed:
                 high_sql = SQLBinaryOp(operator="-", left=high_sql, right=SQLLiteral(value=1))
+            # Ensure integer type for generate_series (cqlDurationBetween returns VARCHAR)
+            low_sql = SQLCast(expression=low_sql, target_type="INTEGER", try_cast=True)
+            high_sql = SQLCast(expression=high_sql, target_type="INTEGER", try_cast=True)
             series = SQLFunctionCall(name="generate_series", args=[low_sql, high_sql])
             lambda_param = SQLIdentifier(name="x")
             lambda_body = SQLFunctionCall(

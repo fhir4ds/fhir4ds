@@ -32,7 +32,7 @@ WITH _patients AS
      _patient_demographics AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
-                   CAST(fhirpath_date(r.resource, 'birthDate') AS DATE) AS birth_date
+                   CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date
    FROM resources r
    WHERE r.resourceType = 'Patient'),
      "Encounter: Clinical Oral Evaluation" AS
@@ -60,13 +60,6 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Coverage'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591')),
-     "Condition: Hospice Diagnosis (qicore-condition-encounter-diagnosis)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165')
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')),
      "Procedure: Hospice Care Ambulatory" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -77,25 +70,31 @@ WITH _patients AS
           OR fhirpath_text(r.resource, 'status') != 'not-done')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
-     "Condition: Hospice Diagnosis (qicore-condition-problems-health-concerns)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165')
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
      "Encounter: Hospice Encounter" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
    WHERE r.resourceType = 'Encounter'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1003')),
+     "Observation: Hospice care [Minimum Data Set]" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Observation'
+     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''45755-6'').exists()')),
      "Encounter: Encounter Inpatient" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
    WHERE r.resourceType = 'Encounter'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307')),
+     "Condition: Hospice Diagnosis (qicore-condition-encounter-diagnosis)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Condition'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165')
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')),
      "ServiceRequest: Hospice Care Ambulatory" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -104,12 +103,13 @@ WITH _patients AS
      AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))),
-     "Observation: Hospice care [Minimum Data Set]" AS
+     "Condition: Hospice Diagnosis (qicore-condition-problems-health-concerns)" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
-   WHERE r.resourceType = 'Observation'
-     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''45755-6'').exists()')),
+   WHERE r.resourceType = 'Condition'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165')
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
      "Hospice.Has Hospice Services" AS
   (SELECT p.patient_id
    FROM _patients AS p
@@ -123,7 +123,7 @@ WITH _patients AS
         WHERE InpatientEncounter.patient_id = p.patient_id
           AND (fhirpath_bool(InpatientEncounter.resource, 'hospitalization.dischargeDisposition.coding.where(system=''http://snomed.info/sct'' and code=''428361000124107'').exists()')
                OR fhirpath_bool(InpatientEncounter.resource, 'hospitalization.dischargeDisposition.coding.where(system=''http://snomed.info/sct'' and code=''428371000124100'').exists()'))
-          AND CAST(intervalEnd(fhirpath_text(InpatientEncounter.resource, 'period')) AS DATE) BETWEEN CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE) AND COALESCE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE), CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE)))
+          AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(InpatientEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) BETWEEN CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)))
      OR EXISTS
        (SELECT *
         FROM
@@ -132,8 +132,8 @@ WITH _patients AS
            FROM "Encounter: Hospice Encounter"
            WHERE fhirpath_text(RESOURCE, 'status') IN ('finished')) AS HospiceEncounter
         WHERE HospiceEncounter.patient_id = p.patient_id
-          AND CAST(intervalStart(fhirpath_text(HospiceEncounter.resource, 'period')) AS DATE) <= COALESCE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE), CAST('9999-12-31' AS DATE))
-          AND COALESCE(CAST(intervalEnd(fhirpath_text(HospiceEncounter.resource, 'period')) AS DATE), CAST('9999-12-31' AS DATE)) >= CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE))
+          AND CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(HospiceEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10))
+          AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(HospiceEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10)) >= CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))
      OR EXISTS
        (SELECT *
         FROM
@@ -145,16 +145,16 @@ WITH _patients AS
                                                        'corrected')) AS HospiceAssessment
         WHERE HospiceAssessment.patient_id = p.patient_id
           AND fhirpath_bool(HospiceAssessment.resource, 'value.coding.where(system=''http://snomed.info/sct'' and code=''373066001'').exists()')
-          AND CAST(intervalStart(CASE
-                                     WHEN fhirpath_text(HospiceAssessment.resource, 'effective') IS NULL THEN NULL
-                                     WHEN starts_with(LTRIM(fhirpath_text(HospiceAssessment.resource, 'effective')), '{') THEN fhirpath_text(HospiceAssessment.resource, 'effective')
-                                     ELSE intervalFromBounds(fhirpath_text(HospiceAssessment.resource, 'effective'), fhirpath_text(HospiceAssessment.resource, 'effective'), TRUE, TRUE)
-                                 END) AS DATE) <= COALESCE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE), CAST('9999-12-31' AS DATE))
-          AND COALESCE(CAST(intervalEnd(CASE
-                                            WHEN fhirpath_text(HospiceAssessment.resource, 'effective') IS NULL THEN NULL
-                                            WHEN starts_with(LTRIM(fhirpath_text(HospiceAssessment.resource, 'effective')), '{') THEN fhirpath_text(HospiceAssessment.resource, 'effective')
-                                            ELSE intervalFromBounds(fhirpath_text(HospiceAssessment.resource, 'effective'), fhirpath_text(HospiceAssessment.resource, 'effective'), TRUE, TRUE)
-                                        END) AS DATE), CAST('9999-12-31' AS DATE)) >= CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE))
+          AND CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                       WHEN fhirpath_text(HospiceAssessment.resource, 'effective') IS NULL THEN NULL
+                                                       WHEN starts_with(LTRIM(fhirpath_text(HospiceAssessment.resource, 'effective')), '{') THEN fhirpath_text(HospiceAssessment.resource, 'effective')
+                                                       ELSE intervalFromBounds(fhirpath_text(HospiceAssessment.resource, 'effective'), fhirpath_text(HospiceAssessment.resource, 'effective'), TRUE, TRUE)
+                                                   END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10))
+          AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(CASE
+                                                              WHEN fhirpath_text(HospiceAssessment.resource, 'effective') IS NULL THEN NULL
+                                                              WHEN starts_with(LTRIM(fhirpath_text(HospiceAssessment.resource, 'effective')), '{') THEN fhirpath_text(HospiceAssessment.resource, 'effective')
+                                                              ELSE intervalFromBounds(fhirpath_text(HospiceAssessment.resource, 'effective'), fhirpath_text(HospiceAssessment.resource, 'effective'), TRUE, TRUE)
+                                                          END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10)) >= CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))
      OR EXISTS
        (SELECT *
         FROM
@@ -169,8 +169,8 @@ WITH _patients AS
                                                        'filler-order',
                                                        'instance-order')) AS HospiceOrder
         WHERE HospiceOrder.patient_id = p.patient_id
-          AND CAST(fhirpath_text(HospiceOrder.resource, 'authoredOn') AS DATE) >= CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS DATE)
-          AND CAST(fhirpath_text(HospiceOrder.resource, 'authoredOn') AS DATE) <= CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS DATE))
+          AND CAST(LEFT(REPLACE(CAST(fhirpath_text(HospiceOrder.resource, 'authoredOn') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+          AND CAST(LEFT(REPLACE(CAST(fhirpath_text(HospiceOrder.resource, 'authoredOn') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))
      OR EXISTS
        (SELECT *
         FROM
@@ -179,16 +179,16 @@ WITH _patients AS
            FROM "Procedure: Hospice Care Ambulatory"
            WHERE fhirpath_text(RESOURCE, 'status') IN ('completed')) AS HospicePerformed
         WHERE HospicePerformed.patient_id = p.patient_id
-          AND CAST(intervalStart(CASE
-                                     WHEN fhirpath_text(HospicePerformed.resource, 'performed') IS NULL THEN NULL
-                                     WHEN starts_with(LTRIM(fhirpath_text(HospicePerformed.resource, 'performed')), '{') THEN fhirpath_text(HospicePerformed.resource, 'performed')
-                                     ELSE intervalFromBounds(fhirpath_text(HospicePerformed.resource, 'performed'), fhirpath_text(HospicePerformed.resource, 'performed'), TRUE, TRUE)
-                                 END) AS DATE) <= COALESCE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE), CAST('9999-12-31' AS DATE))
-          AND COALESCE(CAST(intervalEnd(CASE
-                                            WHEN fhirpath_text(HospicePerformed.resource, 'performed') IS NULL THEN NULL
-                                            WHEN starts_with(LTRIM(fhirpath_text(HospicePerformed.resource, 'performed')), '{') THEN fhirpath_text(HospicePerformed.resource, 'performed')
-                                            ELSE intervalFromBounds(fhirpath_text(HospicePerformed.resource, 'performed'), fhirpath_text(HospicePerformed.resource, 'performed'), TRUE, TRUE)
-                                        END) AS DATE), CAST('9999-12-31' AS DATE)) >= CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE))
+          AND CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                       WHEN fhirpath_text(HospicePerformed.resource, 'performed') IS NULL THEN NULL
+                                                       WHEN starts_with(LTRIM(fhirpath_text(HospicePerformed.resource, 'performed')), '{') THEN fhirpath_text(HospicePerformed.resource, 'performed')
+                                                       ELSE intervalFromBounds(fhirpath_text(HospicePerformed.resource, 'performed'), fhirpath_text(HospicePerformed.resource, 'performed'), TRUE, TRUE)
+                                                   END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10))
+          AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(CASE
+                                                              WHEN fhirpath_text(HospicePerformed.resource, 'performed') IS NULL THEN NULL
+                                                              WHEN starts_with(LTRIM(fhirpath_text(HospicePerformed.resource, 'performed')), '{') THEN fhirpath_text(HospicePerformed.resource, 'performed')
+                                                              ELSE intervalFromBounds(fhirpath_text(HospicePerformed.resource, 'performed'), fhirpath_text(HospicePerformed.resource, 'performed'), TRUE, TRUE)
+                                                          END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10)) >= CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))
      OR EXISTS
        (SELECT *
         FROM
@@ -207,22 +207,22 @@ WITH _patients AS
                                                                   'provisional',
                                                                   'differential')) AS HospiceCareDiagnosis
         WHERE HospiceCareDiagnosis.patient_id = p.patient_id
-          AND CAST(intervalStart(CASE
-                                     WHEN fhirpath_text(HospiceCareDiagnosis.resource, 'abatementDateTime') IS NOT NULL THEN intervalFromBounds(COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')), fhirpath_text(HospiceCareDiagnosis.resource, 'abatementDateTime'), TRUE, TRUE)
-                                     WHEN COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')) IS NOT NULL THEN CASE
-                                                                                                                                                                                                                                                                        WHEN fhirpath_bool(HospiceCareDiagnosis.resource, 'clinicalStatus.coding.where(code=''active'' or code=''recurrence'' or code=''relapse'').exists()') THEN intervalFromBounds(COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, TRUE)
-                                                                                                                                                                                                                                                                        ELSE intervalFromBounds(COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, FALSE)
-                                                                                                                                                                                                                                                                    END
-                                     ELSE NULL
-                                 END) AS DATE) <= COALESCE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE), CAST('9999-12-31' AS DATE))
-          AND COALESCE(CAST(intervalEnd(CASE
-                                            WHEN fhirpath_text(HospiceCareDiagnosis.resource, 'abatementDateTime') IS NOT NULL THEN intervalFromBounds(COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')), fhirpath_text(HospiceCareDiagnosis.resource, 'abatementDateTime'), TRUE, TRUE)
-                                            WHEN COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')) IS NOT NULL THEN CASE
-                                                                                                                                                                                                                                                                               WHEN fhirpath_bool(HospiceCareDiagnosis.resource, 'clinicalStatus.coding.where(code=''active'' or code=''recurrence'' or code=''relapse'').exists()') THEN intervalFromBounds(COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, TRUE)
-                                                                                                                                                                                                                                                                               ELSE intervalFromBounds(COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, FALSE)
-                                                                                                                                                                                                                                                                           END
-                                            ELSE NULL
-                                        END) AS DATE), CAST('9999-12-31' AS DATE)) >= CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE))),
+          AND CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                       WHEN fhirpath_text(HospiceCareDiagnosis.resource, 'abatementDateTime') IS NOT NULL THEN intervalFromBounds(COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')), fhirpath_text(HospiceCareDiagnosis.resource, 'abatementDateTime'), TRUE, TRUE)
+                                                       WHEN COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')) IS NOT NULL THEN CASE
+                                                                                                                                                                                                                                                                                          WHEN fhirpath_bool(HospiceCareDiagnosis.resource, 'clinicalStatus.coding.where(code=''active'' or code=''recurrence'' or code=''relapse'').exists()') THEN intervalFromBounds(COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, TRUE)
+                                                                                                                                                                                                                                                                                          ELSE intervalFromBounds(COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, FALSE)
+                                                                                                                                                                                                                                                                                      END
+                                                       ELSE NULL
+                                                   END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10))
+          AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(CASE
+                                                              WHEN fhirpath_text(HospiceCareDiagnosis.resource, 'abatementDateTime') IS NOT NULL THEN intervalFromBounds(COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')), fhirpath_text(HospiceCareDiagnosis.resource, 'abatementDateTime'), TRUE, TRUE)
+                                                              WHEN COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')) IS NOT NULL THEN CASE
+                                                                                                                                                                                                                                                                                                 WHEN fhirpath_bool(HospiceCareDiagnosis.resource, 'clinicalStatus.coding.where(code=''active'' or code=''recurrence'' or code=''relapse'').exists()') THEN intervalFromBounds(COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, TRUE)
+                                                                                                                                                                                                                                                                                                 ELSE intervalFromBounds(COALESCE(fhirpath_text(HospiceCareDiagnosis.resource, 'onsetDateTime'), fhirpath_text(HospiceCareDiagnosis.resource, 'onsetPeriod.start'), fhirpath_text(HospiceCareDiagnosis.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, FALSE)
+                                                                                                                                                                                                                                                                                             END
+                                                              ELSE NULL
+                                                          END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10)) >= CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))),
      "SDE.SDE Ethnicity" AS
   (SELECT p.patient_id,
           list_transform(from_json(fhirpath(
@@ -276,21 +276,21 @@ WITH _patients AS
    WHERE
        (SELECT COUNT(_val)
         FROM
-          (SELECT DISTINCT intervalEnd(CASE
-                                           WHEN fhirpath_text(FluorideApplication.resource, 'performed') IS NULL THEN NULL
-                                           WHEN starts_with(LTRIM(fhirpath_text(FluorideApplication.resource, 'performed')), '{') THEN fhirpath_text(FluorideApplication.resource, 'performed')
-                                           ELSE intervalFromBounds(fhirpath_text(FluorideApplication.resource, 'performed'), fhirpath_text(FluorideApplication.resource, 'performed'), TRUE, TRUE)
-                                       END) AS _val
+          (SELECT DISTINCT LEFT(REPLACE(CAST(intervalEnd(CASE
+                                                             WHEN fhirpath_text(FluorideApplication.resource, 'performed') IS NULL THEN NULL
+                                                             WHEN starts_with(LTRIM(fhirpath_text(FluorideApplication.resource, 'performed')), '{') THEN fhirpath_text(FluorideApplication.resource, 'performed')
+                                                             ELSE intervalFromBounds(fhirpath_text(FluorideApplication.resource, 'performed'), fhirpath_text(FluorideApplication.resource, 'performed'), TRUE, TRUE)
+                                                         END) AS VARCHAR), ' ', 'T'), 10) AS _val
            FROM
              (SELECT patient_id,
                      RESOURCE
               FROM "Procedure: Fluoride Varnish Application for Children"
               WHERE fhirpath_text(RESOURCE, 'status') IN ('completed')) AS FluorideApplication
-           WHERE CAST(intervalEnd(CASE
-                                      WHEN fhirpath_text(FluorideApplication.resource, 'performed') IS NULL THEN NULL
-                                      WHEN starts_with(LTRIM(fhirpath_text(FluorideApplication.resource, 'performed')), '{') THEN fhirpath_text(FluorideApplication.resource, 'performed')
-                                      ELSE intervalFromBounds(fhirpath_text(FluorideApplication.resource, 'performed'), fhirpath_text(FluorideApplication.resource, 'performed'), TRUE, TRUE)
-                                  END) AS DATE) BETWEEN CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE) AND COALESCE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE), CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE))
+           WHERE CAST(LEFT(REPLACE(CAST(intervalEnd(CASE
+                                                        WHEN fhirpath_text(FluorideApplication.resource, 'performed') IS NULL THEN NULL
+                                                        WHEN starts_with(LTRIM(fhirpath_text(FluorideApplication.resource, 'performed')), '{') THEN fhirpath_text(FluorideApplication.resource, 'performed')
+                                                        ELSE intervalFromBounds(fhirpath_text(FluorideApplication.resource, 'performed'), fhirpath_text(FluorideApplication.resource, 'performed'), TRUE, TRUE)
+                                                    END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) BETWEEN CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))
              AND FluorideApplication.patient_id = p.patient_id) AS _agg) >= 2),
      "Qualifying Encounters" AS
   (SELECT *
@@ -299,41 +299,41 @@ WITH _patients AS
              RESOURCE
       FROM "Encounter: Clinical Oral Evaluation"
       WHERE fhirpath_text(RESOURCE, 'status') IN ('finished')) AS ValidEncounter
-   WHERE CAST(intervalStart(fhirpath_text(ValidEncounter.resource, 'period')) AS DATE) >= CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS DATE)
-     AND CAST(intervalEnd(fhirpath_text(ValidEncounter.resource, 'period')) AS DATE) <= CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS DATE)),
+   WHERE CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(ValidEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+     AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(ValidEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)),
      "Initial Population" AS
   (SELECT p.patient_id
    FROM _patients AS p
    WHERE EXTRACT(YEAR
-                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) - EXTRACT(YEAR
-                                                                              FROM
-                                                                                (SELECT _pd.birth_date
-                                                                                 FROM _patient_demographics AS _pd
-                                                                                 WHERE _pd.patient_id = p.patient_id
-                                                                                 LIMIT 1)) - CASE
-                                                                                                 WHEN EXTRACT(MONTH
-                                                                                                              FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(MONTH
-                                                                                                                                                                           FROM
-                                                                                                                                                                             (SELECT _pd.birth_date
-                                                                                                                                                                              FROM _patient_demographics AS _pd
-                                                                                                                                                                              WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                              LIMIT 1))
-                                                                                                      OR EXTRACT(MONTH
-                                                                                                                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) = EXTRACT(MONTH
-                                                                                                                                                                              FROM
-                                                                                                                                                                                (SELECT _pd.birth_date
-                                                                                                                                                                                 FROM _patient_demographics AS _pd
-                                                                                                                                                                                 WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                                 LIMIT 1))
-                                                                                                      AND EXTRACT(DAY
-                                                                                                                  FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(DAY
-                                                                                                                                                                               FROM
-                                                                                                                                                                                 (SELECT _pd.birth_date
-                                                                                                                                                                                  FROM _patient_demographics AS _pd
-                                                                                                                                                                                  WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                                  LIMIT 1)) THEN 1
-                                                                                                 ELSE 0
-                                                                                             END BETWEEN 1 AND 20
+                 FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) - EXTRACT(YEAR
+                                                                                                                                                                    FROM TRY_CAST(
+                                                                                                                                                                                    (SELECT _pd.birth_date
+                                                                                                                                                                                     FROM _patient_demographics AS _pd
+                                                                                                                                                                                     WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                     LIMIT 1) AS TIMESTAMP)) - CASE
+                                                                                                                                                                                                                   WHEN EXTRACT(MONTH
+                                                                                                                                                                                                                                FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                   FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                   (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                    FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                    WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                    LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                        OR EXTRACT(MONTH
+                                                                                                                                                                                                                                   FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) = EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                      FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                      (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                       FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                       WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                       LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                        AND EXTRACT(DAY
+                                                                                                                                                                                                                                    FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(DAY
+                                                                                                                                                                                                                                                                                                                                                                                       FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                       (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                        FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                        WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                        LIMIT 1) AS TIMESTAMP)) THEN 1
+                                                                                                                                                                                                                   ELSE 0
+                                                                                                                                                                                                               END BETWEEN 1 AND 20
      AND EXISTS
        (SELECT 1
         FROM "Qualifying Encounters" AS sub
@@ -357,101 +357,101 @@ WITH _patients AS
   (SELECT p.patient_id
    FROM _patients AS p
    WHERE EXTRACT(YEAR
-                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) - EXTRACT(YEAR
-                                                                              FROM
-                                                                                (SELECT _pd.birth_date
-                                                                                 FROM _patient_demographics AS _pd
-                                                                                 WHERE _pd.patient_id = p.patient_id
-                                                                                 LIMIT 1)) - CASE
-                                                                                                 WHEN EXTRACT(MONTH
-                                                                                                              FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(MONTH
-                                                                                                                                                                           FROM
-                                                                                                                                                                             (SELECT _pd.birth_date
-                                                                                                                                                                              FROM _patient_demographics AS _pd
-                                                                                                                                                                              WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                              LIMIT 1))
-                                                                                                      OR EXTRACT(MONTH
-                                                                                                                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) = EXTRACT(MONTH
-                                                                                                                                                                              FROM
-                                                                                                                                                                                (SELECT _pd.birth_date
-                                                                                                                                                                                 FROM _patient_demographics AS _pd
-                                                                                                                                                                                 WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                                 LIMIT 1))
-                                                                                                      AND EXTRACT(DAY
-                                                                                                                  FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(DAY
-                                                                                                                                                                               FROM
-                                                                                                                                                                                 (SELECT _pd.birth_date
-                                                                                                                                                                                  FROM _patient_demographics AS _pd
-                                                                                                                                                                                  WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                                  LIMIT 1)) THEN 1
-                                                                                                 ELSE 0
-                                                                                             END BETWEEN 1 AND 5),
+                 FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) - EXTRACT(YEAR
+                                                                                                                                                                    FROM TRY_CAST(
+                                                                                                                                                                                    (SELECT _pd.birth_date
+                                                                                                                                                                                     FROM _patient_demographics AS _pd
+                                                                                                                                                                                     WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                     LIMIT 1) AS TIMESTAMP)) - CASE
+                                                                                                                                                                                                                   WHEN EXTRACT(MONTH
+                                                                                                                                                                                                                                FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                   FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                   (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                    FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                    WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                    LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                        OR EXTRACT(MONTH
+                                                                                                                                                                                                                                   FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) = EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                      FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                      (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                       FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                       WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                       LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                        AND EXTRACT(DAY
+                                                                                                                                                                                                                                    FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(DAY
+                                                                                                                                                                                                                                                                                                                                                                                       FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                       (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                        FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                        WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                        LIMIT 1) AS TIMESTAMP)) THEN 1
+                                                                                                                                                                                                                   ELSE 0
+                                                                                                                                                                                                               END BETWEEN 1 AND 5),
      "Stratification 2" AS
   (SELECT p.patient_id
    FROM _patients AS p
    WHERE EXTRACT(YEAR
-                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) - EXTRACT(YEAR
-                                                                              FROM
-                                                                                (SELECT _pd.birth_date
-                                                                                 FROM _patient_demographics AS _pd
-                                                                                 WHERE _pd.patient_id = p.patient_id
-                                                                                 LIMIT 1)) - CASE
-                                                                                                 WHEN EXTRACT(MONTH
-                                                                                                              FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(MONTH
-                                                                                                                                                                           FROM
-                                                                                                                                                                             (SELECT _pd.birth_date
-                                                                                                                                                                              FROM _patient_demographics AS _pd
-                                                                                                                                                                              WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                              LIMIT 1))
-                                                                                                      OR EXTRACT(MONTH
-                                                                                                                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) = EXTRACT(MONTH
-                                                                                                                                                                              FROM
-                                                                                                                                                                                (SELECT _pd.birth_date
-                                                                                                                                                                                 FROM _patient_demographics AS _pd
-                                                                                                                                                                                 WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                                 LIMIT 1))
-                                                                                                      AND EXTRACT(DAY
-                                                                                                                  FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(DAY
-                                                                                                                                                                               FROM
-                                                                                                                                                                                 (SELECT _pd.birth_date
-                                                                                                                                                                                  FROM _patient_demographics AS _pd
-                                                                                                                                                                                  WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                                  LIMIT 1)) THEN 1
-                                                                                                 ELSE 0
-                                                                                             END BETWEEN 6 AND 12),
+                 FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) - EXTRACT(YEAR
+                                                                                                                                                                    FROM TRY_CAST(
+                                                                                                                                                                                    (SELECT _pd.birth_date
+                                                                                                                                                                                     FROM _patient_demographics AS _pd
+                                                                                                                                                                                     WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                     LIMIT 1) AS TIMESTAMP)) - CASE
+                                                                                                                                                                                                                   WHEN EXTRACT(MONTH
+                                                                                                                                                                                                                                FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                   FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                   (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                    FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                    WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                    LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                        OR EXTRACT(MONTH
+                                                                                                                                                                                                                                   FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) = EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                      FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                      (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                       FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                       WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                       LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                        AND EXTRACT(DAY
+                                                                                                                                                                                                                                    FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(DAY
+                                                                                                                                                                                                                                                                                                                                                                                       FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                       (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                        FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                        WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                        LIMIT 1) AS TIMESTAMP)) THEN 1
+                                                                                                                                                                                                                   ELSE 0
+                                                                                                                                                                                                               END BETWEEN 6 AND 12),
      "Stratification 3" AS
   (SELECT p.patient_id
    FROM _patients AS p
    WHERE EXTRACT(YEAR
-                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) - EXTRACT(YEAR
-                                                                              FROM
-                                                                                (SELECT _pd.birth_date
-                                                                                 FROM _patient_demographics AS _pd
-                                                                                 WHERE _pd.patient_id = p.patient_id
-                                                                                 LIMIT 1)) - CASE
-                                                                                                 WHEN EXTRACT(MONTH
-                                                                                                              FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(MONTH
-                                                                                                                                                                           FROM
-                                                                                                                                                                             (SELECT _pd.birth_date
-                                                                                                                                                                              FROM _patient_demographics AS _pd
-                                                                                                                                                                              WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                              LIMIT 1))
-                                                                                                      OR EXTRACT(MONTH
-                                                                                                                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) = EXTRACT(MONTH
-                                                                                                                                                                              FROM
-                                                                                                                                                                                (SELECT _pd.birth_date
-                                                                                                                                                                                 FROM _patient_demographics AS _pd
-                                                                                                                                                                                 WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                                 LIMIT 1))
-                                                                                                      AND EXTRACT(DAY
-                                                                                                                  FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(DAY
-                                                                                                                                                                               FROM
-                                                                                                                                                                                 (SELECT _pd.birth_date
-                                                                                                                                                                                  FROM _patient_demographics AS _pd
-                                                                                                                                                                                  WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                                  LIMIT 1)) THEN 1
-                                                                                                 ELSE 0
-                                                                                             END BETWEEN 13 AND 20)
+                 FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) - EXTRACT(YEAR
+                                                                                                                                                                    FROM TRY_CAST(
+                                                                                                                                                                                    (SELECT _pd.birth_date
+                                                                                                                                                                                     FROM _patient_demographics AS _pd
+                                                                                                                                                                                     WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                     LIMIT 1) AS TIMESTAMP)) - CASE
+                                                                                                                                                                                                                   WHEN EXTRACT(MONTH
+                                                                                                                                                                                                                                FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                   FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                   (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                    FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                    WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                    LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                        OR EXTRACT(MONTH
+                                                                                                                                                                                                                                   FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) = EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                      FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                      (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                       FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                       WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                       LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                        AND EXTRACT(DAY
+                                                                                                                                                                                                                                    FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(DAY
+                                                                                                                                                                                                                                                                                                                                                                                       FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                       (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                        FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                        WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                        LIMIT 1) AS TIMESTAMP)) THEN 1
+                                                                                                                                                                                                                   ELSE 0
+                                                                                                                                                                                                               END BETWEEN 13 AND 20)
 SELECT p.patient_id,
 
   (SELECT CASE

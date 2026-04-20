@@ -43,45 +43,9 @@ WITH _patients AS
      _patient_demographics AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
-                   CAST(fhirpath_date(r.resource, 'birthDate') AS DATE) AS birth_date
+                   CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date
    FROM resources r
    WHERE r.resourceType = 'Patient'),
-     "Encounter: Outpatient Consultation" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1008')),
-     "Observation: Cup to Disc Ratio (observationcancelled)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status,
-                   fhirpath_text(r.resource, 'value') AS value
-   FROM resources r
-   WHERE r.resourceType = 'Observation'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1333')),
-     "Condition: Primary Open-Angle Glaucoma (qicore-condition-problems-health-concerns)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.326')
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
-     "Encounter: Care Services in Long-Term Residential Facility" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1014')),
-     "Encounter: Nursing Facility Visit" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1012')),
      "Encounter: Ophthalmological Services" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -97,6 +61,28 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Observation'
      AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1334')),
+     "Encounter: Care Services in Long-Term Residential Facility" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1014')),
+     "Observation: Cup to Disc Ratio (observationcancelled)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status,
+                   fhirpath_text(r.resource, 'value') AS value
+   FROM resources r
+   WHERE r.resourceType = 'Observation'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1333')),
+     "Encounter: Outpatient Consultation" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1008')),
      "Observation: Optic Disc Exam for Structural Abnormalities" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -105,13 +91,6 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Observation'
      AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1334')),
-     "Encounter: Office Visit" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001')),
      "Observation: Cup to Disc Ratio" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -120,6 +99,27 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Observation'
      AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1333')),
+     "Encounter: Office Visit" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001')),
+     "Condition: Primary Open-Angle Glaucoma (qicore-condition-problems-health-concerns)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Condition'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.326')
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
+     "Encounter: Nursing Facility Visit" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1012')),
      "Coverage: Payer Type" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -223,50 +223,50 @@ WITH _patients AS
         FROM
           (SELECT *
            FROM "Primary Open Angle Glaucoma Encounter") AS EncounterWithPOAG
-        WHERE CAST(intervalStart(CASE
-                                     WHEN fhirpath_text(CupToDiscExamPerformed.resource, 'effective') IS NULL THEN NULL
-                                     WHEN starts_with(LTRIM(fhirpath_text(CupToDiscExamPerformed.resource, 'effective')), '{') THEN fhirpath_text(CupToDiscExamPerformed.resource, 'effective')
-                                     ELSE intervalFromBounds(fhirpath_text(CupToDiscExamPerformed.resource, 'effective'), fhirpath_text(CupToDiscExamPerformed.resource, 'effective'), TRUE, TRUE)
-                                 END) AS DATE) >= CAST(intervalStart(fhirpath_text(EncounterWithPOAG.resource, 'period')) AS DATE)
-          AND CAST(intervalEnd(CASE
-                                   WHEN fhirpath_text(CupToDiscExamPerformed.resource, 'effective') IS NULL THEN NULL
-                                   WHEN starts_with(LTRIM(fhirpath_text(CupToDiscExamPerformed.resource, 'effective')), '{') THEN fhirpath_text(CupToDiscExamPerformed.resource, 'effective')
-                                   ELSE intervalFromBounds(fhirpath_text(CupToDiscExamPerformed.resource, 'effective'), fhirpath_text(CupToDiscExamPerformed.resource, 'effective'), TRUE, TRUE)
-                               END) AS DATE) <= COALESCE(CAST(intervalEnd(fhirpath_text(EncounterWithPOAG.resource, 'period')) AS DATE), CAST('9999-12-31' AS DATE))
+        WHERE CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                       WHEN fhirpath_text(CupToDiscExamPerformed.resource, 'effective') IS NULL THEN NULL
+                                                       WHEN starts_with(LTRIM(fhirpath_text(CupToDiscExamPerformed.resource, 'effective')), '{') THEN fhirpath_text(CupToDiscExamPerformed.resource, 'effective')
+                                                       ELSE intervalFromBounds(fhirpath_text(CupToDiscExamPerformed.resource, 'effective'), fhirpath_text(CupToDiscExamPerformed.resource, 'effective'), TRUE, TRUE)
+                                                   END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(EncounterWithPOAG.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+          AND CAST(LEFT(REPLACE(CAST(intervalEnd(CASE
+                                                     WHEN fhirpath_text(CupToDiscExamPerformed.resource, 'effective') IS NULL THEN NULL
+                                                     WHEN starts_with(LTRIM(fhirpath_text(CupToDiscExamPerformed.resource, 'effective')), '{') THEN fhirpath_text(CupToDiscExamPerformed.resource, 'effective')
+                                                     ELSE intervalFromBounds(fhirpath_text(CupToDiscExamPerformed.resource, 'effective'), fhirpath_text(CupToDiscExamPerformed.resource, 'effective'), TRUE, TRUE)
+                                                 END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(EncounterWithPOAG.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10))
           AND EncounterWithPOAG.patient_id = CupToDiscExamPerformed.patient_id)),
      "Initial Population" AS
   (SELECT p.patient_id
    FROM _patients AS p
    WHERE EXTRACT(YEAR
-                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) - EXTRACT(YEAR
-                                                                              FROM
-                                                                                (SELECT _pd.birth_date
-                                                                                 FROM _patient_demographics AS _pd
-                                                                                 WHERE _pd.patient_id = p.patient_id
-                                                                                 LIMIT 1)) - CASE
-                                                                                                 WHEN EXTRACT(MONTH
-                                                                                                              FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(MONTH
-                                                                                                                                                                           FROM
-                                                                                                                                                                             (SELECT _pd.birth_date
-                                                                                                                                                                              FROM _patient_demographics AS _pd
-                                                                                                                                                                              WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                              LIMIT 1))
-                                                                                                      OR EXTRACT(MONTH
-                                                                                                                 FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) = EXTRACT(MONTH
-                                                                                                                                                                              FROM
-                                                                                                                                                                                (SELECT _pd.birth_date
-                                                                                                                                                                                 FROM _patient_demographics AS _pd
-                                                                                                                                                                                 WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                                 LIMIT 1))
-                                                                                                      AND EXTRACT(DAY
-                                                                                                                  FROM CAST('2026-01-01T00:00:00.000' AS TIMESTAMP)) < EXTRACT(DAY
-                                                                                                                                                                               FROM
-                                                                                                                                                                                 (SELECT _pd.birth_date
-                                                                                                                                                                                  FROM _patient_demographics AS _pd
-                                                                                                                                                                                  WHERE _pd.patient_id = p.patient_id
-                                                                                                                                                                                  LIMIT 1)) THEN 1
-                                                                                                 ELSE 0
-                                                                                             END >= 18
+                 FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) - EXTRACT(YEAR
+                                                                                                                                                                    FROM TRY_CAST(
+                                                                                                                                                                                    (SELECT _pd.birth_date
+                                                                                                                                                                                     FROM _patient_demographics AS _pd
+                                                                                                                                                                                     WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                     LIMIT 1) AS TIMESTAMP)) - CASE
+                                                                                                                                                                                                                   WHEN EXTRACT(MONTH
+                                                                                                                                                                                                                                FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                   FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                   (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                    FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                    WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                    LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                        OR EXTRACT(MONTH
+                                                                                                                                                                                                                                   FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) = EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                      FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                      (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                       FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                       WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                       LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                        AND EXTRACT(DAY
+                                                                                                                                                                                                                                    FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(DAY
+                                                                                                                                                                                                                                                                                                                                                                                       FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                       (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                        FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                        WHERE _pd.patient_id = p.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                        LIMIT 1) AS TIMESTAMP)) THEN 1
+                                                                                                                                                                                                                   ELSE 0
+                                                                                                                                                                                                               END >= 18
      AND EXISTS
        (SELECT 1
         FROM "Primary Open Angle Glaucoma Encounter" AS sub
@@ -283,8 +283,8 @@ WITH _patients AS
         FROM
           (SELECT *
            FROM "Primary Open Angle Glaucoma Encounter") AS EncounterWithPOAG
-        WHERE CAST(fhirpath_text(CupToDiscExamNotPerformed.resource, 'issued') AS DATE) >= CAST(intervalStart(fhirpath_text(EncounterWithPOAG.resource, 'period')) AS DATE)
-          AND CAST(fhirpath_text(CupToDiscExamNotPerformed.resource, 'issued') AS DATE) <= COALESCE(CAST(intervalEnd(fhirpath_text(EncounterWithPOAG.resource, 'period')) AS DATE), CAST('9999-12-31' AS DATE))
+        WHERE CAST(LEFT(REPLACE(CAST(fhirpath_text(CupToDiscExamNotPerformed.resource, 'issued') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(EncounterWithPOAG.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+          AND CAST(LEFT(REPLACE(CAST(fhirpath_text(CupToDiscExamNotPerformed.resource, 'issued') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(EncounterWithPOAG.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10))
           AND EncounterWithPOAG.patient_id = CupToDiscExamNotPerformed.patient_id)),
      "Medical Reason for Not Performing Optic Disc Exam" AS
   (SELECT *
@@ -295,8 +295,8 @@ WITH _patients AS
         FROM
           (SELECT *
            FROM "Primary Open Angle Glaucoma Encounter") AS EncounterWithPOAG
-        WHERE CAST(fhirpath_text(OpticDiscExamNotPerformed.resource, 'issued') AS DATE) >= CAST(intervalStart(fhirpath_text(EncounterWithPOAG.resource, 'period')) AS DATE)
-          AND CAST(fhirpath_text(OpticDiscExamNotPerformed.resource, 'issued') AS DATE) <= COALESCE(CAST(intervalEnd(fhirpath_text(EncounterWithPOAG.resource, 'period')) AS DATE), CAST('9999-12-31' AS DATE))
+        WHERE CAST(LEFT(REPLACE(CAST(fhirpath_text(OpticDiscExamNotPerformed.resource, 'issued') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(EncounterWithPOAG.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+          AND CAST(LEFT(REPLACE(CAST(fhirpath_text(OpticDiscExamNotPerformed.resource, 'issued') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(EncounterWithPOAG.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10))
           AND EncounterWithPOAG.patient_id = OpticDiscExamNotPerformed.patient_id)),
      "Denominator Exceptions" AS
   (SELECT p.patient_id

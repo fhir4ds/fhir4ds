@@ -475,21 +475,21 @@ class OperatorsMixin:
         return False
 
     def _is_duration_between_expr(self, node, _depth: int = 0) -> bool:
-        """Check if a CQL AST node is a DurationBetween or DifferenceBetween expression.
+        """Check if a CQL AST node is a DurationBetween expression returning VARCHAR.
 
-        CQL §22.21: These may return uncertainty intervals (VARCHAR), so
-        arithmetic on them needs uncertainty-aware UDFs.
+        CQL §22.21: DurationBetween may return uncertainty intervals (VARCHAR
+        from cqlDurationBetween UDF), so arithmetic on them needs
+        uncertainty-aware UDFs.  DifferenceBetween is excluded: our
+        differenceIn* UDFs return INTEGER, not VARCHAR.
         """
         if _depth > 4:
             return False
-        if isinstance(node, (DurationBetween, DifferenceBetween)):
+        if isinstance(node, DurationBetween):
             return True
         # Arithmetic on duration results propagates uncertainty
         if isinstance(node, BinaryExpression) and node.operator in ("+", "-", "*"):
             return (self._is_duration_between_expr(node.left, _depth + 1) or
                     self._is_duration_between_expr(node.right, _depth + 1))
-        # The parser may absorb comparison into DurationBetween's right operand,
-        # but that's handled separately.
         return False
 
     def _is_cql_quantity_expr(self, node, _depth: int = 0) -> bool:
@@ -838,6 +838,16 @@ class OperatorsMixin:
             if left_is_interval:
                 l = self._unwrap_precision_wrapper(left)
                 r = self._unwrap_precision_wrapper(right) if right_is_interval else right
+                # CQL §19.10: When `included in <precision> of`, truncate BOTH
+                # intervals to the specified precision for certain comparison.
+                cql_right = getattr(expr, 'right', None)
+                if (cql_right is not None
+                        and hasattr(cql_right, 'operator')
+                        and cql_right.operator == 'precision of'
+                        and hasattr(cql_right, 'left')
+                        and hasattr(cql_right.left, 'value')):
+                    prec = cql_right.left.value  # e.g. 'day', 'millisecond'
+                    l = self._truncate_to_precision(l, prec)
                 return SQLFunctionCall(name="intervalIncludedIn", args=[l, r])
             if right_is_interval:
                 r = self._unwrap_precision_wrapper(right)
@@ -952,9 +962,11 @@ class OperatorsMixin:
                     # INTERVAL arithmetic requires TIMESTAMP — cast VARCHAR back
                     _right_ts = SQLCast(expression=_right_cast, target_type="TIMESTAMP")
                     if _direction in ("after", "on or after"):
-                        _offset_right = SQLBinaryOp(operator="+", left=_right_ts, right=_interval_lit)
+                        _offset_right = self._timestamp_arith_to_varchar(
+                            SQLBinaryOp(operator="+", left=_right_ts, right=_interval_lit))
                     else:
-                        _offset_right = SQLBinaryOp(operator="-", left=_right_ts, right=_interval_lit)
+                        _offset_right = self._timestamp_arith_to_varchar(
+                            SQLBinaryOp(operator="-", left=_right_ts, right=_interval_lit))
                     _boundary_expr = self._truncate_to_precision(
                         self._ensure_date_cast(_boundary_expr, _cast_type), _precision)
                     _offset_right = self._truncate_to_precision(_offset_right, _precision)
@@ -2172,7 +2184,7 @@ class OperatorsMixin:
                 interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
                 result = SQLBinaryOp(
                     operator="<",
-                    left=SQLCast(expression=interval_end, target_type="TIMESTAMP"),
+                    left=SQLCast(expression=interval_end, target_type="VARCHAR"),
                     right=right_inner
                 )
                 if extra_cond_ast:
@@ -2188,7 +2200,7 @@ class OperatorsMixin:
                 interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
                 result = SQLBinaryOp(
                     operator=">",
-                    left=SQLCast(expression=interval_end, target_type="TIMESTAMP"),
+                    left=SQLCast(expression=interval_end, target_type="VARCHAR"),
                     right=right_inner
                 )
                 if extra_cond_ast:
@@ -2688,9 +2700,11 @@ class OperatorsMixin:
                             # Cast right to TIMESTAMP for INTERVAL arithmetic
                             right_ts = SQLCast(expression=right, target_type="TIMESTAMP")
                             if _direction == "after":
-                                offset_right = SQLBinaryOp(operator="+", left=right_ts, right=interval_lit)
+                                offset_right = self._timestamp_arith_to_varchar(
+                                    SQLBinaryOp(operator="+", left=right_ts, right=interval_lit))
                             else:
-                                offset_right = SQLBinaryOp(operator="-", left=right_ts, right=interval_lit)
+                                offset_right = self._timestamp_arith_to_varchar(
+                                    SQLBinaryOp(operator="-", left=right_ts, right=interval_lit))
                             # Apply precision truncation via VARCHAR LEFT()
                             if _precision:
                                 boundary_expr = self._truncate_to_precision(boundary_expr, _precision)
@@ -2745,6 +2759,23 @@ class OperatorsMixin:
                         SQLCast(expression=right, target_type="VARCHAR"),
                     ],
                 )
+
+        # Division with DurationBetween: cast VARCHAR to INTEGER
+        # CQL §5.6.4: DurationBetween may return VARCHAR (uncertainty interval JSON
+        # or integer string). Division requires numeric operands.
+        if operator == "/":
+            left_is_duration = self._is_duration_between_expr(expr.left)
+            right_is_duration = self._is_duration_between_expr(expr.right)
+            # SQL-level fallback: detect cqlDurationBetween in translated SQL
+            # (handles ExpressionRef indirection the CQL AST check misses)
+            if not left_is_duration and isinstance(left, SQLFunctionCall) and left.name == "cqlDurationBetween":
+                left_is_duration = True
+            if not right_is_duration and isinstance(right, SQLFunctionCall) and right.name == "cqlDurationBetween":
+                right_is_duration = True
+            if left_is_duration:
+                left = SQLCast(expression=left, target_type="INTEGER", try_cast=True)
+            if right_is_duration:
+                right = SQLCast(expression=right, target_type="INTEGER", try_cast=True)
 
         # Date/DateTime arithmetic with Quantity, or Quantity ± Quantity
         # Pattern: date + quantity, date - quantity, quantity - quantity

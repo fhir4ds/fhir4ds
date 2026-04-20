@@ -71,9 +71,11 @@ class DurationMixin:
         if trailing_interval is not None:
             low = self.translate(trailing_interval.low, usage=ExprUsage.SCALAR)
             high = self.translate(trailing_interval.high, usage=ExprUsage.SCALAR)
+            # cqlDurationBetween returns VARCHAR; cast to INTEGER for BETWEEN
+            duration_int = SQLCast(expression=duration_expr, target_type="INTEGER", try_cast=True)
             return SQLBinaryOp(
                 operator="BETWEEN",
-                left=duration_expr,
+                left=duration_int,
                 right=SQLFunctionCall(name="__between_args__", args=[low, high]),
             )
 

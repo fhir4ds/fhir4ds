@@ -10,6 +10,7 @@ from typing import List
 from ...parser.ast_nodes import DateComponent
 from ...translator.types import (
     SQLBinaryOp,
+    SQLCase,
     SQLCast,
     SQLExpression,
     SQLFunctionCall,
@@ -100,19 +101,22 @@ class DateComponentMixin:
             # Non-integer single arg: pass through as-is (already a date/datetime/string)
             return year
 
-        # Build runtime string using printf
+        # Build runtime string using printf — use AST nodes (not SQLRaw with
+        # .to_sql()) to avoid premature placeholder resolution (CQL §22.26).
         year = args[0]
         month = args[1] if len(args) > 1 else SQLLiteral(value=1)
         day = args[2] if len(args) > 2 else SQLLiteral(value=1)
 
         # Determine format based on number of args for correct precision
         if len(args) == 2:
-            return SQLRaw(
-                f"printf('%04d-%02d', {year.to_sql()}, {month.to_sql()})"
+            return SQLFunctionCall(
+                name="printf",
+                args=[SQLLiteral('%04d-%02d'), year, month],
             )
         if len(args) == 3:
-            return SQLRaw(
-                f"printf('%04d-%02d-%02d', {year.to_sql()}, {month.to_sql()}, {day.to_sql()})"
+            return SQLFunctionCall(
+                name="printf",
+                args=[SQLLiteral('%04d-%02d-%02d'), year, month, day],
             )
 
         hour = args[3] if len(args) > 3 else SQLLiteral(value=0)
@@ -122,28 +126,36 @@ class DateComponentMixin:
         if len(args) <= 6:
             n = len(args)
             if n == 4:
-                return SQLRaw(
-                    f"printf('%04d-%02d-%02dT%02d', {year.to_sql()}, {month.to_sql()}, {day.to_sql()}, {hour.to_sql()})"
+                return SQLFunctionCall(
+                    name="printf",
+                    args=[SQLLiteral('%04d-%02dT%02d'), year, month, day, hour],
                 )
             if n == 5:
-                return SQLRaw(
-                    f"printf('%04d-%02d-%02dT%02d:%02d', {year.to_sql()}, {month.to_sql()}, {day.to_sql()}, {hour.to_sql()}, {minute.to_sql()})"
+                return SQLFunctionCall(
+                    name="printf",
+                    args=[SQLLiteral('%04d-%02d-%02dT%02d:%02d'), year, month, day, hour, minute],
                 )
-            return SQLRaw(
-                f"printf('%04d-%02d-%02dT%02d:%02d:%02d', {year.to_sql()}, {month.to_sql()}, {day.to_sql()}, {hour.to_sql()}, {minute.to_sql()}, {second.to_sql()})"
+            return SQLFunctionCall(
+                name="printf",
+                args=[SQLLiteral('%04d-%02d-%02dT%02d:%02d:%02d'), year, month, day, hour, minute, second],
             )
 
         # 7+ args: milliseconds
         millisecond = args[6]
-        base = f"printf('%04d-%02d-%02dT%02d:%02d:%02d.%03d', {year.to_sql()}, {month.to_sql()}, {day.to_sql()}, {hour.to_sql()}, {minute.to_sql()}, {second.to_sql()}, {millisecond.to_sql()})"
+        base_call = SQLFunctionCall(
+            name="printf",
+            args=[SQLLiteral('%04d-%02d-%02dT%02d:%02d:%02d.%03d'), year, month, day, hour, minute, second, millisecond],
+        )
 
         if len(args) > 7:
             tz_offset = args[7]
-            return SQLRaw(
-                f"({base} || printf('%+03.0f:00', CAST({tz_offset.to_sql()} AS DOUBLE)))"
+            tz_str = SQLFunctionCall(
+                name="printf",
+                args=[SQLLiteral('%+03.0f:00'), SQLCast(tz_offset, "DOUBLE")],
             )
+            return SQLBinaryOp(operator="||", left=base_call, right=tz_str)
 
-        return SQLRaw(base)
+        return base_call
 
     def _translate_date_constructor(self, args: List[SQLExpression]) -> SQLExpression:
         """Translate a Date constructor.
@@ -175,9 +187,18 @@ class DateComponentMixin:
             if isinstance(year, SQLLiteral) and isinstance(year.value, str) and len(year.value) > 4:
                 # DateTime/Date literal: extract first 10 chars (YYYY-MM-DD)
                 return SQLLiteral(value=year.value[:10])
-            # Non-literal expression: use LEFT() to extract date portion
-            return SQLRaw(
-                f"LEFT(REPLACE(CAST(({year.to_sql()}) AS VARCHAR), ' ', 'T'), 10)"
+            # Non-literal expression: use LEFT() to extract date portion.
+            # Build AST nodes (not SQLRaw with .to_sql()) to avoid premature
+            # placeholder resolution — CQL §22.6.
+            return SQLFunctionCall(
+                name="LEFT",
+                args=[
+                    SQLFunctionCall(
+                        name="REPLACE",
+                        args=[SQLCast(year, "VARCHAR"), SQLLiteral(' '), SQLLiteral('T')],
+                    ),
+                    SQLLiteral(10),
+                ],
             )
 
         year = args[0]
@@ -185,11 +206,13 @@ class DateComponentMixin:
         day = args[2] if len(args) > 2 else SQLLiteral(value=1)
 
         if len(args) == 2:
-            return SQLRaw(
-                f"printf('%04d-%02d', {year.to_sql()}, {month.to_sql()})"
+            return SQLFunctionCall(
+                name="printf",
+                args=[SQLLiteral('%04d-%02d'), year, month],
             )
-        return SQLRaw(
-            f"printf('%04d-%02d-%02d', {year.to_sql()}, {month.to_sql()}, {day.to_sql()})"
+        return SQLFunctionCall(
+            name="printf",
+            args=[SQLLiteral('%04d-%02d-%02d'), year, month, day],
         )
 
     def _translate_time_constructor(self, args: List[SQLExpression]) -> SQLExpression:
@@ -229,8 +252,15 @@ class DateComponentMixin:
 
         # Handle 'date from X' - extract date portion (first 10 chars of ISO string)
         if component_lower == 'date':
-            return SQLRaw(
-                f"LEFT(REPLACE(CAST(({operand.to_sql()}) AS VARCHAR), ' ', 'T'), 10)"
+            return SQLFunctionCall(
+                name="LEFT",
+                args=[
+                    SQLFunctionCall(
+                        name="REPLACE",
+                        args=[SQLCast(operand, "VARCHAR"), SQLLiteral(' '), SQLLiteral('T')],
+                    ),
+                    SQLLiteral(10),
+                ],
             )
 
         # Map component names to (start_position, length, min_string_length)
@@ -253,7 +283,12 @@ class DateComponentMixin:
             # (component not specified per CQL §22.6).
             # Use SUBSTR (not Substring) to avoid conflict with CQL Substring macro.
             # CQL Time values look like 'T23:20:15.555' — different positions than DateTime.
-            varchar_expr = f"REPLACE(CAST(({operand.to_sql()}) AS VARCHAR), ' ', 'T')"
+            # Build AST nodes to avoid premature placeholder resolution.
+            replace_expr = SQLFunctionCall(
+                name="REPLACE",
+                args=[SQLCast(operand, "VARCHAR"), SQLLiteral(' '), SQLLiteral('T')],
+            )
+            len_expr = SQLFunctionCall(name="LENGTH", args=[replace_expr])
 
             # Time-specific component positions
             time_positions = {
@@ -268,22 +303,46 @@ class DateComponentMixin:
                 t_start, t_length, t_min_len = time_pos
                 # If first char is 'T' → CQL Time value; use Time positions.
                 # DateTimes never start with 'T' (they start with a year digit).
-                return SQLRaw(
-                    f"CASE "
-                    f"WHEN SUBSTR({varchar_expr}, 1, 1) = 'T' "
-                    f"THEN CASE WHEN LENGTH({varchar_expr}) >= {t_min_len} "
-                    f"     THEN CAST(SUBSTR({varchar_expr}, {t_start}, {t_length}) AS INTEGER) "
-                    f"     ELSE NULL END "
-                    f"WHEN LENGTH({varchar_expr}) >= {min_len} "
-                    f"THEN CAST(SUBSTR({varchar_expr}, {start}, {length}) AS INTEGER) "
-                    f"ELSE NULL END"
+                first_char = SQLFunctionCall(name="SUBSTR", args=[replace_expr, SQLLiteral(1), SQLLiteral(1)])
+                is_time = SQLBinaryOp(operator="=", left=first_char, right=SQLLiteral('T'))
+                time_extract = SQLCast(
+                    SQLFunctionCall(name="SUBSTR", args=[replace_expr, SQLLiteral(t_start), SQLLiteral(t_length)]),
+                    "INTEGER",
+                )
+                time_branch = SQLCase(
+                    when_clauses=[(
+                        SQLBinaryOp(operator=">=", left=len_expr, right=SQLLiteral(t_min_len)),
+                        time_extract,
+                    )],
+                    else_clause=SQLNull(),
+                )
+                dt_extract = SQLCast(
+                    SQLFunctionCall(name="SUBSTR", args=[replace_expr, SQLLiteral(start), SQLLiteral(length)]),
+                    "INTEGER",
+                )
+                dt_branch = SQLCase(
+                    when_clauses=[(
+                        SQLBinaryOp(operator=">=", left=len_expr, right=SQLLiteral(min_len)),
+                        dt_extract,
+                    )],
+                    else_clause=SQLNull(),
+                )
+                return SQLCase(
+                    when_clauses=[(is_time, time_branch)],
+                    else_clause=dt_branch,
                 )
             else:
                 # year/month/day — only applicable to DateTime/Date, not Time
-                return SQLRaw(
-                    f"CASE WHEN LENGTH({varchar_expr}) >= {min_len} "
-                    f"THEN CAST(SUBSTR({varchar_expr}, {start}, {length}) AS INTEGER) "
-                    f"ELSE NULL END"
+                dt_extract = SQLCast(
+                    SQLFunctionCall(name="SUBSTR", args=[replace_expr, SQLLiteral(start), SQLLiteral(length)]),
+                    "INTEGER",
+                )
+                return SQLCase(
+                    when_clauses=[(
+                        SQLBinaryOp(operator=">=", left=len_expr, right=SQLLiteral(min_len)),
+                        dt_extract,
+                    )],
+                    else_clause=SQLNull(),
                 )
 
         # Fallback for unknown components

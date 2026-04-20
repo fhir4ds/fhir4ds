@@ -115,7 +115,10 @@ def is_choice_type_column(
 def infer_sql_type_from_function(name: str) -> str:
     lower = name.lower()
     if "date" in lower:
-        return "DATE"
+        # CQL temporal values are now VARCHAR ISO 8601 strings to preserve
+        # precision.  Using DATE here would cause type mismatches in COALESCE
+        # and comparisons with VARCHAR CQL datetime literals.
+        return "VARCHAR"
     if "bool" in lower:
         return "BOOLEAN"
     if "quantity" in lower or "number" in lower:

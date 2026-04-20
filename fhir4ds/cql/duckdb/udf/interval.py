@@ -275,6 +275,9 @@ def _parse_interval(value: str) -> dict | None:
         "high": high,
         "low_closed": low_closed,
         "high_closed": high_closed,
+        # Preserve raw string values for precision-aware comparison
+        "low_raw": data.get("low") or data.get("start"),
+        "high_raw": data.get("high") or data.get("end"),
     }
 
 
@@ -582,6 +585,71 @@ def intervalProperlyContains(interval: str | None, point: str | None) -> bool | 
     return low_ok and high_ok
 
 
+def _normalize_datetime_str(s: str) -> str:
+    """Normalize datetime string format for consistent comparison.
+
+    TIMESTAMP→VARCHAR produces space-separated format ('2026-01-01 00:00:00')
+    while FHIR dates use T-separator ('2026-01-01T00:00:00.000Z').
+    Normalize both to the same format: T-separator, no trailing Z.
+    """
+    s = s.replace(' ', 'T')  # space → T separator
+    if s.endswith('Z'):
+        s = s[:-1]  # strip UTC 'Z' marker
+    return s
+
+
+def _normalize_timestamp_bound(s: str) -> str:
+    """Normalize a TIMESTAMP-formatted bound string to ISO 8601.
+
+    DuckDB ``CAST(... AS TIMESTAMP)`` → VARCHAR produces space-separated
+    format without trailing ``.000`` milliseconds (e.g.
+    ``'2026-01-01 00:00:00'``).  CQL literals use T-separator and preserve
+    precision (``'2017-09-01T00:00:00'``).  The space separator is a
+    reliable indicator of TIMESTAMP formatting — normalize these to full
+    ISO 8601 with ``.000`` milliseconds so precision-aware comparison
+    treats them as millisecond-precision (not second).
+    """
+    if ' ' in s and 'T' not in s:
+        s = s.replace(' ', 'T')
+        if '.' not in s:
+            s += '.000'
+    return s
+
+
+def _precision_aware_compare(a, b) -> int | None:
+    """Precision-aware comparison of two interval bounds.
+
+    Returns -1 (a < b), 0 (a == b), 1 (a > b), or None (uncertain).
+    Handles partial-precision ISO 8601 strings per CQL §18.4.
+    """
+    from .datetime import _compare_at_min_precision, _infer_precision
+    # If both are strings and they're date/datetime values, use precision-aware comparison
+    if isinstance(a, str) and isinstance(b, str):
+        a_s = _normalize_datetime_str(a.strip())
+        b_s = _normalize_datetime_str(b.strip())
+        # Skip non-date strings (e.g., time strings, numeric strings)
+        a_looks_date = (a_s and a_s[0].isdigit() and len(a_s) >= 4) or a_s.startswith('T')
+        b_looks_date = (b_s and b_s[0].isdigit() and len(b_s) >= 4) or b_s.startswith('T')
+        if a_looks_date and b_looks_date:
+            try:
+                a_prec = _infer_precision(a_s)
+                b_prec = _infer_precision(b_s)
+                if a_prec != b_prec:
+                    cmp, certain = _compare_at_min_precision(a_s, b_s)
+                    if not certain:
+                        return None  # Uncertain due to precision mismatch
+                    return cmp
+            except (ValueError, KeyError):
+                pass
+    # Fall back to _normalize_for_compare for same-precision or non-string values
+    na, nb = _normalize_for_compare(a, b)
+    if na < nb:
+        return -1
+    elif na > nb:
+        return 1
+    return 0
+
+
 def _normalize_for_compare(a, b):
     """Normalize date/datetime pair for comparison.
     
@@ -627,6 +695,12 @@ def _normalize_for_compare(a, b):
         m = _time_str_to_millis(b)
         if m is not None:
             b = m
+
+    # Normalize datetime string format (space→T, strip Z) before comparison
+    if isinstance(a, str):
+        a = _normalize_datetime_str(a)
+    if isinstance(b, str):
+        b = _normalize_datetime_str(b)
 
     # Coerce unparsed strings to date/datetime objects first
     if isinstance(a, str) and not isinstance(b, str):
@@ -785,6 +859,8 @@ def _unwrap_bound_for_json(val):
 def intervalOverlaps(interval1: str | None, interval2: str | None) -> bool | None:
     """Check if two intervals overlap.
 
+    CQL §19.22: Returns null when interval endpoints have insufficient
+    precision for certain comparison (e.g., '2012-02-26' vs '2012-02').
     Returns None (NULL) for null/unparseable inputs per CQL three-valued logic.
     """
     iv1 = _parse_interval(interval1)
@@ -793,20 +869,40 @@ def intervalOverlaps(interval1: str | None, interval2: str | None) -> bool | Non
     if not iv1 or not iv2:
         return None
 
+    # Use raw string values for precision-aware comparison only for temporal bounds
+    h1_raw = iv1.get("high_raw") if iv1.get("high_closed", True) and _is_temporal_string(iv1.get("high_raw")) else None
+    l2_raw = iv2.get("low_raw") if iv2.get("low_closed", True) and _is_temporal_string(iv2.get("low_raw")) else None
+    h2_raw = iv2.get("high_raw") if iv2.get("high_closed", True) and _is_temporal_string(iv2.get("high_raw")) else None
+    l1_raw = iv1.get("low_raw") if iv1.get("low_closed", True) and _is_temporal_string(iv1.get("low_raw")) else None
+
     # Intervals overlap if neither ends before the other starts
     # (end1 >= start2) AND (end2 >= start1)
-    # If any bound is None, treat as unbounded (always satisfies that side)
     if iv1["high"] is None or iv2["low"] is None:
         end1_after_start2 = True
     else:
-        h1, l2 = _normalize_for_compare(iv1["high"], iv2["low"])
-        # Both boundaries must be closed for equality to count as overlap
-        end1_after_start2 = h1 > l2 if not (iv1["high_closed"] and iv2["low_closed"]) else h1 >= l2
+        cmp1 = _precision_aware_compare(
+            h1_raw if h1_raw else iv1["high"],
+            l2_raw if l2_raw else iv2["low"],
+        )
+        if cmp1 is None:
+            return None
+        if iv1["high_closed"] and iv2["low_closed"]:
+            end1_after_start2 = cmp1 >= 0
+        else:
+            end1_after_start2 = cmp1 > 0
     if iv2["high"] is None or iv1["low"] is None:
         end2_after_start1 = True
     else:
-        h2, l1 = _normalize_for_compare(iv2["high"], iv1["low"])
-        end2_after_start1 = h2 > l1 if not (iv2["high_closed"] and iv1["low_closed"]) else h2 >= l1
+        cmp2 = _precision_aware_compare(
+            h2_raw if h2_raw else iv2["high"],
+            l1_raw if l1_raw else iv1["low"],
+        )
+        if cmp2 is None:
+            return None
+        if iv2["high_closed"] and iv1["low_closed"]:
+            end2_after_start1 = cmp2 >= 0
+        else:
+            end2_after_start1 = cmp2 > 0
 
     return end1_after_start2 and end2_after_start1
 
@@ -930,9 +1026,20 @@ def intervalMeets(interval1: str | None, interval2: str | None) -> bool | None:
     return False
 
 
+def _is_temporal_string(s) -> bool:
+    """Check if a string looks like a date/datetime ISO 8601 value."""
+    if not isinstance(s, str):
+        return False
+    s = s.strip()
+    # ISO 8601 date/datetime patterns: YYYY or YYYY-MM etc.
+    return len(s) >= 4 and s[0:4].isdigit() and (len(s) == 4 or s[4] == '-' or s[4] == 'T')
+
+
 def intervalIncludes(interval1: str | None, interval2: str | None) -> bool | None:
     """Check if interval1 fully includes interval2.
 
+    CQL §19.10: Returns null when interval endpoints have insufficient
+    precision for certain comparison.
     Respects open/closed boundaries per CQL spec.
     Null bounds are treated as unbounded (CQL §19.1).
     Returns None (NULL) for null/unparseable inputs per CQL three-valued logic.
@@ -945,21 +1052,36 @@ def intervalIncludes(interval1: str | None, interval2: str | None) -> bool | Non
     end1 = _effective_end(iv1)
     start2 = _effective_start(iv2)
     end2 = _effective_end(iv2)
+    # Use raw string values for precision-aware comparison only for temporal bounds
+    start1_raw = iv1.get("low_raw") if iv1.get("low_closed", True) and _is_temporal_string(iv1.get("low_raw")) else None
+    end1_raw = iv1.get("high_raw") if iv1.get("high_closed", True) and _is_temporal_string(iv1.get("high_raw")) else None
+    start2_raw = iv2.get("low_raw") if iv2.get("low_closed", True) and _is_temporal_string(iv2.get("low_raw")) else None
+    end2_raw = iv2.get("high_raw") if iv2.get("high_closed", True) and _is_temporal_string(iv2.get("high_raw")) else None
     # Null bound = unbounded
     if start1 is None:
         start_ok = True
     elif start2 is None:
         start_ok = False
     else:
-        s1, s2 = _normalize_for_compare(start1, start2)
-        start_ok = s1 <= s2
+        cmp = _precision_aware_compare(
+            start1_raw if start1_raw else start1,
+            start2_raw if start2_raw else start2,
+        )
+        if cmp is None:
+            return None
+        start_ok = cmp <= 0
     if end1 is None:
         end_ok = True
     elif end2 is None:
         end_ok = False
     else:
-        e1, e2 = _normalize_for_compare(end1, end2)
-        end_ok = e1 >= e2
+        cmp = _precision_aware_compare(
+            end1_raw if end1_raw else end1,
+            end2_raw if end2_raw else end2,
+        )
+        if cmp is None:
+            return None
+        end_ok = cmp >= 0
     return start_ok and end_ok
 
 
@@ -1135,6 +1257,12 @@ def intervalFromBounds(low: str | None, high: str | None, lowClosed: bool = True
     """
     if low is None and high is None:
         return None
+    # Normalize TIMESTAMP-formatted bounds (space separator → ISO 8601 T + .000)
+    # so interval JSON preserves millisecond precision for downstream comparison.
+    if isinstance(low, str):
+        low = _normalize_timestamp_bound(low)
+    if isinstance(high, str):
+        high = _normalize_timestamp_bound(high)
     # Validate that low <= high for non-null bounds (CQL §2.17)
     if low is not None and high is not None:
         parsed_low = _parse_interval_bound(low)

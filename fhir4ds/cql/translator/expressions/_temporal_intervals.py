@@ -120,19 +120,39 @@ class IntervalMixin:
         if any(_is_time_or_quantity_literal(b) for b in all_bounds if b is not None):
             return None
 
-        # Ensure interval bounds from fhirpath UDFs are cast to DATE
-        # fhirpath_date/fhirpath_text and COALESCE of those return VARCHAR
-        left_start = self._ensure_date_cast(left_start)
-        left_end = self._ensure_date_cast(left_end)
-        right_start = self._ensure_date_cast(right_start)
-        right_end = self._ensure_date_cast(right_end)
+        # Bail out for partial-precision date strings (e.g., '2012-02', '2013')
+        # that cannot be CAST AS DATE. Let the intervalOverlaps UDF handle them.
+        def _is_partial_date(e: SQLExpression) -> bool:
+            if isinstance(e, SQLLiteral) and isinstance(e.value, str):
+                v = e.value
+                # Full date is at least YYYY-MM-DD (10 chars)
+                if v and v[0].isdigit() and len(v) < 10:
+                    return True
+            return False
+
+        if any(_is_partial_date(b) for b in all_bounds if b is not None):
+            return None
+
+        # Ensure interval bounds from fhirpath UDFs are cast consistently.
+        # Use VARCHAR throughout to avoid DATE/VARCHAR type mismatches
+        # (CQL datetime literals are now VARCHAR; FHIR values may be DATE).
+        def _to_varchar(e: SQLExpression) -> SQLExpression:
+            if e is None or isinstance(e, SQLNull):
+                return e
+            if isinstance(e, SQLLiteral) and isinstance(e.value, str):
+                return e  # already VARCHAR
+            if isinstance(e, SQLCast) and e.target_type == "VARCHAR":
+                return e
+            return SQLCast(expression=e, target_type="VARCHAR")
+
+        left_start = _to_varchar(self._ensure_date_cast(left_start))
+        left_end = _to_varchar(self._ensure_date_cast(left_end))
+        right_start = _to_varchar(self._ensure_date_cast(right_start))
+        right_end = _to_varchar(self._ensure_date_cast(right_end))
 
         # For overlaps, we need:
         # left.start < right.end (considering closedness) AND
         # left.end >= right.start (considering closedness)
-        #
-        # For [left_start, left_end) overlaps [right_start, right_end):
-        #   left_start < right_end AND left_end >= right_start
         #
         # With NULL end (open-ended interval like active conditions):
         #   left_start < right_end AND COALESCE(left_end, '9999-12-31') >= right_start
@@ -140,15 +160,13 @@ class IntervalMixin:
         # Handle the end comparison - use COALESCE for NULL handling
         # Always COALESCE left_end because prevalenceInterval().end can be NULL
         # for active conditions (no abatement date), and NULL >= X is NULL (false)
-        left_end_coalesced = SQLCast(
-            expression=SQLFunctionCall(
-                name="COALESCE",
-                args=[
-                    left_end if left_end and not isinstance(left_end, SQLNull) else SQLNull(),
-                    SQLLiteral(value="9999-12-31"),
-                ]
-            ),
-            target_type="DATE",
+        # Use VARCHAR consistently to avoid type mismatches.
+        left_end_coalesced = SQLFunctionCall(
+            name="COALESCE",
+            args=[
+                (left_end if left_end and not isinstance(left_end, SQLNull) else SQLNull()),
+                SQLLiteral(value="9999-12-31"),
+            ]
         )
 
         # For [a, b) overlaps [c, d):
@@ -158,6 +176,8 @@ class IntervalMixin:
         right_op = ">=" if left_low_closed else ">"
 
         # Build the comparison: left_start < right_end
+        # All bounds are VARCHAR — lexicographic comparison of ISO 8601 strings
+        # preserves correct temporal ordering for full-precision dates.
         start_comparison = SQLBinaryOp(
             operator=left_op,
             left=left_start,

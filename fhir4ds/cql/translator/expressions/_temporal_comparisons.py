@@ -341,6 +341,16 @@ class TemporalComparisonMixin:
                 left_cmp = self._truncate_to_precision(boundary_expr, precision) if precision else boundary_expr
                 right_cmp = self._truncate_to_precision(right_resolved, precision) if precision else right_resolved
 
+                # Without explicit precision, VARCHAR comparison may fail at day
+                # boundaries (e.g., '2024-12-31T23:59:59' <= '2024-12-31' → FALSE).
+                # Add a date-equality fallback: (x op y) OR (LEFT(x,10) = LEFT(y,10)).
+                if not precision and cmp_op in ("<=", ">="):
+                    direct = SQLBinaryOp(operator=cmp_op, left=left_cmp, right=right_cmp)
+                    left_date = SQLCast(expression=boundary_expr, target_type="DATE")
+                    right_date = SQLCast(expression=right_resolved, target_type="DATE")
+                    date_eq = SQLBinaryOp(operator="=", left=left_date, right=right_date)
+                    return SQLBinaryOp(operator="OR", left=direct, right=date_eq)
+
                 return SQLBinaryOp(operator=cmp_op, left=left_cmp, right=right_cmp)
 
         return None
@@ -431,14 +441,16 @@ class TemporalComparisonMixin:
         if before_or_after in ("on or after", "after"):
             if less_or_more == "exact":
                 # Exact offset: boundary = right + quantity
-                target = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
+                target = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     target = self._truncate_to_precision(target, precision)
                 return SQLBinaryOp(operator="=", left=boundary_func, right=target)
             elif less_or_more == "or less":
                 # start >= right AND start <= right + quantity
                 lower_bound = right_for_compare
-                upper_bound = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
+                upper_bound = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
 
                 if precision:
                     lower_bound = self._truncate_to_precision(lower_bound, precision)
@@ -453,7 +465,8 @@ class TemporalComparisonMixin:
                 )
             else:  # or more
                 # start >= right + quantity
-                threshold = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
+                threshold = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     threshold = self._truncate_to_precision(threshold, precision)
                 return SQLBinaryOp(operator="<=", left=threshold, right=boundary_func)
@@ -461,14 +474,16 @@ class TemporalComparisonMixin:
         else:  # on or before / before
             if less_or_more == "exact":
                 # Exact offset: boundary = right - quantity
-                target = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
+                target = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     target = self._truncate_to_precision(target, precision)
                 return SQLBinaryOp(operator="=", left=boundary_func, right=target)
             elif less_or_more == "or less":
                 # start <= right AND start >= right - quantity
                 upper_bound = right_for_compare
-                lower_bound = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
+                lower_bound = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
 
                 if precision:
                     lower_bound = self._truncate_to_precision(lower_bound, precision)
@@ -483,7 +498,8 @@ class TemporalComparisonMixin:
                 )
             else:  # or more
                 # start <= right - quantity
-                threshold = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
+                threshold = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     threshold = self._truncate_to_precision(threshold, precision)
                 return SQLBinaryOp(operator="<=", left=boundary_func, right=threshold)
@@ -578,13 +594,15 @@ class TemporalComparisonMixin:
 
         if before_or_after in ("on or after", "after"):
             if less_or_more == "exact":
-                target = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
+                target = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     target = self._truncate_to_precision(target, precision)
                 return SQLBinaryOp(operator="=", left=interval_point_for_compare, right=target)
             elif less_or_more == "or less":
                 lower_bound = right_for_compare
-                upper_bound = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
+                upper_bound = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
 
                 if precision:
                     lower_bound = self._truncate_to_precision(lower_bound, precision)
@@ -597,20 +615,23 @@ class TemporalComparisonMixin:
                     right=SQLBinaryOp(operator="<=", left=interval_point_for_compare, right=upper_bound),
                 )
             else:  # or more
-                threshold = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
+                threshold = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     threshold = self._truncate_to_precision(threshold, precision)
                 return SQLBinaryOp(operator="<=", left=threshold, right=interval_point_for_compare)
 
         else:  # on or before / before
             if less_or_more == "exact":
-                target = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
+                target = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     target = self._truncate_to_precision(target, precision)
                 return SQLBinaryOp(operator="=", left=interval_point_for_compare, right=target)
             elif less_or_more == "or less":
                 upper_bound = right_for_compare
-                lower_bound = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
+                lower_bound = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
 
                 if precision:
                     lower_bound = self._truncate_to_precision(lower_bound, precision)
@@ -623,7 +644,8 @@ class TemporalComparisonMixin:
                     right=SQLBinaryOp(operator=upper_op, left=interval_point_for_compare, right=upper_bound),
                 )
             else:  # or more
-                threshold = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
+                threshold = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     threshold = self._truncate_to_precision(threshold, precision)
                 return SQLBinaryOp(operator="<=", left=interval_point_for_compare, right=threshold)
@@ -673,9 +695,17 @@ class TemporalComparisonMixin:
         # "after" and "on or after" both mean left >= right
         is_before = direction in ("before", "on or before")
 
+        # Truncate TIMESTAMP arithmetic results when an explicit precision
+        # qualifier is given (e.g. "day of") so that VARCHAR comparison works
+        # correctly against precision-truncated operands (CQL R1.5 §18.13).
+        trunc_precision = precision
+
         if is_before:
             if constraint == "or less":
-                lower = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
+                lower = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
+                if trunc_precision:
+                    lower = self._truncate_to_precision(lower, trunc_precision)
                 upper_op = "<" if direction == "before" else "<="
                 return SQLBinaryOp(
                     operator="AND",
@@ -683,12 +713,18 @@ class TemporalComparisonMixin:
                     right=SQLBinaryOp(operator=upper_op, left=left_cmp, right=right_cmp),
                 )
             else:
-                threshold = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
+                threshold = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
+                if trunc_precision:
+                    threshold = self._truncate_to_precision(threshold, trunc_precision)
                 return SQLBinaryOp(operator="<=", left=left_cmp, right=threshold)
         else:
             # after / on or after
             if constraint == "or less":
-                upper = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
+                upper = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
+                if trunc_precision:
+                    upper = self._truncate_to_precision(upper, trunc_precision)
                 lower_op = "<" if direction == "after" else "<="
                 return SQLBinaryOp(
                     operator="AND",
@@ -696,7 +732,10 @@ class TemporalComparisonMixin:
                     right=SQLBinaryOp(operator="<=", left=left_cmp, right=upper),
                 )
             else:
-                threshold = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
+                threshold = self._timestamp_arith_to_varchar(
+                    SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
+                if trunc_precision:
+                    threshold = self._truncate_to_precision(threshold, trunc_precision)
                 return SQLBinaryOp(operator=">=", left=left_cmp, right=threshold)
 
     def _translate_within_operator(
@@ -719,8 +758,10 @@ class TemporalComparisonMixin:
 
         right_for_arithmetic = self._cast_for_interval_arithmetic(right_cmp)
 
-        lower = SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal)
-        upper = SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal)
+        lower = self._timestamp_arith_to_varchar(
+            SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
+        upper = self._timestamp_arith_to_varchar(
+            SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
 
         return SQLBinaryOp(
             operator="AND",

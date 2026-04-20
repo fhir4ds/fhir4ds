@@ -5872,8 +5872,7 @@
       {
         "name": "DateTimeIncludedInNull",
         "result": {
-          "passed": false,
-          "reason": "Expected None (NoneType), got True (bool)"
+          "passed": true
         }
       },
       {
@@ -5885,8 +5884,7 @@
       {
         "name": "DateTimeIncludedInPrecisionNull",
         "result": {
-          "passed": false,
-          "reason": "Expected None (NoneType), got True (bool)"
+          "passed": true
         }
       },
       {
@@ -6504,8 +6502,7 @@
       {
         "name": "DateTimeOverlapsPrecisioLeftPossiblyEndsDuringRight",
         "result": {
-          "passed": false,
-          "reason": "Conversion Error: invalid date field format: \"2012-02\", expected format is (YYYY-MM-DD)\n\nLINE 1: ...-28' AND CAST(COALESCE('2012-02-26', '9999-12-31') AS DATE) >= '2012-02'\n                                                                          ^"
+          "passed": true
         }
       },
       {
@@ -6517,15 +6514,13 @@
       {
         "name": "DateTimeOverlapsPrecisionRightPossiblyStartsDuringLeftButEndsDuringLeft",
         "result": {
-          "passed": false,
-          "reason": "Conversion Error: invalid date field format: \"2013-03\", expected format is (YYYY-MM-DD)\n\nLINE 1: SELECT '2012' <= '2013-02' AND CAST(COALESCE('2013-03', '9999-12-31') AS DATE) >= '2012...\n                                       ^"
+          "passed": true
         }
       },
       {
         "name": "DateTimeOverlapsPrecisionRightStartsDuringLeftAndPossiblyEndsDuringLeft",
         "result": {
-          "passed": false,
-          "reason": "Conversion Error: invalid date field format: \"2013\", expected format is (YYYY-MM-DD)\n\nLINE 1: SELECT '2012-02' <= '2013-02' AND CAST(COALESCE('2013', '9999-12-31') AS DATE) >= '2012-03'\n                                          ^"
+          "passed": true
         }
       },
       {

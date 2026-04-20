@@ -44,9 +44,61 @@ WITH _patients AS
      _patient_demographics AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
-                   CAST(fhirpath_date(r.resource, 'birthDate') AS DATE) AS birth_date
+                   CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date
    FROM resources r
    WHERE r.resourceType = 'Patient'),
+     "Encounter: Office Visit" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001')),
+     "Encounter: Care Services in Long Term Residential Facility" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1014')),
+     "Encounter: Home Healthcare Services" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1016')),
+     "Observation: Standardized Tools for Assessment of Cognition (observationcancelled)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status,
+                   fhirpath_text(r.resource, 'value') AS value
+   FROM resources r
+   WHERE r.resourceType = 'Observation'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1006')),
+     "Encounter: Outpatient Consultation" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1008')),
+     "Condition: Dementia & Mental Degenerations (qicore-condition-encounter-diagnosis)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Condition'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1005')
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')),
+     "Encounter: Behavioral or Neuropsych Assessment" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1023')),
+     "Condition: Dementia & Mental Degenerations (qicore-condition-problems-health-concerns)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Condition'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1005')
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
      "Encounter: Psych Visit Psychotherapy" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -61,19 +113,18 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Observation'
      AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1006')),
+     "Encounter: Occupational Therapy Evaluation" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1011')),
      "Encounter: Psych Visit Diagnostic Evaluation" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
    WHERE r.resourceType = 'Encounter'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1492')),
-     "Condition: Dementia & Mental Degenerations (qicore-condition-encounter-diagnosis)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1005')
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')),
      "Observation: Cognitive Assessment" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -82,39 +133,6 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Observation'
      AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1332')),
-     "Encounter: Behavioral or Neuropsych Assessment" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1023')),
-     "Observation: Standardized Tools for Assessment of Cognition (observationcancelled)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status,
-                   fhirpath_text(r.resource, 'value') AS value
-   FROM resources r
-   WHERE r.resourceType = 'Observation'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1006')),
-     "Encounter: Home Healthcare Services" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1016')),
-     "Condition: Dementia & Mental Degenerations (qicore-condition-problems-health-concerns)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1005')
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
-     "Encounter: Outpatient Consultation" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1008')),
      "Observation: Cognitive Assessment (observationcancelled)" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -123,12 +141,6 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Observation'
      AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1332')),
-     "Encounter: Care Services in Long Term Residential Facility" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1014')),
      "Encounter: Nursing Facility Visit" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -142,18 +154,6 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Encounter'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1012')),
-     "Encounter: Occupational Therapy Evaluation" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1011')),
-     "Encounter: Office Visit" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001')),
      "Coverage: Payer Type" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -277,16 +277,16 @@ WITH _patients AS
         FROM
           (SELECT *
            FROM "Dementia Encounter During Measurement Period") AS EncounterDementia
-        WHERE CAST(CAST(intervalEnd(fhirpath_text(EncounterDementia.resource, 'period')) AS DATE) - INTERVAL '12 month' AS DATE) <= CAST(intervalStart(CASE
-                                                                                                                                                           WHEN fhirpath_text(CognitiveAssessment.resource, 'effective') IS NULL THEN NULL
-                                                                                                                                                           WHEN starts_with(LTRIM(fhirpath_text(CognitiveAssessment.resource, 'effective')), '{') THEN fhirpath_text(CognitiveAssessment.resource, 'effective')
-                                                                                                                                                           ELSE intervalFromBounds(fhirpath_text(CognitiveAssessment.resource, 'effective'), fhirpath_text(CognitiveAssessment.resource, 'effective'), TRUE, TRUE)
-                                                                                                                                                       END) AS DATE)
-          AND CAST(intervalStart(CASE
-                                     WHEN fhirpath_text(CognitiveAssessment.resource, 'effective') IS NULL THEN NULL
-                                     WHEN starts_with(LTRIM(fhirpath_text(CognitiveAssessment.resource, 'effective')), '{') THEN fhirpath_text(CognitiveAssessment.resource, 'effective')
-                                     ELSE intervalFromBounds(fhirpath_text(CognitiveAssessment.resource, 'effective'), fhirpath_text(CognitiveAssessment.resource, 'effective'), TRUE, TRUE)
-                                 END) AS DATE) <= CAST(CAST(intervalEnd(fhirpath_text(EncounterDementia.resource, 'period')) AS DATE) AS DATE)
+        WHERE LEFT(REPLACE(CAST(REPLACE(CAST(CAST(CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(EncounterDementia.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP) - INTERVAL '12 month' AS VARCHAR), ' ', 'T') AS VARCHAR), ' ', 'T'), 10) <= CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                                                                                                                                                                                                                                                                                     WHEN fhirpath_text(CognitiveAssessment.resource, 'effective') IS NULL THEN NULL
+                                                                                                                                                                                                                                                                                                                     WHEN starts_with(LTRIM(fhirpath_text(CognitiveAssessment.resource, 'effective')), '{') THEN fhirpath_text(CognitiveAssessment.resource, 'effective')
+                                                                                                                                                                                                                                                                                                                     ELSE intervalFromBounds(fhirpath_text(CognitiveAssessment.resource, 'effective'), fhirpath_text(CognitiveAssessment.resource, 'effective'), TRUE, TRUE)
+                                                                                                                                                                                                                                                                                                                 END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+          AND CAST(LEFT(REPLACE(CAST(intervalStart(CASE
+                                                       WHEN fhirpath_text(CognitiveAssessment.resource, 'effective') IS NULL THEN NULL
+                                                       WHEN starts_with(LTRIM(fhirpath_text(CognitiveAssessment.resource, 'effective')), '{') THEN fhirpath_text(CognitiveAssessment.resource, 'effective')
+                                                       ELSE intervalFromBounds(fhirpath_text(CognitiveAssessment.resource, 'effective'), fhirpath_text(CognitiveAssessment.resource, 'effective'), TRUE, TRUE)
+                                                   END) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= LEFT(REPLACE(CAST(CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(EncounterDementia.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS VARCHAR), ' ', 'T'), 10)
           AND EncounterDementia.patient_id = CognitiveAssessment.patient_id)),
      "Numerator" AS
   (SELECT p.patient_id
@@ -310,8 +310,8 @@ WITH _patients AS
         FROM
           (SELECT *
            FROM "Dementia Encounter During Measurement Period") AS EncounterDementia
-        WHERE CAST(fhirpath_text(NoCognitiveAssessment.resource, 'issued') AS DATE) >= CAST(intervalStart(fhirpath_text(EncounterDementia.resource, 'period')) AS DATE)
-          AND CAST(fhirpath_text(NoCognitiveAssessment.resource, 'issued') AS DATE) <= COALESCE(CAST(intervalEnd(fhirpath_text(EncounterDementia.resource, 'period')) AS DATE), CAST('9999-12-31' AS DATE))
+        WHERE CAST(LEFT(REPLACE(CAST(fhirpath_text(NoCognitiveAssessment.resource, 'issued') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(EncounterDementia.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR)
+          AND CAST(LEFT(REPLACE(CAST(fhirpath_text(NoCognitiveAssessment.resource, 'issued') AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(EncounterDementia.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), LEFT(CAST('9999-12-31' AS VARCHAR), 10))
           AND EncounterDementia.patient_id = NoCognitiveAssessment.patient_id)),
      "Denominator Exceptions" AS
   (SELECT p.patient_id

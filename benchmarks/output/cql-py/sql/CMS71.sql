@@ -95,25 +95,16 @@ WITH _patients AS
      _patient_demographics AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
-                   CAST(fhirpath_date(r.resource, 'birthDate') AS DATE) AS birth_date
+                   CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date
    FROM resources r
    WHERE r.resourceType = 'Patient'),
-     "Encounter: Observation Services" AS
+     "Condition: History of Atrial Ablation (qicore-condition-encounter-diagnosis)" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143')),
-     "MedicationRequest: Anticoagulant Therapy" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'intent') AS intent,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'MedicationRequest'
-     AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.200')
-     AND (json_extract(r.resource, '$.meta.profile') IS NULL
-          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))),
+   WHERE r.resourceType = 'Condition'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.76')
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')),
      "Task" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -121,47 +112,6 @@ WITH _patients AS
                    fhirpath_text(r.resource, 'status') AS status
    FROM resources r
    WHERE r.resourceType = 'Task'),
-     "Condition: History of Atrial Ablation (qicore-condition-problems-health-concerns)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.76')
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
-     "Condition (qicore-condition-problems-health-concerns)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
-     "Encounter: Emergency Department Visit" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292')),
-     "Observation: History of Atrial Ablation" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Observation'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.76')),
-     "MedicationRequest: Anticoagulant Therapy (medicationnotrequested)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'intent') AS intent,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'MedicationRequest'
-     AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.200')
-     AND fhirpath_bool(r.resource, 'doNotPerform')),
-     "Condition: Atrial Fibrillation or Flutter (qicore-condition-problems-health-concerns)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.202')
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
      "Procedure: Atrial Ablation" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
@@ -172,19 +122,69 @@ WITH _patients AS
           OR fhirpath_text(r.resource, 'status') != 'not-done')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
-     "Condition: History of Atrial Ablation (qicore-condition-encounter-diagnosis)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.76')
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')),
      "Condition (qicore-condition-encounter-diagnosis)" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource
    FROM resources r
    WHERE r.resourceType = 'Condition'
      AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')),
+     "Observation: History of Atrial Ablation" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Observation'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.76')),
+     "Encounter: Observation Services" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143')),
+     "Condition (qicore-condition-problems-health-concerns)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Condition'
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
+     "Condition: History of Atrial Ablation (qicore-condition-problems-health-concerns)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Condition'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.76')
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
+     "Condition: Atrial Fibrillation or Flutter (qicore-condition-problems-health-concerns)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Condition'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.202')
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
+     "MedicationRequest: Anticoagulant Therapy (medicationnotrequested)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'intent') AS intent,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'MedicationRequest'
+     AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.200')
+     AND fhirpath_bool(r.resource, 'doNotPerform')),
+     "Encounter: Emergency Department Visit" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292')),
+     "MedicationRequest: Anticoagulant Therapy" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'intent') AS intent,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'MedicationRequest'
+     AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.200')
+     AND (json_extract(r.resource, '$.meta.profile') IS NULL
+          OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))),
      "Encounter: Encounter Inpatient" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -209,12 +209,6 @@ WITH _patients AS
      AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))),
-     "Encounter: Nonelective Inpatient Encounter" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.424')),
      "Procedure: Comfort Measures" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -226,11 +220,17 @@ WITH _patients AS
           OR fhirpath_text(r.resource, 'status') != 'not-done')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
+     "Encounter: Nonelective Inpatient Encounter" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.424')),
      "CQMCommon.Inpatient Encounter" AS
   (SELECT *
    FROM "Encounter: Encounter Inpatient" AS EncounterInpatient
    WHERE EncounterInpatient.status = 'finished'
-     AND CAST(intervalEnd(fhirpath_text(EncounterInpatient.resource, 'period')) AS DATE) BETWEEN CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE) AND COALESCE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE), CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE))),
+     AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(EncounterInpatient.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) BETWEEN CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))),
      "SDE.SDE Ethnicity" AS
   (SELECT p.patient_id,
           list_transform(from_json(fhirpath(
@@ -291,36 +291,36 @@ WITH _patients AS
   (SELECT *
    FROM "Encounter: Nonelective Inpatient Encounter" AS NonElectiveEncounter
    WHERE EXTRACT(YEAR
-                 FROM CAST(intervalStart(fhirpath_text(NonElectiveEncounter.resource, 'period')) AS DATE)) - EXTRACT(YEAR
-                                                                                                                     FROM
-                                                                                                                       (SELECT _pd.birth_date
-                                                                                                                        FROM _patient_demographics AS _pd
-                                                                                                                        WHERE _pd.patient_id = NonElectiveEncounter.patient_id
-                                                                                                                        LIMIT 1)) - CASE
-                                                                                                                                        WHEN EXTRACT(MONTH
-                                                                                                                                                     FROM CAST(intervalStart(fhirpath_text(NonElectiveEncounter.resource, 'period')) AS DATE)) < EXTRACT(MONTH
-                                                                                                                                                                                                                                                         FROM
-                                                                                                                                                                                                                                                           (SELECT _pd.birth_date
-                                                                                                                                                                                                                                                            FROM _patient_demographics AS _pd
-                                                                                                                                                                                                                                                            WHERE _pd.patient_id = NonElectiveEncounter.patient_id
-                                                                                                                                                                                                                                                            LIMIT 1))
-                                                                                                                                             OR EXTRACT(MONTH
-                                                                                                                                                        FROM CAST(intervalStart(fhirpath_text(NonElectiveEncounter.resource, 'period')) AS DATE)) = EXTRACT(MONTH
-                                                                                                                                                                                                                                                            FROM
-                                                                                                                                                                                                                                                              (SELECT _pd.birth_date
-                                                                                                                                                                                                                                                               FROM _patient_demographics AS _pd
-                                                                                                                                                                                                                                                               WHERE _pd.patient_id = NonElectiveEncounter.patient_id
-                                                                                                                                                                                                                                                               LIMIT 1))
-                                                                                                                                             AND EXTRACT(DAY
-                                                                                                                                                         FROM CAST(intervalStart(fhirpath_text(NonElectiveEncounter.resource, 'period')) AS DATE)) < EXTRACT(DAY
-                                                                                                                                                                                                                                                             FROM
-                                                                                                                                                                                                                                                               (SELECT _pd.birth_date
-                                                                                                                                                                                                                                                                FROM _patient_demographics AS _pd
-                                                                                                                                                                                                                                                                WHERE _pd.patient_id = NonElectiveEncounter.patient_id
-                                                                                                                                                                                                                                                                LIMIT 1)) THEN 1
-                                                                                                                                        ELSE 0
-                                                                                                                                    END >= 18
-     AND CAST(intervalEnd(fhirpath_text(NonElectiveEncounter.resource, 'period')) AS DATE) BETWEEN CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE) AND COALESCE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE), CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS DATE))),
+                 FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(NonElectiveEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) - EXTRACT(YEAR
+                                                                                                                                                                                             FROM TRY_CAST(
+                                                                                                                                                                                                             (SELECT _pd.birth_date
+                                                                                                                                                                                                              FROM _patient_demographics AS _pd
+                                                                                                                                                                                                              WHERE _pd.patient_id = NonElectiveEncounter.patient_id
+                                                                                                                                                                                                              LIMIT 1) AS TIMESTAMP)) - CASE
+                                                                                                                                                                                                                                            WHEN EXTRACT(MONTH
+                                                                                                                                                                                                                                                         FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(NonElectiveEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                                                                     FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                                                                     (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                                                                      FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                                                                      WHERE _pd.patient_id = NonElectiveEncounter.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                                                                      LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                                                 OR EXTRACT(MONTH
+                                                                                                                                                                                                                                                            FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(NonElectiveEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) = EXTRACT(MONTH
+                                                                                                                                                                                                                                                                                                                                                                                                                                        FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                                                                        (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                                                                         FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                                                                         WHERE _pd.patient_id = NonElectiveEncounter.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                                                                         LIMIT 1) AS TIMESTAMP))
+                                                                                                                                                                                                                                                 AND EXTRACT(DAY
+                                                                                                                                                                                                                                                             FROM TRY_CAST(CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(NonElectiveEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AS TIMESTAMP)) < EXTRACT(DAY
+                                                                                                                                                                                                                                                                                                                                                                                                                                         FROM TRY_CAST(
+                                                                                                                                                                                                                                                                                                                                                                                                                                                         (SELECT _pd.birth_date
+                                                                                                                                                                                                                                                                                                                                                                                                                                                          FROM _patient_demographics AS _pd
+                                                                                                                                                                                                                                                                                                                                                                                                                                                          WHERE _pd.patient_id = NonElectiveEncounter.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                                                                          LIMIT 1) AS TIMESTAMP)) THEN 1
+                                                                                                                                                                                                                                            ELSE 0
+                                                                                                                                                                                                                                        END >= 18
+     AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(NonElectiveEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) BETWEEN CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))),
      "TJC.Ischemic Stroke Encounter" AS
   (SELECT *
    FROM "TJC.Non Elective Inpatient Encounter With Age" AS NonElectiveEncounterWithAge
@@ -358,32 +358,32 @@ WITH _patients AS
                                                                                          (SELECT RESOURCE
                                                                                           FROM "Encounter: Emergency Department Visit" AS LastED
                                                                                           WHERE fhirpath_text(LastED.resource, 'status') = 'finished'
-                                                                                            AND CAST(COALESCE(intervalStart(fhirpath_text(
-                                                                                                                                            (SELECT RESOURCE
-                                                                                                                                             FROM "Encounter: Observation Services" AS LastObs
-                                                                                                                                             WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
-                                                                                                                                               AND CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' <= CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                               AND CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP) <= CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                               AND LastObs.patient_id = IschemicStrokeEncounter.patient_id
-                                                                                                                                             ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
-                                                                                                                                             LIMIT 1), 'period')), intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))) AS TIMESTAMP) - INTERVAL '1 hour' <= CAST(intervalEnd(fhirpath_text(LastED.resource, 'period')) AS TIMESTAMP)
-                                                                                            AND CAST(intervalEnd(fhirpath_text(LastED.resource, 'period')) AS TIMESTAMP) <= CAST(COALESCE(intervalStart(fhirpath_text(
-                                                                                                                                                                                                                        (SELECT RESOURCE
-                                                                                                                                                                                                                         FROM "Encounter: Observation Services" AS LastObs
-                                                                                                                                                                                                                         WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
-                                                                                                                                                                                                                           AND CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' <= CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                                                                                                           AND CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP) <= CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                                                                                                           AND LastObs.patient_id = IschemicStrokeEncounter.patient_id
-                                                                                                                                                                                                                         ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
-                                                                                                                                                                                                                         LIMIT 1), 'period')), intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))) AS TIMESTAMP)
+                                                                                            AND REPLACE(CAST(CAST(CAST(COALESCE(intervalStart(fhirpath_text(
+                                                                                                                                                              (SELECT RESOURCE
+                                                                                                                                                               FROM "Encounter: Observation Services" AS LastObs
+                                                                                                                                                               WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
+                                                                                                                                                                 AND REPLACE(CAST(CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(LastObs.resource, 'period'))
+                                                                                                                                                                 AND intervalEnd(fhirpath_text(LastObs.resource, 'period')) <= intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))
+                                                                                                                                                                 AND LastObs.patient_id = IschemicStrokeEncounter.patient_id
+                                                                                                                                                               ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
+                                                                                                                                                               LIMIT 1), 'period')), intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))) AS VARCHAR) AS TIMESTAMP) - INTERVAL '1 hour' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(LastED.resource, 'period'))
+                                                                                            AND intervalEnd(fhirpath_text(LastED.resource, 'period')) <= CAST(COALESCE(intervalStart(fhirpath_text(
+                                                                                                                                                                                                     (SELECT RESOURCE
+                                                                                                                                                                                                      FROM "Encounter: Observation Services" AS LastObs
+                                                                                                                                                                                                      WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
+                                                                                                                                                                                                        AND REPLACE(CAST(CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(LastObs.resource, 'period'))
+                                                                                                                                                                                                        AND intervalEnd(fhirpath_text(LastObs.resource, 'period')) <= intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))
+                                                                                                                                                                                                        AND LastObs.patient_id = IschemicStrokeEncounter.patient_id
+                                                                                                                                                                                                      ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
+                                                                                                                                                                                                      LIMIT 1), 'period')), intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))) AS VARCHAR)
                                                                                             AND LastED.patient_id = IschemicStrokeEncounter.patient_id
                                                                                           ORDER BY intervalEnd(fhirpath_text(LastED.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastED.resource, '$.id') ASC NULLS LAST
                                                                                           LIMIT 1), 'period')), COALESCE(intervalStart(fhirpath_text(
                                                                                                                                                        (SELECT RESOURCE
                                                                                                                                                         FROM "Encounter: Observation Services" AS LastObs
                                                                                                                                                         WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
-                                                                                                                                                          AND CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' <= CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                                          AND CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP) <= CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP)
+                                                                                                                                                          AND REPLACE(CAST(CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(LastObs.resource, 'period'))
+                                                                                                                                                          AND intervalEnd(fhirpath_text(LastObs.resource, 'period')) <= intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))
                                                                                                                                                           AND LastObs.patient_id = IschemicStrokeEncounter.patient_id
                                                                                                                                                         ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
                                                                                                                                                         LIMIT 1), 'period')), intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')))), CAST(intervalEnd(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS VARCHAR), TRUE, TRUE), CAST(COALESCE(intervalStart(CASE
@@ -404,32 +404,32 @@ WITH _patients AS
                                                                                          (SELECT RESOURCE
                                                                                           FROM "Encounter: Emergency Department Visit" AS LastED
                                                                                           WHERE fhirpath_text(LastED.resource, 'status') = 'finished'
-                                                                                            AND CAST(COALESCE(intervalStart(fhirpath_text(
-                                                                                                                                            (SELECT RESOURCE
-                                                                                                                                             FROM "Encounter: Observation Services" AS LastObs
-                                                                                                                                             WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
-                                                                                                                                               AND CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' <= CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                               AND CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP) <= CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                               AND LastObs.patient_id = IschemicStrokeEncounter.patient_id
-                                                                                                                                             ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
-                                                                                                                                             LIMIT 1), 'period')), intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))) AS TIMESTAMP) - INTERVAL '1 hour' <= CAST(intervalEnd(fhirpath_text(LastED.resource, 'period')) AS TIMESTAMP)
-                                                                                            AND CAST(intervalEnd(fhirpath_text(LastED.resource, 'period')) AS TIMESTAMP) <= CAST(COALESCE(intervalStart(fhirpath_text(
-                                                                                                                                                                                                                        (SELECT RESOURCE
-                                                                                                                                                                                                                         FROM "Encounter: Observation Services" AS LastObs
-                                                                                                                                                                                                                         WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
-                                                                                                                                                                                                                           AND CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' <= CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                                                                                                           AND CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP) <= CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                                                                                                           AND LastObs.patient_id = IschemicStrokeEncounter.patient_id
-                                                                                                                                                                                                                         ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
-                                                                                                                                                                                                                         LIMIT 1), 'period')), intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))) AS TIMESTAMP)
+                                                                                            AND REPLACE(CAST(CAST(CAST(COALESCE(intervalStart(fhirpath_text(
+                                                                                                                                                              (SELECT RESOURCE
+                                                                                                                                                               FROM "Encounter: Observation Services" AS LastObs
+                                                                                                                                                               WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
+                                                                                                                                                                 AND REPLACE(CAST(CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(LastObs.resource, 'period'))
+                                                                                                                                                                 AND intervalEnd(fhirpath_text(LastObs.resource, 'period')) <= intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))
+                                                                                                                                                                 AND LastObs.patient_id = IschemicStrokeEncounter.patient_id
+                                                                                                                                                               ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
+                                                                                                                                                               LIMIT 1), 'period')), intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))) AS VARCHAR) AS TIMESTAMP) - INTERVAL '1 hour' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(LastED.resource, 'period'))
+                                                                                            AND intervalEnd(fhirpath_text(LastED.resource, 'period')) <= CAST(COALESCE(intervalStart(fhirpath_text(
+                                                                                                                                                                                                     (SELECT RESOURCE
+                                                                                                                                                                                                      FROM "Encounter: Observation Services" AS LastObs
+                                                                                                                                                                                                      WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
+                                                                                                                                                                                                        AND REPLACE(CAST(CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(LastObs.resource, 'period'))
+                                                                                                                                                                                                        AND intervalEnd(fhirpath_text(LastObs.resource, 'period')) <= intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))
+                                                                                                                                                                                                        AND LastObs.patient_id = IschemicStrokeEncounter.patient_id
+                                                                                                                                                                                                      ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
+                                                                                                                                                                                                      LIMIT 1), 'period')), intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))) AS VARCHAR)
                                                                                             AND LastED.patient_id = IschemicStrokeEncounter.patient_id
                                                                                           ORDER BY intervalEnd(fhirpath_text(LastED.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastED.resource, '$.id') ASC NULLS LAST
                                                                                           LIMIT 1), 'period')), COALESCE(intervalStart(fhirpath_text(
                                                                                                                                                        (SELECT RESOURCE
                                                                                                                                                         FROM "Encounter: Observation Services" AS LastObs
                                                                                                                                                         WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
-                                                                                                                                                          AND CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' <= CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                                          AND CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP) <= CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP)
+                                                                                                                                                          AND REPLACE(CAST(CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(LastObs.resource, 'period'))
+                                                                                                                                                          AND intervalEnd(fhirpath_text(LastObs.resource, 'period')) <= intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))
                                                                                                                                                           AND LastObs.patient_id = IschemicStrokeEncounter.patient_id
                                                                                                                                                         ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
                                                                                                                                                         LIMIT 1), 'period')), intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')))), CAST(intervalEnd(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS VARCHAR), TRUE, TRUE), CAST(COALESCE(intervalStart(CASE
@@ -477,11 +477,11 @@ WITH _patients AS
                                                               (SELECT *
                                                                FROM "Procedure: Atrial Ablation" AS AtrialAblationProcedure
                                                                WHERE fhirpath_text(AtrialAblationProcedure.resource, 'status') = 'completed'
-                                                                 AND CAST(intervalStart(CASE
-                                                                                            WHEN fhirpath_text(AtrialAblationProcedure.resource, 'performed') IS NULL THEN NULL
-                                                                                            WHEN starts_with(LTRIM(fhirpath_text(AtrialAblationProcedure.resource, 'performed')), '{') THEN fhirpath_text(AtrialAblationProcedure.resource, 'performed')
-                                                                                            ELSE intervalFromBounds(fhirpath_text(AtrialAblationProcedure.resource, 'performed'), fhirpath_text(AtrialAblationProcedure.resource, 'performed'), TRUE, TRUE)
-                                                                                        END) AS TIMESTAMP) < CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP)
+                                                                 AND intervalStart(CASE
+                                                                                       WHEN fhirpath_text(AtrialAblationProcedure.resource, 'performed') IS NULL THEN NULL
+                                                                                       WHEN starts_with(LTRIM(fhirpath_text(AtrialAblationProcedure.resource, 'performed')), '{') THEN fhirpath_text(AtrialAblationProcedure.resource, 'performed')
+                                                                                       ELSE intervalFromBounds(fhirpath_text(AtrialAblationProcedure.resource, 'performed'), fhirpath_text(AtrialAblationProcedure.resource, 'performed'), TRUE, TRUE)
+                                                                                   END) < intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))
                                                                  AND AtrialAblationProcedure.patient_id = IschemicStrokeEncounter.patient_id))
                                                        UNION
                                                          (SELECT patient_id,
@@ -493,11 +493,11 @@ WITH _patients AS
                                                                WHERE (NOT (fhirpath_text(AtrialAblationDiagnosis.resource, 'verificationStatus') IS NOT NULL)
                                                                       OR NOT fhirpath_bool(AtrialAblationDiagnosis.resource, 'verificationStatus.coding.where(system=''http://terminology.hl7.org/CodeSystem/condition-ver-status'' and code=''refuted'').exists()')
                                                                       AND NOT fhirpath_bool(AtrialAblationDiagnosis.resource, 'verificationStatus.coding.where(system=''http://terminology.hl7.org/CodeSystem/condition-ver-status'' and code=''entered-in-error'').exists()'))
-                                                                 AND CAST(intervalStart(CASE
-                                                                                            WHEN fhirpath_text(AtrialAblationDiagnosis.resource, 'onset') IS NULL THEN NULL
-                                                                                            WHEN starts_with(LTRIM(fhirpath_text(AtrialAblationDiagnosis.resource, 'onset')), '{') THEN fhirpath_text(AtrialAblationDiagnosis.resource, 'onset')
-                                                                                            ELSE intervalFromBounds(fhirpath_text(AtrialAblationDiagnosis.resource, 'onset'), fhirpath_text(AtrialAblationDiagnosis.resource, 'onset'), TRUE, TRUE)
-                                                                                        END) AS TIMESTAMP) < CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP)
+                                                                 AND intervalStart(CASE
+                                                                                       WHEN fhirpath_text(AtrialAblationDiagnosis.resource, 'onset') IS NULL THEN NULL
+                                                                                       WHEN starts_with(LTRIM(fhirpath_text(AtrialAblationDiagnosis.resource, 'onset')), '{') THEN fhirpath_text(AtrialAblationDiagnosis.resource, 'onset')
+                                                                                       ELSE intervalFromBounds(fhirpath_text(AtrialAblationDiagnosis.resource, 'onset'), fhirpath_text(AtrialAblationDiagnosis.resource, 'onset'), TRUE, TRUE)
+                                                                                   END) < intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))
                                                                  AND AtrialAblationDiagnosis.patient_id = IschemicStrokeEncounter.patient_id))
                                                        UNION
                                                          (SELECT patient_id,
@@ -507,27 +507,27 @@ WITH _patients AS
                                                               (SELECT 1
                                                                FROM "Observation: History of Atrial Ablation" AS AtrialAblationObservation
                                                                WHERE array_contains(['final', 'amended', 'corrected'], fhirpath_text(AtrialAblationObservation.resource, 'status'))
-                                                                 AND CAST(CASE
-                                                                              WHEN NOT (intervalStart(CASE
-                                                                                                          WHEN fhirpath_text(AtrialAblationObservation.resource, 'effective') IS NULL THEN NULL
-                                                                                                          WHEN starts_with(LTRIM(fhirpath_text(AtrialAblationObservation.resource, 'effective')), '{') THEN fhirpath_text(AtrialAblationObservation.resource, 'effective')
-                                                                                                          ELSE intervalFromBounds(fhirpath_text(AtrialAblationObservation.resource, 'effective'), fhirpath_text(AtrialAblationObservation.resource, 'effective'), TRUE, TRUE)
-                                                                                                      END) IS NULL
-                                                                                        OR intervalStart(CASE
-                                                                                                             WHEN fhirpath_text(AtrialAblationObservation.resource, 'effective') IS NULL THEN NULL
-                                                                                                             WHEN starts_with(LTRIM(fhirpath_text(AtrialAblationObservation.resource, 'effective')), '{') THEN fhirpath_text(AtrialAblationObservation.resource, 'effective')
-                                                                                                             ELSE intervalFromBounds(fhirpath_text(AtrialAblationObservation.resource, 'effective'), fhirpath_text(AtrialAblationObservation.resource, 'effective'), TRUE, TRUE)
-                                                                                                         END) = '0001-01-01 00:00:00') THEN intervalStart(CASE
-                                                                                                                                                              WHEN fhirpath_text(AtrialAblationObservation.resource, 'effective') IS NULL THEN NULL
-                                                                                                                                                              WHEN starts_with(LTRIM(fhirpath_text(AtrialAblationObservation.resource, 'effective')), '{') THEN fhirpath_text(AtrialAblationObservation.resource, 'effective')
-                                                                                                                                                              ELSE intervalFromBounds(fhirpath_text(AtrialAblationObservation.resource, 'effective'), fhirpath_text(AtrialAblationObservation.resource, 'effective'), TRUE, TRUE)
-                                                                                                                                                          END)
-                                                                              ELSE intervalEnd(CASE
-                                                                                                   WHEN fhirpath_text(AtrialAblationObservation.resource, 'effective') IS NULL THEN NULL
-                                                                                                   WHEN starts_with(LTRIM(fhirpath_text(AtrialAblationObservation.resource, 'effective')), '{') THEN fhirpath_text(AtrialAblationObservation.resource, 'effective')
-                                                                                                   ELSE intervalFromBounds(fhirpath_text(AtrialAblationObservation.resource, 'effective'), fhirpath_text(AtrialAblationObservation.resource, 'effective'), TRUE, TRUE)
-                                                                                               END)
-                                                                          END AS TIMESTAMP) <= CAST(intervalEnd(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP)
+                                                                 AND cqlSameOrBefore(CAST(CASE
+                                                                                              WHEN NOT (intervalStart(CASE
+                                                                                                                          WHEN fhirpath_text(AtrialAblationObservation.resource, 'effective') IS NULL THEN NULL
+                                                                                                                          WHEN starts_with(LTRIM(fhirpath_text(AtrialAblationObservation.resource, 'effective')), '{') THEN fhirpath_text(AtrialAblationObservation.resource, 'effective')
+                                                                                                                          ELSE intervalFromBounds(fhirpath_text(AtrialAblationObservation.resource, 'effective'), fhirpath_text(AtrialAblationObservation.resource, 'effective'), TRUE, TRUE)
+                                                                                                                      END) IS NULL
+                                                                                                        OR intervalStart(CASE
+                                                                                                                             WHEN fhirpath_text(AtrialAblationObservation.resource, 'effective') IS NULL THEN NULL
+                                                                                                                             WHEN starts_with(LTRIM(fhirpath_text(AtrialAblationObservation.resource, 'effective')), '{') THEN fhirpath_text(AtrialAblationObservation.resource, 'effective')
+                                                                                                                             ELSE intervalFromBounds(fhirpath_text(AtrialAblationObservation.resource, 'effective'), fhirpath_text(AtrialAblationObservation.resource, 'effective'), TRUE, TRUE)
+                                                                                                                         END) = '0001-01-01 00:00:00') THEN intervalStart(CASE
+                                                                                                                                                                              WHEN fhirpath_text(AtrialAblationObservation.resource, 'effective') IS NULL THEN NULL
+                                                                                                                                                                              WHEN starts_with(LTRIM(fhirpath_text(AtrialAblationObservation.resource, 'effective')), '{') THEN fhirpath_text(AtrialAblationObservation.resource, 'effective')
+                                                                                                                                                                              ELSE intervalFromBounds(fhirpath_text(AtrialAblationObservation.resource, 'effective'), fhirpath_text(AtrialAblationObservation.resource, 'effective'), TRUE, TRUE)
+                                                                                                                                                                          END)
+                                                                                              ELSE intervalEnd(CASE
+                                                                                                                   WHEN fhirpath_text(AtrialAblationObservation.resource, 'effective') IS NULL THEN NULL
+                                                                                                                   WHEN starts_with(LTRIM(fhirpath_text(AtrialAblationObservation.resource, 'effective')), '{') THEN fhirpath_text(AtrialAblationObservation.resource, 'effective')
+                                                                                                                   ELSE intervalFromBounds(fhirpath_text(AtrialAblationObservation.resource, 'effective'), fhirpath_text(AtrialAblationObservation.resource, 'effective'), TRUE, TRUE)
+                                                                                                               END)
+                                                                                          END AS VARCHAR), CAST(intervalEnd(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS VARCHAR))
                                                                  AND AtrialAblationObservation.patient_id = IschemicStrokeEncounter.patient_id))
                                                        UNION
                                                          (SELECT patient_id,
@@ -539,11 +539,11 @@ WITH _patients AS
                                                                WHERE (NOT (fhirpath_text(AtrialAblationEncDiagnosis.resource, 'verificationStatus') IS NOT NULL)
                                                                       OR NOT fhirpath_bool(AtrialAblationEncDiagnosis.resource, 'verificationStatus.coding.where(system=''http://terminology.hl7.org/CodeSystem/condition-ver-status'' and code=''refuted'').exists()')
                                                                       AND NOT fhirpath_bool(AtrialAblationEncDiagnosis.resource, 'verificationStatus.coding.where(system=''http://terminology.hl7.org/CodeSystem/condition-ver-status'' and code=''entered-in-error'').exists()'))
-                                                                 AND CAST(intervalStart(CASE
-                                                                                            WHEN fhirpath_text(AtrialAblationEncDiagnosis.resource, 'onset') IS NULL THEN NULL
-                                                                                            WHEN starts_with(LTRIM(fhirpath_text(AtrialAblationEncDiagnosis.resource, 'onset')), '{') THEN fhirpath_text(AtrialAblationEncDiagnosis.resource, 'onset')
-                                                                                            ELSE intervalFromBounds(fhirpath_text(AtrialAblationEncDiagnosis.resource, 'onset'), fhirpath_text(AtrialAblationEncDiagnosis.resource, 'onset'), TRUE, TRUE)
-                                                                                        END) AS TIMESTAMP) < CAST(intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS TIMESTAMP)
+                                                                 AND intervalStart(CASE
+                                                                                       WHEN fhirpath_text(AtrialAblationEncDiagnosis.resource, 'onset') IS NULL THEN NULL
+                                                                                       WHEN starts_with(LTRIM(fhirpath_text(AtrialAblationEncDiagnosis.resource, 'onset')), '{') THEN fhirpath_text(AtrialAblationEncDiagnosis.resource, 'onset')
+                                                                                       ELSE intervalFromBounds(fhirpath_text(AtrialAblationEncDiagnosis.resource, 'onset'), fhirpath_text(AtrialAblationEncDiagnosis.resource, 'onset'), TRUE, TRUE)
+                                                                                   END) < intervalStart(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))
                                                                  AND AtrialAblationEncDiagnosis.patient_id = IschemicStrokeEncounter.patient_id))),
      "Encounter With Prior Or Present Diagnosis Of Atrial Fibrillation Or Flutter" AS (
                                                                                          (SELECT patient_id,
@@ -555,11 +555,11 @@ WITH _patients AS
                                                                                                WHERE (NOT (fhirpath_text(AtrialFibrillationFlutter.resource, 'verificationStatus') IS NOT NULL)
                                                                                                       OR NOT fhirpath_bool(AtrialFibrillationFlutter.resource, 'verificationStatus.coding.where(system=''http://terminology.hl7.org/CodeSystem/condition-ver-status'' and code=''refuted'').exists()')
                                                                                                       AND NOT fhirpath_bool(AtrialFibrillationFlutter.resource, 'verificationStatus.coding.where(system=''http://terminology.hl7.org/CodeSystem/condition-ver-status'' and code=''entered-in-error'').exists()'))
-                                                                                                 AND CAST(intervalStart(CASE
-                                                                                                                            WHEN fhirpath_text(AtrialFibrillationFlutter.resource, 'onset') IS NULL THEN NULL
-                                                                                                                            WHEN starts_with(LTRIM(fhirpath_text(AtrialFibrillationFlutter.resource, 'onset')), '{') THEN fhirpath_text(AtrialFibrillationFlutter.resource, 'onset')
-                                                                                                                            ELSE intervalFromBounds(fhirpath_text(AtrialFibrillationFlutter.resource, 'onset'), fhirpath_text(AtrialFibrillationFlutter.resource, 'onset'), TRUE, TRUE)
-                                                                                                                        END) AS DATE) <= CAST(intervalEnd(fhirpath_text(IschemicStrokeEncounter.resource, 'period')) AS DATE)
+                                                                                                 AND LEFT(CAST(intervalStart(CASE
+                                                                                                                                 WHEN fhirpath_text(AtrialFibrillationFlutter.resource, 'onset') IS NULL THEN NULL
+                                                                                                                                 WHEN starts_with(LTRIM(fhirpath_text(AtrialFibrillationFlutter.resource, 'onset')), '{') THEN fhirpath_text(AtrialFibrillationFlutter.resource, 'onset')
+                                                                                                                                 ELSE intervalFromBounds(fhirpath_text(AtrialFibrillationFlutter.resource, 'onset'), fhirpath_text(AtrialFibrillationFlutter.resource, 'onset'), TRUE, TRUE)
+                                                                                                                             END) AS VARCHAR), 10) <= intervalEnd(fhirpath_text(IschemicStrokeEncounter.resource, 'period'))
                                                                                                  AND AtrialFibrillationFlutter.patient_id = IschemicStrokeEncounter.patient_id))
                                                                                        UNION
                                                                                          (SELECT patient_id,
@@ -627,32 +627,32 @@ WITH _patients AS
                                                                                          (SELECT RESOURCE
                                                                                           FROM "Encounter: Emergency Department Visit" AS LastED
                                                                                           WHERE fhirpath_text(LastED.resource, 'status') = 'finished'
-                                                                                            AND CAST(COALESCE(intervalStart(fhirpath_text(
-                                                                                                                                            (SELECT RESOURCE
-                                                                                                                                             FROM "Encounter: Observation Services" AS LastObs
-                                                                                                                                             WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
-                                                                                                                                               AND CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' <= CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                               AND CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP) <= CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                               AND LastObs.patient_id = Encounter.patient_id
-                                                                                                                                             ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
-                                                                                                                                             LIMIT 1), 'period')), intervalStart(fhirpath_text(Encounter.resource, 'period'))) AS TIMESTAMP) - INTERVAL '1 hour' <= CAST(intervalEnd(fhirpath_text(LastED.resource, 'period')) AS TIMESTAMP)
-                                                                                            AND CAST(intervalEnd(fhirpath_text(LastED.resource, 'period')) AS TIMESTAMP) <= CAST(COALESCE(intervalStart(fhirpath_text(
-                                                                                                                                                                                                                        (SELECT RESOURCE
-                                                                                                                                                                                                                         FROM "Encounter: Observation Services" AS LastObs
-                                                                                                                                                                                                                         WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
-                                                                                                                                                                                                                           AND CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' <= CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                                                                                                           AND CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP) <= CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                                                                                                           AND LastObs.patient_id = Encounter.patient_id
-                                                                                                                                                                                                                         ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
-                                                                                                                                                                                                                         LIMIT 1), 'period')), intervalStart(fhirpath_text(Encounter.resource, 'period'))) AS TIMESTAMP)
+                                                                                            AND REPLACE(CAST(CAST(CAST(COALESCE(intervalStart(fhirpath_text(
+                                                                                                                                                              (SELECT RESOURCE
+                                                                                                                                                               FROM "Encounter: Observation Services" AS LastObs
+                                                                                                                                                               WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
+                                                                                                                                                                 AND REPLACE(CAST(CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(LastObs.resource, 'period'))
+                                                                                                                                                                 AND intervalEnd(fhirpath_text(LastObs.resource, 'period')) <= intervalStart(fhirpath_text(Encounter.resource, 'period'))
+                                                                                                                                                                 AND LastObs.patient_id = Encounter.patient_id
+                                                                                                                                                               ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
+                                                                                                                                                               LIMIT 1), 'period')), intervalStart(fhirpath_text(Encounter.resource, 'period'))) AS VARCHAR) AS TIMESTAMP) - INTERVAL '1 hour' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(LastED.resource, 'period'))
+                                                                                            AND intervalEnd(fhirpath_text(LastED.resource, 'period')) <= CAST(COALESCE(intervalStart(fhirpath_text(
+                                                                                                                                                                                                     (SELECT RESOURCE
+                                                                                                                                                                                                      FROM "Encounter: Observation Services" AS LastObs
+                                                                                                                                                                                                      WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
+                                                                                                                                                                                                        AND REPLACE(CAST(CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(LastObs.resource, 'period'))
+                                                                                                                                                                                                        AND intervalEnd(fhirpath_text(LastObs.resource, 'period')) <= intervalStart(fhirpath_text(Encounter.resource, 'period'))
+                                                                                                                                                                                                        AND LastObs.patient_id = Encounter.patient_id
+                                                                                                                                                                                                      ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
+                                                                                                                                                                                                      LIMIT 1), 'period')), intervalStart(fhirpath_text(Encounter.resource, 'period'))) AS VARCHAR)
                                                                                             AND LastED.patient_id = Encounter.patient_id
                                                                                           ORDER BY intervalEnd(fhirpath_text(LastED.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastED.resource, '$.id') ASC NULLS LAST
                                                                                           LIMIT 1), 'period')), COALESCE(intervalStart(fhirpath_text(
                                                                                                                                                        (SELECT RESOURCE
                                                                                                                                                         FROM "Encounter: Observation Services" AS LastObs
                                                                                                                                                         WHERE fhirpath_text(LastObs.resource, 'status') = 'finished'
-                                                                                                                                                          AND CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' <= CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP)
-                                                                                                                                                          AND CAST(intervalEnd(fhirpath_text(LastObs.resource, 'period')) AS TIMESTAMP) <= CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS TIMESTAMP)
+                                                                                                                                                          AND REPLACE(CAST(CAST(intervalStart(fhirpath_text(Encounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '1 hour' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(LastObs.resource, 'period'))
+                                                                                                                                                          AND intervalEnd(fhirpath_text(LastObs.resource, 'period')) <= intervalStart(fhirpath_text(Encounter.resource, 'period'))
                                                                                                                                                           AND LastObs.patient_id = Encounter.patient_id
                                                                                                                                                         ORDER BY intervalEnd(fhirpath_text(LastObs.resource, 'period')) DESC NULLS FIRST, json_extract_string(LastObs.resource, '$.id') ASC NULLS LAST
                                                                                                                                                         LIMIT 1), 'period')), intervalStart(fhirpath_text(Encounter.resource, 'period')))), CAST(intervalEnd(fhirpath_text(Encounter.resource, 'period')) AS VARCHAR), TRUE, TRUE), CAST(COALESCE(intervalStart(CASE

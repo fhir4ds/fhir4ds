@@ -231,7 +231,10 @@ class SQLExtract(SQLExpression):
         self.precedence = PRECEDENCE["PRIMARY"]
 
     def to_sql(self, parent_precedence: int = 0) -> str:
-        return f"EXTRACT({self.extract_field} FROM {self.source.to_sql()})"
+        # Wrap source in TRY_CAST to TIMESTAMP to handle VARCHAR ISO 8601
+        # strings from CQL precision-preserving datetime representation.
+        src = self.source.to_sql()
+        return f"EXTRACT({self.extract_field} FROM TRY_CAST({src} AS TIMESTAMP))"
 
 
 @dataclass
@@ -337,6 +340,25 @@ class SQLFunctionCall(SQLExpression):
                     for op in first_arg.operands
                 ]
                 return SQLFunctionCall(name="COALESCE", args=coalesce_args)
+
+        # fhirpath_date returns DATE, but CQL temporal values are now VARCHAR
+        # ISO 8601 strings.  Wrap in CAST(... AS VARCHAR) for type compatibility
+        # in COALESCE, comparisons, and other mixed-type contexts.
+        if self.name.lower() == "fhirpath_date":
+            arg_sqls = [a.to_sql() for a in self.args]
+            return SQLRaw(f"CAST(fhirpath_date({', '.join(arg_sqls)}) AS VARCHAR)")
+
+        # Numeric aggregates (SUM, AVG, etc.) may receive VARCHAR columns from
+        # CQL DurationBetween or temporal expressions.  Wrap in TRY_CAST(... AS DOUBLE)
+        # so DuckDB can aggregate them.  TRY_CAST on actual numeric types is a no-op.
+        if self.name.upper() in ("SUM", "AVG", "STDDEV_SAMP", "STDDEV_POP", "VAR_SAMP", "VAR_POP") and len(self.args) == 1:
+            arg = self.args[0]
+            if not (isinstance(arg, SQLCast) and arg.target_type == "DOUBLE"):
+                return SQLFunctionCall(
+                    name=self.name,
+                    args=[SQLCast(expression=arg, target_type="DOUBLE", try_cast=True)],
+                    distinct=self.distinct,
+                )
 
         # intervalFromBounds: cast first two args to VARCHAR
         if self.name == "intervalFromBounds":
@@ -752,6 +774,13 @@ class SQLCast(SQLExpression):
     def to_sql(self, parent_precedence: int = 0) -> str:
         expr_sql = self.expression.to_sql()
         keyword = "TRY_CAST" if self.try_cast else "CAST"
+        # CQL temporal values are now VARCHAR ISO 8601 strings.
+        # DATE casts previously served two purposes: (1) type assertion and
+        # (2) day-level truncation (stripping time component).  We preserve
+        # both by emitting LEFT(CAST(x AS VARCHAR), 10) which yields a
+        # 'YYYY-MM-DD' VARCHAR — safe in COALESCE and comparison contexts.
+        if self.target_type == "DATE":
+            return f"LEFT({keyword}({expr_sql} AS VARCHAR), 10)"
         return f"{keyword}({expr_sql} AS {self.target_type})"
 
     def is_date_typed(self) -> bool:
