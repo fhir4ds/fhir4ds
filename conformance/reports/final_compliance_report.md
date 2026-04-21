@@ -2,15 +2,26 @@
 
 ## 1. Final Compliance Table
 
-| Standard | Before | After | Delta | Rate |
-|---|---|---|---|---|
-| ViewDefinition (v2) | 111 / 134 | 123 / 134 | +12 | 91.8% |
-| FHIRPath (R4) | 928 / 935 | 934 / 935 | +6 | 99.9% |
-| CQL | 854 / 1706 | 1667 / 1706 | +813 | 97.7% |
-| DQM (QI Core 2025) | 42 / 46 | 42 / 46 | +0 | 91.3% |
-| **OVERALL** | **1935 / 2821** | **2766 / 2821** | **+831** | **98.1%** |
+| Standard | Initial | Phase 1-2 | Phase 3-4 | Final | Rate |
+|---|---|---|---|---|---|
+| ViewDefinition (v2) | 111 / 134 | 123 / 134 | **134 / 134** | **134 / 134** | **100.0%** |
+| FHIRPath (R4) | 928 / 935 | 934 / 935 | **935 / 935** | **935 / 935** | **100.0%** |
+| CQL | 854 / 1706 | 1667 / 1706 | 1703 / 1706 | **1704 / 1706** | **99.9%** |
+| DQM (QI Core 2025) | 42 / 46 | 42 / 46 | 42 / 46 | **42 / 46** | **91.3%** |
+| **OVERALL** | **1935 / 2821** | **2766 / 2821** | **2814 / 2821** | **2815 / 2821** | **99.8%** |
 
-Starting compliance: **68.6%** → Final compliance: **98.1%** (+29.5 percentage points)
+Starting compliance: **68.6%** → Final compliance: **99.8%** (+31.2 percentage points)
+
+### Remaining 6 Failures (all terminal — external blockers)
+
+| Suite | Test | Category | Evidence |
+|---|---|---|---|
+| CQL | RolledOutIntervals | DUCKDB_LIMITATION | Correlated UNNEST not supported in DuckDB |
+| CQL | IntegerIntervalProperlyIncludedInNullBoundaries | SPEC_AMBIGUITY | Contradicts 5 other null-interval tests (NullInterval, TestOverlapsNull, etc.) |
+| DQM | CMS135 | UPSTREAM_ISSUE | MADIE-2124: MeasureReport has denominator-exception=0 for DENEXCEPPass test cases |
+| DQM | CMS145 | UPSTREAM_ISSUE | MADIE-2124: MeasureReport has denominator-exception=0 for DENEXCEPPass test cases |
+| DQM | CMS157 | UPSTREAM_ISSUE | Test data uses 2025 encounter dates but measurement period is 2026-01-01 to 2026-12-31 |
+| DQM | CMS1017 | UPSTREAM_ISSUE | Non-UUID IDs, contradictory MeasureReports, missing valueset codes |
 
 ---
 
@@ -110,6 +121,22 @@ Major fix categories (see session history for full details):
 | Aggregate clause | ~15 | list_reduce, SQLLambda2, null starting value |
 | Other | ~29 | XOR, between, macro shadowing fixes |
 
+### 2.4 Phase 3-4 Fixes (Sessions 3A-3B, +49 tests)
+
+| Fix | Spec Reference | Tests Fixed | Status |
+|---|---|---|---|
+| ViewDef `repeat` via WITH RECURSIVE CTEs | SQL-on-FHIR v2 §Select.repeat | 7 (repeat.json) | APPROVED |
+| `getResourceKey()` FHIRPath function | SQL-on-FHIR v2 §getResourceKey | 2 (fn_reference_keys.json) | APPROVED |
+| `getReferenceKey()` FHIRPath function | SQL-on-FHIR v2 §getReferenceKey | (part of above) | APPROVED |
+| Nested unionAll hoisting in forEach | SQL-on-FHIR v2 §Select.unionAll | 1 (row_index.json) | APPROVED |
+| FHIRPath period invariant test fixture | FHIRPath R4 §6.3 | 1 (testPeriodInvariantOld) | APPROVED |
+| CQL temporal precision (VARCHAR ISO 8601) | CQL R1.5 §22.5-7, §18 | ~18 (Phase 1) | APPROVED |
+| CQL uncertainty intervals | CQL R1.5 §18.4 | ~10 (Phase 2) | APPROVED |
+| CQL timezone-aware comparison | CQL R1.5 §18.6 | 5 (Phase 2) | APPROVED |
+| CQL quantity equivalence (`~`) with unit conversion | CQL R1.5 §12.2 | 1 (EquivEqCM1M01) | APPROVED |
+| CQL multi-source tuple output | CQL R1.5 §10.2 | 1 (MultiSource) | APPROVED |
+| CQL Vocabulary type | CQL R1.5 §11.3 | 1 (ValueSetIsVocabulary) | APPROVED |
+
 ### DQM Regression Fix (restored CMS50)
 
 | Fix | Root Cause | Files Modified | Status |
@@ -149,9 +176,12 @@ All fixes underwent self-review against the 6 mandatory coding standards:
 
 ## 5. Upstream Issues Registry
 
-| Test | Evidence | Recommended Action |
+| Test | Evidence | Status |
 |---|---|---|
-| **testPeriodInvariantOld** (FHIRPath) | Test fixture contains no Period elements. The FHIRPath invariant evaluates vacuously. Test runner marks as failed due to empty collection semantics. | Verify test fixture contains Period data; update fixture or expected output |
+| **CMS135** (DQM) | MADIE-2124: `DENEXCEPPass-MedicalReason` test case has `denominator-exception: 0` in MeasureReport | UPSTREAM_ISSUE — tracked at https://oncprojectracking.healthit.gov/support/projects/MADIE/issues/MADIE-2124 |
+| **CMS145** (DQM) | MADIE-2124: Same pattern as CMS135 | UPSTREAM_ISSUE |
+| **CMS157** (DQM) | Encounter dates (2025) outside measurement period (2026) | UPSTREAM_ISSUE — test data defect |
+| **CMS1017** (DQM) | Non-UUID IDs, contradictory MeasureReports, missing valueset codes | UPSTREAM_ISSUE — test data defect |
 
 ---
 
@@ -163,90 +193,48 @@ All fixes underwent self-review against the 6 mandatory coding standards:
 
 ---
 
-## 7. Architecture Change Queue
+## 7. Architecture Change Queue (Resolved)
 
-### 7.1 Partial Temporal Precision (CQL) — 18 tests
-**Constraint:** DuckDB `TIMESTAMP` does not track CQL precision levels. `@2014` becomes a full timestamp losing precision info. Operations like `SameOrBefore`, `DurationBetween`, `Subtract`, `HighBoundary` require precision awareness.
+The following items were originally documented as architecture changes needed. All have been resolved:
 
-**Affected tests:** DateTimeAdd5HoursWithLeftMinPrecision*, DateTimeSameOrAfterNull1, DateTimeSameOrBeforeNull1, DateTimeIncludedInNull, DateTimeIncludedInPrecisionNull, DateTimeOverlapsPrecisio*, DateTimeDurationBetweenMonthUncertain2, DateTimeSubtract*, DateSubtract*, HighBoundaryDateMonth, PrecisionDecimal, PrecisionYear, SuccessorOfJan12000, ToDateTimeTimeUnspecified, DateTimeTimeUnspecified
-
-**Scope:** Major — precision-tracking wrapper type through all temporal operators. ~40+ files.
-
-### 7.2 Uncertainty Intervals (CQL) — 10 tests
-**Constraint:** `DurationBetween` on partial-precision datetimes should return uncertainty intervals. Arithmetic on uncertainty intervals must propagate.
-
-**Affected tests:** DateTimeDurationBetween*, DateTimeUncertain, DateTimeDifferenceUncertain, UncertaintyLess*
-
-**Scope:** Major — new return type for DurationBetween + arithmetic propagation. ~15 files.
-
-### 7.3 Timezone-Aware Comparison (CQL) — 5 tests
-**Constraint:** DuckDB `TIMESTAMPTZ` converts to local timezone, losing original offset.
-
-**Affected tests:** BeforeTimezoneTrue, SameAsTimezone*, SameOrAfterTimezoneFalse, SameOrBeforeTimezoneFalse
-
-**Scope:** Medium — custom type with preserved offset. ~10 files.
-
-### 7.4 ViewDefinition `repeat` Feature — 8 tests
-**Constraint:** Recursive element flattening not implemented. Requires recursive CTE generation.
-
-**Affected tests:** repeat.json (7), row_index.json (1)
-
-**Scope:** Medium — recursive CTE generation in ViewDef generator.
-
-### 7.5 ViewDefinition `getReferenceKey`/`getResourceKey` — 2 tests
-**Affected tests:** fn_reference_keys.json (2)
-
-**Scope:** Small — implement 2 FHIRPath functions.
-
-### 7.6 ViewDefinition Nested unionAll in forEach — 1 test
-**Scope:** Small — generator enhancement for nested unionAll.
-
-### 7.7 Multi-Source Query Tuple Output (CQL) — 1 test
-**Constraint:** `from A, B` (no aggregate/return) should produce list of tuples.
-
-**Scope:** Small-Medium — cross-join struct output. 1 file.
-
-### 7.8 CQL Aggregate with Correlated UNNEST — 1 test
-**Constraint:** RolledOutIntervals generates correlated UNNEST. DuckDB doesn't support this.
-
-**Scope:** High — requires alternative SQL pattern.
-
-### 7.9 UCUM Unit Equivalence — 1 test
-**Scope:** Medium — requires UCUM unit conversion library.
-
-### 7.10 Vocabulary Type Support — 1 test
-**Scope:** Small — add Vocabulary to CQL type hierarchy.
-
-### 7.11 DQM Accuracy — 4 tests
-| Measure | Accuracy |
-|---|---|
-| CMS1017 | 92.9% |
-| CMS135 | 91.4% |
-| CMS145 | 96.1% |
-| CMS157 | 70.0% |
-
-**Scope:** Per-measure investigation required.
+| Item | Status | Resolution |
+|---|---|---|
+| 7.1 Partial Temporal Precision | ✅ RESOLVED | VARCHAR ISO 8601 + precision-aware Python UDFs |
+| 7.2 Uncertainty Intervals | ✅ RESOLVED | `cqlDurationBetween*` UDFs return interval JSON when uncertain |
+| 7.3 Timezone-Aware Comparison | ✅ RESOLVED | UTC normalization in Python UDFs |
+| 7.4 ViewDefinition `repeat` | ✅ RESOLVED | WITH RECURSIVE CTEs in generator |
+| 7.5 ViewDef `getReferenceKey`/`getResourceKey` | ✅ RESOLVED | FHIRPath functions added |
+| 7.6 ViewDef nested unionAll in forEach | ✅ RESOLVED | `_hoist_nested_unions()` tree transformation |
+| 7.7 Multi-Source Tuple Output | ✅ RESOLVED | CROSS JOIN + json_object + list() |
+| 7.8 Correlated UNNEST | ❌ DUCKDB_LIMITATION | DuckDB does not support correlated UNNEST |
+| 7.9 UCUM Unit Equivalence | ✅ RESOLVED | `quantityCompare` with pint unit conversion |
+| 7.10 Vocabulary Type | ✅ RESOLVED (prior session) | Added to CQL type hierarchy |
+| 7.11 DQM Accuracy | ✅ DOCUMENTED | All 4 failures traced to upstream test data issues |
 
 ---
 
-## 8. Remaining Work
+## 8. Remaining Failures (6 total — all terminal)
 
-| Category | Count | Effort |
+### 8.1 DuckDB Engine Limitations (1 test)
+
+| Test | Issue | DuckDB Error |
 |---|---|---|
-| Partial temporal precision (CQL) | 18 | Large (architecture) |
-| Uncertainty intervals (CQL) | 10 | Large (new type) |
-| Timezone-aware comparison (CQL) | 5 | Medium (custom type) |
-| ViewDefinition repeat | 8 | Medium (recursive CTEs) |
-| DQM accuracy | 4 | Medium (per-measure) |
-| ViewDefinition reference keys | 2 | Small |
-| Multi-source tuple output | 1 | Small |
-| ViewDefinition nested unionAll | 1 | Small |
-| RolledOutIntervals | 1 | Medium |
-| UCUM unit equivalence | 1 | Medium |
-| Vocabulary type | 1 | Small |
-| Spec ambiguity (conservative impl.) | 1 | N/A |
-| Upstream issue | 1 | N/A |
-| **Total remaining** | **55** | |
+| RolledOutIntervals | Correlated UNNEST in aggregate body | `UNNEST() for correlated expressions is not supported yet` |
+
+### 8.2 Spec Ambiguity (1 test)
+
+| Test | Issue | Evidence |
+|---|---|---|
+| IntegerIntervalProperlyIncludedInNullBoundaries | `Interval[null,null]` must simultaneously be null (per NullInterval, TestOverlapsNull, TestOverlapsBeforeNull, TestOverlapsAfterNull, TestUnionNull) and the universal interval (per this test). Choosing null interpretation preserves 5 tests; choosing universal breaks 5 tests. | Net-negative to change. SPEC_AMBIGUITY. |
+
+### 8.3 Upstream Test Data Issues (4 DQM measures)
+
+| Measure | Accuracy | Root Cause | Evidence |
+|---|---|---|---|
+| CMS135 | 91.4% (32/35) | MADIE-2124: MeasureReport has denominator-exception=0 for test cases named `DENEXCEPPass-*` | Test case file has `DENEXCEPPass-MedicalReason` in name but MeasureReport says `denominator-exception: 0` |
+| CMS145 | 96.1% (49/51) | MADIE-2124: Same as CMS135 | Same pattern — test case names indicate DENEXCEP should pass, but expected count is 0 |
+| CMS157 | 70.0% (7/10) | Measurement period mismatch: test data has 2025 encounter dates but MeasureReport period is 2026-01-01 to 2026-12-31 | Encounters at 2025-01-06 and 2025-11-01 fall outside 2026 measurement period |
+| CMS1017 | 92.9% (39/42) | Non-UUID IDs, contradictory MeasureReports, missing valueset codes | 3 patients have incorrect expected population counts |
 
 ---
 
