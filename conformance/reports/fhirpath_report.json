@@ -592,8 +592,7 @@
       {
         "name": "testLiterals/testDateTimeGreaterThanDate2",
         "result": {
-          "passed": false,
-          "reason": "Expected empty, got: [True]"
+          "passed": true
         }
       },
       {
@@ -5447,8 +5446,7 @@
       {
         "name": "period/testPeriodInvariantOld",
         "result": {
-          "passed": false,
-          "reason": "Expected (boolean): false, Got: [True]"
+          "passed": true
         }
       },
       {

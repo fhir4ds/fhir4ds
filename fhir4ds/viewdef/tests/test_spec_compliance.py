@@ -742,8 +742,6 @@ class TestSpecExecution:
         "logic.json:filtering with 'or'": "ofType(boolean) broken on choice types",
         # row_index with repeat — depends on repeat being implemented
         # "row_index.json:%rowIndex with repeat": "repeat not implemented",
-        # unionAll nested inside forEach — columns from inner branches not propagated
-        "row_index.json:%rowIndex in unionAll inside forEach": "unionAll inside forEach not fully supported",
     }
 
     @pytest.mark.parametrize("test_info", get_all_spec_tests(),

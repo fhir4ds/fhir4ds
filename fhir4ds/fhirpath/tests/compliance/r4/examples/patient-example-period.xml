@@ -5,4 +5,10 @@
   <name>
     <given value="Test"/>
   </name>
+  <identifier>
+    <period>
+      <start value="2025-01-15"/>
+      <end value="2025-01"/>
+    </period>
+  </identifier>
 </Patient>

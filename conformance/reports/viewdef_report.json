@@ -708,8 +708,7 @@
       {
         "name": "%rowIndex in unionAll inside forEach",
         "result": {
-          "passed": false,
-          "reason": "Row count mismatch: got 2, expected 5"
+          "passed": true
         }
       },
       {

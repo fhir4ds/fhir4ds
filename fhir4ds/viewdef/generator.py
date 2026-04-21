@@ -17,6 +17,7 @@ Type mapping (FHIRPath type -> DuckDB UDF):
 """
 
 import re
+import copy
 import logging
 from typing import List, Optional, Set, Tuple
 
@@ -934,15 +935,69 @@ class SQLGenerator:
             queries.append(self._generate_single_resource(single_vd))
         return "\nUNION ALL\n".join(queries)
 
+    def _hoist_nested_unions(self, selects: List[Select]) -> List[Select]:
+        """Hoist unionAll nested inside forEach/forEachOrNull to the parent level.
+
+        When a forEach-select has a nested select containing unionAll, the
+        UNION ALL branches cannot be handled by ``_process_selects`` (which
+        returns a flat tuple of cols/joins/wheres).  This transformation
+        lifts nested unionAll up by replicating the parent context for each
+        branch, so ``_generate_single_resource`` can handle them at the top
+        level via ``_build_union_all_query``.
+
+        SQL-on-FHIR v2 §Select.unionAll — nested unions inherit parent context.
+        """
+        result: List[Select] = []
+        for s in selects:
+            # Recursively hoist in sub-selects first
+            if s.select:
+                s = copy.copy(s)
+                s.select = self._hoist_nested_unions(list(s.select))
+            # Recursively hoist inside unionAll branches too
+            if s.unionAll:
+                s = copy.copy(s)
+                s.unionAll = self._hoist_nested_unions(list(s.unionAll))
+
+            # Check if this select has a forEach/forEachOrNull context AND
+            # a nested select child that contains unionAll
+            if (s.forEach or s.forEachOrNull or s.repeat) and s.select:
+                nested_unions = [sub for sub in s.select if sub.unionAll]
+                if nested_unions:
+                    nested_regular = [sub for sub in s.select if not sub.unionAll]
+                    # For each nested unionAll, hoist its branches
+                    for nu in nested_unions:
+                        branches = []
+                        for branch in nu.unionAll:
+                            # Replicate parent context for each branch
+                            hoisted = Select(
+                                forEach=s.forEach,
+                                forEachOrNull=s.forEachOrNull,
+                                repeat=s.repeat,
+                                column=list(s.column),
+                                select=list(nested_regular) + [branch],
+                                where=list(s.where),
+                            )
+                            branches.append(hoisted)
+                        # Replace the original select with a unionAll wrapper
+                        result.append(Select(unionAll=branches))
+                    continue
+
+            result.append(s)
+        return result
+
     def _generate_single_resource(self, view_definition: ViewDefinition) -> str:
         """Generate SQL for a single-resource ViewDefinition (internal)."""
         base_resource_var = f"{self.table_alias}.resource"
         table_name = self._get_table_name(view_definition.resource)
         root_where = list(view_definition.where)
 
+        # Hoist nested unionAll (inside forEach) to top level so
+        # _build_union_all_query can process them.
+        hoisted_selects = self._hoist_nested_unions(list(view_definition.select))
+
         union_selects: List[Select] = []
         sibling_selects: List[Select] = []
-        for s in view_definition.select:
+        for s in hoisted_selects:
             if s.unionAll:
                 union_selects.append(s)
             else:

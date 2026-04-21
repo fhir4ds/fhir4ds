@@ -2603,8 +2603,7 @@
       {
         "name": "EquivEqCM1M01",
         "result": {
-          "passed": false,
-          "reason": "Expected True (bool), got False (bool)"
+          "passed": true
         }
       },
       {

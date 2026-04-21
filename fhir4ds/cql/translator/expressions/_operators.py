@@ -2531,6 +2531,43 @@ class OperatorsMixin:
             if left_types and right_types and left_types.isdisjoint(right_types):
                 return SQLLiteral(value=is_negated)
 
+        # CQL §12.2: Quantity equivalence — convert units and compare values.
+        left_is_qty = _is_quantity_expression(left) or self._is_cql_quantity_expr(expr.left)
+        right_is_qty = _is_quantity_expression(right) or self._is_cql_quantity_expr(expr.right)
+        if left_is_qty or right_is_qty:
+            cmp_result = SQLFunctionCall(
+                name="quantityCompare",
+                args=[left, right, SQLLiteral(value="==")],
+            )
+            # Equivalence: null-safe (both null → true, one null → false)
+            equiv_qty = SQLCase(
+                when_clauses=[
+                    (
+                        SQLBinaryOp(
+                            operator="AND",
+                            left=SQLUnaryOp(operator="IS NULL", operand=left, prefix=False),
+                            right=SQLUnaryOp(operator="IS NULL", operand=right, prefix=False),
+                        ),
+                        SQLLiteral(value=True),
+                    ),
+                    (
+                        SQLBinaryOp(
+                            operator="OR",
+                            left=SQLUnaryOp(operator="IS NULL", operand=left, prefix=False),
+                            right=SQLUnaryOp(operator="IS NULL", operand=right, prefix=False),
+                        ),
+                        SQLLiteral(value=False),
+                    ),
+                ],
+                else_clause=SQLFunctionCall(
+                    name="COALESCE",
+                    args=[cmp_result, SQLLiteral(value=False)],
+                ),
+            )
+            if is_negated:
+                return SQLUnaryOp(operator="NOT", operand=equiv_qty)
+            return equiv_qty
+
         equiv_case = SQLCase(
             when_clauses=[
                 (
