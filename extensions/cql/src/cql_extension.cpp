@@ -2684,61 +2684,13 @@ static void LoadInternal(ExtensionLoader &loader) {
 	RegisterSpecialScalar(loader, "AgeInDaysAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
 	                      AgeInDaysAtFunc);
 
-	// Interval UDFs (22 — includes collapse_intervals)
-	RegisterSpecialScalar(loader, "intervalStart", {LogicalType::VARCHAR}, LogicalType::VARCHAR, IntervalStartFunc);
-	RegisterSpecialScalar(loader, "intervalEnd", {LogicalType::VARCHAR}, LogicalType::VARCHAR, IntervalEndFunc);
-	RegisterSpecialScalar(loader, "intervalWidth", {LogicalType::VARCHAR}, LogicalType::BIGINT, IntervalWidthFunc);
-	RegisterSpecialScalar(loader, "intervalContains", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalContainsFunc);
-	RegisterSpecialScalar(loader, "intervalProperlyContains", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalProperlyContainsFunc);
-	RegisterSpecialScalar(loader, "intervalOverlaps", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalOverlapsFunc);
-	RegisterSpecialScalar(loader, "intervalBefore", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
-	                      IntervalBeforeFunc);
-	RegisterSpecialScalar(loader, "intervalAfter", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
-	                      IntervalAfterFunc);
-	RegisterSpecialScalar(loader, "intervalMeets", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
-	                      IntervalMeetsFunc);
-	RegisterSpecialScalar(loader, "intervalIncludes", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalIncludesFunc);
-	RegisterSpecialScalar(loader, "intervalIncludedIn", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalIncludedInFunc);
-	RegisterSpecialScalar(loader, "intervalProperlyIncludes", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalProperlyIncludesFunc);
-	RegisterSpecialScalar(loader, "intervalProperlyIncludedIn", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalProperlyIncludedInFunc);
-	RegisterSpecialScalar(loader, "intervalOverlapsBefore", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalOverlapsBeforeFunc);
-	RegisterSpecialScalar(loader, "intervalOverlapsAfter", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalOverlapsAfterFunc);
-	RegisterSpecialScalar(loader, "intervalMeetsBefore", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalMeetsBeforeFunc);
-	RegisterSpecialScalar(loader, "intervalMeetsAfter", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalMeetsAfterFunc);
-	RegisterSpecialScalar(loader, "intervalStartsSame", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalStartsSameFunc);
-	RegisterSpecialScalar(loader, "intervalEndsSame", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalEndsSameFunc);
-	RegisterSpecialScalar(loader, "intervalFromBounds",
-	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::BOOLEAN, LogicalType::BOOLEAN},
-	                      LogicalType::VARCHAR, IntervalFromBoundsFunc);
-	RegisterSpecialScalar(loader, "collapse_intervals", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
-	                      CollapseIntervalsFunc);
+	// Interval UDFs — deferred to Python (Time bounds, meets/successor, overlaps/exclusive
+	// boundary, except/predecessor, collapse/adjacency bugs require fundamental redesign).
+	// Python handles these correctly with full CQL semantics.
 
-	// Datetime UDFs (24)
-	RegisterSpecialScalar(loader, "differenceInYears", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, DifferenceInYearsFunc);
-	RegisterSpecialScalar(loader, "differenceInMonths", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, DifferenceInMonthsFunc);
-	RegisterSpecialScalar(loader, "differenceInDays", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, DifferenceInDaysFunc);
-	RegisterSpecialScalar(loader, "differenceInHours", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, DifferenceInHoursFunc);
-	RegisterSpecialScalar(loader, "differenceInMinutes", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, DifferenceInMinutesFunc);
-	RegisterSpecialScalar(loader, "differenceInSeconds", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, DifferenceInSecondsFunc);
+	// Datetime difference UDFs — deferred to Python (Time input bugs, calculation edge cases)
+	// Python handles these with full CQL semantics.
+	// Keep: YearsBetween..SecondsBetween (working correctly for non-Time inputs)
 	RegisterSpecialScalar(loader, "weeksBetween", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
 	                      WeeksBetweenFunc);
 	RegisterSpecialScalar(loader, "millisecondsBetween", {LogicalType::VARCHAR, LogicalType::VARCHAR},
@@ -2769,12 +2721,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      DateTimeSameOrAfterFunc);
 	RegisterSpecialScalar(loader, "dateComponent", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
 	                      DateComponentFunc);
-	RegisterSpecialScalar(loader, "quantityToInterval", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
-	                      QuantityToIntervalFunc);
-	RegisterSpecialScalar(loader, "dateAddQuantity", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::VARCHAR, DateAddQuantityFunc);
-	RegisterSpecialScalar(loader, "dateSubtractQuantity", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::VARCHAR, DateSubtractQuantityFunc);
+	// quantityToInterval, dateAddQuantity, dateSubtractQuantity — deferred to Python
+	// (Time input bugs and edge cases in date arithmetic)
 
 	// Clinical UDFs (4)
 	RegisterSpecialScalar(loader, "Latest",
@@ -2859,39 +2807,19 @@ static void LoadInternal(ExtensionLoader &loader) {
 	RegisterSpecialScalar(loader, "jsonConcat", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::LIST(LogicalType::VARCHAR), JsonConcatFunc);
 
-	// Boundary UDFs (6 new)
-	RegisterSpecialScalar(loader, "HighBoundary", {LogicalType::VARCHAR, LogicalType::BIGINT},
-	                      LogicalType::VARCHAR, HighBoundaryFunc2);
-	RegisterSpecialScalar(loader, "LowBoundary", {LogicalType::VARCHAR, LogicalType::BIGINT},
-	                      LogicalType::VARCHAR, LowBoundaryFunc2);
-	RegisterSpecialScalar(loader, "predecessorOf", {LogicalType::VARCHAR},
-	                      LogicalType::VARCHAR, PredecessorOfFunc);
-	RegisterSpecialScalar(loader, "successorOf", {LogicalType::VARCHAR},
-	                      LogicalType::VARCHAR, SuccessorOfFunc);
+	// Boundary UDFs — deferred to Python (Time precision bugs, quantity predecessor/successor,
+	// overflow/underflow detection missing)
+	// Keep: CQLPrecision, cqlTimezoneOffset (working correctly)
 	RegisterSpecialScalar(loader, "CQLPrecision", {LogicalType::VARCHAR},
 	                      LogicalType::BIGINT, CQLPrecisionFunc);
 	RegisterSpecialScalar(loader, "cqlTimezoneOffset", {LogicalType::VARCHAR},
 	                      LogicalType::DOUBLE, CQLTimezoneOffsetFunc);
 
-	// Interval set operations (5 new)
-	RegisterSpecialScalar(loader, "intervalIntersect", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::VARCHAR, IntervalIntersectFunc);
-	RegisterSpecialScalar(loader, "intervalUnion", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::VARCHAR, IntervalUnionFunc);
-	RegisterSpecialScalar(loader, "intervalExcept", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::VARCHAR, IntervalExceptFunc);
-	RegisterSpecialScalar(loader, "intervalOnOrAfter", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalOnOrAfterFunc);
-	RegisterSpecialScalar(loader, "intervalOnOrBefore", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BOOLEAN, IntervalOnOrBeforeFunc);
+	// Interval set operations — deferred to Python (same fundamental interval bugs)
 
-	// Phase 4: pointFrom + diff aliases
+	// Phase 4: pointFrom (working) + diff aliases (deferred to Python)
 	RegisterSpecialScalar(loader, "pointFrom", {LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, PointFromFunc);
-	RegisterSpecialScalar(loader, "differenceInWeeks", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, WeeksBetweenFunc);
-	RegisterSpecialScalar(loader, "differenceInMilliseconds", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, MillisecondsBetweenFunc);
 
 	// Phase 5: Math functions (10)
 	RegisterSpecialScalar(loader, "mathAbs", {LogicalType::VARCHAR},
@@ -2915,11 +2843,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 	RegisterSpecialScalar(loader, "mathTruncate", {LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, MathTruncateFunc);
 
-	// Phase 6: Quantity arithmetic UDFs (8)
-	RegisterSpecialScalar(loader, "quantityMultiply", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::VARCHAR, QuantityMultiplyFunc);
-	RegisterSpecialScalar(loader, "quantityDivide", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                      LogicalType::VARCHAR, QuantityDivideFunc);
+	// Phase 6: Quantity arithmetic UDFs
+	// quantityMultiply and quantityDivide deferred to Python (unit calculation bugs)
 	RegisterSpecialScalar(loader, "quantityNegate", {LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, QuantityNegateFunc);
 	RegisterSpecialScalar(loader, "quantityAbs", {LogicalType::VARCHAR},

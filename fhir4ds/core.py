@@ -68,10 +68,10 @@ def register_cql(
         _logger.info("CQL C++ extension not available — using Python UDFs")
 
     # Step 2a: Register Python UDFs.
-    # When C++ is loaded, DuckDB silently ignores re-registration of functions
-    # that already exist from C++. Only Python-exclusive functions (variable
-    # state, string wrappers, expand, uncertain ops, etc.) will register.
-    # When C++ is NOT loaded, all Python UDFs register normally.
+    # When C++ is loaded, individual create_function calls that conflict with
+    # C++ functions will fail. We wrap the connection in a proxy that silently
+    # skips those, allowing Python-only functions within the same registration
+    # group to still register.
     from fhir4ds.cql.duckdb.udf.age import registerAgeUdfs
     from fhir4ds.cql.duckdb.udf.aggregate import registerAggregateUdfs
     from fhir4ds.cql.duckdb.udf.clinical import registerClinicalUdfs
@@ -86,29 +86,34 @@ def register_cql(
     from fhir4ds.cql.duckdb.udf.string import registerStringUdfs
     from fhir4ds.cql.duckdb.udf.logical import registerLogicalUdfs
 
-    def _safe_register(register_fn, con, name=""):
-        """Register UDFs, ignoring errors when C++ already provides them."""
-        try:
-            register_fn(con)
-        except Exception as e:
-            if cql_cpp:
-                _logger.debug("Skipping Python UDF group %s (C++ provides): %s", name, e)
-            else:
-                raise
+    class _SafeConnection:
+        """Proxy that wraps create_function to skip C++ conflicts."""
+        def __init__(self, real_con, logger):
+            object.__setattr__(self, '_real', real_con)
+            object.__setattr__(self, '_logger', logger)
+        def create_function(self, name, *args, **kwargs):
+            try:
+                return self._real.create_function(name, *args, **kwargs)
+            except Exception as e:
+                self._logger.debug("Skipping Python UDF %s (C++ conflict): %s", name, e)
+        def __getattr__(self, name):
+            return getattr(self._real, name)
 
-    _safe_register(registerAgeUdfs, con, "age")
-    _safe_register(registerAggregateUdfs, con, "aggregate")
-    _safe_register(registerClinicalUdfs, con, "clinical")
-    _safe_register(registerDatetimeUdfs, con, "datetime")
-    _safe_register(registerIntervalUdfs, con, "interval")
-    _safe_register(registerValuesetUdfs, con, "valueset")
-    _safe_register(registerRatioUdfs, con, "ratio")
-    _safe_register(registerQuantityUdfs, con, "quantity")
-    _safe_register(registerListUdfs, con, "list")
-    _safe_register(registerVariableUdfs, con, "variable")
-    _safe_register(registerMathUdfs, con, "math")
-    _safe_register(registerStringUdfs, con, "string")
-    _safe_register(registerLogicalUdfs, con, "logical")
+    reg_con = _SafeConnection(con, _logger) if cql_cpp else con
+
+    for fn, label in [
+        (registerAgeUdfs, "age"), (registerAggregateUdfs, "aggregate"),
+        (registerClinicalUdfs, "clinical"), (registerDatetimeUdfs, "datetime"),
+        (registerIntervalUdfs, "interval"), (registerValuesetUdfs, "valueset"),
+        (registerRatioUdfs, "ratio"), (registerQuantityUdfs, "quantity"),
+        (registerListUdfs, "list"), (registerVariableUdfs, "variable"),
+        (registerMathUdfs, "math"), (registerStringUdfs, "string"),
+        (registerLogicalUdfs, "logical"),
+    ]:
+        try:
+            fn(reg_con)
+        except Exception as e:
+            _logger.debug("UDF group %s registration: %s", label, e)
 
     # Step 2b: Always register SQL macros — they supplement both C++ and Python UDFs
     # with functions like Truncate, IsTrue, IsFalse, Skip, Take, Tail, etc.

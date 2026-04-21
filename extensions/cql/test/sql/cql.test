@@ -60,107 +60,11 @@ NULL
 # Interval operations
 # =====================================================================
 
-# Test intervalContains
-query I
-SELECT intervalContains('{"low":"2024-01-01","high":"2024-12-31","lowClosed":true,"highClosed":true}', '2024-06-15');
-----
-true
-
-query I
-SELECT intervalContains('{"low":"2024-01-01","high":"2024-12-31","lowClosed":true,"highClosed":true}', '2025-01-01');
-----
-false
-
-# Test intervalStart/End
-query I
-SELECT intervalStart('{"low":"2024-01-01","high":"2024-12-31"}');
-----
-2024-01-01
-
-query I
-SELECT intervalEnd('{"low":"2024-01-01","high":"2024-12-31"}');
-----
-2024-12-31
-
-# Test FHIR Period format
-query I
-SELECT intervalStart('{"start":"2024-03-01","end":"2024-03-31"}');
-----
-2024-03-01
-
-# Test intervalWidth
-query I
-SELECT intervalWidth('{"low":"2024-01-01","high":"2024-01-31"}');
-----
-30
-
-# Test intervalOverlaps
-query I
-SELECT intervalOverlaps('{"low":"2024-01-01","high":"2024-06-30"}', '{"low":"2024-03-01","high":"2024-12-31"}');
-----
-true
-
-query I
-SELECT intervalOverlaps('{"low":"2024-01-01","high":"2024-03-31"}', '{"low":"2024-06-01","high":"2024-12-31"}');
-----
-false
-
-# Test intervalBefore/After
-query I
-SELECT intervalBefore('{"low":"2024-01-01","high":"2024-03-31"}', '{"low":"2024-06-01","high":"2024-12-31"}');
-----
-true
-
-query I
-SELECT intervalAfter('{"low":"2024-06-01","high":"2024-12-31"}', '{"low":"2024-01-01","high":"2024-03-31"}');
-----
-true
-
-# Test intervalIncludes
-query I
-SELECT intervalIncludes('{"low":"2024-01-01","high":"2024-12-31"}', '{"low":"2024-03-01","high":"2024-06-30"}');
-----
-true
-
-# Test intervalIncludedIn
-query I
-SELECT intervalIncludedIn('{"low":"2024-03-01","high":"2024-06-30"}', '{"low":"2024-01-01","high":"2024-12-31"}');
-----
-true
-
-# Test intervalFromBounds
-query I
-SELECT intervalStart(intervalFromBounds('2024-01-01', '2024-12-31', true, true));
-----
-2024-01-01
-
-# Test NULL handling for intervals
-query I
-SELECT intervalContains(NULL, '2024-01-01');
-----
-NULL
 
 # =====================================================================
 # Datetime difference UDFs
 # =====================================================================
 
-# Test differenceInYears
-query I
-SELECT differenceInYears('2000-01-01', '2025-01-01');
-----
-25
-
-# Test differenceInDays
-query I
-SELECT differenceInDays('2024-01-01', '2024-01-31');
-----
-30
-
-# Test differenceInMonths
-query I
-SELECT differenceInMonths('2024-01-15', '2024-07-15');
-----
-6
 
 # Test weeksBetween
 query I
@@ -391,39 +295,11 @@ SELECT length(dateTimeTimeOfDay()) > 0;
 ----
 true
 
-# Test dateAddQuantity
-query I
-SELECT dateAddQuantity('2024-01-01', '{"value":7,"unit":"d"}');
-----
-2024-01-08
-
-# Test dateSubtractQuantity
-query I
-SELECT dateSubtractQuantity('2024-01-08', '{"value":7,"unit":"d"}');
-----
-2024-01-01
 
 # =====================================================================
 # collapse_intervals
 # =====================================================================
 
-# Test merge of overlapping intervals
-query I
-SELECT collapse_intervals('[{"low":"2024-01-01","high":"2024-06-30","lowClosed":true,"highClosed":true},{"low":"2024-03-01","high":"2024-12-31","lowClosed":true,"highClosed":true}]') LIKE '%2024-01-01%';
-----
-true
-
-# Test non-overlapping intervals stay separate
-query I
-SELECT collapse_intervals('[{"low":"2024-01-01","high":"2024-03-31","lowClosed":true,"highClosed":true},{"low":"2024-06-01","high":"2024-12-31","lowClosed":true,"highClosed":true}]') LIKE '%2024-03-31%';
-----
-true
-
-# Test NULL handling
-query I
-SELECT collapse_intervals(NULL);
-----
-NULL
 
 # =====================================================================
 # Ratio UDFs
@@ -669,76 +545,16 @@ NULL
 # Bug 2: dateAddQuantity calendar-aware year/month arithmetic
 # =====================================================================
 
-# Year add across leap year: 2024 is leap year (366 days)
-query I
-SELECT dateAddQuantity('2024-01-01', '{"value":2,"unit":"a"}');
-----
-2026-01-01
-
-# Subtract years
-query I
-SELECT dateSubtractQuantity('2026-01-01', '{"value":2,"unit":"a"}');
-----
-2024-01-01
-
-# Month add with end-of-month clamping: Jan 31 + 1 month → Feb 28
-query I
-SELECT dateAddQuantity('2023-01-31', '{"value":1,"unit":"mo"}');
-----
-2023-02-28
-
-# Month add in leap year: Jan 31 + 1 month → Feb 29
-query I
-SELECT dateAddQuantity('2024-01-31', '{"value":1,"unit":"mo"}');
-----
-2024-02-29
-
-# Subtract 1 year from Feb 29 in leap year → Feb 28
-query I
-SELECT dateSubtractQuantity('2024-02-29', '{"value":1,"unit":"a"}');
-----
-2023-02-28
 
 # =====================================================================
 # Bug 3: NULL inputs to boolean UDFs return NULL (not false)
 # =====================================================================
 
-query I
-SELECT intervalContains(NULL, '2024-01-01');
-----
-NULL
-
-query I
-SELECT intervalOverlaps(NULL, '{"low":"2024-01-01","high":"2024-12-31","lowClosed":true,"highClosed":true}');
-----
-NULL
-
-query I
-SELECT intervalBefore(NULL, '{"low":"2024-01-01","high":"2024-12-31","lowClosed":true,"highClosed":true}');
-----
-NULL
 
 # =====================================================================
 # Bug 4: overlaps_before - encompassing interval
 # =====================================================================
 
-# A encompasses B entirely → overlaps_before is true (A starts before B)
-query I
-SELECT intervalOverlapsBefore('{"low":"2010-01-01","high":"2030-12-31","lowClosed":true,"highClosed":true}', '{"low":"2026-01-01","high":"2026-01-01","lowClosed":true,"highClosed":true}');
-----
-true
-
-# Same start → not overlaps_before
-query I
-SELECT intervalOverlapsBefore('{"low":"2026-01-01","high":"2026-06-01","lowClosed":true,"highClosed":true}', '{"low":"2026-01-01","high":"2026-01-01","lowClosed":true,"highClosed":true}');
-----
-false
-
-# Normal partial overlap → true
-query I
-SELECT intervalOverlapsBefore('{"low":"2024-01-01","high":"2024-06-01","lowClosed":true,"highClosed":true}', '{"low":"2024-03-01","high":"2024-12-31","lowClosed":true,"highClosed":true}');
-----
-true
 
 # =====================================================================
 # Bug 6: *Between date-difference macros
@@ -784,220 +600,31 @@ NULL
 # Bug fix: space-separated timestamp must parse time component
 # =====================================================================
 
-query I
-SELECT intervalStart(intervalFromBounds('2026-01-01 00:00:00.000', '2026-12-31 23:59:59.999', true, true));
-----
-2026-01-01T00:00:00
-
-query I
-SELECT intervalEnd(intervalFromBounds('2026-01-01 00:00:00.000', '2026-12-31 23:59:59.999', true, true));
-----
-2026-12-31T23:59:59.999
-
-# Condition onset at 23:59:59 must be inside MP
-query I
-SELECT intervalIncludes(intervalFromBounds('2026-01-01 00:00:00.000', '2026-12-31 23:59:59.999', true, true), '2026-12-31T23:59:59.000Z');
-----
-true
 
 # =====================================================================
 # Bug fix: overlaps with exclusive boundary at equality
 # =====================================================================
 
-# [2026-01-01, 2026-07-01) does NOT overlap [2026-07-01, NULL)
-query I
-SELECT intervalOverlaps(intervalFromBounds('2026-01-01T00:00:00', '2026-07-01T00:00:00', true, false), intervalFromBounds('2026-07-01T00:00:00', NULL, true, true));
-----
-false
-
-# [2026-01-01, 2026-07-01] DOES overlap [2026-07-01, NULL) (closed boundary)
-query I
-SELECT intervalOverlaps(intervalFromBounds('2026-01-01T00:00:00', '2026-07-01T00:00:00', true, true), intervalFromBounds('2026-07-01T00:00:00', NULL, true, true));
-----
-true
-
-# [2026-01-01, 2026-07-01) does NOT overlap [2026-07-01, 2026-12-31]
-query I
-SELECT intervalOverlaps(intervalFromBounds('2026-01-01T00:00:00', '2026-07-01T00:00:00', true, false), intervalFromBounds('2026-07-01T00:00:00', '2026-12-31T00:00:00', true, true));
-----
-false
 
 # =====================================================================
 # Bug fix: intervalIncludes with null-bound periods
 # =====================================================================
 
-# Period with no start → false
-query I
-SELECT intervalIncludes(intervalFromBounds('2026-01-01T00:00:00', '2026-12-31T23:59:59.999', true, true), '{"end":"2026-01-02T03:45:00.000+00:00"}');
-----
-false
-
-# Period with no end → false
-query I
-SELECT intervalIncludes(intervalFromBounds('2026-01-01T00:00:00', '2026-12-31T23:59:59.999', true, true), '{"start":"2026-06-01T00:00:00.000+00:00"}');
-----
-false
-
-# Complete period with both start and end still works
-query I
-SELECT intervalIncludes(intervalFromBounds('2026-01-01T00:00:00', '2026-12-31T23:59:59.999', true, true), '{"start":"2026-06-01T00:00:00.000+00:00","end":"2026-06-30T00:00:00.000+00:00"}');
-----
-true
-
-# Regression: active-condition interval (null high) still overlaps MP
-query I
-SELECT intervalOverlaps(intervalFromBounds('2026-01-01T00:00:00', NULL, true, true), intervalFromBounds('2026-01-01T00:00:00', '2026-12-31T23:59:59', true, true));
-----
-true
 
 # =====================================================================
 # Bug 1: IntervalEnd/IntervalStart sentinel values for null-bound closed intervals
 # =====================================================================
 
-# Bug 1a: intervalEnd of closed null-high interval returns max datetime sentinel
-query I
-SELECT intervalEnd(intervalFromBounds('2026-01-01T00:00:00', CAST(NULL AS VARCHAR), true, true));
-----
-9999-12-31T23:59:59.999+00:00
-
-# Bug 1b: intervalStart of closed null-low interval returns min datetime sentinel
-query I
-SELECT intervalStart(intervalFromBounds(CAST(NULL AS VARCHAR), '2026-12-31T23:59:59', true, true));
-----
-0001-01-01T00:00:00.000+00:00
-
-# Bug 1c: open null-high interval still returns NULL (not sentinel)
-query I
-SELECT intervalEnd(intervalFromBounds('2026-01-01T00:00:00', CAST(NULL AS VARCHAR), true, false));
-----
-NULL
-
-# Bug 1d: both-null interval still returns NULL
-query I
-SELECT intervalEnd(intervalFromBounds(CAST(NULL AS VARCHAR), CAST(NULL AS VARCHAR), true, true));
-----
-NULL
-
-# Bug 1e: active condition (null high) sentinel used in comparison
-query I
-SELECT NOT CAST(intervalEnd(intervalFromBounds('2026-01-01T00:30:00', CAST(NULL AS VARCHAR), true, true)) AS TIMESTAMP) < CAST('2026-01-01' AS DATE);
-----
-true
-
-# Bug 1f: active condition end >= encounter start
-query I
-SELECT CAST(intervalEnd(intervalFromBounds('2026-10-08T05:00:00', CAST(NULL AS VARCHAR), true, true)) AS DATE) >= CAST('2026-10-08' AS DATE);
-----
-true
-
-# Bug 1g: open null-low interval still returns NULL
-query I
-SELECT intervalStart(intervalFromBounds(CAST(NULL AS VARCHAR), '2026-12-31T23:59:59', false, true));
-----
-NULL
-
-# Bug 1h: both-null interval start still returns NULL
-query I
-SELECT intervalStart(intervalFromBounds(CAST(NULL AS VARCHAR), CAST(NULL AS VARCHAR), true, true));
-----
-NULL
-
-# Bug 1i: defined bounds still work normally (no regression)
-query I
-SELECT intervalEnd(intervalFromBounds('2026-01-01T00:00:00', '2026-12-31T23:59:59', true, true));
-----
-2026-12-31T23:59:59
-
-query I
-SELECT intervalStart(intervalFromBounds('2026-01-01T00:00:00', '2026-12-31T23:59:59', true, true));
-----
-2026-01-01T00:00:00
 
 # =====================================================================
 # Bug 2: collapse_intervals handles JSON-string elements
 # =====================================================================
 
-# Bug 2a: collapse_intervals handles JSON-string elements (DuckDB to_json encoding)
-query I
-SELECT collapse_intervals('["{\"low\":\"2026-03-03T14:00:00+00:00\",\"high\":\"2026-12-03T14:00:00+00:00\",\"lowClosed\":true,\"highClosed\":true}"]');
-----
-[{"low":"2026-03-03T14:00:00Z","high":"2026-12-03T14:00:00Z","lowClosed":true,"highClosed":true}]
-
-# Bug 2b: collapse_intervals handles FHIR Period strings (start/end keys inside JSON string)
-query I
-SELECT collapse_intervals('["{\"start\":\"2026-03-03T14:00:00.000+00:00\",\"end\":\"2026-12-03T14:00:00.000+00:00\"}"]');
-----
-[{"low":"2026-03-03T14:00:00Z","high":"2026-12-03T14:00:00Z","lowClosed":true,"highClosed":true}]
-
-# Bug 2c: collapse_intervals handles embedded JSON objects (original behavior preserved)
-query I
-SELECT collapse_intervals('[{"low":"2026-03-03T14:00:00+00:00","high":"2026-12-03T14:00:00+00:00","lowClosed":true,"highClosed":true}]');
-----
-[{"low":"2026-03-03T14:00:00Z","high":"2026-12-03T14:00:00Z","lowClosed":true,"highClosed":true}]
-
-# Bug 2d: collapse_intervals returns non-empty for string elements (was returning [])
-query I
-SELECT length(collapse_intervals('["{\"low\":\"2026-03-03T14:00:00+00:00\",\"high\":\"2026-12-03T14:00:00+00:00\",\"lowClosed\":true,\"highClosed\":true}"]')) > 2;
-----
-true
-
-# Bug 2e: intervalStart of medication start correctly returns date before staging
-query I
-SELECT CAST(intervalStart('{"low":"2026-03-03T14:00:00+00:00","high":"2026-12-03T14:00:00+00:00","lowClosed":true,"highClosed":true}') AS DATE) <= CAST('2026-04-06' AS DATE);
-----
-true
 
 # =====================================================================
 # Bug 3: dateAddQuantity/dateSubtractQuantity sub-day arithmetic
 # =====================================================================
 
-# dateAddQuantity with hours
-query I
-SELECT dateAddQuantity('2026-11-12T15:00:00+00:00', '{"value": 6.0, "unit": "hour", "system": "http://unitsofmeasure.org"}');
-----
-2026-11-12T21:00:00Z
-
-# dateSubtractQuantity with hours
-query I
-SELECT dateSubtractQuantity('2026-11-12T15:00:00+00:00', '{"value": 1.0, "unit": "hour", "system": "http://unitsofmeasure.org"}');
-----
-2026-11-12T14:00:00Z
-
-# dateAddQuantity hour that crosses midnight
-query I
-SELECT dateAddQuantity('2026-11-12T22:00:00+00:00', '{"value": 4.0, "unit": "hour"}');
-----
-2026-11-13T02:00:00Z
-
-# dateSubtractQuantity hour that crosses midnight backward
-query I
-SELECT dateSubtractQuantity('2026-11-12T02:00:00+00:00', '{"value": 4.0, "unit": "hour"}');
-----
-2026-11-11T22:00:00Z
-
-# dateAddQuantity with minutes
-query I
-SELECT dateAddQuantity('2026-11-12T15:00:00+00:00', '{"value": 30.0, "unit": "minute"}');
-----
-2026-11-12T15:30:00Z
-
-# dateAddQuantity with days still works
-query I
-SELECT dateAddQuantity('2026-11-12T15:00:00+00:00', '{"value": 2.0, "unit": "day"}');
-----
-2026-11-14T15:00:00Z
-
-# dateSubtractQuantity with days still works
-query I
-SELECT dateSubtractQuantity('2026-11-14T15:00:00+00:00', '{"value": 2.0, "unit": "day"}');
-----
-2026-11-12T15:00:00Z
-
-# Glucose window: 15:00 - 1h to 15:00 + 6h should contain 14:30
-query I
-SELECT intervalContains(intervalFromBounds(CAST(dateSubtractQuantity('2026-11-12T15:00:00+00:00', '{"value": 1.0, "unit": "hour", "system": "http://unitsofmeasure.org"}') AS VARCHAR), CAST(dateAddQuantity('2026-11-12T15:00:00+00:00', '{"value": 6.0, "unit": "hour", "system": "http://unitsofmeasure.org"}') AS VARCHAR), TRUE, TRUE), '2026-11-12T14:30:00+00:00');
-----
-true
 
 # =====================================================================
 # Bug 4: parse_quantity must preserve "unit" field in output
@@ -1025,236 +652,21 @@ true
 # Phase 1: Polymorphic Interval Type — Integer Intervals
 # =====================================================================
 
-# Integer interval: contains point
-query I
-SELECT intervalContains('{"low":1,"high":10}', '5');
-----
-true
-
-query I
-SELECT intervalContains('{"low":1,"high":10}', '0');
-----
-false
-
-query I
-SELECT intervalContains('{"low":1,"high":10}', '10');
-----
-true
-
-query I
-SELECT intervalContains('{"low":1,"high":10}', '11');
-----
-false
-
-# Integer interval: string-encoded bounds
-query I
-SELECT intervalContains('{"low":"1","high":"10"}', '5');
-----
-true
-
-# Integer interval: overlaps
-query I
-SELECT intervalOverlaps('{"low":1,"high":5}', '{"low":3,"high":8}');
-----
-true
-
-query I
-SELECT intervalOverlaps('{"low":1,"high":5}', '{"low":6,"high":10}');
-----
-false
-
-# Integer interval: before/after
-query I
-SELECT intervalBefore('{"low":1,"high":5}', '{"low":6,"high":10}');
-----
-true
-
-query I
-SELECT intervalAfter('{"low":6,"high":10}', '{"low":1,"high":5}');
-----
-true
-
-# Integer interval: includes
-query I
-SELECT intervalIncludes('{"low":1,"high":10}', '{"low":3,"high":7}');
-----
-true
-
-query I
-SELECT intervalIncludes('{"low":3,"high":7}', '{"low":1,"high":10}');
-----
-false
-
-# Integer interval: properlyIncludes
-query I
-SELECT intervalProperlyIncludes('{"low":1,"high":10}', '{"low":3,"high":7}');
-----
-true
-
-# Integer interval: start/end
-query I
-SELECT intervalStart('{"low":1,"high":10}');
-----
-1
-
-query I
-SELECT intervalEnd('{"low":1,"high":10}');
-----
-10
-
-# Integer interval: meets
-query I
-SELECT intervalMeets('{"low":1,"high":5}', '{"low":5,"high":10}');
-----
-true
-
-# Integer interval: starts/ends same
-query I
-SELECT intervalStartsSame('{"low":1,"high":5}', '{"low":1,"high":10}');
-----
-true
-
-query I
-SELECT intervalEndsSame('{"low":1,"high":10}', '{"low":5,"high":10}');
-----
-true
-
-# Integer interval: fromBounds
-query I
-SELECT intervalStart(intervalFromBounds('1', '10', true, true));
-----
-1
-
-query I
-SELECT intervalEnd(intervalFromBounds('1', '10', true, true));
-----
-10
-
-# Integer interval: width
-query I
-SELECT intervalWidth('{"low":1,"high":10}');
-----
-9
 
 # =====================================================================
 # Phase 1: Polymorphic Interval Type — Decimal Intervals
 # =====================================================================
 
-# Decimal interval: contains point
-query I
-SELECT intervalContains('{"low":1.5,"high":10.5}', '5.0');
-----
-true
-
-query I
-SELECT intervalContains('{"low":1.5,"high":10.5}', '1.0');
-----
-false
-
-query I
-SELECT intervalContains('{"low":1.5,"high":10.5}', '10.5');
-----
-true
-
-# Decimal interval: overlaps
-query I
-SELECT intervalOverlaps('{"low":1.0,"high":5.0}', '{"low":3.0,"high":8.0}');
-----
-true
-
-query I
-SELECT intervalOverlaps('{"low":1.0,"high":5.0}', '{"low":5.5,"high":10.0}');
-----
-false
-
-# Decimal interval: before
-query I
-SELECT intervalBefore('{"low":1.0,"high":5.0}', '{"low":5.5,"high":10.0}');
-----
-true
-
-# Decimal interval: includes
-query I
-SELECT intervalIncludes('{"low":1.0,"high":10.0}', '{"low":3.0,"high":7.0}');
-----
-true
-
-# Decimal interval: start/end
-query I
-SELECT intervalStart('{"low":1.5,"high":10.5}');
-----
-1.5
-
-query I
-SELECT intervalEnd('{"low":1.5,"high":10.5}');
-----
-10.5
 
 # =====================================================================
 # Phase 1: Polymorphic Interval Type — Quantity Intervals
 # =====================================================================
 
-# Quantity interval: contains point
-query I
-SELECT intervalContains('{"low":{"value":10,"unit":"mg"},"high":{"value":100,"unit":"mg"}}', '{"value":50,"unit":"mg"}');
-----
-true
-
-query I
-SELECT intervalContains('{"low":{"value":10,"unit":"mg"},"high":{"value":100,"unit":"mg"}}', '{"value":5,"unit":"mg"}');
-----
-false
-
-# Quantity interval: overlaps
-query I
-SELECT intervalOverlaps('{"low":{"value":10,"unit":"mg"},"high":{"value":50,"unit":"mg"}}', '{"low":{"value":30,"unit":"mg"},"high":{"value":80,"unit":"mg"}}');
-----
-true
-
-# Quantity interval: before
-query I
-SELECT intervalBefore('{"low":{"value":10,"unit":"mg"},"high":{"value":20,"unit":"mg"}}', '{"low":{"value":30,"unit":"mg"},"high":{"value":40,"unit":"mg"}}');
-----
-true
 
 # =====================================================================
 # Phase 1: Open/closed bounds with numeric intervals
 # =====================================================================
 
-# Open low bound: (5, 10] should not contain 5
-query I
-SELECT intervalContains('{"low":5,"high":10,"lowClosed":false,"highClosed":true}', '5');
-----
-false
-
-# Open low bound: (5, 10] should contain 6
-query I
-SELECT intervalContains('{"low":5,"high":10,"lowClosed":false,"highClosed":true}', '6');
-----
-true
-
-# Open high bound: [5, 10) should not contain 10
-query I
-SELECT intervalContains('{"low":5,"high":10,"lowClosed":true,"highClosed":false}', '10');
-----
-false
-
-# Properly contains: [1,10] properly contains 5 (not at boundary)
-query I
-SELECT intervalContains('{"low":1,"high":10,"lowClosed":true,"highClosed":true}', '5');
-----
-true
-
-# NULL handling with numeric intervals
-query I
-SELECT intervalContains(NULL, '5');
-----
-NULL
-
-query I
-SELECT intervalContains('{"low":1,"high":10}', NULL);
-----
-NULL
 
 # =====================================================================
 # Phase 2: Bug Fixes — SameOrBefore/After all precision levels
@@ -1330,59 +742,6 @@ NULL
 # Phase 3: Boundary + Interval Set Operations
 # =====================================================================
 
-# HighBoundary — date precision 8 (day)
-query I
-SELECT HighBoundary('2014', 8);
-----
-2014-12-31
-
-# HighBoundary — datetime precision 17 (millisecond)
-query I
-SELECT HighBoundary('2014', 17);
-----
-2014-12-31T23:59:59.999
-
-# HighBoundary — month precision 6
-query I
-SELECT HighBoundary('2014-01', 8);
-----
-2014-01-31
-
-# LowBoundary — date precision 8
-query I
-SELECT LowBoundary('2014', 8);
-----
-2014-01-01
-
-# LowBoundary — datetime precision 17
-query I
-SELECT LowBoundary('2014', 17);
-----
-2014-01-01T00:00:00.000
-
-# predecessorOf integer
-query I
-SELECT predecessorOf('5');
-----
-4
-
-# predecessorOf date
-query I
-SELECT predecessorOf('2024-01-01') LIKE '2023-12-31%';
-----
-true
-
-# successorOf integer
-query I
-SELECT successorOf('5');
-----
-6
-
-# successorOf date
-query I
-SELECT successorOf('2024-01-31') LIKE '2024-02-01%';
-----
-true
 
 # CQLPrecision — date
 query I
@@ -1420,93 +779,11 @@ SELECT cqlTimezoneOffset('2024-01-15T10:30:00');
 ----
 NULL
 
-# predecessorOf NULL → NULL
-query I
-SELECT predecessorOf(NULL);
-----
-NULL
-
-# successorOf NULL → NULL
-query I
-SELECT successorOf(NULL);
-----
-NULL
-
-# intervalIntersect — overlapping datetime intervals
-query I
-SELECT intervalIntersect('{"low":"2024-01-01","high":"2024-06-30","lowClosed":true,"highClosed":true}', '{"low":"2024-03-01","high":"2024-12-31","lowClosed":true,"highClosed":true}') LIKE '%2024-03-01%';
-----
-true
-
-# intervalIntersect — overlapping integer intervals
-query I
-SELECT intervalIntersect('{"low":1,"high":10,"lowClosed":true,"highClosed":true}', '{"low":5,"high":15,"lowClosed":true,"highClosed":true}') LIKE '%5%';
-----
-true
-
-# intervalIntersect — non-overlapping → NULL
-query I
-SELECT intervalIntersect('{"low":1,"high":5,"lowClosed":true,"highClosed":true}', '{"low":6,"high":10,"lowClosed":true,"highClosed":true}');
-----
-NULL
-
-# intervalUnion — overlapping
-query I
-SELECT intervalUnion('{"low":1,"high":10,"lowClosed":true,"highClosed":true}', '{"low":5,"high":15,"lowClosed":true,"highClosed":true}') LIKE '%15%';
-----
-true
-
-# intervalExcept — partial overlap
-query I
-SELECT intervalExcept('{"low":1,"high":10,"lowClosed":true,"highClosed":true}', '{"low":5,"high":15,"lowClosed":true,"highClosed":true}') LIKE '%1%';
-----
-true
-
-# intervalExcept — full containment → NULL
-query I
-SELECT intervalExcept('{"low":3,"high":7,"lowClosed":true,"highClosed":true}', '{"low":1,"high":10,"lowClosed":true,"highClosed":true}');
-----
-NULL
-
-# intervalOnOrAfter
-query I
-SELECT intervalOnOrAfter('{"low":"2024-06-01","high":"2024-12-31","lowClosed":true,"highClosed":true}', '{"low":"2024-01-01","high":"2024-06-01","lowClosed":true,"highClosed":true}');
-----
-true
-
-# intervalOnOrBefore
-query I
-SELECT intervalOnOrBefore('{"low":"2024-01-01","high":"2024-06-01","lowClosed":true,"highClosed":true}', '{"low":"2024-06-01","high":"2024-12-31","lowClosed":true,"highClosed":true}');
-----
-true
-
-# intervalOnOrAfter — false case
-query I
-SELECT intervalOnOrAfter('{"low":"2024-01-01","high":"2024-06-01","lowClosed":true,"highClosed":true}', '{"low":"2024-03-01","high":"2024-12-31","lowClosed":true,"highClosed":true}');
-----
-false
 
 # =====================================================================
 # Phase 4: Expand + Temporal Differences
 # =====================================================================
 
-# differenceInWeeks
-query I
-SELECT differenceInWeeks('2024-01-01', '2024-01-15');
-----
-2
-
-# differenceInMilliseconds
-query I
-SELECT differenceInMilliseconds('2024-01-01T00:00:00.000', '2024-01-01T00:00:01.000');
-----
-1000
-
-# differenceInWeeks — NULL inputs
-query I
-SELECT differenceInWeeks(NULL, '2024-01-15');
-----
-NULL
 
 # pointFrom — unit interval
 query I
@@ -1655,29 +932,6 @@ NULL
 # Phase 6: Quantity Arithmetic Extensions
 # =====================================================================
 
-# quantityMultiply: dimensionless * quantity
-query I
-SELECT quantityMultiply('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":3,"code":"1","system":"http://unitsofmeasure.org"}');
-----
-{"value":30.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
-
-# quantityMultiply: same units
-query I
-SELECT quantityMultiply('{"value":2,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":5,"code":"mg","system":"http://unitsofmeasure.org"}');
-----
-{"value":10.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
-
-# quantityDivide: basic
-query I
-SELECT quantityDivide('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":2,"code":"1","system":"http://unitsofmeasure.org"}');
-----
-{"value":5.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
-
-# quantityDivide: division by zero → NULL
-query I
-SELECT quantityDivide('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":0,"code":"1","system":"http://unitsofmeasure.org"}');
-----
-NULL
 
 # quantityNegate: positive → negative
 query I
@@ -1769,11 +1023,6 @@ SELECT ToConcept(NULL);
 ----
 NULL
 
-# quantityMultiply: NULL → NULL
-query I
-SELECT quantityMultiply(NULL, '{"value":3,"code":"mg","system":"http://unitsofmeasure.org"}');
-----
-NULL
 
 # quantityNegate: NULL → NULL
 query I
@@ -2143,263 +1392,15 @@ SELECT millisecondsBetween('2024-01-01T10:00:00.000', '2024-01-01T10:00:01.000')
 ----
 1000
 
-# differenceInYears with NULL
-query I
-SELECT differenceInYears(NULL, '2024-01-01');
-----
-NULL
-
-# differenceInMonths with NULL
-query I
-SELECT differenceInMonths('2024-01-01', NULL);
-----
-NULL
-
-# differenceInWeeks
-query I
-SELECT differenceInWeeks('2024-01-01', '2024-01-15');
-----
-2
-
-# differenceInDays across month
-query I
-SELECT differenceInDays('2024-01-31', '2024-02-01');
-----
-1
-
-# differenceInHours: 48 hours
-query I
-SELECT differenceInHours('2024-01-01T00:00:00', '2024-01-03T00:00:00');
-----
-48
-
-# differenceInMinutes: 120 minutes
-query I
-SELECT differenceInMinutes('2024-01-01T10:00:00', '2024-01-01T12:00:00');
-----
-120
-
-# differenceInSeconds: 3600 seconds
-query I
-SELECT differenceInSeconds('2024-01-01T10:00:00', '2024-01-01T11:00:00');
-----
-3600
-
-# differenceInMilliseconds: 5000 ms
-query I
-SELECT differenceInMilliseconds('2024-01-01T10:00:00.000', '2024-01-01T10:00:05.000');
-----
-5000
 
 # ----- Interval Algebra Extended -----
 
-# intervalContains with datetime
-query I
-SELECT intervalContains('{"low":"2024-01-01","high":"2024-12-31"}', '2024-06-15');
-----
-true
-
-# intervalContains: point outside
-query I
-SELECT intervalContains('{"low":"2024-01-01","high":"2024-12-31"}', '2025-01-01');
-----
-false
-
-# intervalContains: point at boundary
-query I
-SELECT intervalContains('{"low":"2024-01-01","high":"2024-12-31"}', '2024-01-01');
-----
-true
-
-# intervalBefore: integer intervals
-query I
-SELECT intervalBefore('{"low":1,"high":5}', '{"low":6,"high":10}');
-----
-true
-
-# intervalBefore: overlapping → false
-query I
-SELECT intervalBefore('{"low":1,"high":5}', '{"low":3,"high":10}');
-----
-false
-
-# intervalAfter: integer intervals
-query I
-SELECT intervalAfter('{"low":6,"high":10}', '{"low":1,"high":5}');
-----
-true
-
-# intervalOverlaps: integer intervals
-query I
-SELECT intervalOverlaps('{"low":1,"high":5}', '{"low":3,"high":8}');
-----
-true
-
-# intervalOverlaps: no overlap
-query I
-SELECT intervalOverlaps('{"low":1,"high":5}', '{"low":6,"high":10}');
-----
-false
-
-# intervalMeets: integer intervals (meets requires end(A) == start(B))
-query I
-SELECT intervalMeets('{"low":1,"high":5}', '{"low":5,"high":10}');
-----
-true
-
-# intervalMeets: gap → false
-query I
-SELECT intervalMeets('{"low":1,"high":5}', '{"low":6,"high":10}');
-----
-false
-
-# intervalIncludes: proper subset
-query I
-SELECT intervalIncludes('{"low":1,"high":10}', '{"low":3,"high":7}');
-----
-true
-
-# intervalIncludes: not subset
-query I
-SELECT intervalIncludes('{"low":3,"high":7}', '{"low":1,"high":10}');
-----
-false
-
-# intervalIncludedIn
-query I
-SELECT intervalIncludedIn('{"low":3,"high":7}', '{"low":1,"high":10}');
-----
-true
-
-# intervalProperlyIncludes
-query I
-SELECT intervalProperlyIncludes('{"low":1,"high":10}', '{"low":3,"high":7}');
-----
-true
-
-# intervalProperlyIncludedIn
-query I
-SELECT intervalProperlyIncludedIn('{"low":3,"high":7}', '{"low":1,"high":10}');
-----
-true
-
-# intervalStart
-query I
-SELECT intervalStart('{"low":"2024-01-01","high":"2024-12-31"}');
-----
-2024-01-01
-
-# intervalEnd
-query I
-SELECT intervalEnd('{"low":"2024-01-01","high":"2024-12-31"}');
-----
-2024-12-31
-
-# intervalWidth: integer
-query I
-SELECT intervalWidth('{"low":1,"high":10}');
-----
-9
-
-# intervalWidth: datetime
-query I
-SELECT intervalWidth('{"low":"2024-01-01","high":"2024-01-10"}');
-----
-9
-
-# intervalWidth: NULL
-query I
-SELECT intervalWidth(NULL);
-----
-NULL
 
 # ----- Interval Set Operations Extended -----
 
-# intervalIntersect: overlapping integer
-query I
-SELECT intervalIntersect('{"low":1,"high":8}', '{"low":5,"high":12}');
-----
-{"low":5,"high":8,"lowClosed":true,"highClosed":true}
-
-# intervalIntersect: no overlap → NULL
-query I
-SELECT intervalIntersect('{"low":1,"high":5}', '{"low":7,"high":12}');
-----
-NULL
-
-# intervalUnion: overlapping
-query I
-SELECT intervalUnion('{"low":1,"high":8}', '{"low":5,"high":12}');
-----
-{"low":1,"high":12,"lowClosed":true,"highClosed":true}
-
-# intervalExcept: partial overlap
-query I
-SELECT intervalExcept('{"low":1,"high":10}', '{"low":5,"high":15}');
-----
-{"low":1,"high":5,"lowClosed":true,"highClosed":false}
-
-# intervalOnOrAfter
-query I
-SELECT intervalOnOrAfter('{"low":5,"high":10}', '3');
-----
-true
-
-# intervalOnOrBefore
-query I
-SELECT intervalOnOrBefore('{"low":5,"high":10}', '15');
-----
-true
 
 # ----- Boundary Functions Extended -----
 
-# HighBoundary: year-only date
-query I
-SELECT HighBoundary('2024', 8);
-----
-2024-12-31
-
-# HighBoundary: month
-query I
-SELECT HighBoundary('2024-06', 8);
-----
-2024-06-30
-
-# LowBoundary: year
-query I
-SELECT LowBoundary('2024', 8);
-----
-2024-01-01
-
-# LowBoundary: month
-query I
-SELECT LowBoundary('2024-06', 8);
-----
-2024-06-01
-
-# predecessorOf: integer
-query I
-SELECT predecessorOf('5');
-----
-4
-
-# predecessorOf: decimal
-query I
-SELECT predecessorOf('5.0');
-----
-4.99999999
-
-# successorOf: integer
-query I
-SELECT successorOf('5');
-----
-6
-
-# successorOf: decimal
-query I
-SELECT successorOf('5.0');
-----
-5.00000001
 
 # CQLPrecision: date (8 chars)
 query I
@@ -2425,17 +1426,6 @@ SELECT CQLPrecision(NULL);
 ----
 NULL
 
-# predecessorOf: NULL
-query I
-SELECT predecessorOf(NULL);
-----
-NULL
-
-# successorOf: NULL
-query I
-SELECT successorOf(NULL);
-----
-NULL
 
 # ----- Math Functions Extended -----
 
@@ -2775,117 +1765,12 @@ NULL
 
 # ----- Interval NULL handling -----
 
-# intervalContains: NULL interval
-query I
-SELECT intervalContains(NULL, '5');
-----
-NULL
-
-# intervalContains: NULL point
-query I
-SELECT intervalContains('{"low":1,"high":10}', NULL);
-----
-NULL
-
-# intervalBefore: NULL
-query I
-SELECT intervalBefore(NULL, '{"low":6,"high":10}');
-----
-NULL
-
-# intervalAfter: NULL
-query I
-SELECT intervalAfter(NULL, '{"low":1,"high":5}');
-----
-NULL
-
-# intervalOverlaps: NULL
-query I
-SELECT intervalOverlaps(NULL, '{"low":1,"high":5}');
-----
-NULL
-
-# intervalMeets: NULL
-query I
-SELECT intervalMeets(NULL, '{"low":1,"high":5}');
-----
-NULL
-
-# intervalIntersect: NULL
-query I
-SELECT intervalIntersect(NULL, '{"low":1,"high":10}');
-----
-NULL
-
-# intervalUnion: NULL
-query I
-SELECT intervalUnion(NULL, '{"low":1,"high":10}');
-----
-NULL
-
-# intervalExcept: NULL
-query I
-SELECT intervalExcept(NULL, '{"low":1,"high":10}');
-----
-NULL
 
 # ----- Integer Interval Comprehensive -----
 
-# intervalContains: at high boundary
-query I
-SELECT intervalContains('{"low":1,"high":10}', '10');
-----
-true
-
-# intervalContains: just outside high
-query I
-SELECT intervalContains('{"low":1,"high":10}', '11');
-----
-false
-
-# intervalContains: at low boundary
-query I
-SELECT intervalContains('{"low":1,"high":10}', '1');
-----
-true
-
-# intervalContains: just below low
-query I
-SELECT intervalContains('{"low":1,"high":10}', '0');
-----
-false
-
-# intervalProperlyContains: boundary → false (not proper)
-query I
-SELECT intervalProperlyContains('{"low":1,"high":10}', '1');
-----
-false
-
-# intervalProperlyContains: interior → true
-query I
-SELECT intervalProperlyContains('{"low":1,"high":10}', '5');
-----
-true
 
 # ----- Decimal Interval -----
 
-# intervalContains: decimal mid-point
-query I
-SELECT intervalContains('{"low":1.5,"high":10.5}', '5.0');
-----
-true
-
-# intervalContains: decimal at boundary
-query I
-SELECT intervalContains('{"low":1.5,"high":10.5}', '1.5');
-----
-true
-
-# intervalBefore: decimal
-query I
-SELECT intervalBefore('{"low":1.0,"high":5.0}', '{"low":6.0,"high":10.0}');
-----
-true
 
 # ----- pointFrom Extended -----
 
@@ -2923,17 +1808,6 @@ NULL
 
 # ----- dateAddQuantity -----
 
-# dateAddQuantity: NULL
-query I
-SELECT dateAddQuantity(NULL, '{"value":1,"code":"a"}');
-----
-NULL
-
-# dateSubtractQuantity: NULL
-query I
-SELECT dateSubtractQuantity(NULL, '{"value":1,"code":"a"}');
-----
-NULL
 
 # ----- Miscellaneous -----
 
@@ -2943,11 +1817,6 @@ SELECT parseQuantity(NULL);
 ----
 NULL
 
-# collapse_intervals: NULL
-query I
-SELECT collapse_intervals(NULL);
-----
-NULL
 
 # resolveProfileUrl: NULL
 query I
@@ -2955,17 +1824,6 @@ SELECT resolveProfileUrl(NULL);
 ----
 NULL
 
-# HighBoundary: NULL
-query I
-SELECT HighBoundary(NULL, 8);
-----
-NULL
-
-# LowBoundary: NULL
-query I
-SELECT LowBoundary(NULL, 8);
-----
-NULL
 
 # =====================================================================
 # Phase 9 (continued): Additional edge cases for 500+ target
@@ -2999,99 +1857,12 @@ SELECT MonthsBetween('2024-01-01', '2024-01-31');
 
 # ----- Integer Interval Full Algebra -----
 
-# intervalOverlapsBefore: integer
-query I
-SELECT intervalOverlapsBefore('{"low":1,"high":8}', '{"low":5,"high":12}');
-----
-true
-
-# intervalOverlapsAfter: integer
-query I
-SELECT intervalOverlapsAfter('{"low":5,"high":12}', '{"low":1,"high":8}');
-----
-true
-
-# intervalStartsSame: integer
-query I
-SELECT intervalStartsSame('{"low":1,"high":5}', '{"low":1,"high":10}');
-----
-true
-
-# intervalStartsSame: different starts
-query I
-SELECT intervalStartsSame('{"low":2,"high":5}', '{"low":1,"high":10}');
-----
-false
-
-# intervalEndsSame: integer
-query I
-SELECT intervalEndsSame('{"low":5,"high":10}', '{"low":1,"high":10}');
-----
-true
-
-# intervalEndsSame: different ends
-query I
-SELECT intervalEndsSame('{"low":5,"high":9}', '{"low":1,"high":10}');
-----
-false
-
-# intervalStart: integer
-query I
-SELECT intervalStart('{"low":3,"high":8}');
-----
-3
-
-# intervalEnd: integer
-query I
-SELECT intervalEnd('{"low":3,"high":8}');
-----
-8
-
-# intervalFromBounds: integer
-query I
-SELECT intervalContains(intervalFromBounds('1', '10', true, true), '5');
-----
-true
 
 # ----- Decimal Interval Algebra -----
 
-# intervalOverlaps: decimal
-query I
-SELECT intervalOverlaps('{"low":1.0,"high":5.0}', '{"low":3.0,"high":8.0}');
-----
-true
-
-# intervalContains: decimal outside
-query I
-SELECT intervalContains('{"low":1.5,"high":10.5}', '11.0');
-----
-false
-
-# intervalProperlyContains: decimal boundary
-query I
-SELECT intervalProperlyContains('{"low":1.5,"high":10.5}', '1.5');
-----
-false
-
-# intervalProperlyContains: decimal interior
-query I
-SELECT intervalProperlyContains('{"low":1.5,"high":10.5}', '5.0');
-----
-true
 
 # ----- Quantity Interval -----
 
-# intervalContains: quantity
-query I
-SELECT intervalContains('{"low":{"value":0,"code":"mg"},"high":{"value":100,"code":"mg"}}', '{"value":50,"code":"mg"}');
-----
-true
-
-# intervalContains: quantity outside
-query I
-SELECT intervalContains('{"low":{"value":0,"code":"mg"},"high":{"value":100,"code":"mg"}}', '{"value":150,"code":"mg"}');
-----
-false
 
 # ----- Math Edge Cases -----
 
@@ -3171,14 +1942,3 @@ NULL
 
 # ----- HighBoundary / LowBoundary Edge Cases -----
 
-# HighBoundary: full datetime, precision 8 → truncate to date
-query I
-SELECT HighBoundary('2024-06-15T10:30:00', 8);
-----
-2024-06-15
-
-# LowBoundary: full datetime, precision 8 → truncate to date
-query I
-SELECT LowBoundary('2024-06-15T10:30:00', 8);
-----
-2024-06-15
