@@ -6,11 +6,17 @@ SELECT DISTINCT _outer.patient_ref AS patient_id FROM resources AS _outer WHERE 
 _patient_demographics AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date FROM resources r WHERE r.resourceType = 'Patient'
 ),
+"MedicationRequest: ACE Inhibitor or ARB or ARNI" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationRequest' AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1139') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
+),
 "AllergyIntolerance: Substance with angiotensin-converting enzyme inhibitor mechanism of action (substance)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'AllergyIntolerance' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''372733002'').exists()')
 ),
-"AllergyIntolerance: ACE Inhibitor or ARB or ARNI Ingredient" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'AllergyIntolerance' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1489')
+"Condition: Pregnancy (qicore-condition-problems-health-concerns)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.378') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
+),
+"Condition: Intolerance to ACE Inhibitor or ARB (qicore-condition-problems-health-concerns)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1212') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
 ),
 "Condition: Allergy to ACE Inhibitor or ARB (qicore-condition-problems-health-concerns)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1211') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
@@ -18,83 +24,77 @@ SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r
 "MedicationRequest: ACE Inhibitor or ARB or ARNI (medicationnotrequested)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationRequest' AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1139') AND fhirpath_bool(r.resource, 'doNotPerform')
 ),
-"Condition: Intolerance to ACE Inhibitor or ARB (qicore-condition-problems-health-concerns)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1212') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
-),
-"AllergyIntolerance: Substance with angiotensin II receptor antagonist mechanism of action (substance)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'AllergyIntolerance' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''372913009'').exists()')
-),
-"Condition: Acute renal failure caused by angiotensin-converting-enzyme inhibitor (disorder) (qicore-condition-encounter-diagnosis)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''422593004'').exists()') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
-),
-"Condition: Pregnancy (qicore-condition-problems-health-concerns)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.378') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
+"AllergyIntolerance: ACE Inhibitor or ARB or ARNI Ingredient" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'AllergyIntolerance' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1489')
 ),
 "AllergyIntolerance: Substance with neprilysin inhibitor mechanism of action (substance)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'AllergyIntolerance' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''786886009'').exists()')
 ),
-"MedicationRequest: ACE Inhibitor or ARB or ARNI" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationRequest' AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1139') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
+"Condition: Acute renal failure caused by angiotensin-converting-enzyme inhibitor (disorder) (qicore-condition-encounter-diagnosis)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''422593004'').exists()') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
+),
+"AllergyIntolerance: Substance with angiotensin II receptor antagonist mechanism of action (substance)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'AllergyIntolerance' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''372913009'').exists()')
 ),
 "Coverage: Payer Type" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'type') AS "type" FROM resources r WHERE r.resourceType = 'Coverage' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591')
 ),
-"Condition: Heart Failure (qicore-condition-encounter-diagnosis)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.376') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
-),
-"Condition: Left ventricular systolic dysfunction (disorder) (qicore-condition-encounter-diagnosis)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''134401001'').exists()') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
-),
 "Procedure: Heart Transplant" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1178.33') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
-),
-"Encounter: Home Healthcare Services" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1016')
-),
-"Condition: Moderate or Severe LVSD (qicore-condition-problems-health-concerns)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1090') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
 ),
 "Condition: Moderate or Severe LVSD (qicore-condition-encounter-diagnosis)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1090') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
 ),
-"Encounter: Care Services in Long Term Residential Facility" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1014')
+"Procedure: Left Ventricular Assist Device Placement" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1178.61') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
 ),
 "Condition: Left Ventricular Assist Device Complications (qicore-condition-problems-health-concerns)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1178.58') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
 ),
-"Encounter: Nursing Facility Visit" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1012')
-),
-"Condition: Heart Transplant Complications (qicore-condition-problems-health-concerns)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1178.56') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
-),
-"Condition: Left Ventricular Assist Device Complications (qicore-condition-encounter-diagnosis)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1178.58') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
-),
 "Condition: Heart Transplant Complications (qicore-condition-encounter-diagnosis)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1178.56') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
 ),
-"Encounter: Patient Provider Interaction" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1012')
+"Condition: Moderate or Severe LVSD (qicore-condition-problems-health-concerns)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1090') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
 ),
 "Encounter: Office Visit" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001')
 ),
+"Condition: Left ventricular systolic dysfunction (disorder) (qicore-condition-encounter-diagnosis)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''134401001'').exists()') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
+),
+"Encounter: Patient Provider Interaction" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1012')
+),
 "Encounter: Outpatient Consultation" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1008')
 ),
-"Condition: Heart Failure (qicore-condition-problems-health-concerns)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.376') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
+"Condition: Heart Transplant Complications (qicore-condition-problems-health-concerns)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1178.56') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
+),
+"Encounter: Care Services in Long Term Residential Facility" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1014')
 ),
 "Observation: Ejection Fraction" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1134')
 ),
+"Condition: Heart Failure (qicore-condition-encounter-diagnosis)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.376') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
+),
 "Condition: Left ventricular systolic dysfunction (disorder) (qicore-condition-problems-health-concerns)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''134401001'').exists()') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
 ),
-"Procedure: Left Ventricular Assist Device Placement" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1178.61') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
+"Encounter: Home Healthcare Services" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1016')
+),
+"Condition: Heart Failure (qicore-condition-problems-health-concerns)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.376') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
+),
+"Encounter: Nursing Facility Visit" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1012')
+),
+"Condition: Left Ventricular Assist Device Complications (qicore-condition-encounter-diagnosis)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1178.58') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
 ),
 "AHA.Heart Failure Outpatient Encounter" AS (
 SELECT * FROM (SELECT patient_id, resource FROM "Encounter: Care Services in Long Term Residential Facility" UNION SELECT patient_id, resource FROM "Encounter: Home Healthcare Services" UNION SELECT patient_id, resource FROM "Encounter: Nursing Facility Visit" UNION SELECT patient_id, resource FROM "Encounter: Office Visit" UNION SELECT patient_id, resource FROM "Encounter: Outpatient Consultation") AS QualifyingEncounter WHERE CAST(LEFT(REPLACE(CAST(intervalStart(fhirpath_text(QualifyingEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) >= CAST(LEFT(REPLACE(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(QualifyingEncounter.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) <= CAST(LEFT(REPLACE(CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AND fhirpath_text(QualifyingEncounter.resource, 'status') = 'finished' AND EXISTS (SELECT 1 FROM (SELECT patient_id, resource FROM "Condition: Heart Failure (qicore-condition-problems-health-concerns)" UNION SELECT patient_id, resource FROM "Condition: Heart Failure (qicore-condition-encounter-diagnosis)") AS HeartFailure WHERE intervalOverlaps(CASE WHEN fhirpath_text(HeartFailure.resource, 'abatementDateTime') IS NOT NULL THEN intervalFromBounds(COALESCE(fhirpath_text(HeartFailure.resource, 'onsetDateTime'), fhirpath_text(HeartFailure.resource, 'onsetPeriod.start'), fhirpath_text(HeartFailure.resource, 'recordedDate')), fhirpath_text(HeartFailure.resource, 'abatementDateTime'), TRUE, TRUE) WHEN COALESCE(fhirpath_text(HeartFailure.resource, 'onsetDateTime'), fhirpath_text(HeartFailure.resource, 'onsetPeriod.start'), fhirpath_text(HeartFailure.resource, 'recordedDate')) IS NOT NULL THEN CASE WHEN fhirpath_bool(HeartFailure.resource, 'clinicalStatus.coding.where(code=''active'' or code=''recurrence'' or code=''relapse'').exists()') THEN intervalFromBounds(COALESCE(fhirpath_text(HeartFailure.resource, 'onsetDateTime'), fhirpath_text(HeartFailure.resource, 'onsetPeriod.start'), fhirpath_text(HeartFailure.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, TRUE) ELSE intervalFromBounds(COALESCE(fhirpath_text(HeartFailure.resource, 'onsetDateTime'), fhirpath_text(HeartFailure.resource, 'onsetPeriod.start'), fhirpath_text(HeartFailure.resource, 'recordedDate')), CAST(NULL AS VARCHAR), TRUE, FALSE) END ELSE NULL END, fhirpath_text(QualifyingEncounter.resource, 'period')) AND (fhirpath_bool(HeartFailure.resource, 'clinicalStatus.coding.where(system=''http://terminology.hl7.org/CodeSystem/condition-clinical'' and code=''active'').exists()') OR fhirpath_bool(HeartFailure.resource, 'clinicalStatus.coding.where(system=''http://terminology.hl7.org/CodeSystem/condition-clinical'' and code=''recurrence'').exists()') OR fhirpath_bool(HeartFailure.resource, 'clinicalStatus.coding.where(system=''http://terminology.hl7.org/CodeSystem/condition-clinical'' and code=''relapse'').exists()')) AND fhirpath_bool(HeartFailure.resource, 'verificationStatus.coding.where(system=''http://terminology.hl7.org/CodeSystem/condition-ver-status'' and code=''confirmed'').exists()') AND HeartFailure.patient_id = QualifyingEncounter.patient_id)
@@ -183,4 +183,4 @@ SELECT * FROM "SDE.SDE Race"
 "SDE Sex" AS (
 SELECT * FROM "SDE.SDE Sex"
 )
-SELECT p.patient_id, (SELECT CASE WHEN "Initial Population".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS "Initial Population", (SELECT CASE WHEN "Denominator".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS Denominator, (SELECT CASE WHEN "Denominator Exclusions".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS "Denominator Exclusions", (SELECT CASE WHEN "Denominator Exceptions".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS "Denominator Exceptions", (SELECT CASE WHEN "Numerator".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS Numerator FROM _patients p LEFT JOIN "Initial Population" ON p.patient_id = "Initial Population".patient_id LEFT JOIN "Denominator" ON p.patient_id = "Denominator".patient_id LEFT JOIN "Denominator Exclusions" ON p.patient_id = "Denominator Exclusions".patient_id LEFT JOIN "Denominator Exceptions" ON p.patient_id = "Denominator Exceptions".patient_id LEFT JOIN "Numerator" ON p.patient_id = "Numerator".patient_id ORDER BY p.patient_id ASC
+SELECT p.patient_id, (SELECT CASE WHEN "Initial Population".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS "Initial Population", (SELECT CASE WHEN "Denominator".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS Denominator, (SELECT CASE WHEN "Denominator Exclusions".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS "Denominator Exclusions", (SELECT CASE WHEN "Numerator".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS Numerator, (SELECT CASE WHEN "Denominator Exceptions".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS "Denominator Exceptions", (SELECT CASE WHEN "Has ACEI or ARB or ARNI Ordered".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS "Has ACEI or ARB or ARNI Ordered", (SELECT CASE WHEN "Has Allergy or Intolerance to ACEI or ARB or ARNI Ingredient".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS "Has Allergy or Intolerance to ACEI or ARB or ARNI Ingredient", (SELECT CASE WHEN "Has Diagnosis of Allergy or Intolerance to ACEI or ARB".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS "Has Diagnosis of Allergy or Intolerance to ACEI or ARB", (SELECT CASE WHEN "Has Diagnosis of Pregnancy".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS "Has Diagnosis of Pregnancy", (SELECT CASE WHEN "Has Diagnosis of Renal Failure Due to ACEI".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS "Has Diagnosis of Renal Failure Due to ACEI", (SELECT CASE WHEN "Has Medical or Patient Reason for Not Ordering ACEI or ARB or ARNI".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS "Has Medical or Patient Reason for Not Ordering ACEI or ARB or ARNI", (SELECT CASE WHEN "Is Currently Taking ACEI or ARB or ARNI".patient_id IS NOT NULL THEN TRUE ELSE FALSE END) AS "Is Currently Taking ACEI or ARB or ARNI" FROM _patients p LEFT JOIN "Initial Population" ON p.patient_id = "Initial Population".patient_id LEFT JOIN "Denominator" ON p.patient_id = "Denominator".patient_id LEFT JOIN "Denominator Exclusions" ON p.patient_id = "Denominator Exclusions".patient_id LEFT JOIN "Numerator" ON p.patient_id = "Numerator".patient_id LEFT JOIN "Denominator Exceptions" ON p.patient_id = "Denominator Exceptions".patient_id LEFT JOIN "Has ACEI or ARB or ARNI Ordered" ON p.patient_id = "Has ACEI or ARB or ARNI Ordered".patient_id LEFT JOIN "Has Allergy or Intolerance to ACEI or ARB or ARNI Ingredient" ON p.patient_id = "Has Allergy or Intolerance to ACEI or ARB or ARNI Ingredient".patient_id LEFT JOIN "Has Diagnosis of Allergy or Intolerance to ACEI or ARB" ON p.patient_id = "Has Diagnosis of Allergy or Intolerance to ACEI or ARB".patient_id LEFT JOIN "Has Diagnosis of Pregnancy" ON p.patient_id = "Has Diagnosis of Pregnancy".patient_id LEFT JOIN "Has Diagnosis of Renal Failure Due to ACEI" ON p.patient_id = "Has Diagnosis of Renal Failure Due to ACEI".patient_id LEFT JOIN "Has Medical or Patient Reason for Not Ordering ACEI or ARB or ARNI" ON p.patient_id = "Has Medical or Patient Reason for Not Ordering ACEI or ARB or ARNI".patient_id LEFT JOIN "Is Currently Taking ACEI or ARB or ARNI" ON p.patient_id = "Is Currently Taking ACEI or ARB or ARNI".patient_id ORDER BY p.patient_id ASC

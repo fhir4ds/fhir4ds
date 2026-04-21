@@ -6,29 +6,29 @@ SELECT DISTINCT _outer.patient_ref AS patient_id FROM resources AS _outer WHERE 
 _patient_demographics AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date FROM resources r WHERE r.resourceType = 'Patient'
 ),
-"Condition: Severe cognitive impairment (finding) (qicore-condition-problems-health-concerns)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''702956004'').exists()') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
+"Observation: VR-12 Mental component summary (MCS) score - orthogonal method T-score" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72028-4'').exists()')
+),
+"Observation: Symptoms score [HOOS]" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72096-1'').exists()')
+),
+"Condition: Malignant Neoplasms of Lower and Unspecified Limbs (qicore-condition-encounter-diagnosis)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1180') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
+),
+"Observation: PROMIS-10 Global Mental Health (GMH) score T-score" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''71969-0'').exists()')
+),
+"Encounter" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter'
+),
+"Observation: Activities of daily living score [HOOS]" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72095-3'').exists()')
 ),
 "Encounter: Virtual Encounter" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1089')
 ),
-"Observation: Sport-recreation score [HOOS]" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72094-6'').exists()')
-),
 "Observation: Total interval score [HOOSJR]" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''82323-7'').exists()')
-),
-"Condition: Severe cognitive impairment (finding) (qicore-condition-encounter-diagnosis)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''702956004'').exists()') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
-),
-"Observation: Pain score [HOOS]" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72097-9'').exists()')
-),
-"Observation: VR-12 Physical component summary (PCS) score - orthogonal method T-score" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72027-6'').exists()')
-),
-"Encounter" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter'
 ),
 "Condition: Mechanical Complications Excluding Upper Body (qicore-condition-problems-health-concerns)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1182') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
@@ -36,80 +36,80 @@ SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r
 "Procedure: Removal, Revision and Supplement Procedures of the Lower Body and Spine" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1189') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
 ),
-"Observation: PROMIS-10 Global Physical Health (GPH) score T-score" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''71971-6'').exists()')
+"Condition: Lower Body Fractures Excluding Ankle and Foot (qicore-condition-problems-health-concerns)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1178') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
 ),
 "Observation: Quality of life score [HOOS]" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72093-8'').exists()')
 ),
-"Condition: Mechanical Complications Excluding Upper Body (qicore-condition-encounter-diagnosis)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1182') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
+"Condition: Severe cognitive impairment (finding) (qicore-condition-problems-health-concerns)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''702956004'').exists()') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
 ),
-"Observation: Activities of daily living score [HOOS]" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72095-3'').exists()')
-),
-"Condition: Lower Body Fractures Excluding Ankle and Foot (qicore-condition-problems-health-concerns)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1178') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
-),
-"Observation: VR-12 Mental component summary (MCS) score - oblique method T-score" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72026-8'').exists()')
-),
-"Condition: Lower Body Fractures Excluding Ankle and Foot (qicore-condition-encounter-diagnosis)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1178') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
-),
-"Observation: VR-12 Physical component summary (PCS) score - oblique method T-score" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72025-0'').exists()')
-),
-"Observation: PROMIS-10 Global Mental Health (GMH) score T-score" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''71969-0'').exists()')
+"Observation: Sport-recreation score [HOOS]" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72094-6'').exists()')
 ),
 "Procedure: Partial Arthroplasty of Hip" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1184') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
 ),
-"Encounter: Telephone Visits" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1080')
+"Observation: Pain score [HOOS]" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72097-9'').exists()')
 ),
-"Observation: Symptoms score [HOOS]" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72096-1'').exists()')
-),
-"Observation: VR-12 Mental component summary (MCS) score - orthogonal method T-score" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72028-4'').exists()')
-),
-"Encounter: Office Visit" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001')
-),
-"Procedure: Primary THA Procedure" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1006') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
+"Condition: Mechanical Complications Excluding Upper Body (qicore-condition-encounter-diagnosis)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1182') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
 ),
 "Encounter: Outpatient Consultation" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1008')
 ),
+"Observation: PROMIS-10 Global Physical Health (GPH) score T-score" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''71971-6'').exists()')
+),
+"Observation: VR-12 Mental component summary (MCS) score - oblique method T-score" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72026-8'').exists()')
+),
+"Observation: VR-12 Physical component summary (PCS) score - orthogonal method T-score" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72027-6'').exists()')
+),
+"Condition: Lower Body Fractures Excluding Ankle and Foot (qicore-condition-encounter-diagnosis)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1178') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
+),
+"Procedure: Primary THA Procedure" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1006') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
+),
+"Condition: Severe cognitive impairment (finding) (qicore-condition-encounter-diagnosis)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''702956004'').exists()') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
+),
 "Condition: Malignant Neoplasms of Lower and Unspecified Limbs (qicore-condition-problems-health-concerns)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1180') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
 ),
-"Condition: Malignant Neoplasms of Lower and Unspecified Limbs (qicore-condition-encounter-diagnosis)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1180') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
+"Encounter: Telephone Visits" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1080')
+),
+"Observation: VR-12 Physical component summary (PCS) score - oblique method T-score" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status, fhirpath_text(r.resource, 'value') AS value FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''72025-0'').exists()')
+),
+"Encounter: Office Visit" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001')
 ),
 "Coverage: Payer Type" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'type') AS "type" FROM resources r WHERE r.resourceType = 'Coverage' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591')
 ),
+"Encounter: Hospice Encounter" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1003')
+),
+"Procedure: Hospice Care Ambulatory" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
+),
 "Observation: Hospice care [Minimum Data Set]" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://loinc.org'' and code=''45755-6'').exists()')
 ),
-"Encounter: Hospice Encounter" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1003')
+"ServiceRequest: Hospice Care Ambulatory" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
 ),
 "Condition: Hospice Diagnosis (qicore-condition-problems-health-concerns)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
 ),
 "Encounter: Encounter Inpatient" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307')
-),
-"ServiceRequest: Hospice Care Ambulatory" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
-),
-"Procedure: Hospice Care Ambulatory" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1584') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
 ),
 "Condition: Hospice Diagnosis (qicore-condition-encounter-diagnosis)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.1165') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')

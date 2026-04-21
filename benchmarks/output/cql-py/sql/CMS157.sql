@@ -25,37 +25,6 @@ WITH _patients AS
                    CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date
    FROM resources r
    WHERE r.resourceType = 'Patient'),
-     "Encounter: Radiation Treatment Management" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1026')),
-     "Encounter: Audio Visual Telehealth Encounter" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.1444.5.215')),
-     "Encounter: Office Visit" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
-   FROM resources r
-   WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001')),
-     "Condition: Cancer (qicore-condition-problems-health-concerns)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'abatementDateTime') AS abatement_date,
-                   fhirpath_text(r.resource, 'onsetDateTime') AS onset_date,
-                   fhirpath_text(r.resource, 'recordedDate') AS recorded_date
-   FROM resources r
-   WHERE r.resourceType = 'Condition'
-     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1010')
-     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
      "Observation: Standardized Pain Assessment Tool" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -75,6 +44,37 @@ WITH _patients AS
           OR fhirpath_text(r.resource, 'status') != 'not-done')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
+     "Condition: Cancer (qicore-condition-problems-health-concerns)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'abatementDateTime') AS abatement_date,
+                   fhirpath_text(r.resource, 'onsetDateTime') AS onset_date,
+                   fhirpath_text(r.resource, 'recordedDate') AS recorded_date
+   FROM resources r
+   WHERE r.resourceType = 'Condition'
+     AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1010')
+     AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')),
+     "Encounter: Audio Visual Telehealth Encounter" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.1444.5.215')),
+     "Encounter: Office Visit" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1001')),
+     "Encounter: Radiation Treatment Management" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
+   FROM resources r
+   WHERE r.resourceType = 'Encounter'
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.526.3.1026')),
      "Encounter: Encounter Inpatient" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -302,34 +302,54 @@ WITH _patients AS
           AND PainAssessed.patient_id = RadiationManagementEncounter.patient_id))
 SELECT p.patient_id,
 
-  (SELECT COALESCE(LIST("Initial Population 1".resource), [])
-   FROM "Initial Population 1"
-   WHERE "Initial Population 1".patient_id = p.patient_id
-     AND "Initial Population 1".resource IS NOT NULL) AS "Initial Population 1",
-
   (SELECT COALESCE(LIST("Denominator 1".resource), [])
    FROM "Denominator 1"
    WHERE "Denominator 1".patient_id = p.patient_id
      AND "Denominator 1".resource IS NOT NULL) AS "Denominator 1",
-
-  (SELECT COALESCE(LIST("Numerator 1".resource), [])
-   FROM "Numerator 1"
-   WHERE "Numerator 1".patient_id = p.patient_id
-     AND "Numerator 1".resource IS NOT NULL) AS "Numerator 1",
-
-  (SELECT COALESCE(LIST(json_extract_string("Initial Population 2".resource, '$.resourceType') || '/' || json_extract_string("Initial Population 2".resource, '$.id')), [])
-   FROM "Initial Population 2"
-   WHERE "Initial Population 2".patient_id = p.patient_id
-     AND "Initial Population 2".resource IS NOT NULL) AS "Initial Population 2",
 
   (SELECT COALESCE(LIST(json_extract_string("Denominator 2".resource, '$.resourceType') || '/' || json_extract_string("Denominator 2".resource, '$.id')), [])
    FROM "Denominator 2"
    WHERE "Denominator 2".patient_id = p.patient_id
      AND "Denominator 2".resource IS NOT NULL) AS "Denominator 2",
 
+  (SELECT COALESCE(LIST("Initial Population 1".resource), [])
+   FROM "Initial Population 1"
+   WHERE "Initial Population 1".patient_id = p.patient_id
+     AND "Initial Population 1".resource IS NOT NULL) AS "Initial Population 1",
+
+  (SELECT COALESCE(LIST(json_extract_string("Initial Population 2".resource, '$.resourceType') || '/' || json_extract_string("Initial Population 2".resource, '$.id')), [])
+   FROM "Initial Population 2"
+   WHERE "Initial Population 2".patient_id = p.patient_id
+     AND "Initial Population 2".resource IS NOT NULL) AS "Initial Population 2",
+
+  (SELECT COALESCE(LIST(json_extract_string("Chemotherapy Within 31 Days Prior and During Measurement Period".resource, '$.resourceType') || '/' || json_extract_string("Chemotherapy Within 31 Days Prior and During Measurement Period".resource, '$.id')), [])
+   FROM "Chemotherapy Within 31 Days Prior and During Measurement Period"
+   WHERE "Chemotherapy Within 31 Days Prior and During Measurement Period".patient_id = p.patient_id
+     AND "Chemotherapy Within 31 Days Prior and During Measurement Period".resource IS NOT NULL) AS "Chemotherapy Within 31 Days Prior and During Measurement Period",
+
+  (SELECT COALESCE(LIST("Face to Face or Telehealth Encounter with Ongoing Chemotherapy".resource), [])
+   FROM "Face to Face or Telehealth Encounter with Ongoing Chemotherapy"
+   WHERE "Face to Face or Telehealth Encounter with Ongoing Chemotherapy".patient_id = p.patient_id
+     AND "Face to Face or Telehealth Encounter with Ongoing Chemotherapy".resource IS NOT NULL) AS "Face to Face or Telehealth Encounter with Ongoing Chemotherapy",
+
+  (SELECT COALESCE(LIST("Numerator 1".resource), [])
+   FROM "Numerator 1"
+   WHERE "Numerator 1".patient_id = p.patient_id
+     AND "Numerator 1".resource IS NOT NULL) AS "Numerator 1",
+
+  (SELECT COALESCE(LIST(json_extract_string("Radiation Treatment Management During Measurement Period with Cancer Diagnosis".resource, '$.resourceType') || '/' || json_extract_string("Radiation Treatment Management During Measurement Period with Cancer Diagnosis".resource, '$.id')), [])
+   FROM "Radiation Treatment Management During Measurement Period with Cancer Diagnosis"
+   WHERE "Radiation Treatment Management During Measurement Period with Cancer Diagnosis".patient_id = p.patient_id
+     AND "Radiation Treatment Management During Measurement Period with Cancer Diagnosis".resource IS NOT NULL) AS "Radiation Treatment Management During Measurement Period with Cancer Diagnosis",
+
   (SELECT COALESCE(LIST(json_extract_string("Numerator 2".resource, '$.resourceType') || '/' || json_extract_string("Numerator 2".resource, '$.id')), [])
    FROM "Numerator 2"
    WHERE "Numerator 2".patient_id = p.patient_id
-     AND "Numerator 2".resource IS NOT NULL) AS "Numerator 2"
+     AND "Numerator 2".resource IS NOT NULL) AS "Numerator 2",
+
+  (SELECT COALESCE(LIST(json_extract_string("Standard Pain Assessment with Result".resource, '$.resourceType') || '/' || json_extract_string("Standard Pain Assessment with Result".resource, '$.id')), [])
+   FROM "Standard Pain Assessment with Result"
+   WHERE "Standard Pain Assessment with Result".patient_id = p.patient_id
+     AND "Standard Pain Assessment with Result".resource IS NOT NULL) AS "Standard Pain Assessment with Result"
 FROM _patients p
 ORDER BY p.patient_id ASC
