@@ -1351,6 +1351,54 @@ def _compare_at_min_precision(a_str: str, b_str: str) -> tuple:
     # All compared components are equal
     # If precisions differ, the result is uncertain (CQL §18.4)
     if a_idx != b_idx:
+        # CQL §7.1.3: Type promotion — Date to DateTime.
+        # When one operand is DateTime (has 'T' separator with time components)
+        # and the other is a Date (YYYY-MM-DD, no 'T', exactly 10 chars),
+        # promote the Date by adding T00:00:00.000 (start of day) and re-compare.
+        # This only applies when the Date has full day precision (10 chars).
+        a_has_time_sep = 'T' in a_str or ' ' in a_str[10:11]
+        b_has_time_sep = 'T' in b_str or ' ' in b_str[10:11]
+        a_is_date_only = (not a_has_time_sep and len(a_str.split('+')[0].split('Z')[0]) == 10)
+        b_is_date_only = (not b_has_time_sep and len(b_str.split('+')[0].split('Z')[0]) == 10)
+
+        if a_is_date_only and b_has_time_sep and not b_is_date_only:
+            # Promote a (Date) to DateTime with midnight
+            promoted = a_str + 'T00:00:00.000'
+            a_comps2 = _parse_components(promoted)
+            b_comps2 = b_comps
+            if a_comps2.get('tz') or b_comps2.get('tz'):
+                a_comps2 = _normalize_to_utc(a_comps2)
+                b_comps2 = _normalize_to_utc(b_comps2)
+            new_max = _PRECISION_INDEX[_infer_precision(promoted)]
+            compare_to = min(new_max, b_idx)
+            for i, field in enumerate(_PRECISION_ORDER[:compare_to + 1]):
+                av = a_comps2[field]
+                bv = b_comps2[field]
+                if av < bv:
+                    return (-1, True)
+                if av > bv:
+                    return (1, True)
+            return (0, True)
+
+        if b_is_date_only and a_has_time_sep and not a_is_date_only:
+            # Promote b (Date) to DateTime with midnight
+            promoted = b_str + 'T00:00:00.000'
+            a_comps2 = a_comps
+            b_comps2 = _parse_components(promoted)
+            if a_comps2.get('tz') or b_comps2.get('tz'):
+                a_comps2 = _normalize_to_utc(a_comps2)
+                b_comps2 = _normalize_to_utc(b_comps2)
+            new_max = _PRECISION_INDEX[_infer_precision(promoted)]
+            compare_to = min(a_idx, new_max)
+            for i, field in enumerate(_PRECISION_ORDER[:compare_to + 1]):
+                av = a_comps2[field]
+                bv = b_comps2[field]
+                if av < bv:
+                    return (-1, True)
+                if av > bv:
+                    return (1, True)
+            return (0, True)
+
         return (0, False)  # equal so far, but uncertain due to unspecified components
 
     return (0, True)  # fully equal at same precision

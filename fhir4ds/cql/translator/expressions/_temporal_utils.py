@@ -288,18 +288,39 @@ class TemporalUtilsMixin:
 
     @staticmethod
     def _timestamp_arith_to_varchar(expr: SQLExpression) -> SQLExpression:
-        """Convert TIMESTAMP arithmetic result (e.g. TIMESTAMP ± INTERVAL) to VARCHAR.
+        """Convert TIMESTAMP arithmetic result to 23-char ISO 8601 VARCHAR.
 
-        DuckDB ``CAST(TIMESTAMP AS VARCHAR)`` uses a space separator
-        (``2014-01-01 00:00:00``).  This replaces it with ``T`` to
-        produce ISO 8601 (``2014-01-01T00:00:00``).
+        Uses ``STRFTIME`` with millisecond precision to produce a
+        consistent 23-character output (``2014-01-01T00:00:00.000``)
+        regardless of whether the TIMESTAMP has sub-second components.
+        This avoids length mismatches in bare VARCHAR comparisons
+        against FHIR datetime strings that carry timezone suffixes.
         """
         return SQLFunctionCall(
-            name="REPLACE",
+            name="STRFTIME",
             args=[
-                SQLCast(expression=expr, target_type="VARCHAR"),
-                SQLLiteral(" "),
-                SQLLiteral("T"),
+                expr,
+                SQLLiteral("%Y-%m-%dT%H:%M:%S.%g"),
+            ],
+        )
+
+    @staticmethod
+    def _normalize_temporal_for_compare(expr: SQLExpression) -> SQLExpression:
+        """Normalize a temporal VARCHAR to 23-char ISO 8601 for bare comparison.
+
+        FHIR datetime strings may carry timezone suffixes
+        (``2027-05-01T02:00:00.000+00:00``, 29 chars) while TIMESTAMP
+        arithmetic results are 23 chars.  Bare ``<=`` / ``>=`` between
+        these produces wrong results at boundaries because VARCHAR
+        comparison is lexicographic.  This normalizes by casting through
+        TIMESTAMP (which strips the timezone) and formatting back to a
+        consistent 23-character string.
+        """
+        return SQLFunctionCall(
+            name="STRFTIME",
+            args=[
+                SQLCast(expression=expr, target_type="TIMESTAMP"),
+                SQLLiteral("%Y-%m-%dT%H:%M:%S.%g"),
             ],
         )
 

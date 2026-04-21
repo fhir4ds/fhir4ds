@@ -34,13 +34,6 @@ WITH _patients AS
                    CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date
    FROM resources r
    WHERE r.resourceType = 'Patient'),
-     "Procedure: Documentation of current medications (procedure) (procedurenotdone)" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Procedure'
-     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''428191000124101'').exists()')
-     AND fhirpath_text(r.resource, 'status') = 'not-done'),
      "Encounter: Encounter to Document Medications" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -58,6 +51,13 @@ WITH _patients AS
           OR fhirpath_text(r.resource, 'status') != 'not-done')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))),
+     "Procedure: Documentation of current medications (procedure) (procedurenotdone)" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Procedure'
+     AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''428191000124101'').exists()')
+     AND fhirpath_text(r.resource, 'status') = 'not-done'),
      "Coverage: Payer Type" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,

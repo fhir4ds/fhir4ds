@@ -2004,12 +2004,14 @@ class OperatorsMixin:
                 right_inner = self._ensure_date_cast(right_inner)
                 # Gap 18: Use < for exclusive boundary
                 op = "<" if getattr(right_inner, 'is_exclusive_boundary', False) else "<="
-                # Wrap intervalStart in CAST to DATE for type compatibility
+                # Symmetric DATE truncation on BOTH sides (CQL §18.2 —
+                # compare at minimum precision).  Old code only truncated
+                # the left, causing 10-char vs 29-char mismatches.
                 interval_start = SQLFunctionCall(name="intervalStart", args=[left])
                 result = SQLBinaryOp(
                     operator=op,
                     left=SQLCast(expression=interval_start, target_type="DATE"),
-                    right=right_inner
+                    right=SQLCast(expression=right_inner, target_type="DATE"),
                 )
                 if extra_cond_ast:
                     extra_sql = self.translate(extra_cond_ast, boolean_context=True)
@@ -2023,11 +2025,12 @@ class OperatorsMixin:
                 if self._is_fhir_interval_expression(right_inner):
                     right_inner = SQLFunctionCall(name="intervalEnd", args=[right_inner])
                 right_inner = self._ensure_date_cast(right_inner)
+                # Symmetric DATE truncation on BOTH sides (CQL §18.2).
                 interval_start = SQLFunctionCall(name="intervalStart", args=[left])
                 result = SQLBinaryOp(
                     operator=">=",
                     left=SQLCast(expression=interval_start, target_type="DATE"),
-                    right=right_inner
+                    right=SQLCast(expression=right_inner, target_type="DATE"),
                 )
                 if extra_cond_ast:
                     extra_sql = self.translate(extra_cond_ast, boolean_context=True)
@@ -2152,10 +2155,11 @@ class OperatorsMixin:
                 # Gap 18: Use < for exclusive boundary
                 op = "<" if getattr(right_inner, 'is_exclusive_boundary', False) else "<="
                 interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
+                # Symmetric DATE truncation on BOTH sides (CQL §18.2).
                 result = SQLBinaryOp(
                     operator=op,
                     left=SQLCast(expression=interval_end, target_type="DATE"),
-                    right=right_inner
+                    right=SQLCast(expression=right_inner, target_type="DATE"),
                 )
                 if extra_cond_ast:
                     extra_sql = self.translate(extra_cond_ast, boolean_context=True)
@@ -2166,10 +2170,11 @@ class OperatorsMixin:
                 cleaned_operand, extra_cond_ast = self._strip_and_conditions(expr.right.operand)
                 right_inner = self._ensure_date_cast(self.translate(cleaned_operand))
                 interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
+                # Symmetric DATE truncation on BOTH sides (CQL §18.2).
                 result = SQLBinaryOp(
                     operator=">=",
                     left=SQLCast(expression=interval_end, target_type="DATE"),
-                    right=right_inner
+                    right=SQLCast(expression=right_inner, target_type="DATE"),
                 )
                 if extra_cond_ast:
                     extra_sql = self.translate(extra_cond_ast, boolean_context=True)
@@ -2710,11 +2715,10 @@ class OperatorsMixin:
                                 boundary_expr = self._truncate_to_precision(boundary_expr, _precision)
                                 offset_right = self._truncate_to_precision(offset_right, _precision)
                             else:
-                                # No explicit precision — use temporal target type
-                                # based on the interval unit (TIMESTAMP for sub-day)
-                                _cast_type = self._temporal_target_type(_qty_unit)
-                                boundary_expr = self._ensure_date_cast(boundary_expr, _cast_type)
-                                offset_right = self._ensure_date_cast(offset_right, _cast_type)
+                                # No explicit precision — normalize both sides
+                                # to 23-char ISO 8601 for consistent comparison.
+                                boundary_expr = self._normalize_temporal_for_compare(boundary_expr)
+                                offset_right = self._normalize_temporal_for_compare(offset_right)
                             return SQLBinaryOp(operator="=", left=boundary_expr, right=offset_right)
                     except ValueError:
                         pass  # Not a numeric token, fall through

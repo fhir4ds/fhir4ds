@@ -341,15 +341,12 @@ class TemporalComparisonMixin:
                 left_cmp = self._truncate_to_precision(boundary_expr, precision) if precision else boundary_expr
                 right_cmp = self._truncate_to_precision(right_resolved, precision) if precision else right_resolved
 
-                # Without explicit precision, VARCHAR comparison may fail at day
-                # boundaries (e.g., '2024-12-31T23:59:59' <= '2024-12-31' → FALSE).
-                # Add a date-equality fallback: (x op y) OR (LEFT(x,10) = LEFT(y,10)).
-                if not precision and cmp_op in ("<=", ">="):
-                    direct = SQLBinaryOp(operator=cmp_op, left=left_cmp, right=right_cmp)
-                    left_date = SQLCast(expression=boundary_expr, target_type="DATE")
-                    right_date = SQLCast(expression=right_resolved, target_type="DATE")
-                    date_eq = SQLBinaryOp(operator="=", left=left_date, right=right_date)
-                    return SQLBinaryOp(operator="OR", left=direct, right=date_eq)
+                # Without explicit precision, normalize FHIR temporal VARCHARs
+                # to 23-char ISO 8601 (strip timezone suffixes) so bare <= / >=
+                # works correctly at time boundaries (CQL §18.13).
+                if not precision:
+                    left_cmp = self._normalize_temporal_for_compare(left_cmp)
+                    right_cmp = self._normalize_temporal_for_compare(right_cmp)
 
                 return SQLBinaryOp(operator=cmp_op, left=left_cmp, right=right_cmp)
 
@@ -437,6 +434,13 @@ class TemporalComparisonMixin:
 
         # For INTERVAL arithmetic (+/-), DuckDB requires TIMESTAMP, not VARCHAR.
         right_for_arithmetic = self._cast_for_interval_arithmetic(right_for_compare)
+
+        # When no precision qualifier, normalize FHIR temporal VARCHARs to
+        # 23-char ISO 8601 (strip timezone suffixes) so bare <= / >= works
+        # correctly against STRFTIME-formatted arithmetic results (CQL §18.13).
+        if not precision:
+            right_for_compare = self._normalize_temporal_for_compare(right_for_compare)
+            boundary_func = self._normalize_temporal_for_compare(boundary_func)
 
         if before_or_after in ("on or after", "after"):
             if less_or_more == "exact":
@@ -592,6 +596,13 @@ class TemporalComparisonMixin:
         # For INTERVAL arithmetic (+/-), DuckDB requires TIMESTAMP, not VARCHAR.
         right_for_arithmetic = self._cast_for_interval_arithmetic(right_for_compare)
 
+        # When no precision qualifier, normalize FHIR temporal VARCHARs to
+        # 23-char ISO 8601 (strip timezone suffixes) so bare <= / >= works
+        # correctly against STRFTIME-formatted arithmetic results (CQL §18.13).
+        if not precision:
+            right_for_compare = self._normalize_temporal_for_compare(right_for_compare)
+            interval_point_for_compare = self._normalize_temporal_for_compare(interval_point_for_compare)
+
         if before_or_after in ("on or after", "after"):
             if less_or_more == "exact":
                 target = self._timestamp_arith_to_varchar(
@@ -691,6 +702,13 @@ class TemporalComparisonMixin:
         # For INTERVAL arithmetic, DuckDB requires TIMESTAMP, not VARCHAR.
         right_for_arithmetic = self._cast_for_interval_arithmetic(right_cmp)
 
+        # When no precision qualifier, normalize FHIR temporal VARCHARs to
+        # 23-char ISO 8601 (strip timezone suffixes) so bare <= / >= works
+        # correctly against STRFTIME-formatted arithmetic results (CQL §18.13).
+        if not precision:
+            left_cmp = self._normalize_temporal_for_compare(left_cmp)
+            right_cmp = self._normalize_temporal_for_compare(right_cmp)
+
         # "before" and "on or before" both mean left <= right
         # "after" and "on or after" both mean left >= right
         is_before = direction in ("before", "on or before")
@@ -757,6 +775,11 @@ class TemporalComparisonMixin:
         right_cmp = self._ensure_date_cast(right, cast_type)
 
         right_for_arithmetic = self._cast_for_interval_arithmetic(right_cmp)
+
+        # Normalize FHIR temporal VARCHARs to 23-char ISO 8601 (strip timezone
+        # suffixes) so bare <= / >= works against STRFTIME-formatted arithmetic
+        # results (CQL §18.13).
+        left_cmp = self._normalize_temporal_for_compare(left_cmp)
 
         lower = self._timestamp_arith_to_varchar(
             SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))

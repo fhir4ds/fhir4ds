@@ -75,17 +75,13 @@ WITH _patients AS
    FROM resources r
    WHERE r.resourceType = 'Encounter'
      AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1010')),
-     "Encounter: Observation Services" AS
+     "Encounter: Triage" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
+                   r.resource,
+                   fhirpath_text(r.resource, 'status') AS status
    FROM resources r
    WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143')),
-     "Location" AS
-  (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource
-   FROM resources r
-   WHERE r.resourceType = 'Location'),
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.279')),
      "ServiceRequest: Decision to Transfer" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -97,13 +93,17 @@ WITH _patients AS
      AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.286')
      AND (json_extract(r.resource, '$.meta.profile') IS NULL
           OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))),
-     "Encounter: Triage" AS
+     "Encounter: Observation Services" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
-                   r.resource,
-                   fhirpath_text(r.resource, 'status') AS status
+                   r.resource
    FROM resources r
    WHERE r.resourceType = 'Encounter'
-     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.279')),
+     AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143')),
+     "Location" AS
+  (SELECT DISTINCT r.patient_ref AS patient_id,
+                   r.resource
+   FROM resources r
+   WHERE r.resourceType = 'Location'),
      "Encounter: Encounter Inpatient" AS
   (SELECT DISTINCT r.patient_ref AS patient_id,
                    r.resource,
@@ -186,8 +186,8 @@ WITH _patients AS
         WHERE (intervalOverlapsBefore(fhirpath_text(EDTriageinMP.resource, 'period'), fhirpath_text(EDEvalManagementinMP.resource, 'period'))
                OR intervalIncludes(fhirpath_text(EDEvalManagementinMP.resource, 'period'), fhirpath_text(EDTriageinMP.resource, 'period'))
                OR intervalIncludes(fhirpath_text(EDTriageinMP.resource, 'period'), fhirpath_text(EDEvalManagementinMP.resource, 'period'))
-               OR REPLACE(CAST(CAST(intervalStart(fhirpath_text(EDEvalManagementinMP.resource, 'period')) AS TIMESTAMP) - INTERVAL '120 minute' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(EDTriageinMP.resource, 'period'))
-               AND intervalEnd(fhirpath_text(EDTriageinMP.resource, 'period')) < intervalStart(fhirpath_text(EDEvalManagementinMP.resource, 'period')))
+               OR STRFTIME(CAST(intervalStart(fhirpath_text(EDEvalManagementinMP.resource, 'period')) AS TIMESTAMP) - INTERVAL '120 minute', '%Y-%m-%dT%H:%M:%S.%g') <= STRFTIME(CAST(intervalEnd(fhirpath_text(EDTriageinMP.resource, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g')
+               AND STRFTIME(CAST(intervalEnd(fhirpath_text(EDTriageinMP.resource, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g') < STRFTIME(CAST(intervalStart(fhirpath_text(EDEvalManagementinMP.resource, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g'))
           AND EDEvalManagementinMP.patient_id = EDTriageinMP.patient_id)),
      "Initial Population" AS (
                                 (SELECT patient_id,
@@ -342,8 +342,8 @@ WITH _patients AS
         WHERE (intervalOverlapsBefore(fhirpath_text(EDTriageinMP.resource, 'period'), fhirpath_text(EDEncounter.resource, 'period'))
                OR intervalIncludes(fhirpath_text(EDEncounter.resource, 'period'), fhirpath_text(EDTriageinMP.resource, 'period'))
                OR intervalIncludes(fhirpath_text(EDTriageinMP.resource, 'period'), fhirpath_text(EDEncounter.resource, 'period'))
-               OR REPLACE(CAST(CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '120 minute' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(EDTriageinMP.resource, 'period'))
-               AND intervalEnd(fhirpath_text(EDTriageinMP.resource, 'period')) < intervalStart(fhirpath_text(EDEncounter.resource, 'period')))
+               OR STRFTIME(CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '120 minute', '%Y-%m-%dT%H:%M:%S.%g') <= STRFTIME(CAST(intervalEnd(fhirpath_text(EDTriageinMP.resource, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g')
+               AND STRFTIME(CAST(intervalEnd(fhirpath_text(EDTriageinMP.resource, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g') < STRFTIME(CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g'))
           AND EDEncounter.patient_id = EDTriageinMP.patient_id)),
      "ED Triage and Evaluation Management" AS (
                                                  (SELECT patient_id,
@@ -356,39 +356,39 @@ WITH _patients AS
      "Boarded Time Greater Than 240 Minutes" AS
   (SELECT *
    FROM "Denominator" AS EDEncounter
-   WHERE CAST(
-                (SELECT fhirpath_text(TransferOrder.resource, 'authoredOn')
-                 FROM "ServiceRequest: Decision to Transfer" AS TransferOrder
-                 WHERE intervalContains(fhirpath_text(EDEncounter.resource, 'period'), fhirpath_text(TransferOrder.resource, 'authoredOn'))
-                   AND fhirpath_text(TransferOrder.resource, 'intent') = 'order'
-                   AND array_contains(['active', 'completed'], fhirpath_text(TransferOrder.resource, 'status'))
-                   AND TransferOrder.patient_id = EDEncounter.patient_id
-                 ORDER BY fhirpath_text(TransferOrder.resource, 'authoredOn') DESC NULLS FIRST, json_extract_string(TransferOrder.resource, '$.id') ASC NULLS LAST
-                 LIMIT 1) AS VARCHAR) <= REPLACE(CAST(CAST(CAST(list_extract(list_sort(
-                                                                                         (SELECT list(intervalEnd(fhirpath_text(_lt_Location, 'period')))
-                                                                                          FROM
-                                                                                            (SELECT unnest(from_json(fhirpath(_bb_Location.resource, 'location'), '["VARCHAR"]')) AS _lt_Location
-                                                                                             FROM "ED Triage and Evaluation Management" AS _bb_Location
-                                                                                             WHERE _bb_Location.patient_id = EDEncounter.patient_id) AS _bb_unnest
-                                                                                          WHERE in_valueset(CASE
-                                                                                                                WHEN
-                                                                                                                       (SELECT COUNT(*)
-                                                                                                                        FROM "Location" AS L
-                                                                                                                        WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
-                                                                                                                          AND L.patient_id = EDEncounter.patient_id) = 1 THEN
-                                                                                                                       (SELECT RESOURCE
-                                                                                                                        FROM "Location" AS L
-                                                                                                                        WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
-                                                                                                                          AND L.patient_id = EDEncounter.patient_id
-                                                                                                                        LIMIT 1)
-                                                                                                                ELSE NULL
-                                                                                                            END, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.284')
-                                                                                            AND intervalEnd(fhirpath_text(_lt_Location, 'period')) IS NOT NULL
-                                                                                            AND (REPLACE(CAST(CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '120 minute' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(_lt_Location, 'period'))
-                                                                                                 AND intervalEnd(fhirpath_text(_lt_Location, 'period')) < intervalStart(fhirpath_text(EDEncounter.resource, 'period'))
-                                                                                                 OR intervalOverlapsBefore(fhirpath_text(_lt_Location, 'period'), fhirpath_text(EDEncounter.resource, 'period'))
-                                                                                                 OR intervalOverlapsBefore(fhirpath_text(EDEncounter.resource, 'period'), fhirpath_text(_lt_Location, 'period'))
-                                                                                                 OR cqlDateTimeEqual(CAST(intervalStart(fhirpath_text(_lt_Location, 'period')) AS VARCHAR), CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS VARCHAR)))), 'asc'), -1) AS VARCHAR) AS TIMESTAMP) - INTERVAL '241 minute' AS VARCHAR), ' ', 'T')),
+   WHERE STRFTIME(CAST(CAST(
+                              (SELECT fhirpath_text(TransferOrder.resource, 'authoredOn')
+                               FROM "ServiceRequest: Decision to Transfer" AS TransferOrder
+                               WHERE intervalContains(fhirpath_text(EDEncounter.resource, 'period'), fhirpath_text(TransferOrder.resource, 'authoredOn'))
+                                 AND fhirpath_text(TransferOrder.resource, 'intent') = 'order'
+                                 AND array_contains(['active', 'completed'], fhirpath_text(TransferOrder.resource, 'status'))
+                                 AND TransferOrder.patient_id = EDEncounter.patient_id
+                               ORDER BY fhirpath_text(TransferOrder.resource, 'authoredOn') DESC NULLS FIRST, json_extract_string(TransferOrder.resource, '$.id') ASC NULLS LAST
+                               LIMIT 1) AS VARCHAR) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g') <= STRFTIME(CAST(CAST(list_extract(list_sort(
+                                                                                                                                          (SELECT list(intervalEnd(fhirpath_text(_lt_Location, 'period')))
+                                                                                                                                           FROM
+                                                                                                                                             (SELECT unnest(from_json(fhirpath(_bb_Location.resource, 'location'), '["VARCHAR"]')) AS _lt_Location
+                                                                                                                                              FROM "ED Triage and Evaluation Management" AS _bb_Location
+                                                                                                                                              WHERE _bb_Location.patient_id = EDEncounter.patient_id) AS _bb_unnest
+                                                                                                                                           WHERE in_valueset(CASE
+                                                                                                                                                                 WHEN
+                                                                                                                                                                        (SELECT COUNT(*)
+                                                                                                                                                                         FROM "Location" AS L
+                                                                                                                                                                         WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
+                                                                                                                                                                           AND L.patient_id = EDEncounter.patient_id) = 1 THEN
+                                                                                                                                                                        (SELECT RESOURCE
+                                                                                                                                                                         FROM "Location" AS L
+                                                                                                                                                                         WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
+                                                                                                                                                                           AND L.patient_id = EDEncounter.patient_id
+                                                                                                                                                                         LIMIT 1)
+                                                                                                                                                                 ELSE NULL
+                                                                                                                                                             END, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.284')
+                                                                                                                                             AND intervalEnd(fhirpath_text(_lt_Location, 'period')) IS NOT NULL
+                                                                                                                                             AND (STRFTIME(CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '120 minute', '%Y-%m-%dT%H:%M:%S.%g') <= STRFTIME(CAST(intervalEnd(fhirpath_text(_lt_Location, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g')
+                                                                                                                                                  AND STRFTIME(CAST(intervalEnd(fhirpath_text(_lt_Location, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g') < STRFTIME(CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g')
+                                                                                                                                                  OR intervalOverlapsBefore(fhirpath_text(_lt_Location, 'period'), fhirpath_text(EDEncounter.resource, 'period'))
+                                                                                                                                                  OR intervalOverlapsBefore(fhirpath_text(EDEncounter.resource, 'period'), fhirpath_text(_lt_Location, 'period'))
+                                                                                                                                                  OR cqlDateTimeEqual(CAST(intervalStart(fhirpath_text(_lt_Location, 'period')) AS VARCHAR), CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS VARCHAR)))), 'asc'), -1) AS VARCHAR) AS TIMESTAMP) - INTERVAL '241 minute', '%Y-%m-%dT%H:%M:%S.%g')),
      "Boarded Time Greater Than 240 Minutes and No Observation Stay" AS
   (SELECT *
    FROM "Boarded Time Greater Than 240 Minutes" AS Boarding
@@ -400,55 +400,55 @@ WITH _patients AS
      "ED Length of Stay Greater Than 480 Minutes" AS
   (SELECT *
    FROM "Denominator" AS EDEncounter
-   WHERE CAST(list_extract(list_sort(
-                                       (SELECT list(intervalStart(fhirpath_text(_lt_Location, 'period')))
-                                        FROM
-                                          (SELECT unnest(from_json(fhirpath(_bb_Location.resource, 'location'), '["VARCHAR"]')) AS _lt_Location
-                                           FROM "ED Triage and Evaluation Management" AS _bb_Location
-                                           WHERE _bb_Location.patient_id = EDEncounter.patient_id) AS _bb_unnest
-                                        WHERE in_valueset(CASE
-                                                              WHEN
-                                                                     (SELECT COUNT(*)
-                                                                      FROM "Location" AS L
-                                                                      WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
-                                                                        AND L.patient_id = EDEncounter.patient_id) = 1 THEN
-                                                                     (SELECT RESOURCE
-                                                                      FROM "Location" AS L
-                                                                      WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
-                                                                        AND L.patient_id = EDEncounter.patient_id
-                                                                      LIMIT 1)
-                                                              ELSE NULL
-                                                          END, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.284')
-                                          AND intervalStart(fhirpath_text(_lt_Location, 'period')) IS NOT NULL
-                                          AND (REPLACE(CAST(CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '120 minute' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(_lt_Location, 'period'))
-                                               AND intervalEnd(fhirpath_text(_lt_Location, 'period')) < intervalStart(fhirpath_text(EDEncounter.resource, 'period'))
-                                               OR intervalOverlapsBefore(fhirpath_text(_lt_Location, 'period'), fhirpath_text(EDEncounter.resource, 'period'))
-                                               OR intervalOverlapsBefore(fhirpath_text(EDEncounter.resource, 'period'), fhirpath_text(_lt_Location, 'period'))
-                                               OR cqlDateTimeEqual(CAST(intervalStart(fhirpath_text(_lt_Location, 'period')) AS VARCHAR), CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS VARCHAR)))), 'asc'), -1) AS VARCHAR) <= REPLACE(CAST(CAST(CAST(list_extract(list_sort(
-                                                                                                                                                                                                                                                                                                       (SELECT list(intervalEnd(fhirpath_text(_lt_Location, 'period')))
-                                                                                                                                                                                                                                                                                                        FROM
-                                                                                                                                                                                                                                                                                                          (SELECT unnest(from_json(fhirpath(_bb_Location.resource, 'location'), '["VARCHAR"]')) AS _lt_Location
-                                                                                                                                                                                                                                                                                                           FROM "ED Triage and Evaluation Management" AS _bb_Location
-                                                                                                                                                                                                                                                                                                           WHERE _bb_Location.patient_id = EDEncounter.patient_id) AS _bb_unnest
-                                                                                                                                                                                                                                                                                                        WHERE in_valueset(CASE
-                                                                                                                                                                                                                                                                                                                              WHEN
-                                                                                                                                                                                                                                                                                                                                     (SELECT COUNT(*)
-                                                                                                                                                                                                                                                                                                                                      FROM "Location" AS L
-                                                                                                                                                                                                                                                                                                                                      WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
-                                                                                                                                                                                                                                                                                                                                        AND L.patient_id = EDEncounter.patient_id) = 1 THEN
-                                                                                                                                                                                                                                                                                                                                     (SELECT RESOURCE
-                                                                                                                                                                                                                                                                                                                                      FROM "Location" AS L
-                                                                                                                                                                                                                                                                                                                                      WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
-                                                                                                                                                                                                                                                                                                                                        AND L.patient_id = EDEncounter.patient_id
-                                                                                                                                                                                                                                                                                                                                      LIMIT 1)
-                                                                                                                                                                                                                                                                                                                              ELSE NULL
-                                                                                                                                                                                                                                                                                                                          END, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.284')
-                                                                                                                                                                                                                                                                                                          AND intervalEnd(fhirpath_text(_lt_Location, 'period')) IS NOT NULL
-                                                                                                                                                                                                                                                                                                          AND (REPLACE(CAST(CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '120 minute' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(_lt_Location, 'period'))
-                                                                                                                                                                                                                                                                                                               AND intervalEnd(fhirpath_text(_lt_Location, 'period')) < intervalStart(fhirpath_text(EDEncounter.resource, 'period'))
-                                                                                                                                                                                                                                                                                                               OR intervalOverlapsBefore(fhirpath_text(_lt_Location, 'period'), fhirpath_text(EDEncounter.resource, 'period'))
-                                                                                                                                                                                                                                                                                                               OR intervalOverlapsBefore(fhirpath_text(EDEncounter.resource, 'period'), fhirpath_text(_lt_Location, 'period'))
-                                                                                                                                                                                                                                                                                                               OR cqlDateTimeEqual(CAST(intervalStart(fhirpath_text(_lt_Location, 'period')) AS VARCHAR), CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS VARCHAR)))), 'asc'), -1) AS VARCHAR) AS TIMESTAMP) - INTERVAL '481 minute' AS VARCHAR), ' ', 'T')),
+   WHERE STRFTIME(CAST(CAST(list_extract(list_sort(
+                                                     (SELECT list(intervalStart(fhirpath_text(_lt_Location, 'period')))
+                                                      FROM
+                                                        (SELECT unnest(from_json(fhirpath(_bb_Location.resource, 'location'), '["VARCHAR"]')) AS _lt_Location
+                                                         FROM "ED Triage and Evaluation Management" AS _bb_Location
+                                                         WHERE _bb_Location.patient_id = EDEncounter.patient_id) AS _bb_unnest
+                                                      WHERE in_valueset(CASE
+                                                                            WHEN
+                                                                                   (SELECT COUNT(*)
+                                                                                    FROM "Location" AS L
+                                                                                    WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
+                                                                                      AND L.patient_id = EDEncounter.patient_id) = 1 THEN
+                                                                                   (SELECT RESOURCE
+                                                                                    FROM "Location" AS L
+                                                                                    WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
+                                                                                      AND L.patient_id = EDEncounter.patient_id
+                                                                                    LIMIT 1)
+                                                                            ELSE NULL
+                                                                        END, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.284')
+                                                        AND intervalStart(fhirpath_text(_lt_Location, 'period')) IS NOT NULL
+                                                        AND (STRFTIME(CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '120 minute', '%Y-%m-%dT%H:%M:%S.%g') <= STRFTIME(CAST(intervalEnd(fhirpath_text(_lt_Location, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g')
+                                                             AND STRFTIME(CAST(intervalEnd(fhirpath_text(_lt_Location, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g') < STRFTIME(CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g')
+                                                             OR intervalOverlapsBefore(fhirpath_text(_lt_Location, 'period'), fhirpath_text(EDEncounter.resource, 'period'))
+                                                             OR intervalOverlapsBefore(fhirpath_text(EDEncounter.resource, 'period'), fhirpath_text(_lt_Location, 'period'))
+                                                             OR cqlDateTimeEqual(CAST(intervalStart(fhirpath_text(_lt_Location, 'period')) AS VARCHAR), CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS VARCHAR)))), 'asc'), -1) AS VARCHAR) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g') <= STRFTIME(CAST(CAST(list_extract(list_sort(
+                                                                                                                                                                                                                                                                                                                                                        (SELECT list(intervalEnd(fhirpath_text(_lt_Location, 'period')))
+                                                                                                                                                                                                                                                                                                                                                         FROM
+                                                                                                                                                                                                                                                                                                                                                           (SELECT unnest(from_json(fhirpath(_bb_Location.resource, 'location'), '["VARCHAR"]')) AS _lt_Location
+                                                                                                                                                                                                                                                                                                                                                            FROM "ED Triage and Evaluation Management" AS _bb_Location
+                                                                                                                                                                                                                                                                                                                                                            WHERE _bb_Location.patient_id = EDEncounter.patient_id) AS _bb_unnest
+                                                                                                                                                                                                                                                                                                                                                         WHERE in_valueset(CASE
+                                                                                                                                                                                                                                                                                                                                                                               WHEN
+                                                                                                                                                                                                                                                                                                                                                                                      (SELECT COUNT(*)
+                                                                                                                                                                                                                                                                                                                                                                                       FROM "Location" AS L
+                                                                                                                                                                                                                                                                                                                                                                                       WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
+                                                                                                                                                                                                                                                                                                                                                                                         AND L.patient_id = EDEncounter.patient_id) = 1 THEN
+                                                                                                                                                                                                                                                                                                                                                                                      (SELECT RESOURCE
+                                                                                                                                                                                                                                                                                                                                                                                       FROM "Location" AS L
+                                                                                                                                                                                                                                                                                                                                                                                       WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
+                                                                                                                                                                                                                                                                                                                                                                                         AND L.patient_id = EDEncounter.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                       LIMIT 1)
+                                                                                                                                                                                                                                                                                                                                                                               ELSE NULL
+                                                                                                                                                                                                                                                                                                                                                                           END, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.284')
+                                                                                                                                                                                                                                                                                                                                                           AND intervalEnd(fhirpath_text(_lt_Location, 'period')) IS NOT NULL
+                                                                                                                                                                                                                                                                                                                                                           AND (STRFTIME(CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS TIMESTAMP) - INTERVAL '120 minute', '%Y-%m-%dT%H:%M:%S.%g') <= STRFTIME(CAST(intervalEnd(fhirpath_text(_lt_Location, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g')
+                                                                                                                                                                                                                                                                                                                                                                AND STRFTIME(CAST(intervalEnd(fhirpath_text(_lt_Location, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g') < STRFTIME(CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g')
+                                                                                                                                                                                                                                                                                                                                                                OR intervalOverlapsBefore(fhirpath_text(_lt_Location, 'period'), fhirpath_text(EDEncounter.resource, 'period'))
+                                                                                                                                                                                                                                                                                                                                                                OR intervalOverlapsBefore(fhirpath_text(EDEncounter.resource, 'period'), fhirpath_text(_lt_Location, 'period'))
+                                                                                                                                                                                                                                                                                                                                                                OR cqlDateTimeEqual(CAST(intervalStart(fhirpath_text(_lt_Location, 'period')) AS VARCHAR), CAST(intervalStart(fhirpath_text(EDEncounter.resource, 'period')) AS VARCHAR)))), 'asc'), -1) AS VARCHAR) AS TIMESTAMP) - INTERVAL '481 minute', '%Y-%m-%dT%H:%M:%S.%g')),
      "ED Length of Stay Greater Than 480 Minutes and No Observation Stay" AS
   (SELECT *
    FROM "ED Length of Stay Greater Than 480 Minutes" AS EDStay
@@ -534,48 +534,48 @@ WITH _patients AS
      "Time to Treatment Room Greater Than 60 Minutes" AS
   (SELECT *
    FROM "ED Evaluation and Management" AS EDEvalManagementinMP
-   WHERE CAST(list_extract(list_sort(
-                                       (SELECT list(intervalStart(fhirpath_text(_lt_Location, 'period')))
-                                        FROM
-                                          (SELECT unnest(from_json(fhirpath(_bb_Location.resource, 'location'), '["VARCHAR"]')) AS _lt_Location
-                                           FROM "ED Triage and Evaluation Management" AS _bb_Location
-                                           WHERE _bb_Location.patient_id = EDEvalManagementinMP.patient_id) AS _bb_unnest
-                                        WHERE in_valueset(CASE
-                                                              WHEN
-                                                                     (SELECT COUNT(*)
-                                                                      FROM "Location" AS L
-                                                                      WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
-                                                                        AND L.patient_id = EDEvalManagementinMP.patient_id) = 1 THEN
-                                                                     (SELECT RESOURCE
-                                                                      FROM "Location" AS L
-                                                                      WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
-                                                                        AND L.patient_id = EDEvalManagementinMP.patient_id
-                                                                      LIMIT 1)
-                                                              ELSE NULL
-                                                          END, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.284')
-                                          AND intervalStart(fhirpath_text(_lt_Location, 'period')) IS NOT NULL
-                                          AND (REPLACE(CAST(CAST(intervalStart(fhirpath_text(EDEvalManagementinMP.resource, 'period')) AS TIMESTAMP) - INTERVAL '120 minute' AS VARCHAR), ' ', 'T') <= intervalEnd(fhirpath_text(_lt_Location, 'period'))
-                                               AND intervalEnd(fhirpath_text(_lt_Location, 'period')) < intervalStart(fhirpath_text(EDEvalManagementinMP.resource, 'period'))
-                                               OR intervalOverlapsBefore(fhirpath_text(_lt_Location, 'period'), fhirpath_text(EDEvalManagementinMP.resource, 'period'))
-                                               OR intervalOverlapsBefore(fhirpath_text(EDEvalManagementinMP.resource, 'period'), fhirpath_text(_lt_Location, 'period'))
-                                               OR cqlDateTimeEqual(CAST(intervalStart(fhirpath_text(_lt_Location, 'period')) AS VARCHAR), CAST(intervalStart(fhirpath_text(EDEvalManagementinMP.resource, 'period')) AS VARCHAR)))), 'asc'), -1) AS VARCHAR) <= REPLACE(CAST(CAST(CAST(list_extract(list_sort(
-                                                                                                                                                                                                                                                                                                                (SELECT list(intervalStart(fhirpath_text(_lt_Location, 'period')))
-                                                                                                                                                                                                                                                                                                                 FROM
-                                                                                                                                                                                                                                                                                                                   (SELECT unnest(from_json(fhirpath(EDEvalManagementinMP.resource, 'location'), '["VARCHAR"]')) AS _lt_Location) AS _lt_unnest
-                                                                                                                                                                                                                                                                                                                 WHERE in_valueset(CASE
-                                                                                                                                                                                                                                                                                                                                       WHEN
-                                                                                                                                                                                                                                                                                                                                              (SELECT COUNT(*)
-                                                                                                                                                                                                                                                                                                                                               FROM "Location" AS L
-                                                                                                                                                                                                                                                                                                                                               WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
-                                                                                                                                                                                                                                                                                                                                                 AND L.patient_id = EDEvalManagementinMP.patient_id) = 1 THEN
-                                                                                                                                                                                                                                                                                                                                              (SELECT RESOURCE
-                                                                                                                                                                                                                                                                                                                                               FROM "Location" AS L
-                                                                                                                                                                                                                                                                                                                                               WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
-                                                                                                                                                                                                                                                                                                                                                 AND L.patient_id = EDEvalManagementinMP.patient_id
-                                                                                                                                                                                                                                                                                                                                               LIMIT 1)
-                                                                                                                                                                                                                                                                                                                                       ELSE NULL
-                                                                                                                                                                                                                                                                                                                                   END, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.278')
-                                                                                                                                                                                                                                                                                                                   AND intervalStart(fhirpath_text(_lt_Location, 'period')) IS NOT NULL), 'asc'), 1) AS VARCHAR) AS TIMESTAMP) - INTERVAL '61 minute' AS VARCHAR), ' ', 'T')),
+   WHERE STRFTIME(CAST(CAST(list_extract(list_sort(
+                                                     (SELECT list(intervalStart(fhirpath_text(_lt_Location, 'period')))
+                                                      FROM
+                                                        (SELECT unnest(from_json(fhirpath(_bb_Location.resource, 'location'), '["VARCHAR"]')) AS _lt_Location
+                                                         FROM "ED Triage and Evaluation Management" AS _bb_Location
+                                                         WHERE _bb_Location.patient_id = EDEvalManagementinMP.patient_id) AS _bb_unnest
+                                                      WHERE in_valueset(CASE
+                                                                            WHEN
+                                                                                   (SELECT COUNT(*)
+                                                                                    FROM "Location" AS L
+                                                                                    WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
+                                                                                      AND L.patient_id = EDEvalManagementinMP.patient_id) = 1 THEN
+                                                                                   (SELECT RESOURCE
+                                                                                    FROM "Location" AS L
+                                                                                    WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
+                                                                                      AND L.patient_id = EDEvalManagementinMP.patient_id
+                                                                                    LIMIT 1)
+                                                                            ELSE NULL
+                                                                        END, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.284')
+                                                        AND intervalStart(fhirpath_text(_lt_Location, 'period')) IS NOT NULL
+                                                        AND (STRFTIME(CAST(intervalStart(fhirpath_text(EDEvalManagementinMP.resource, 'period')) AS TIMESTAMP) - INTERVAL '120 minute', '%Y-%m-%dT%H:%M:%S.%g') <= STRFTIME(CAST(intervalEnd(fhirpath_text(_lt_Location, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g')
+                                                             AND STRFTIME(CAST(intervalEnd(fhirpath_text(_lt_Location, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g') < STRFTIME(CAST(intervalStart(fhirpath_text(EDEvalManagementinMP.resource, 'period')) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g')
+                                                             OR intervalOverlapsBefore(fhirpath_text(_lt_Location, 'period'), fhirpath_text(EDEvalManagementinMP.resource, 'period'))
+                                                             OR intervalOverlapsBefore(fhirpath_text(EDEvalManagementinMP.resource, 'period'), fhirpath_text(_lt_Location, 'period'))
+                                                             OR cqlDateTimeEqual(CAST(intervalStart(fhirpath_text(_lt_Location, 'period')) AS VARCHAR), CAST(intervalStart(fhirpath_text(EDEvalManagementinMP.resource, 'period')) AS VARCHAR)))), 'asc'), -1) AS VARCHAR) AS TIMESTAMP), '%Y-%m-%dT%H:%M:%S.%g') <= STRFTIME(CAST(CAST(list_extract(list_sort(
+                                                                                                                                                                                                                                                                                                                                                                 (SELECT list(intervalStart(fhirpath_text(_lt_Location, 'period')))
+                                                                                                                                                                                                                                                                                                                                                                  FROM
+                                                                                                                                                                                                                                                                                                                                                                    (SELECT unnest(from_json(fhirpath(EDEvalManagementinMP.resource, 'location'), '["VARCHAR"]')) AS _lt_Location) AS _lt_unnest
+                                                                                                                                                                                                                                                                                                                                                                  WHERE in_valueset(CASE
+                                                                                                                                                                                                                                                                                                                                                                                        WHEN
+                                                                                                                                                                                                                                                                                                                                                                                               (SELECT COUNT(*)
+                                                                                                                                                                                                                                                                                                                                                                                                FROM "Location" AS L
+                                                                                                                                                                                                                                                                                                                                                                                                WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
+                                                                                                                                                                                                                                                                                                                                                                                                  AND L.patient_id = EDEvalManagementinMP.patient_id) = 1 THEN
+                                                                                                                                                                                                                                                                                                                                                                                               (SELECT RESOURCE
+                                                                                                                                                                                                                                                                                                                                                                                                FROM "Location" AS L
+                                                                                                                                                                                                                                                                                                                                                                                                WHERE fhirpath_text(L.resource, 'id') = LIST_EXTRACT(STR_SPLIT(fhirpath_text(_lt_Location, 'location.reference'), '/'), -1)
+                                                                                                                                                                                                                                                                                                                                                                                                  AND L.patient_id = EDEvalManagementinMP.patient_id
+                                                                                                                                                                                                                                                                                                                                                                                                LIMIT 1)
+                                                                                                                                                                                                                                                                                                                                                                                        ELSE NULL
+                                                                                                                                                                                                                                                                                                                                                                                    END, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.278')
+                                                                                                                                                                                                                                                                                                                                                                    AND intervalStart(fhirpath_text(_lt_Location, 'period')) IS NOT NULL), 'asc'), 1) AS VARCHAR) AS TIMESTAMP) - INTERVAL '61 minute', '%Y-%m-%dT%H:%M:%S.%g')),
      "Numerator" AS (
                        (SELECT patient_id,
                                RESOURCE
