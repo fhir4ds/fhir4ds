@@ -166,3 +166,51 @@ def descendants(ctx, coll):
         result.append(item)
         queue.extend(reduce(create_reduce_children(ctx, False), [item], []))
     return result
+
+
+def get_resource_key(ctx, coll):
+    """Return {resourceType}/{id} for the current resource.
+
+    Per SQL-on-FHIR v2, getResourceKey() returns the canonical key for the
+    root resource being processed. The input collection is the resource itself.
+    """
+    if util.is_empty(coll):
+        return []
+    results = []
+    for item in coll:
+        data = util.get_data(item)
+        if isinstance(data, dict):
+            rt = data.get('resourceType', '')
+            rid = data.get('id', '')
+            if rt and rid:
+                results.append(f"{rt}/{rid}")
+    return results
+
+
+def get_reference_key(ctx, coll, type_arg=None):
+    """Resolve a Reference element to {resourceType}/{id}.
+
+    Per SQL-on-FHIR v2, getReferenceKey() extracts the reference string from
+    a FHIR Reference element. If a type argument is provided, returns empty
+    when the reference doesn't match that type.
+
+    Args:
+        ctx: Evaluation context.
+        coll: Collection of Reference elements.
+        type_arg: Optional TypeInfo to filter by (e.g., Patient).
+    """
+    if util.is_empty(coll):
+        return []
+    results = []
+    for item in coll:
+        data = util.get_data(item)
+        if isinstance(data, dict):
+            ref = data.get('reference', '')
+            if not ref:
+                continue
+            if type_arg is not None:
+                type_name = type_arg.name if hasattr(type_arg, 'name') else str(type_arg)
+                if not ref.startswith(type_name + '/'):
+                    continue
+            results.append(ref)
+    return results

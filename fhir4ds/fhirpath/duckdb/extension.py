@@ -227,3 +227,12 @@ def register_fhirpath(con: duckdb.DuckDBPyConnection) -> None:
         fhirpath_quantity_udf,
         null_handling="special",
     )
+
+    # Register repeat traversal UDF for SQL-on-FHIR v2 ``repeat`` directive
+    from .udf import fhirpath_repeat_udf
+    con.create_function(
+        "fhirpath_repeat",
+        fhirpath_repeat_udf,
+        return_type="VARCHAR[]",
+        null_handling="special",
+    )

@@ -6,47 +6,47 @@ SELECT DISTINCT _outer.patient_ref AS patient_id FROM resources AS _outer WHERE 
 _patient_demographics AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date FROM resources r WHERE r.resourceType = 'Patient'
 ),
-"Procedure: Intravenous or Intraarterial Thrombolytic tPA Therapy" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.21') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
-),
-"MedicationRequest: Antithrombotic Therapy for Ischemic Stroke" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'authoredOn') AS authored_date, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'MedicationRequest' AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.62') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
-),
-"MedicationRequest: Antithrombotic Therapy for Ischemic Stroke (medicationnotrequested)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'authoredOn') AS authored_date, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'MedicationRequest' AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.62') AND fhirpath_bool(r.resource, 'doNotPerform')
-),
-"Observation: INR" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.213')
-),
-"MedicationAdministration: Antithrombotic Therapy for Ischemic Stroke (medicationadministrationnotdone)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationAdministration' AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.62') AND fhirpath_text(r.resource, 'status') = 'not-done'
-),
-"Encounter: Emergency Department Visit" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292')
-),
-"Encounter: Observation Services" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143')
-),
-"Condition: Intravenous or Intraarterial Thrombolytic tPA Therapy Prior to Arrival (qicore-condition-problems-health-concerns)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.21') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
-),
-"MedicationAdministration: Pharmacological Contraindications For Antithrombotic Therapy" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationAdministration' AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.52') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministrationnotdone'))
-),
-"Condition (qicore-condition-problems-health-concerns)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
-),
-"MedicationAdministration: Thrombolytic tPA Therapy" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationAdministration' AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.226') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministrationnotdone'))
-),
 "Task" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'authoredOn') AS authored_date, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Task'
 ),
 "Condition (qicore-condition-encounter-diagnosis)" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis')
 ),
+"Condition: Intravenous or Intraarterial Thrombolytic tPA Therapy Prior to Arrival (qicore-condition-problems-health-concerns)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.21') AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
+),
+"MedicationRequest: Antithrombotic Therapy for Ischemic Stroke" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'authoredOn') AS authored_date, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'MedicationRequest' AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.62') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationnotrequested'))
+),
+"Observation: INR" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.213')
+),
 "MedicationAdministration: Antithrombotic Therapy for Ischemic Stroke" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationAdministration' AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.62') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministrationnotdone'))
+),
+"Encounter: Emergency Department Visit" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.292')
+),
+"MedicationAdministration: Antithrombotic Therapy for Ischemic Stroke (medicationadministrationnotdone)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationAdministration' AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.62') AND fhirpath_text(r.resource, 'status') = 'not-done'
+),
+"MedicationAdministration: Pharmacological Contraindications For Antithrombotic Therapy" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationAdministration' AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.52') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministrationnotdone'))
+),
+"Procedure: Intravenous or Intraarterial Thrombolytic tPA Therapy" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1045.21') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
+),
+"MedicationRequest: Antithrombotic Therapy for Ischemic Stroke (medicationnotrequested)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'authoredOn') AS authored_date, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'MedicationRequest' AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1110.62') AND fhirpath_bool(r.resource, 'doNotPerform')
+),
+"MedicationAdministration: Thrombolytic tPA Therapy" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'MedicationAdministration' AND in_valueset(r.resource, 'medication', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.226') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-medicationadministrationnotdone'))
+),
+"Condition (qicore-condition-problems-health-concerns)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Condition' AND list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-problems-health-concerns')
+),
+"Encounter: Observation Services" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143')
 ),
 "Encounter: Encounter Inpatient" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307')
@@ -54,14 +54,14 @@ SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resourc
 "Coverage: Payer Type" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'type') AS "type" FROM resources r WHERE r.resourceType = 'Coverage' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.114222.4.11.3591')
 ),
-"Encounter: Nonelective Inpatient Encounter" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.424')
+"Procedure: Comfort Measures" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
 ),
 "ServiceRequest: Comfort Measures" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'intent') AS intent, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
 ),
-"Procedure: Comfort Measures" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Procedure' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/1.3.6.1.4.1.33895.1.3.0.45') AND (fhirpath_text(r.resource, 'status') IS NULL OR fhirpath_text(r.resource, 'status') != 'not-done') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-procedurenotdone'))
+"Encounter: Nonelective Inpatient Encounter" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.424')
 ),
 "CQMCommon.Inpatient Encounter" AS (
 SELECT * FROM "Encounter: Encounter Inpatient" AS EncounterInpatient WHERE EncounterInpatient.status = 'finished' AND CAST(LEFT(REPLACE(CAST(intervalEnd(fhirpath_text(EncounterInpatient.resource, 'period')) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) BETWEEN CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR) AND COALESCE(CAST(LEFT(REPLACE(CAST(intervalEnd(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR), CAST(LEFT(REPLACE(CAST(intervalStart(intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), TRUE, TRUE)) AS VARCHAR), ' ', 'T'), 10) AS VARCHAR))

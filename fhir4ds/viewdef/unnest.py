@@ -42,6 +42,33 @@ def generate_foreach_unnest(path: str, resource_var: str, alias: str) -> str:
     )
 
 
+def generate_repeat_unnest(paths: list, resource_var: str, alias: str) -> str:
+    """Generate CROSS JOIN LATERAL with UNNEST for repeat traversal.
+
+    Creates a SQL fragment using the ``fhirpath_repeat`` UDF for recursive
+    traversal per SQL-on-FHIR v2 §Select.repeat.  Like forEach, rows without
+    matching elements are excluded from the result.
+
+    Args:
+        paths: List of FHIRPath path strings for repeat traversal.
+        resource_var: Variable/expression holding the FHIR resource.
+        alias: Alias name for the unnested element.
+
+    Returns:
+        SQL fragment for CROSS JOIN LATERAL UNNEST of repeat results.
+    """
+    import json
+    paths_literal = json.dumps(paths).replace("'", "''")
+    table_alias = f"{alias}_table"
+    return (
+        f"CROSS JOIN LATERAL (\n"
+        f"    SELECT unnest(arr) as {alias}, "
+        f"unnest(range(len(arr))) as {alias}__row_index\n"
+        f"    FROM (VALUES (fhirpath_repeat({resource_var}, '{paths_literal}'))) v(arr)\n"
+        f") as {table_alias}"
+    )
+
+
 def generate_foreachornull_unnest(path: str, resource_var: str, alias: str) -> str:
     """Generate LEFT JOIN LATERAL with UNNEST for forEachOrNull.
 

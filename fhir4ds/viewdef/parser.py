@@ -96,13 +96,22 @@ def _parse_select(select_data: Dict[str, Any]) -> Select:
     # Parse where conditions
     where = _parse_where(select_data.get('where', []))
 
+    # Parse repeat (list of FHIRPath expressions for recursive traversal)
+    repeat = select_data.get('repeat')
+    if repeat is not None:
+        if isinstance(repeat, str):
+            repeat = [repeat]
+        elif not isinstance(repeat, list):
+            repeat = list(repeat)
+
     return Select(
         column=columns,
         select=nested_selects,
         forEach=select_data.get('forEach'),
         forEachOrNull=select_data.get('forEachOrNull'),
         unionAll=union_all,
-        where=where
+        where=where,
+        repeat=repeat,
     )
 
 

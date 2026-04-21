@@ -216,7 +216,6 @@ class TestSpecSQLGeneration:
         # Known unsupported features that prevent SQL generation
         test_id = f"{test_info['file']}:{test_info['test_title']}"
         _gen_xfail = {
-            "repeat.json:empty child expression": "repeat not implemented",
         }
         if test_id in _gen_xfail:
             pytest.xfail(_gen_xfail[test_id])
@@ -735,24 +734,14 @@ class TestSpecExecution:
         "constant_types.json:dateTime": "ofType(dateTime) broken on choice types",
         "constant_types.json:instant": "ofType(instant) broken on choice types",
         "constant_types.json:time": "ofType(time) broken on choice types",
-        # getReferenceKey/getResourceKey not implemented in fhirpath-py
-        "fn_reference_keys.json:getReferenceKey result matches getResourceKey without type specifier": "getReferenceKey() not implemented",
-        "fn_reference_keys.json:getReferenceKey result matches getResourceKey with right type specifier": "getReferenceKey() not implemented",
         # where with ofType(integer) — choice type resolution
         "where.json:where path with greater than inequality": "ofType(integer) broken on choice types",
         "where.json:where path with less than inequality": "ofType(integer) broken on choice types",
         # Logic tests using ofType on choice types
         "logic.json:filtering with 'and'": "ofType(boolean) broken on choice types",
         "logic.json:filtering with 'or'": "ofType(boolean) broken on choice types",
-        # repeat not yet supported
-        "repeat.json:basic": "repeat not implemented",
-        "repeat.json:item and answer.item": "repeat not implemented",
-        "repeat.json:empty expression": "repeat not implemented",
-        "repeat.json:combined with forEach": "repeat not implemented",
-        "repeat.json:combined with forEachOrNull": "repeat not implemented",
-        "repeat.json:combined with unionAll": "repeat not implemented",
-        # row_index with repeat — repeat not implemented
-        "row_index.json:%rowIndex with repeat": "repeat not implemented",
+        # row_index with repeat — depends on repeat being implemented
+        # "row_index.json:%rowIndex with repeat": "repeat not implemented",
         # unionAll nested inside forEach — columns from inner branches not propagated
         "row_index.json:%rowIndex in unionAll inside forEach": "unionAll inside forEach not fully supported",
     }

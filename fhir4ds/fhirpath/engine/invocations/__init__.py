@@ -109,6 +109,8 @@ invocation_registry = {
     "children": {"fn": navigation.children},
     "descendants": {"fn": navigation.descendants},
     "resolve": {"fn": navigation.resolve},
+    "getResourceKey": {"fn": navigation.get_resource_key, "arity": {0: []}},
+    "getReferenceKey": {"fn": navigation.get_reference_key, "arity": {0: [], 1: ["TypeSpecifier"]}},
     "|": {"fn": combining.union_op, "arity": {2: ["Any", "Any"]}},
     "=": {"fn": equality.equal, "arity": {2: ["Any", "Any"]}, "nullable": True},
     "!=": {"fn": equality.unequal, "arity": {2: ["Any", "Any"]}, "nullable": True},

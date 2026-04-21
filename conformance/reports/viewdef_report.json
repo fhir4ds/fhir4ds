@@ -494,15 +494,13 @@
       {
         "name": "getReferenceKey result matches getResourceKey without type specifier",
         "result": {
-          "passed": false,
-          "reason": "Row 0, column 'key_equal_ref': got None, expected False"
+          "passed": true
         }
       },
       {
         "name": "getReferenceKey result matches getResourceKey with right type specifier",
         "result": {
-          "passed": false,
-          "reason": "Row 0, column 'key_equal_ref': got None, expected False"
+          "passed": true
         }
       },
       {
@@ -622,50 +620,43 @@
       {
         "name": "basic",
         "result": {
-          "passed": false,
-          "reason": "Row count mismatch: got 1, expected 5"
+          "passed": true
         }
       },
       {
         "name": "item and answer.item",
         "result": {
-          "passed": false,
-          "reason": "Row count mismatch: got 1, expected 6"
+          "passed": true
         }
       },
       {
         "name": "empty expression",
         "result": {
-          "passed": false,
-          "reason": "Row count mismatch: got 1, expected 0"
+          "passed": true
         }
       },
       {
         "name": "empty child expression",
         "result": {
-          "passed": false,
-          "reason": "Column 'definition' has collection=false but path 'definition' likely returns multiple values. Either set collection=true or use a singleton accessor (e.g., .first(), [0], .where()) (column_name='definition', path='definition', hint='Set collection=true or use .first(), [n], or .where()')"
+          "passed": true
         }
       },
       {
         "name": "combined with forEach",
         "result": {
-          "passed": false,
-          "reason": "Row count mismatch: got 0, expected 1"
+          "passed": true
         }
       },
       {
         "name": "combined with forEachOrNull",
         "result": {
-          "passed": false,
-          "reason": "Row count mismatch: got 1, expected 5"
+          "passed": true
         }
       },
       {
         "name": "combined with unionAll",
         "result": {
-          "passed": false,
-          "reason": "Row count mismatch: got 2, expected 11"
+          "passed": true
         }
       }
     ]
@@ -699,8 +690,7 @@
       {
         "name": "%rowIndex with repeat",
         "result": {
-          "passed": false,
-          "reason": "Row count mismatch: got 1, expected 4"
+          "passed": true
         }
       },
       {

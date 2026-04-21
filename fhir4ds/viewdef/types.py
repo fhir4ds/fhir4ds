@@ -109,7 +109,7 @@ class Select:
     """Represents a select structure in a ViewDefinition.
 
     A select can contain columns, nested selects, forEach iteration,
-    unionAll for combining results, and where filters.
+    unionAll for combining results, where filters, and repeat traversal.
 
     Attributes:
         column: List of column definitions.
@@ -118,6 +118,8 @@ class Select:
         forEachOrNull: FHIRPath expression for iteration (LEFT JOIN behavior).
         unionAll: List of select structures to union.
         where: List of filter conditions.
+        repeat: List of FHIRPath expressions for recursive traversal
+            (SQL-on-FHIR v2 §Select.repeat).
     """
 
     column: List[Column] = field(default_factory=list)
@@ -126,6 +128,7 @@ class Select:
     forEachOrNull: Optional[str] = None
     unionAll: List["Select"] = field(default_factory=list)
     where: List[Dict[str, str]] = field(default_factory=list)
+    repeat: Optional[List[str]] = None
 
 
 @dataclass

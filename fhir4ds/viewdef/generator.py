@@ -41,7 +41,7 @@ def _quote_identifier(name: str) -> str:
 from .types import Column, ColumnType, Select, ViewDefinition
 from .errors import ValidationError
 
-from .unnest import generate_foreach_unnest, generate_foreachornull_unnest
+from .unnest import generate_foreach_unnest, generate_foreachornull_unnest, generate_repeat_unnest
 from .constants import ConstantResolver
 
 
@@ -340,6 +340,10 @@ class SQLGenerator:
                 if select.forEachOrNull:
                     paths.append(select.forEachOrNull)
 
+                # repeat paths
+                if select.repeat:
+                    paths.extend(select.repeat)
+
                 # where clauses
                 for where in select.where:
                     if isinstance(where, dict):
@@ -515,7 +519,7 @@ class SQLGenerator:
         """
         def validate_select_columns(selects: List[Select], in_foreach: bool = False) -> None:
             for select in selects:
-                current_in_foreach = in_foreach or bool(select.forEach) or bool(select.forEachOrNull)
+                current_in_foreach = in_foreach or bool(select.forEach) or bool(select.forEachOrNull) or bool(select.repeat)
 
                 if not current_in_foreach:
                     for column in select.column:
@@ -597,13 +601,24 @@ class SQLGenerator:
     def _validate_foreach_mutual_exclusion(self, selects: List[Select]) -> None:
         """Validate that no select uses both forEach and forEachOrNull.
 
-        Per SQL-on-FHIR v2 spec, these are mutually exclusive.
+        Per SQL-on-FHIR v2 spec, forEach, forEachOrNull, and repeat are
+        mutually exclusive iteration mechanisms at the same select level.
         """
         def _check(sels: List[Select], path: str = "select") -> None:
             for i, sel in enumerate(sels):
                 if sel.forEach and sel.forEachOrNull:
                     raise ValidationError(
                         f"{path}[{i}]: Both forEach and forEachOrNull specified "
+                        "(they are mutually exclusive per the SQL-on-FHIR v2 specification)"
+                    )
+                if sel.repeat and sel.forEach:
+                    raise ValidationError(
+                        f"{path}[{i}]: Both repeat and forEach specified "
+                        "(they are mutually exclusive per the SQL-on-FHIR v2 specification)"
+                    )
+                if sel.repeat and sel.forEachOrNull:
+                    raise ValidationError(
+                        f"{path}[{i}]: Both repeat and forEachOrNull specified "
                         "(they are mutually exclusive per the SQL-on-FHIR v2 specification)"
                     )
                 if sel.select:
@@ -738,6 +753,15 @@ class SQLGenerator:
         for select in selects:
             current_var = resource_var
 
+            # Establish a repeat context (CROSS JOIN LATERAL with recursive UDF)
+            if select.repeat:
+                resolved_paths = [self._resolve_path(p) for p in select.repeat]
+                alias = self._next_alias("repeat")
+                join_clauses.append(
+                    generate_repeat_unnest(resolved_paths, current_var, alias)
+                )
+                current_var = alias
+
             # Establish a new forEach context (CROSS JOIN LATERAL)
             if select.forEach:
                 resolved_foreach = self._resolve_path(select.forEach)
@@ -841,6 +865,7 @@ class SQLGenerator:
         """
         has_parent_context = bool(
             union_select.forEach or union_select.forEachOrNull
+            or union_select.repeat
             or union_select.column or union_select.select
             or union_select.where
         )
@@ -849,11 +874,12 @@ class SQLGenerator:
 
         for branch in union_select.unionAll:
             if has_parent_context:
-                # Wrap the branch inside the parent's forEach context so that
+                # Wrap the branch inside the parent's forEach/repeat context so that
                 # the branch's paths resolve relative to the unnested element.
                 wrapper = Select(
                     forEach=union_select.forEach,
                     forEachOrNull=union_select.forEachOrNull,
+                    repeat=union_select.repeat,
                     column=list(union_select.column),
                     select=list(union_select.select or []) + [branch],
                     where=list(union_select.where or []),
@@ -870,6 +896,7 @@ class SQLGenerator:
                     parent_ctx = Select(
                         forEach=union_select.forEach,
                         forEachOrNull=union_select.forEachOrNull,
+                        repeat=union_select.repeat,
                         column=list(union_select.column),
                         select=list(union_select.select or []),
                         where=list(union_select.where or []),

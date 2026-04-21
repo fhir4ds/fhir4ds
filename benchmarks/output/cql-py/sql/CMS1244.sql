@@ -6,29 +6,29 @@ SELECT DISTINCT _outer.patient_ref AS patient_id FROM resources AS _outer WHERE 
 _patient_demographics AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, CAST(fhirpath_date(r.resource, 'birthDate') AS VARCHAR) AS birth_date FROM resources r WHERE r.resourceType = 'Patient'
 ),
-"Encounter: Emergency Department Evaluation and Management Visit" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1010')
+"ServiceRequest: Decision to Admit to Hospital Inpatient" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.294') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
 ),
 "Observation: Emergency Department Evaluation" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Observation' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.163')
 ),
-"ServiceRequest: Patient bed assigned (finding)" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''5751000175101'').exists()') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
-),
 "Encounter: Triage" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1046.279')
 ),
-"Encounter: Observation Services" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143')
+"Location" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Location'
 ),
-"ServiceRequest: Decision to Admit to Hospital Inpatient" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.117.1.7.1.294') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
+"Encounter: Emergency Department Evaluation and Management Visit" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.101.12.1010')
 ),
 "ServiceRequest: Encounter Inpatient" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND in_valueset(r.resource, 'code', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
 ),
-"Location" AS (
-SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Location'
+"ServiceRequest: Patient bed assigned (finding)" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'ServiceRequest' AND fhirpath_bool(r.resource, 'code.coding.where(system=''http://snomed.info/sct'' and code=''5751000175101'').exists()') AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'), 'http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-servicenotrequested'))
+),
+"Encounter: Observation Services" AS (
+SELECT DISTINCT r.patient_ref AS patient_id, r.resource FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113762.1.4.1111.143')
 ),
 "Encounter: Encounter Inpatient" AS (
 SELECT DISTINCT r.patient_ref AS patient_id, r.resource, fhirpath_text(r.resource, 'status') AS status FROM resources r WHERE r.resourceType = 'Encounter' AND in_valueset(r.resource, 'type', 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.666.5.307')

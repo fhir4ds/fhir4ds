@@ -686,3 +686,76 @@ def fhirpath_quantity_udf(resource: str | None, expression: str | None) -> str |
         if _STRICT_MODE:
             raise
         return None
+
+
+# ---------------------------------------------------------------------------
+# fhirpath_repeat: recursive traversal for SQL-on-FHIR v2 ``repeat``
+# ---------------------------------------------------------------------------
+
+def _navigate_simple_path(obj: dict, path: str) -> list:
+    """Navigate a dotted property path in a JSON object.
+
+    For ``repeat``, paths are simple dotted property names (e.g. ``item``
+    or ``answer.item``), not full FHIRPath expressions.
+
+    Returns a list of dict children found at the end of the path.
+    """
+    parts = path.split(".")
+    candidates = [obj]
+    for part in parts:
+        next_candidates: list = []
+        for c in candidates:
+            if isinstance(c, dict) and part in c:
+                val = c[part]
+                if isinstance(val, list):
+                    next_candidates.extend(val)
+                else:
+                    next_candidates.append(val)
+        candidates = next_candidates
+    # Only return dict-typed children (JSON objects)
+    return [c for c in candidates if isinstance(c, dict)]
+
+
+def _repeat_dfs(current: dict, paths: list, results: list, max_depth: int = 200, depth: int = 0) -> None:
+    """Depth-first recursive traversal collecting all repeat path results.
+
+    Per SQL-on-FHIR v2 §Select.repeat, the repeat directive recursively
+    applies each path expression and collects all matching elements in
+    document order (depth-first).
+    """
+    if depth >= max_depth:
+        return
+    for path in paths:
+        children = _navigate_simple_path(current, path)
+        for child in children:
+            results.append(orjson.dumps(child).decode())
+            _repeat_dfs(child, paths, results, max_depth, depth + 1)
+
+
+def fhirpath_repeat_udf(resource: str, paths_json: str) -> list:
+    """Recursively apply FHIRPath paths and return flattened array of JSON elements.
+
+    Implements the SQL-on-FHIR v2 ``repeat`` directive. Given a FHIR resource
+    and a JSON array of simple dotted paths, performs a depth-first traversal
+    collecting all matching elements at every nesting level.
+
+    Args:
+        resource: JSON string of the FHIR resource.
+        paths_json: JSON array of path strings, e.g. ``'["item","answer.item"]'``.
+
+    Returns:
+        List of JSON strings, one per collected element.
+    """
+    if resource is None or paths_json is None:
+        return []
+    try:
+        obj = orjson.loads(resource)
+        paths = orjson.loads(paths_json)
+        if not isinstance(paths, list) or not paths:
+            return []
+        results: list = []
+        _repeat_dfs(obj, paths, results)
+        return results
+    except Exception:
+        _logger.debug("fhirpath_repeat failed", exc_info=True)
+        return []
