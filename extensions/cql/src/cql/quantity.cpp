@@ -291,4 +291,139 @@ Optional<std::string> quantity_convert(const std::string &q_json, const std::str
 	return format_quantity_json({converted.value(), target_unit, q->system});
 }
 
+// =====================================================================
+// Phase 6: New quantity operations
+// =====================================================================
+
+Optional<std::string> quantity_multiply(const std::string &q1_json, const std::string &q2_json) {
+	auto q1 = parse_quantity_json(q1_json);
+	auto q2 = parse_quantity_json(q2_json);
+	if (!q1 || !q2) return NullOpt<std::string>();
+	ParsedQuantity result;
+	result.value = q1->value * q2->value;
+	// Simple unit handling: if one is "1" (dimensionless), take the other
+	if (q1->code == "1" || q1->code.empty()) {
+		result.code = q2->code;
+	} else if (q2->code == "1" || q2->code.empty()) {
+		result.code = q1->code;
+	} else {
+		result.code = q1->code;
+	}
+	result.system = q1->system;
+	return format_quantity_json(result);
+}
+
+Optional<std::string> quantity_divide(const std::string &q1_json, const std::string &q2_json) {
+	auto q1 = parse_quantity_json(q1_json);
+	auto q2 = parse_quantity_json(q2_json);
+	if (!q1 || !q2) return NullOpt<std::string>();
+	if (q2->value == 0) return NullOpt<std::string>();
+	ParsedQuantity result;
+	result.value = q1->value / q2->value;
+	result.code = q1->code;
+	result.system = q1->system;
+	return format_quantity_json(result);
+}
+
+Optional<std::string> quantity_negate(const std::string &q_json) {
+	auto q = parse_quantity_json(q_json);
+	if (!q) return NullOpt<std::string>();
+	q->value = -q->value;
+	return format_quantity_json(*q);
+}
+
+Optional<std::string> quantity_abs(const std::string &q_json) {
+	auto q = parse_quantity_json(q_json);
+	if (!q) return NullOpt<std::string>();
+	if (q->value < 0) q->value = -q->value;
+	return format_quantity_json(*q);
+}
+
+Optional<std::string> quantity_modulo(const std::string &q1_json, const std::string &q2_json) {
+	auto q1 = parse_quantity_json(q1_json);
+	auto q2 = parse_quantity_json(q2_json);
+	if (!q1 || !q2) return NullOpt<std::string>();
+	if (q2->value == 0) return NullOpt<std::string>();
+	// CQL modulo: x - y * trunc(x/y)
+	double quotient = q1->value / q2->value;
+	double trunc_q = (quotient >= 0) ? std::floor(quotient) : std::ceil(quotient);
+	ParsedQuantity result;
+	result.value = q1->value - q2->value * trunc_q;
+	result.code = q1->code;
+	result.system = q1->system;
+	return format_quantity_json(result);
+}
+
+Optional<std::string> quantity_truncated_divide(const std::string &q1_json, const std::string &q2_json) {
+	auto q1 = parse_quantity_json(q1_json);
+	auto q2 = parse_quantity_json(q2_json);
+	if (!q1 || !q2) return NullOpt<std::string>();
+	if (q2->value == 0) return NullOpt<std::string>();
+	double quotient = q1->value / q2->value;
+	ParsedQuantity result;
+	result.value = (quotient >= 0) ? std::floor(quotient) : std::ceil(quotient);
+	result.code = q1->code;
+	result.system = q1->system;
+	return format_quantity_json(result);
+}
+
+Optional<std::string> to_quantity(const std::string &s) {
+	if (s.empty()) return NullOpt<std::string>();
+	// Match: number optionally followed by unit in single quotes
+	// E.g. "5.5 'cm'" or just "5.5"
+	const char *p = s.c_str();
+	while (*p == ' ') p++;
+
+	char *end = NULL;
+	double val = std::strtod(p, &end);
+	if (end == p) return NullOpt<std::string>();
+
+	while (*end == ' ') end++;
+	std::string unit = "1";
+	if (*end == '\'') {
+		end++;
+		const char *unit_start = end;
+		while (*end && *end != '\'') end++;
+		if (*end == '\'') {
+			unit = std::string(unit_start, end - unit_start);
+		}
+	}
+
+	ParsedQuantity q;
+	q.value = val;
+	q.code = unit;
+	q.system = "http://unitsofmeasure.org";
+	return format_quantity_json(q);
+}
+
+Optional<std::string> to_concept(const std::string &code_json) {
+	if (code_json.empty()) return NullOpt<std::string>();
+	// Wrap code in a concept: {"codes": [code]}
+	yyjson_doc *doc = yyjson_read(code_json.c_str(), code_json.size(), 0);
+	if (!doc) return NullOpt<std::string>();
+
+	yyjson_mut_doc *mut_doc = yyjson_mut_doc_new(NULL);
+	yyjson_mut_val *root = yyjson_mut_obj(mut_doc);
+	yyjson_mut_doc_set_root(mut_doc, root);
+
+	yyjson_mut_val *codes_arr = yyjson_mut_arr(mut_doc);
+	yyjson_val *src_root = yyjson_doc_get_root(doc);
+
+	// Copy the input as an element in the codes array
+	yyjson_mut_val *copied = yyjson_val_mut_copy(mut_doc, src_root);
+	yyjson_mut_arr_append(codes_arr, copied);
+	yyjson_mut_obj_add_val(mut_doc, root, "codes", codes_arr);
+
+	char *json_str = yyjson_mut_write(mut_doc, 0, NULL);
+	std::string result;
+	if (json_str) {
+		result = json_str;
+		free(json_str);
+	}
+
+	yyjson_mut_doc_free(mut_doc);
+	yyjson_doc_free(doc);
+	return result.empty() ? NullOpt<std::string>() : Optional<std::string>(result);
+}
+
 } // namespace cql

@@ -20,4 +20,14 @@ Optional<std::string> quantity_add(const std::string &q1_json, const std::string
 Optional<std::string> quantity_subtract(const std::string &q1_json, const std::string &q2_json);
 Optional<std::string> quantity_convert(const std::string &q_json, const std::string &target_unit);
 
+// Phase 6: New quantity operations
+Optional<std::string> quantity_multiply(const std::string &q1_json, const std::string &q2_json);
+Optional<std::string> quantity_divide(const std::string &q1_json, const std::string &q2_json);
+Optional<std::string> quantity_negate(const std::string &q_json);
+Optional<std::string> quantity_abs(const std::string &q_json);
+Optional<std::string> quantity_modulo(const std::string &q1_json, const std::string &q2_json);
+Optional<std::string> quantity_truncated_divide(const std::string &q1_json, const std::string &q2_json);
+Optional<std::string> to_quantity(const std::string &s);
+Optional<std::string> to_concept(const std::string &code_json);
+
 } // namespace cql

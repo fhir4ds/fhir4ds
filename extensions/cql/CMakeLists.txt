@@ -18,6 +18,9 @@ set(EXTENSION_SOURCES
     src/cql/aggregate.cpp
     src/cql/ratio.cpp
     src/cql/quantity.cpp
+    src/cql/boundary.cpp
+    src/cql/math.cpp
+src/cql/logical.cpp
 )
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})

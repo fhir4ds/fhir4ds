@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 namespace cql {
 
 // Simple C++11 optional replacement (DuckDB uses C++11, std::optional is C++17)

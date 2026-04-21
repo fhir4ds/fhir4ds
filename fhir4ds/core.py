@@ -47,17 +47,31 @@ def register_cql(
 
     Returns True if the CQL C++ extension was loaded.
     """
+    import logging
+    _logger = logging.getLogger("fhir4ds.core")
+
     from fhir4ds.fhirpath.duckdb.extension import register_fhirpath as _fhirpath_register
 
     # Step 1: register FHIRPath (C++ bundled extension or Python UDFs)
     _fhirpath_register(con)
 
-    # Step 2: register CQL Python UDFs directly (skip C++ extension).
-    # The C++ extension only handles date/datetime intervals correctly;
-    # Decimal, Integer, Quantity, and Time intervals return NULL from C++.
-    # DuckDB cannot override C++ scalar functions with Python UDFs, so we
-    # must use the Python path exclusively for full CQL spec compliance.
-    cql_cpp = False
+    # Step 2: Try C++ CQL extension first for maximum performance.
+    # The C++ extension now has full polymorphic interval support (datetime,
+    # integer, decimal, quantity, time) plus math, quantity arithmetic, and
+    # logical functions.
+    from fhir4ds.cql.duckdb.extension import _try_load_bundled_cpp_extension
+    cql_cpp = _try_load_bundled_cpp_extension(con)
+
+    if cql_cpp:
+        _logger.info("CQL C++ extension loaded — registering Python-only supplements")
+    else:
+        _logger.info("CQL C++ extension not available — using Python UDFs")
+
+    # Step 2a: Register Python UDFs.
+    # When C++ is loaded, DuckDB silently ignores re-registration of functions
+    # that already exist from C++. Only Python-exclusive functions (variable
+    # state, string wrappers, expand, uncertain ops, etc.) will register.
+    # When C++ is NOT loaded, all Python UDFs register normally.
     from fhir4ds.cql.duckdb.udf.age import registerAgeUdfs
     from fhir4ds.cql.duckdb.udf.aggregate import registerAggregateUdfs
     from fhir4ds.cql.duckdb.udf.clinical import registerClinicalUdfs
@@ -72,19 +86,29 @@ def register_cql(
     from fhir4ds.cql.duckdb.udf.string import registerStringUdfs
     from fhir4ds.cql.duckdb.udf.logical import registerLogicalUdfs
 
-    registerAgeUdfs(con)
-    registerAggregateUdfs(con)
-    registerClinicalUdfs(con)
-    registerDatetimeUdfs(con)
-    registerIntervalUdfs(con)
-    registerValuesetUdfs(con)
-    registerRatioUdfs(con)
-    registerQuantityUdfs(con)
-    registerListUdfs(con)
-    registerVariableUdfs(con)
-    registerMathUdfs(con)
-    registerStringUdfs(con)
-    registerLogicalUdfs(con)
+    def _safe_register(register_fn, con, name=""):
+        """Register UDFs, ignoring errors when C++ already provides them."""
+        try:
+            register_fn(con)
+        except Exception as e:
+            if cql_cpp:
+                _logger.debug("Skipping Python UDF group %s (C++ provides): %s", name, e)
+            else:
+                raise
+
+    _safe_register(registerAgeUdfs, con, "age")
+    _safe_register(registerAggregateUdfs, con, "aggregate")
+    _safe_register(registerClinicalUdfs, con, "clinical")
+    _safe_register(registerDatetimeUdfs, con, "datetime")
+    _safe_register(registerIntervalUdfs, con, "interval")
+    _safe_register(registerValuesetUdfs, con, "valueset")
+    _safe_register(registerRatioUdfs, con, "ratio")
+    _safe_register(registerQuantityUdfs, con, "quantity")
+    _safe_register(registerListUdfs, con, "list")
+    _safe_register(registerVariableUdfs, con, "variable")
+    _safe_register(registerMathUdfs, con, "math")
+    _safe_register(registerStringUdfs, con, "string")
+    _safe_register(registerLogicalUdfs, con, "logical")
 
     # Step 2b: Always register SQL macros — they supplement both C++ and Python UDFs
     # with functions like Truncate, IsTrue, IsFalse, Skip, Take, Tail, etc.

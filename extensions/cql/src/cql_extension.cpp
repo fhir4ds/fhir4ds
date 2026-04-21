@@ -3,9 +3,12 @@
 #include "cql_extension.hpp"
 #include "cql/age.hpp"
 #include "cql/aggregate.hpp"
+#include "cql/boundary.hpp"
 #include "cql/clinical.hpp"
 #include "cql/datetime.hpp"
 #include "cql/interval.hpp"
+#include "cql/math.hpp"
+#include "cql/logical.hpp"
 #include "cql/quantity.hpp"
 #include "cql/ratio.hpp"
 #include "cql/valueset.hpp"
@@ -112,6 +115,56 @@ static cql::DateTimeValue GetToday() {
 		auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);                                                  \
 		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
 		auto result_data = FlatVector::GetData<bool>(result);                                                          \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
+		for (idx_t i = 0; i < count; i++) {                                                                            \
+			auto a_idx = a_data.sel->get_index(i);                                                                     \
+			auto b_idx = b_data.sel->get_index(i);                                                                     \
+			if (!a_data.validity.RowIsValid(a_idx) || !b_data.validity.RowIsValid(b_idx)) {                            \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto a_str = a_vals[a_idx].GetString();                                                                    \
+			auto b_str = b_vals[b_idx].GetString();                                                                    \
+			body                                                                                                       \
+		}                                                                                                              \
+	}
+
+// =====================================================================
+// Macro for one-string-input → VARCHAR functions
+// =====================================================================
+#define DEFINE_ONE_STR_STR_UDF(FuncName, body)                                                                         \
+	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
+		idx_t count = args.size();                                                                                     \
+		UnifiedVectorFormat a_data;                                                                                    \
+		args.data[0].ToUnifiedFormat(count, a_data);                                                                   \
+		auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);                                                  \
+		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
+		auto result_data = FlatVector::GetData<string_t>(result);                                                      \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
+		for (idx_t i = 0; i < count; i++) {                                                                            \
+			auto a_idx = a_data.sel->get_index(i);                                                                     \
+			if (!a_data.validity.RowIsValid(a_idx)) {                                                                  \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto a_str = a_vals[a_idx].GetString();                                                                    \
+			body                                                                                                       \
+		}                                                                                                              \
+	}
+
+// =====================================================================
+// Macro for two-string-input → VARCHAR functions
+// =====================================================================
+#define DEFINE_TWO_STR_STR_UDF(FuncName, body)                                                                         \
+	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
+		idx_t count = args.size();                                                                                     \
+		UnifiedVectorFormat a_data, b_data;                                                                            \
+		args.data[0].ToUnifiedFormat(count, a_data);                                                                   \
+		args.data[1].ToUnifiedFormat(count, b_data);                                                                   \
+		auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);                                                  \
+		auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);                                                  \
+		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
+		auto result_data = FlatVector::GetData<string_t>(result);                                                      \
 		auto &result_mask = FlatVector::Validity(result);                                                              \
 		for (idx_t i = 0; i < count; i++) {                                                                            \
 			auto a_idx = a_data.sel->get_index(i);                                                                     \
@@ -321,7 +374,6 @@ static void IntervalStartFunc(DataChunk &args, ExpressionState &state, Vector &r
 		if (!iv) {
 			result_mask.SetInvalid(i);
 		} else if (!iv->low) {
-			// CQL spec: closed null-low interval with defined high → min datetime sentinel
 			if (iv->low_closed && iv->high) {
 				result_data[i] = StringVector::AddString(result, CQL_MIN_DATETIME);
 			} else {
@@ -353,7 +405,6 @@ static void IntervalEndFunc(DataChunk &args, ExpressionState &state, Vector &res
 		if (!iv) {
 			result_mask.SetInvalid(i);
 		} else if (!iv->high) {
-			// CQL spec: closed null-high interval with defined low → max datetime sentinel
 			if (iv->high_closed && iv->low) {
 				result_data[i] = StringVector::AddString(result, CQL_MAX_DATETIME);
 			} else {
@@ -405,7 +456,7 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalContainsFunc, {
 		auto other = cql::Interval::parse(b_str);
 		result_data[i] = other ? iv->includes(*other) : false;
 	} else {
-		auto point = cql::DateTimeValue::parse(b_str);
+		auto point = cql::parse_point_value(b_str);
 		result_data[i] = point ? iv->contains_point(*point) : false;
 	}
 })
@@ -420,7 +471,7 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalProperlyContainsFunc, {
 		auto other = cql::Interval::parse(b_str);
 		result_data[i] = other ? iv->properly_includes(*other) : false;
 	} else {
-		auto point = cql::DateTimeValue::parse(b_str);
+		auto point = cql::parse_point_value(b_str);
 		result_data[i] = point ? iv->properly_contains_point(*point) : false;
 	}
 })
@@ -535,13 +586,18 @@ static void IntervalFromBoundsFunc(DataChunk &args, ExpressionState &state, Vect
 
 		cql::Interval iv;
 		if (low_data.validity.RowIsValid(l_idx)) {
-			iv.low = cql::DateTimeValue::parse(lows[l_idx].GetString());
+			iv.low = cql::BoundValue::from_string(lows[l_idx].GetString());
 		}
 		if (high_data.validity.RowIsValid(h_idx)) {
-			iv.high = cql::DateTimeValue::parse(highs[h_idx].GetString());
+			iv.high = cql::BoundValue::from_string(highs[h_idx].GetString());
 		}
 		iv.low_closed = lc_data.validity.RowIsValid(lc_idx) ? lcs[lc_idx] : true;
 		iv.high_closed = hc_data.validity.RowIsValid(hc_idx) ? hcs[hc_idx] : true;
+		if (iv.low) {
+			iv.bound_type = iv.low->type;
+		} else if (iv.high) {
+			iv.bound_type = iv.high->type;
+		}
 
 		if (!iv.low && !iv.high) {
 			result_mask.SetInvalid(i);
@@ -628,6 +684,8 @@ static void DateTimeSameAsFunc(DataChunk &args, ExpressionState &state, Vector &
 				prec = cql::DateTimeValue::Precision::Minute;
 			} else if (p_str == "second") {
 				prec = cql::DateTimeValue::Precision::Second;
+			} else if (p_str == "millisecond") {
+				prec = cql::DateTimeValue::Precision::Millisecond;
 			}
 		}
 		result_data[i] = a_dt->compare_at_precision(*b_dt, prec) == 0;
@@ -676,6 +734,14 @@ static void DateTimeSameOrBeforeFunc(DataChunk &args, ExpressionState &state, Ve
 				prec = cql::DateTimeValue::Precision::Month;
 			} else if (p_str == "day") {
 				prec = cql::DateTimeValue::Precision::Day;
+			} else if (p_str == "hour") {
+				prec = cql::DateTimeValue::Precision::Hour;
+			} else if (p_str == "minute") {
+				prec = cql::DateTimeValue::Precision::Minute;
+			} else if (p_str == "second") {
+				prec = cql::DateTimeValue::Precision::Second;
+			} else if (p_str == "millisecond") {
+				prec = cql::DateTimeValue::Precision::Millisecond;
 			}
 		}
 		result_data[i] = a_dt->compare_at_precision(*b_dt, prec) <= 0;
@@ -723,6 +789,14 @@ static void DateTimeSameOrAfterFunc(DataChunk &args, ExpressionState &state, Vec
 				prec = cql::DateTimeValue::Precision::Month;
 			} else if (p_str == "day") {
 				prec = cql::DateTimeValue::Precision::Day;
+			} else if (p_str == "hour") {
+				prec = cql::DateTimeValue::Precision::Hour;
+			} else if (p_str == "minute") {
+				prec = cql::DateTimeValue::Precision::Minute;
+			} else if (p_str == "second") {
+				prec = cql::DateTimeValue::Precision::Second;
+			} else if (p_str == "millisecond") {
+				prec = cql::DateTimeValue::Precision::Millisecond;
 			}
 		}
 		result_data[i] = a_dt->compare_at_precision(*b_dt, prec) >= 0;
@@ -1159,6 +1233,7 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
 	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto r_idx = res_data.sel->get_index(i);
@@ -1167,7 +1242,7 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 
 		if (!res_data.validity.RowIsValid(r_idx) || !path_data.validity.RowIsValid(p_idx) ||
 		    !url_data.validity.RowIsValid(u_idx)) {
-			result_data[i] = false;
+			result_mask.SetInvalid(i);
 			continue;
 		}
 
@@ -1176,6 +1251,11 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 		auto url_str = urls[u_idx].GetString();
 
 		auto codes = cql::extract_codes(resource_str, path_str);
+		if (codes.empty()) {
+			// No code found in resource → NULL (not false)
+			result_mask.SetInvalid(i);
+			continue;
+		}
 		bool found = false;
 		{
 			std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
@@ -1586,7 +1666,7 @@ static void CollapseIntervalsFunc(DataChunk &args, ExpressionState &state, Vecto
 			if (!b.low) {
 				return false;
 			}
-			return *a.low < *b.low;
+			return a.low->compare(*b.low) < 0;
 		});
 
 		// Merge overlapping/adjacent intervals
@@ -1599,9 +1679,10 @@ static void CollapseIntervalsFunc(DataChunk &args, ExpressionState &state, Vecto
 
 			bool can_merge = false;
 			if (current.high && next.low) {
-				if (*current.high >= *next.low) {
+				int cmp = current.high->compare(*next.low);
+				if (cmp >= 0) {
 					can_merge = true;
-				} else if (*current.high == *next.low && (current.high_closed || next.low_closed)) {
+				} else if (cmp == 0 && (current.high_closed || next.low_closed)) {
 					can_merge = true;
 				}
 			} else if (!current.high) {
@@ -1611,11 +1692,11 @@ static void CollapseIntervalsFunc(DataChunk &args, ExpressionState &state, Vecto
 			if (can_merge) {
 				// Extend current interval
 				if (!next.high) {
-					current.high = cql::NullOpt<cql::DateTimeValue>();
-				} else if (!current.high || *next.high > *current.high) {
+					current.high = cql::NullOpt<cql::BoundValue>();
+				} else if (!current.high || next.high->compare(*current.high) > 0) {
 					current.high = next.high;
 					current.high_closed = next.high_closed;
-				} else if (current.high && *next.high == *current.high) {
+				} else if (current.high && next.high->compare(*current.high) == 0) {
 					current.high_closed = current.high_closed || next.high_closed;
 				}
 			} else {
@@ -2131,6 +2212,461 @@ static void RegisterSpecialScalar(ExtensionLoader &loader, const std::string &na
 }
 
 // =====================================================================
+// Boundary UDFs — HighBoundary, LowBoundary, CQLPrecision,
+// cqlTimezoneOffset, predecessorOf, successorOf
+// =====================================================================
+
+DEFINE_ONE_STR_STR_UDF(HighBoundaryFunc1, {
+	auto res = cql::high_boundary(a_str, 17);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+static void HighBoundaryFunc2(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, p_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, p_data);
+
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto p_vals = UnifiedVectorFormat::GetData<int64_t>(p_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto p_idx = p_data.sel->get_index(i);
+
+		if (!a_data.validity.RowIsValid(a_idx) || !p_data.validity.RowIsValid(p_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
+		std::string val = a_vals[a_idx].GetString();
+		int prec = static_cast<int>(p_vals[p_idx]);
+		auto res = cql::high_boundary(val, prec);
+		if (!res) { result_mask.SetInvalid(i); continue; }
+		result_data[i] = StringVector::AddString(result, *res);
+	}
+}
+
+DEFINE_ONE_STR_STR_UDF(LowBoundaryFunc1, {
+	auto res = cql::low_boundary(a_str, 17);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+static void LowBoundaryFunc2(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, p_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, p_data);
+
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto p_vals = UnifiedVectorFormat::GetData<int64_t>(p_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto p_idx = p_data.sel->get_index(i);
+
+		if (!a_data.validity.RowIsValid(a_idx) || !p_data.validity.RowIsValid(p_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
+		std::string val = a_vals[a_idx].GetString();
+		int prec = static_cast<int>(p_vals[p_idx]);
+		auto res = cql::low_boundary(val, prec);
+		if (!res) { result_mask.SetInvalid(i); continue; }
+		result_data[i] = StringVector::AddString(result, *res);
+	}
+}
+
+DEFINE_ONE_STR_STR_UDF(PredecessorOfFunc, {
+	auto res = cql::predecessor_of(a_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_ONE_STR_STR_UDF(SuccessorOfFunc, {
+	auto res = cql::successor_of(a_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+static void CQLPrecisionFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		std::string val = a_vals[a_idx].GetString();
+		auto res = cql::cql_precision(val);
+		if (!res) { result_mask.SetInvalid(i); continue; }
+		result_data[i] = static_cast<int64_t>(*res);
+	}
+}
+
+static void CQLTimezoneOffsetFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		std::string val = a_vals[a_idx].GetString();
+		auto res = cql::cql_timezone_offset(val);
+		if (!res) { result_mask.SetInvalid(i); continue; }
+		result_data[i] = *res;
+	}
+}
+
+// =====================================================================
+// Interval set operation UDFs
+// =====================================================================
+DEFINE_TWO_STR_STR_UDF(IntervalIntersectFunc, {
+	auto iv1 = cql::Interval::parse(a_str);
+	auto iv2 = cql::Interval::parse(b_str);
+	if (!iv1 || !iv2) { result_mask.SetInvalid(i); continue; }
+	auto res = cql::Interval::intersect(*iv1, *iv2);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, res->to_json());
+})
+
+DEFINE_TWO_STR_STR_UDF(IntervalUnionFunc, {
+	auto iv1 = cql::Interval::parse(a_str);
+	auto iv2 = cql::Interval::parse(b_str);
+	if (!iv1 || !iv2) { result_mask.SetInvalid(i); continue; }
+	auto res = cql::Interval::union_of(*iv1, *iv2);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, res->to_json());
+})
+
+DEFINE_TWO_STR_STR_UDF(IntervalExceptFunc, {
+	auto iv1 = cql::Interval::parse(a_str);
+	auto iv2 = cql::Interval::parse(b_str);
+	if (!iv1 || !iv2) { result_mask.SetInvalid(i); continue; }
+	auto res = cql::Interval::except_of(*iv1, *iv2);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, res->to_json());
+})
+
+DEFINE_TWO_STR_BOOL_UDF(IntervalOnOrAfterFunc, {
+	auto iv1 = cql::Interval::parse(a_str);
+	auto iv2 = cql::Interval::parse(b_str);
+	if (!iv1 || !iv2) { result_mask.SetInvalid(i); continue; }
+	auto res = cql::Interval::on_or_after(*iv1, *iv2);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = *res;
+})
+
+DEFINE_TWO_STR_BOOL_UDF(IntervalOnOrBeforeFunc, {
+	auto iv1 = cql::Interval::parse(a_str);
+	auto iv2 = cql::Interval::parse(b_str);
+	if (!iv1 || !iv2) { result_mask.SetInvalid(i); continue; }
+	auto res = cql::Interval::on_or_before(*iv1, *iv2);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = *res;
+})
+
+// =====================================================================
+// pointFrom UDF — extract single point from unit interval
+// =====================================================================
+DEFINE_ONE_STR_STR_UDF(PointFromFunc, {
+	auto iv = cql::Interval::parse(a_str);
+	if (!iv) { result_mask.SetInvalid(i); continue; }
+	if (!iv->low || !iv->high) { result_mask.SetInvalid(i); continue; }
+	if (!iv->low_closed || !iv->high_closed) { result_mask.SetInvalid(i); continue; }
+	int cmp = iv->low->compare(*iv->high);
+	if (cmp != 0) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, iv->low->to_string());
+})
+
+// =====================================================================
+// Math UDFs
+// =====================================================================
+DEFINE_TWO_STR_STR_UDF(MathRoundFunc, {
+	auto res = cql::math_round(a_str, b_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_TWO_STR_STR_UDF(MathLogFunc, {
+	auto res = cql::math_log(a_str, b_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_TWO_STR_STR_UDF(MathPowerFunc, {
+	auto res = cql::math_power(a_str, b_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_ONE_STR_STR_UDF(MathAbsFunc, {
+	auto res = cql::math_abs(a_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_ONE_STR_STR_UDF(MathCeilingFunc, {
+	auto res = cql::math_ceiling(a_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_ONE_STR_STR_UDF(MathFloorFunc, {
+	auto res = cql::math_floor(a_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_ONE_STR_STR_UDF(MathExpFunc, {
+	auto res = cql::math_exp(a_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_ONE_STR_STR_UDF(MathLnFunc, {
+	auto res = cql::math_ln(a_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_ONE_STR_STR_UDF(MathSqrtFunc, {
+	auto res = cql::math_sqrt(a_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_ONE_STR_STR_UDF(MathTruncateFunc, {
+	auto res = cql::math_truncate(a_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+// =====================================================================
+// Phase 6: Quantity arithmetic UDFs
+// =====================================================================
+DEFINE_TWO_STR_STR_UDF(QuantityMultiplyFunc, {
+	auto res = cql::quantity_multiply(a_str, b_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_TWO_STR_STR_UDF(QuantityDivideFunc, {
+	auto res = cql::quantity_divide(a_str, b_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_ONE_STR_STR_UDF(QuantityNegateFunc, {
+	auto res = cql::quantity_negate(a_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_ONE_STR_STR_UDF(QuantityAbsFunc, {
+	auto res = cql::quantity_abs(a_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_TWO_STR_STR_UDF(QuantityModuloFunc, {
+	auto res = cql::quantity_modulo(a_str, b_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_TWO_STR_STR_UDF(QuantityTruncatedDivideFunc, {
+	auto res = cql::quantity_truncated_divide(a_str, b_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_ONE_STR_STR_UDF(ToQuantityFunc, {
+	auto res = cql::to_quantity(a_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+DEFINE_ONE_STR_STR_UDF(ToConceptFunc, {
+	auto res = cql::to_concept(a_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+// =====================================================================
+// Phase 7: Logical aggregate UDFs
+// =====================================================================
+
+// AllTrue/AnyTrue/AllFalse/AnyFalse: VARCHAR (JSON array) → BOOLEAN
+// Must handle NULL inputs manually (NULL → default per CQL spec)
+static void LogicalAllTrueFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	auto count = args.size();
+	auto &input = args.data[0];
+	UnifiedVectorFormat input_data;
+	input.ToUnifiedFormat(count, input_data);
+	auto input_strings = UnifiedVectorFormat::GetData<string_t>(input_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto idx = input_data.sel->get_index(i);
+		if (!input_data.validity.RowIsValid(idx)) {
+			result_data[i] = true; // NULL → empty list → true
+			continue;
+		}
+		auto res = cql::logical_all_true(input_strings[idx].GetString());
+		if (!res) { result_mask.SetInvalid(i); } else { result_data[i] = res.value(); }
+	}
+}
+
+static void LogicalAnyTrueFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	auto count = args.size();
+	auto &input = args.data[0];
+	UnifiedVectorFormat input_data;
+	input.ToUnifiedFormat(count, input_data);
+	auto input_strings = UnifiedVectorFormat::GetData<string_t>(input_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto idx = input_data.sel->get_index(i);
+		if (!input_data.validity.RowIsValid(idx)) {
+			result_data[i] = false; // NULL → empty list → false
+			continue;
+		}
+		auto res = cql::logical_any_true(input_strings[idx].GetString());
+		if (!res) { result_mask.SetInvalid(i); } else { result_data[i] = res.value(); }
+	}
+}
+
+static void LogicalAllFalseFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	auto count = args.size();
+	auto &input = args.data[0];
+	UnifiedVectorFormat input_data;
+	input.ToUnifiedFormat(count, input_data);
+	auto input_strings = UnifiedVectorFormat::GetData<string_t>(input_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto idx = input_data.sel->get_index(i);
+		if (!input_data.validity.RowIsValid(idx)) {
+			result_data[i] = true; // NULL → empty list → true
+			continue;
+		}
+		auto res = cql::logical_all_false(input_strings[idx].GetString());
+		if (!res) { result_mask.SetInvalid(i); } else { result_data[i] = res.value(); }
+	}
+}
+
+static void LogicalAnyFalseFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	auto count = args.size();
+	auto &input = args.data[0];
+	UnifiedVectorFormat input_data;
+	input.ToUnifiedFormat(count, input_data);
+	auto input_strings = UnifiedVectorFormat::GetData<string_t>(input_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto idx = input_data.sel->get_index(i);
+		if (!input_data.validity.RowIsValid(idx)) {
+			result_data[i] = false; // NULL → empty list → false
+			continue;
+		}
+		auto res = cql::logical_any_false(input_strings[idx].GetString());
+		if (!res) { result_mask.SetInvalid(i); } else { result_data[i] = res.value(); }
+	}
+}
+
+// LogicalImplies: two nullable VARCHAR → BOOLEAN (3-valued logic)
+static void LogicalImpliesFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	auto count = args.size();
+	auto &a_vec = args.data[0];
+	auto &b_vec = args.data[1];
+
+	UnifiedVectorFormat a_data, b_data;
+	a_vec.ToUnifiedFormat(count, a_data);
+	b_vec.ToUnifiedFormat(count, b_data);
+
+	auto a_strings = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_strings = UnifiedVectorFormat::GetData<string_t>(b_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto b_idx = b_data.sel->get_index(i);
+
+		bool a_null = !a_data.validity.RowIsValid(a_idx);
+		bool b_null = !b_data.validity.RowIsValid(b_idx);
+
+		bool a_val = false;
+		bool b_val = false;
+		if (!a_null) {
+			std::string s = a_strings[a_idx].GetString();
+			a_val = (s == "true");
+		}
+		if (!b_null) {
+			std::string s = b_strings[b_idx].GetString();
+			b_val = (s == "true");
+		}
+
+		auto res = cql::logical_implies(a_null, a_val, b_null, b_val);
+		if (!res) {
+			result_mask.SetInvalid(i);
+		} else {
+			result_data[i] = res.value();
+		}
+	}
+}
+
+// LogicalCoalesce: VARCHAR (JSON array) → VARCHAR
+DEFINE_ONE_STR_STR_UDF(LogicalCoalesceFunc, {
+	auto res = cql::logical_coalesce(a_str);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+// =====================================================================
 // Main registration
 // =====================================================================
 static void LoadInternal(ExtensionLoader &loader) {
@@ -2322,6 +2858,94 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::VARCHAR, ElementAtFunc);
 	RegisterSpecialScalar(loader, "jsonConcat", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::LIST(LogicalType::VARCHAR), JsonConcatFunc);
+
+	// Boundary UDFs (6 new)
+	RegisterSpecialScalar(loader, "HighBoundary", {LogicalType::VARCHAR, LogicalType::BIGINT},
+	                      LogicalType::VARCHAR, HighBoundaryFunc2);
+	RegisterSpecialScalar(loader, "LowBoundary", {LogicalType::VARCHAR, LogicalType::BIGINT},
+	                      LogicalType::VARCHAR, LowBoundaryFunc2);
+	RegisterSpecialScalar(loader, "predecessorOf", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, PredecessorOfFunc);
+	RegisterSpecialScalar(loader, "successorOf", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, SuccessorOfFunc);
+	RegisterSpecialScalar(loader, "CQLPrecision", {LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, CQLPrecisionFunc);
+	RegisterSpecialScalar(loader, "cqlTimezoneOffset", {LogicalType::VARCHAR},
+	                      LogicalType::DOUBLE, CQLTimezoneOffsetFunc);
+
+	// Interval set operations (5 new)
+	RegisterSpecialScalar(loader, "intervalIntersect", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, IntervalIntersectFunc);
+	RegisterSpecialScalar(loader, "intervalUnion", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, IntervalUnionFunc);
+	RegisterSpecialScalar(loader, "intervalExcept", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, IntervalExceptFunc);
+	RegisterSpecialScalar(loader, "intervalOnOrAfter", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalOnOrAfterFunc);
+	RegisterSpecialScalar(loader, "intervalOnOrBefore", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalOnOrBeforeFunc);
+
+	// Phase 4: pointFrom + diff aliases
+	RegisterSpecialScalar(loader, "pointFrom", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, PointFromFunc);
+	RegisterSpecialScalar(loader, "differenceInWeeks", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, WeeksBetweenFunc);
+	RegisterSpecialScalar(loader, "differenceInMilliseconds", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, MillisecondsBetweenFunc);
+
+	// Phase 5: Math functions (10)
+	RegisterSpecialScalar(loader, "mathAbs", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, MathAbsFunc);
+	RegisterSpecialScalar(loader, "mathCeiling", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, MathCeilingFunc);
+	RegisterSpecialScalar(loader, "mathFloor", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, MathFloorFunc);
+	RegisterSpecialScalar(loader, "mathExp", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, MathExpFunc);
+	RegisterSpecialScalar(loader, "mathLn", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, MathLnFunc);
+	RegisterSpecialScalar(loader, "mathLog", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, MathLogFunc);
+	RegisterSpecialScalar(loader, "mathPower", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, MathPowerFunc);
+	RegisterSpecialScalar(loader, "mathRound", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, MathRoundFunc);
+	RegisterSpecialScalar(loader, "mathSqrt", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, MathSqrtFunc);
+	RegisterSpecialScalar(loader, "mathTruncate", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, MathTruncateFunc);
+
+	// Phase 6: Quantity arithmetic UDFs (8)
+	RegisterSpecialScalar(loader, "quantityMultiply", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, QuantityMultiplyFunc);
+	RegisterSpecialScalar(loader, "quantityDivide", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, QuantityDivideFunc);
+	RegisterSpecialScalar(loader, "quantityNegate", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, QuantityNegateFunc);
+	RegisterSpecialScalar(loader, "quantityAbs", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, QuantityAbsFunc);
+	RegisterSpecialScalar(loader, "quantityModulo", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, QuantityModuloFunc);
+	RegisterSpecialScalar(loader, "quantityTruncatedDivide", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, QuantityTruncatedDivideFunc);
+	RegisterSpecialScalar(loader, "ToQuantity", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, ToQuantityFunc);
+	RegisterSpecialScalar(loader, "ToConcept", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, ToConceptFunc);
+
+	// Phase 7: Logical aggregate UDFs (6)
+	RegisterSpecialScalar(loader, "logicalAllTrue", {LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, LogicalAllTrueFunc);
+	RegisterSpecialScalar(loader, "logicalAnyTrue", {LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, LogicalAnyTrueFunc);
+	RegisterSpecialScalar(loader, "logicalAllFalse", {LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, LogicalAllFalseFunc);
+	RegisterSpecialScalar(loader, "logicalAnyFalse", {LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, LogicalAnyFalseFunc);
+	RegisterSpecialScalar(loader, "logicalImplies", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, LogicalImpliesFunc);
+	RegisterSpecialScalar(loader, "logicalCoalesce", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, LogicalCoalesceFunc);
 }
 
 void CqlExtension::Load(ExtensionLoader &loader) {

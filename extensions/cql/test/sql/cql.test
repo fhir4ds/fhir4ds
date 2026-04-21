@@ -1020,3 +1020,2165 @@ query I
 SELECT parse_quantity('{"value":3.0,"code":"mg/dL","system":"http://unitsofmeasure.org"}') LIKE '%"unit":"mg/dL"%';
 ----
 true
+
+# =====================================================================
+# Phase 1: Polymorphic Interval Type — Integer Intervals
+# =====================================================================
+
+# Integer interval: contains point
+query I
+SELECT intervalContains('{"low":1,"high":10}', '5');
+----
+true
+
+query I
+SELECT intervalContains('{"low":1,"high":10}', '0');
+----
+false
+
+query I
+SELECT intervalContains('{"low":1,"high":10}', '10');
+----
+true
+
+query I
+SELECT intervalContains('{"low":1,"high":10}', '11');
+----
+false
+
+# Integer interval: string-encoded bounds
+query I
+SELECT intervalContains('{"low":"1","high":"10"}', '5');
+----
+true
+
+# Integer interval: overlaps
+query I
+SELECT intervalOverlaps('{"low":1,"high":5}', '{"low":3,"high":8}');
+----
+true
+
+query I
+SELECT intervalOverlaps('{"low":1,"high":5}', '{"low":6,"high":10}');
+----
+false
+
+# Integer interval: before/after
+query I
+SELECT intervalBefore('{"low":1,"high":5}', '{"low":6,"high":10}');
+----
+true
+
+query I
+SELECT intervalAfter('{"low":6,"high":10}', '{"low":1,"high":5}');
+----
+true
+
+# Integer interval: includes
+query I
+SELECT intervalIncludes('{"low":1,"high":10}', '{"low":3,"high":7}');
+----
+true
+
+query I
+SELECT intervalIncludes('{"low":3,"high":7}', '{"low":1,"high":10}');
+----
+false
+
+# Integer interval: properlyIncludes
+query I
+SELECT intervalProperlyIncludes('{"low":1,"high":10}', '{"low":3,"high":7}');
+----
+true
+
+# Integer interval: start/end
+query I
+SELECT intervalStart('{"low":1,"high":10}');
+----
+1
+
+query I
+SELECT intervalEnd('{"low":1,"high":10}');
+----
+10
+
+# Integer interval: meets
+query I
+SELECT intervalMeets('{"low":1,"high":5}', '{"low":5,"high":10}');
+----
+true
+
+# Integer interval: starts/ends same
+query I
+SELECT intervalStartsSame('{"low":1,"high":5}', '{"low":1,"high":10}');
+----
+true
+
+query I
+SELECT intervalEndsSame('{"low":1,"high":10}', '{"low":5,"high":10}');
+----
+true
+
+# Integer interval: fromBounds
+query I
+SELECT intervalStart(intervalFromBounds('1', '10', true, true));
+----
+1
+
+query I
+SELECT intervalEnd(intervalFromBounds('1', '10', true, true));
+----
+10
+
+# Integer interval: width
+query I
+SELECT intervalWidth('{"low":1,"high":10}');
+----
+9
+
+# =====================================================================
+# Phase 1: Polymorphic Interval Type — Decimal Intervals
+# =====================================================================
+
+# Decimal interval: contains point
+query I
+SELECT intervalContains('{"low":1.5,"high":10.5}', '5.0');
+----
+true
+
+query I
+SELECT intervalContains('{"low":1.5,"high":10.5}', '1.0');
+----
+false
+
+query I
+SELECT intervalContains('{"low":1.5,"high":10.5}', '10.5');
+----
+true
+
+# Decimal interval: overlaps
+query I
+SELECT intervalOverlaps('{"low":1.0,"high":5.0}', '{"low":3.0,"high":8.0}');
+----
+true
+
+query I
+SELECT intervalOverlaps('{"low":1.0,"high":5.0}', '{"low":5.5,"high":10.0}');
+----
+false
+
+# Decimal interval: before
+query I
+SELECT intervalBefore('{"low":1.0,"high":5.0}', '{"low":5.5,"high":10.0}');
+----
+true
+
+# Decimal interval: includes
+query I
+SELECT intervalIncludes('{"low":1.0,"high":10.0}', '{"low":3.0,"high":7.0}');
+----
+true
+
+# Decimal interval: start/end
+query I
+SELECT intervalStart('{"low":1.5,"high":10.5}');
+----
+1.5
+
+query I
+SELECT intervalEnd('{"low":1.5,"high":10.5}');
+----
+10.5
+
+# =====================================================================
+# Phase 1: Polymorphic Interval Type — Quantity Intervals
+# =====================================================================
+
+# Quantity interval: contains point
+query I
+SELECT intervalContains('{"low":{"value":10,"unit":"mg"},"high":{"value":100,"unit":"mg"}}', '{"value":50,"unit":"mg"}');
+----
+true
+
+query I
+SELECT intervalContains('{"low":{"value":10,"unit":"mg"},"high":{"value":100,"unit":"mg"}}', '{"value":5,"unit":"mg"}');
+----
+false
+
+# Quantity interval: overlaps
+query I
+SELECT intervalOverlaps('{"low":{"value":10,"unit":"mg"},"high":{"value":50,"unit":"mg"}}', '{"low":{"value":30,"unit":"mg"},"high":{"value":80,"unit":"mg"}}');
+----
+true
+
+# Quantity interval: before
+query I
+SELECT intervalBefore('{"low":{"value":10,"unit":"mg"},"high":{"value":20,"unit":"mg"}}', '{"low":{"value":30,"unit":"mg"},"high":{"value":40,"unit":"mg"}}');
+----
+true
+
+# =====================================================================
+# Phase 1: Open/closed bounds with numeric intervals
+# =====================================================================
+
+# Open low bound: (5, 10] should not contain 5
+query I
+SELECT intervalContains('{"low":5,"high":10,"lowClosed":false,"highClosed":true}', '5');
+----
+false
+
+# Open low bound: (5, 10] should contain 6
+query I
+SELECT intervalContains('{"low":5,"high":10,"lowClosed":false,"highClosed":true}', '6');
+----
+true
+
+# Open high bound: [5, 10) should not contain 10
+query I
+SELECT intervalContains('{"low":5,"high":10,"lowClosed":true,"highClosed":false}', '10');
+----
+false
+
+# Properly contains: [1,10] properly contains 5 (not at boundary)
+query I
+SELECT intervalContains('{"low":1,"high":10,"lowClosed":true,"highClosed":true}', '5');
+----
+true
+
+# NULL handling with numeric intervals
+query I
+SELECT intervalContains(NULL, '5');
+----
+NULL
+
+query I
+SELECT intervalContains('{"low":1,"high":10}', NULL);
+----
+NULL
+
+# =====================================================================
+# Phase 2: Bug Fixes — SameOrBefore/After all precision levels
+# =====================================================================
+
+# SameOrBefore with hour precision
+query I
+SELECT dateTimeSameOrBefore('2024-01-15T10:30:00', '2024-01-15T12:00:00', 'hour');
+----
+true
+
+# SameOrBefore with minute precision
+query I
+SELECT dateTimeSameOrBefore('2024-01-15T10:30:00', '2024-01-15T10:45:00', 'minute');
+----
+true
+
+# SameOrBefore with second precision
+query I
+SELECT dateTimeSameOrBefore('2024-01-15T10:30:45', '2024-01-15T10:30:50', 'second');
+----
+true
+
+# SameOrBefore with millisecond precision
+query I
+SELECT dateTimeSameOrBefore('2024-01-15T10:30:45.100', '2024-01-15T10:30:45.200', 'millisecond');
+----
+true
+
+# SameOrAfter with hour precision
+query I
+SELECT dateTimeSameOrAfter('2024-01-15T12:00:00', '2024-01-15T10:30:00', 'hour');
+----
+true
+
+# SameOrAfter with minute precision
+query I
+SELECT dateTimeSameOrAfter('2024-01-15T10:45:00', '2024-01-15T10:30:00', 'minute');
+----
+true
+
+# SameOrAfter with second precision
+query I
+SELECT dateTimeSameOrAfter('2024-01-15T10:30:50', '2024-01-15T10:30:45', 'second');
+----
+true
+
+# SameOrAfter with millisecond precision
+query I
+SELECT dateTimeSameOrAfter('2024-01-15T10:30:45.200', '2024-01-15T10:30:45.100', 'millisecond');
+----
+true
+
+# SameAs with millisecond precision
+query I
+SELECT dateTimeSameAs('2024-01-15T10:30:45.100', '2024-01-15T10:30:45.100', 'millisecond');
+----
+true
+
+# in_valueset returns NULL when no code found
+query I
+SELECT in_valueset('{}', 'code', 'http://example.com/vs');
+----
+NULL
+
+# in_valueset returns NULL for NULL input
+query I
+SELECT in_valueset(NULL, 'code', 'http://example.com/vs');
+----
+NULL
+
+# =====================================================================
+# Phase 3: Boundary + Interval Set Operations
+# =====================================================================
+
+# HighBoundary — date precision 8 (day)
+query I
+SELECT HighBoundary('2014', 8);
+----
+2014-12-31
+
+# HighBoundary — datetime precision 17 (millisecond)
+query I
+SELECT HighBoundary('2014', 17);
+----
+2014-12-31T23:59:59.999
+
+# HighBoundary — month precision 6
+query I
+SELECT HighBoundary('2014-01', 8);
+----
+2014-01-31
+
+# LowBoundary — date precision 8
+query I
+SELECT LowBoundary('2014', 8);
+----
+2014-01-01
+
+# LowBoundary — datetime precision 17
+query I
+SELECT LowBoundary('2014', 17);
+----
+2014-01-01T00:00:00.000
+
+# predecessorOf integer
+query I
+SELECT predecessorOf('5');
+----
+4
+
+# predecessorOf date
+query I
+SELECT predecessorOf('2024-01-01') LIKE '2023-12-31%';
+----
+true
+
+# successorOf integer
+query I
+SELECT successorOf('5');
+----
+6
+
+# successorOf date
+query I
+SELECT successorOf('2024-01-31') LIKE '2024-02-01%';
+----
+true
+
+# CQLPrecision — date
+query I
+SELECT CQLPrecision('2024-01-15');
+----
+8
+
+# CQLPrecision — datetime
+query I
+SELECT CQLPrecision('2024-01-15T10:30:45.100');
+----
+17
+
+# CQLPrecision — year only
+query I
+SELECT CQLPrecision('2024');
+----
+4
+
+# cqlTimezoneOffset
+query R
+SELECT cqlTimezoneOffset('2024-01-15T10:30:00+05:30');
+----
+5.5
+
+# cqlTimezoneOffset — negative
+query R
+SELECT cqlTimezoneOffset('2024-01-15T10:30:00-04:00');
+----
+-4.0
+
+# cqlTimezoneOffset — no timezone → NULL
+query I
+SELECT cqlTimezoneOffset('2024-01-15T10:30:00');
+----
+NULL
+
+# predecessorOf NULL → NULL
+query I
+SELECT predecessorOf(NULL);
+----
+NULL
+
+# successorOf NULL → NULL
+query I
+SELECT successorOf(NULL);
+----
+NULL
+
+# intervalIntersect — overlapping datetime intervals
+query I
+SELECT intervalIntersect('{"low":"2024-01-01","high":"2024-06-30","lowClosed":true,"highClosed":true}', '{"low":"2024-03-01","high":"2024-12-31","lowClosed":true,"highClosed":true}') LIKE '%2024-03-01%';
+----
+true
+
+# intervalIntersect — overlapping integer intervals
+query I
+SELECT intervalIntersect('{"low":1,"high":10,"lowClosed":true,"highClosed":true}', '{"low":5,"high":15,"lowClosed":true,"highClosed":true}') LIKE '%5%';
+----
+true
+
+# intervalIntersect — non-overlapping → NULL
+query I
+SELECT intervalIntersect('{"low":1,"high":5,"lowClosed":true,"highClosed":true}', '{"low":6,"high":10,"lowClosed":true,"highClosed":true}');
+----
+NULL
+
+# intervalUnion — overlapping
+query I
+SELECT intervalUnion('{"low":1,"high":10,"lowClosed":true,"highClosed":true}', '{"low":5,"high":15,"lowClosed":true,"highClosed":true}') LIKE '%15%';
+----
+true
+
+# intervalExcept — partial overlap
+query I
+SELECT intervalExcept('{"low":1,"high":10,"lowClosed":true,"highClosed":true}', '{"low":5,"high":15,"lowClosed":true,"highClosed":true}') LIKE '%1%';
+----
+true
+
+# intervalExcept — full containment → NULL
+query I
+SELECT intervalExcept('{"low":3,"high":7,"lowClosed":true,"highClosed":true}', '{"low":1,"high":10,"lowClosed":true,"highClosed":true}');
+----
+NULL
+
+# intervalOnOrAfter
+query I
+SELECT intervalOnOrAfter('{"low":"2024-06-01","high":"2024-12-31","lowClosed":true,"highClosed":true}', '{"low":"2024-01-01","high":"2024-06-01","lowClosed":true,"highClosed":true}');
+----
+true
+
+# intervalOnOrBefore
+query I
+SELECT intervalOnOrBefore('{"low":"2024-01-01","high":"2024-06-01","lowClosed":true,"highClosed":true}', '{"low":"2024-06-01","high":"2024-12-31","lowClosed":true,"highClosed":true}');
+----
+true
+
+# intervalOnOrAfter — false case
+query I
+SELECT intervalOnOrAfter('{"low":"2024-01-01","high":"2024-06-01","lowClosed":true,"highClosed":true}', '{"low":"2024-03-01","high":"2024-12-31","lowClosed":true,"highClosed":true}');
+----
+false
+
+# =====================================================================
+# Phase 4: Expand + Temporal Differences
+# =====================================================================
+
+# differenceInWeeks
+query I
+SELECT differenceInWeeks('2024-01-01', '2024-01-15');
+----
+2
+
+# differenceInMilliseconds
+query I
+SELECT differenceInMilliseconds('2024-01-01T00:00:00.000', '2024-01-01T00:00:01.000');
+----
+1000
+
+# differenceInWeeks — NULL inputs
+query I
+SELECT differenceInWeeks(NULL, '2024-01-15');
+----
+NULL
+
+# pointFrom — unit interval
+query I
+SELECT pointFrom('{"low":"2024-01-01","high":"2024-01-01","lowClosed":true,"highClosed":true}');
+----
+2024-01-01
+
+# pointFrom — integer unit interval
+query I
+SELECT pointFrom('{"low":5,"high":5,"lowClosed":true,"highClosed":true}');
+----
+5
+
+# pointFrom — non-unit interval → NULL
+query I
+SELECT pointFrom('{"low":"2024-01-01","high":"2024-01-15","lowClosed":true,"highClosed":true}');
+----
+NULL
+
+# pointFrom — open bounds → NULL
+query I
+SELECT pointFrom('{"low":"2024-01-01","high":"2024-01-01","lowClosed":false,"highClosed":true}');
+----
+NULL
+
+# =====================================================================
+# Phase 5: Math Functions
+# =====================================================================
+
+# mathAbs
+query I
+SELECT mathAbs('-5');
+----
+5
+
+query I
+SELECT mathAbs('3.14');
+----
+3.14
+
+# mathCeiling
+query I
+SELECT mathCeiling('2.1');
+----
+3
+
+# mathFloor
+query I
+SELECT mathFloor('2.9');
+----
+2
+
+# mathRound — half-up (CQL spec)
+query I
+SELECT mathRound('2.5', '0');
+----
+3
+
+query I
+SELECT mathRound('2.4', '0');
+----
+2
+
+query I
+SELECT mathRound('-2.5', '0');
+----
+-3
+
+# mathSqrt
+query I
+SELECT mathSqrt('9');
+----
+3
+
+# mathSqrt negative → NULL
+query I
+SELECT mathSqrt('-1');
+----
+NULL
+
+# mathExp
+query I
+SELECT mathExp('0');
+----
+1
+
+# mathLn positive
+query I
+SELECT mathLn('1');
+----
+0
+
+# mathLn zero → NULL
+query I
+SELECT mathLn('0');
+----
+NULL
+
+# mathLn negative → NULL
+query I
+SELECT mathLn('-1');
+----
+NULL
+
+# mathPower
+query I
+SELECT mathPower('2', '10');
+----
+1024
+
+# mathPower fractional
+query I
+SELECT mathPower('4', '0.5');
+----
+2
+
+# mathLog base 10
+query I
+SELECT mathLog('100', '10');
+----
+2
+
+# mathTruncate
+query I
+SELECT mathTruncate('2.9');
+----
+2
+
+query I
+SELECT mathTruncate('-2.9');
+----
+-2
+
+# NULL handling
+query I
+SELECT mathAbs(NULL);
+----
+NULL
+
+query I
+SELECT mathRound(NULL, '0');
+----
+NULL
+
+# =====================================================================
+# Phase 6: Quantity Arithmetic Extensions
+# =====================================================================
+
+# quantityMultiply: dimensionless * quantity
+query I
+SELECT quantityMultiply('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":3,"code":"1","system":"http://unitsofmeasure.org"}');
+----
+{"value":30.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+# quantityMultiply: same units
+query I
+SELECT quantityMultiply('{"value":2,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":5,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+{"value":10.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+# quantityDivide: basic
+query I
+SELECT quantityDivide('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":2,"code":"1","system":"http://unitsofmeasure.org"}');
+----
+{"value":5.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+# quantityDivide: division by zero → NULL
+query I
+SELECT quantityDivide('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":0,"code":"1","system":"http://unitsofmeasure.org"}');
+----
+NULL
+
+# quantityNegate: positive → negative
+query I
+SELECT quantityNegate('{"value":5,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+{"value":-5.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+# quantityNegate: negative → positive
+query I
+SELECT quantityNegate('{"value":-3.5,"code":"kg","system":"http://unitsofmeasure.org"}');
+----
+{"value":3.5,"unit":"kg","code":"kg","system":"http://unitsofmeasure.org"}
+
+# quantityAbs: negative
+query I
+SELECT quantityAbs('{"value":-7,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+{"value":7.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+# quantityAbs: already positive
+query I
+SELECT quantityAbs('{"value":7,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+{"value":7.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+# quantityModulo: basic
+query I
+SELECT quantityModulo('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":3,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+{"value":1.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+# quantityModulo: division by zero → NULL
+query I
+SELECT quantityModulo('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":0,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+NULL
+
+# quantityTruncatedDivide: basic
+query I
+SELECT quantityTruncatedDivide('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":3,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+{"value":3.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+# quantityTruncatedDivide: negative
+query I
+SELECT quantityTruncatedDivide('{"value":-10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":3,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+{"value":-3.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+# quantityTruncatedDivide: division by zero → NULL
+query I
+SELECT quantityTruncatedDivide('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":0,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+NULL
+
+# ToQuantity: number with unit
+query I
+SELECT ToQuantity('5.5 ''cm''');
+----
+{"value":5.5,"unit":"cm","code":"cm","system":"http://unitsofmeasure.org"}
+
+# ToQuantity: plain number
+query I
+SELECT ToQuantity('42');
+----
+{"value":42.0,"unit":"1","code":"1","system":"http://unitsofmeasure.org"}
+
+# ToQuantity: invalid → NULL
+query I
+SELECT ToQuantity('abc');
+----
+NULL
+
+# ToQuantity: NULL → NULL
+query I
+SELECT ToQuantity(NULL);
+----
+NULL
+
+# ToConcept: wrap code in concept
+query I
+SELECT ToConcept('{"code":"123","system":"http://example.com"}');
+----
+{"codes":[{"code":"123","system":"http://example.com"}]}
+
+# ToConcept: NULL → NULL
+query I
+SELECT ToConcept(NULL);
+----
+NULL
+
+# quantityMultiply: NULL → NULL
+query I
+SELECT quantityMultiply(NULL, '{"value":3,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+NULL
+
+# quantityNegate: NULL → NULL
+query I
+SELECT quantityNegate(NULL);
+----
+NULL
+
+# =====================================================================
+# Phase 7: Logical Aggregates
+# =====================================================================
+
+# logicalAllTrue: all true
+query I
+SELECT logicalAllTrue('["true","true","true"]');
+----
+true
+
+# logicalAllTrue: one false
+query I
+SELECT logicalAllTrue('["true","false","true"]');
+----
+false
+
+# logicalAllTrue: with null (ignored per CQL §22.1)
+query I
+SELECT logicalAllTrue('["true",null,"true"]');
+----
+true
+
+# logicalAllTrue: empty array
+query I
+SELECT logicalAllTrue('[]');
+----
+true
+
+# logicalAllTrue: NULL input → true
+query I
+SELECT logicalAllTrue(NULL);
+----
+true
+
+# logicalAnyTrue: one true
+query I
+SELECT logicalAnyTrue('["false","true","false"]');
+----
+true
+
+# logicalAnyTrue: all false
+query I
+SELECT logicalAnyTrue('["false","false"]');
+----
+false
+
+# logicalAnyTrue: all null
+query I
+SELECT logicalAnyTrue('[null,null]');
+----
+false
+
+# logicalAnyTrue: empty
+query I
+SELECT logicalAnyTrue('[]');
+----
+false
+
+# logicalAllFalse: all false
+query I
+SELECT logicalAllFalse('["false","false"]');
+----
+true
+
+# logicalAllFalse: one true
+query I
+SELECT logicalAllFalse('["false","true"]');
+----
+false
+
+# logicalAllFalse: with null (ignored)
+query I
+SELECT logicalAllFalse('["false",null]');
+----
+true
+
+# logicalAnyFalse: has false
+query I
+SELECT logicalAnyFalse('["true","false"]');
+----
+true
+
+# logicalAnyFalse: all true
+query I
+SELECT logicalAnyFalse('["true","true"]');
+----
+false
+
+# logicalAnyFalse: empty
+query I
+SELECT logicalAnyFalse('[]');
+----
+false
+
+# logicalImplies: false → anything = true
+query I
+SELECT logicalImplies('false', NULL);
+----
+true
+
+# logicalImplies: true → true = true
+query I
+SELECT logicalImplies('true', 'true');
+----
+true
+
+# logicalImplies: true → false = false
+query I
+SELECT logicalImplies('true', 'false');
+----
+false
+
+# logicalImplies: true → null = null
+query I
+SELECT logicalImplies('true', NULL);
+----
+NULL
+
+# logicalImplies: null → true = true
+query I
+SELECT logicalImplies(NULL, 'true');
+----
+true
+
+# logicalImplies: null → false = null
+query I
+SELECT logicalImplies(NULL, 'false');
+----
+NULL
+
+# logicalImplies: null → null = null
+query I
+SELECT logicalImplies(NULL, NULL);
+----
+NULL
+
+# logicalCoalesce: first non-null
+query I
+SELECT logicalCoalesce('[null, null, "5"]');
+----
+5
+
+# logicalCoalesce: first element non-null
+query I
+SELECT logicalCoalesce('["hello", null]');
+----
+hello
+
+# logicalCoalesce: all null
+query I
+SELECT logicalCoalesce('[null, null]');
+----
+NULL
+
+# logicalCoalesce: empty array
+query I
+SELECT logicalCoalesce('[]');
+----
+NULL
+
+# logicalCoalesce: boolean values
+query I
+SELECT logicalCoalesce('[null, true, false]');
+----
+true
+
+# =====================================================================
+# Phase 9: Expanded Test Coverage
+# =====================================================================
+
+# ----- Age Functions Edge Cases -----
+
+# AgeInYears with NULL
+query I
+SELECT AgeInYears(NULL);
+----
+NULL
+
+# AgeInMonths with NULL
+query I
+SELECT AgeInMonths(NULL);
+----
+NULL
+
+# AgeInDays with NULL
+query I
+SELECT AgeInDays(NULL);
+----
+NULL
+
+# AgeInHours with NULL
+query I
+SELECT AgeInHours(NULL);
+----
+NULL
+
+# AgeInMinutes with NULL
+query I
+SELECT AgeInMinutes(NULL);
+----
+NULL
+
+# AgeInSeconds with NULL
+query I
+SELECT AgeInSeconds(NULL);
+----
+NULL
+
+# AgeInYearsAt with NULL date
+query I
+SELECT AgeInYearsAt(NULL, '2024-01-01');
+----
+NULL
+
+# AgeInYearsAt with NULL reference
+query I
+SELECT AgeInYearsAt('2000-01-01', NULL);
+----
+NULL
+
+# AgeInMonthsAt with NULL
+query I
+SELECT AgeInMonthsAt(NULL, '2024-01-01');
+----
+NULL
+
+# ----- DateTime Comparison Extended -----
+
+# SameAs with full precision
+query I
+SELECT dateTimeSameAs('2024-01-15T10:30:00.000', '2024-01-15T10:30:00.000', 'millisecond');
+----
+true
+
+# SameAs with year precision only
+query I
+SELECT dateTimeSameAs('2024-06-15', '2024-12-31', 'year');
+----
+true
+
+# SameAs with month precision
+query I
+SELECT dateTimeSameAs('2024-06-15', '2024-06-01', 'month');
+----
+true
+
+# SameAs different years
+query I
+SELECT dateTimeSameAs('2024-01-01', '2025-01-01', 'year');
+----
+false
+
+# SameOrBefore: equal dates
+query I
+SELECT dateTimeSameOrBefore('2024-01-01', '2024-01-01', 'day');
+----
+true
+
+# SameOrBefore: before
+query I
+SELECT dateTimeSameOrBefore('2023-12-31', '2024-01-01', 'day');
+----
+true
+
+# SameOrBefore: after
+query I
+SELECT dateTimeSameOrBefore('2024-01-02', '2024-01-01', 'day');
+----
+false
+
+# SameOrAfter: equal dates
+query I
+SELECT dateTimeSameOrAfter('2024-01-01', '2024-01-01', 'day');
+----
+true
+
+# SameOrAfter: after
+query I
+SELECT dateTimeSameOrAfter('2024-01-02', '2024-01-01', 'day');
+----
+true
+
+# SameOrAfter: before
+query I
+SELECT dateTimeSameOrAfter('2023-12-31', '2024-01-01', 'day');
+----
+false
+
+# SameOrBefore with hour precision
+query I
+SELECT dateTimeSameOrBefore('2024-01-01T10:00:00', '2024-01-01T11:00:00', 'hour');
+----
+true
+
+# SameOrAfter with minute precision
+query I
+SELECT dateTimeSameOrAfter('2024-01-01T10:30:00', '2024-01-01T10:30:00', 'minute');
+----
+true
+
+# SameOrBefore with second precision
+query I
+SELECT dateTimeSameOrBefore('2024-01-01T10:30:00', '2024-01-01T10:30:01', 'second');
+----
+true
+
+# SameOrBefore with millisecond precision
+query I
+SELECT dateTimeSameOrBefore('2024-01-01T10:30:00.000', '2024-01-01T10:30:00.001', 'millisecond');
+----
+true
+
+# ----- Duration Between Extended -----
+
+# YearsBetween with NULL
+query I
+SELECT YearsBetween(NULL, '2024-01-01');
+----
+NULL
+
+# MonthsBetween with NULL
+query I
+SELECT MonthsBetween('2024-01-01', NULL);
+----
+NULL
+
+# DaysBetween same day
+query I
+SELECT DaysBetween('2024-06-15', '2024-06-15');
+----
+0
+
+# weeksBetween: two weeks
+query I
+SELECT weeksBetween('2024-01-01', '2024-01-15');
+----
+2
+
+# HoursBetween: one day
+query I
+SELECT HoursBetween('2024-01-01T00:00:00', '2024-01-02T00:00:00');
+----
+24
+
+# MinutesBetween: one hour
+query I
+SELECT MinutesBetween('2024-01-01T10:00:00', '2024-01-01T11:00:00');
+----
+60
+
+# SecondsBetween: one minute
+query I
+SELECT SecondsBetween('2024-01-01T10:00:00', '2024-01-01T10:01:00');
+----
+60
+
+# millisecondsBetween: one second
+query I
+SELECT millisecondsBetween('2024-01-01T10:00:00.000', '2024-01-01T10:00:01.000');
+----
+1000
+
+# differenceInYears with NULL
+query I
+SELECT differenceInYears(NULL, '2024-01-01');
+----
+NULL
+
+# differenceInMonths with NULL
+query I
+SELECT differenceInMonths('2024-01-01', NULL);
+----
+NULL
+
+# differenceInWeeks
+query I
+SELECT differenceInWeeks('2024-01-01', '2024-01-15');
+----
+2
+
+# differenceInDays across month
+query I
+SELECT differenceInDays('2024-01-31', '2024-02-01');
+----
+1
+
+# differenceInHours: 48 hours
+query I
+SELECT differenceInHours('2024-01-01T00:00:00', '2024-01-03T00:00:00');
+----
+48
+
+# differenceInMinutes: 120 minutes
+query I
+SELECT differenceInMinutes('2024-01-01T10:00:00', '2024-01-01T12:00:00');
+----
+120
+
+# differenceInSeconds: 3600 seconds
+query I
+SELECT differenceInSeconds('2024-01-01T10:00:00', '2024-01-01T11:00:00');
+----
+3600
+
+# differenceInMilliseconds: 5000 ms
+query I
+SELECT differenceInMilliseconds('2024-01-01T10:00:00.000', '2024-01-01T10:00:05.000');
+----
+5000
+
+# ----- Interval Algebra Extended -----
+
+# intervalContains with datetime
+query I
+SELECT intervalContains('{"low":"2024-01-01","high":"2024-12-31"}', '2024-06-15');
+----
+true
+
+# intervalContains: point outside
+query I
+SELECT intervalContains('{"low":"2024-01-01","high":"2024-12-31"}', '2025-01-01');
+----
+false
+
+# intervalContains: point at boundary
+query I
+SELECT intervalContains('{"low":"2024-01-01","high":"2024-12-31"}', '2024-01-01');
+----
+true
+
+# intervalBefore: integer intervals
+query I
+SELECT intervalBefore('{"low":1,"high":5}', '{"low":6,"high":10}');
+----
+true
+
+# intervalBefore: overlapping → false
+query I
+SELECT intervalBefore('{"low":1,"high":5}', '{"low":3,"high":10}');
+----
+false
+
+# intervalAfter: integer intervals
+query I
+SELECT intervalAfter('{"low":6,"high":10}', '{"low":1,"high":5}');
+----
+true
+
+# intervalOverlaps: integer intervals
+query I
+SELECT intervalOverlaps('{"low":1,"high":5}', '{"low":3,"high":8}');
+----
+true
+
+# intervalOverlaps: no overlap
+query I
+SELECT intervalOverlaps('{"low":1,"high":5}', '{"low":6,"high":10}');
+----
+false
+
+# intervalMeets: integer intervals (meets requires end(A) == start(B))
+query I
+SELECT intervalMeets('{"low":1,"high":5}', '{"low":5,"high":10}');
+----
+true
+
+# intervalMeets: gap → false
+query I
+SELECT intervalMeets('{"low":1,"high":5}', '{"low":6,"high":10}');
+----
+false
+
+# intervalIncludes: proper subset
+query I
+SELECT intervalIncludes('{"low":1,"high":10}', '{"low":3,"high":7}');
+----
+true
+
+# intervalIncludes: not subset
+query I
+SELECT intervalIncludes('{"low":3,"high":7}', '{"low":1,"high":10}');
+----
+false
+
+# intervalIncludedIn
+query I
+SELECT intervalIncludedIn('{"low":3,"high":7}', '{"low":1,"high":10}');
+----
+true
+
+# intervalProperlyIncludes
+query I
+SELECT intervalProperlyIncludes('{"low":1,"high":10}', '{"low":3,"high":7}');
+----
+true
+
+# intervalProperlyIncludedIn
+query I
+SELECT intervalProperlyIncludedIn('{"low":3,"high":7}', '{"low":1,"high":10}');
+----
+true
+
+# intervalStart
+query I
+SELECT intervalStart('{"low":"2024-01-01","high":"2024-12-31"}');
+----
+2024-01-01
+
+# intervalEnd
+query I
+SELECT intervalEnd('{"low":"2024-01-01","high":"2024-12-31"}');
+----
+2024-12-31
+
+# intervalWidth: integer
+query I
+SELECT intervalWidth('{"low":1,"high":10}');
+----
+9
+
+# intervalWidth: datetime
+query I
+SELECT intervalWidth('{"low":"2024-01-01","high":"2024-01-10"}');
+----
+9
+
+# intervalWidth: NULL
+query I
+SELECT intervalWidth(NULL);
+----
+NULL
+
+# ----- Interval Set Operations Extended -----
+
+# intervalIntersect: overlapping integer
+query I
+SELECT intervalIntersect('{"low":1,"high":8}', '{"low":5,"high":12}');
+----
+{"low":5,"high":8,"lowClosed":true,"highClosed":true}
+
+# intervalIntersect: no overlap → NULL
+query I
+SELECT intervalIntersect('{"low":1,"high":5}', '{"low":7,"high":12}');
+----
+NULL
+
+# intervalUnion: overlapping
+query I
+SELECT intervalUnion('{"low":1,"high":8}', '{"low":5,"high":12}');
+----
+{"low":1,"high":12,"lowClosed":true,"highClosed":true}
+
+# intervalExcept: partial overlap
+query I
+SELECT intervalExcept('{"low":1,"high":10}', '{"low":5,"high":15}');
+----
+{"low":1,"high":5,"lowClosed":true,"highClosed":false}
+
+# intervalOnOrAfter
+query I
+SELECT intervalOnOrAfter('{"low":5,"high":10}', '3');
+----
+true
+
+# intervalOnOrBefore
+query I
+SELECT intervalOnOrBefore('{"low":5,"high":10}', '15');
+----
+true
+
+# ----- Boundary Functions Extended -----
+
+# HighBoundary: year-only date
+query I
+SELECT HighBoundary('2024', 8);
+----
+2024-12-31
+
+# HighBoundary: month
+query I
+SELECT HighBoundary('2024-06', 8);
+----
+2024-06-30
+
+# LowBoundary: year
+query I
+SELECT LowBoundary('2024', 8);
+----
+2024-01-01
+
+# LowBoundary: month
+query I
+SELECT LowBoundary('2024-06', 8);
+----
+2024-06-01
+
+# predecessorOf: integer
+query I
+SELECT predecessorOf('5');
+----
+4
+
+# predecessorOf: decimal
+query I
+SELECT predecessorOf('5.0');
+----
+4.99999999
+
+# successorOf: integer
+query I
+SELECT successorOf('5');
+----
+6
+
+# successorOf: decimal
+query I
+SELECT successorOf('5.0');
+----
+5.00000001
+
+# CQLPrecision: date (8 chars)
+query I
+SELECT CQLPrecision('2024-01-15');
+----
+8
+
+# CQLPrecision: datetime with seconds (14 chars)
+query I
+SELECT CQLPrecision('2024-01-15T10:30:45');
+----
+14
+
+# CQLPrecision: year only (4 chars)
+query I
+SELECT CQLPrecision('2024');
+----
+4
+
+# CQLPrecision: NULL
+query I
+SELECT CQLPrecision(NULL);
+----
+NULL
+
+# predecessorOf: NULL
+query I
+SELECT predecessorOf(NULL);
+----
+NULL
+
+# successorOf: NULL
+query I
+SELECT successorOf(NULL);
+----
+NULL
+
+# ----- Math Functions Extended -----
+
+# mathAbs: zero
+query I
+SELECT mathAbs('0');
+----
+0
+
+# mathAbs: positive
+query I
+SELECT mathAbs('42');
+----
+42
+
+# mathAbs: negative decimal
+query I
+SELECT mathAbs('-3.14');
+----
+3.14
+
+# mathCeiling: integer (no change)
+query I
+SELECT mathCeiling('5');
+----
+5
+
+# mathCeiling: negative
+query I
+SELECT mathCeiling('-2.3');
+----
+-2
+
+# mathFloor: negative
+query I
+SELECT mathFloor('-2.3');
+----
+-3
+
+# mathFloor: integer (no change)
+query I
+SELECT mathFloor('5');
+----
+5
+
+# mathExp: zero
+query I
+SELECT mathExp('0');
+----
+1
+
+# mathLn: 1
+query I
+SELECT mathLn('1');
+----
+0
+
+# mathLn: negative → NULL (domain error)
+query I
+SELECT mathLn('-1');
+----
+NULL
+
+# mathLn: zero → NULL (domain error)
+query I
+SELECT mathLn('0');
+----
+NULL
+
+# mathSqrt: zero
+query I
+SELECT mathSqrt('0');
+----
+0
+
+# mathSqrt: negative → NULL
+query I
+SELECT mathSqrt('-1');
+----
+NULL
+
+# mathPower: zero exponent
+query I
+SELECT mathPower('5', '0');
+----
+1
+
+# mathPower: base zero
+query I
+SELECT mathPower('0', '5');
+----
+0
+
+# mathRound: negative half-up
+query I
+SELECT mathRound('-2.5', '0');
+----
+-3
+
+# mathRound: positive with precision
+query I
+SELECT mathRound('3.456', '2');
+----
+3.46
+
+# mathRound: integer (no change)
+query I
+SELECT mathRound('5', '0');
+----
+5
+
+# mathTruncate: positive
+query I
+SELECT mathTruncate('3.7');
+----
+3
+
+# mathTruncate: negative
+query I
+SELECT mathTruncate('-3.7');
+----
+-3
+
+# mathLog: base 2
+query I
+SELECT mathLog('8', '2');
+----
+3
+
+# ----- Quantity Operations Extended -----
+
+# quantityValue: extract value
+query R
+SELECT quantityValue('{"value":140,"code":"mm[Hg]","system":"http://unitsofmeasure.org"}');
+----
+140.0
+
+# quantityUnit: extract unit
+query I
+SELECT quantityUnit('{"value":140,"code":"mm[Hg]","system":"http://unitsofmeasure.org"}');
+----
+mm[Hg]
+
+# quantityValue: NULL → NULL
+query I
+SELECT quantityValue(NULL);
+----
+NULL
+
+# quantityUnit: NULL → NULL
+query I
+SELECT quantityUnit(NULL);
+----
+NULL
+
+# quantityAdd: same units
+query I
+SELECT quantityAdd('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":5,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+{"value":15.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+# quantitySubtract: same units
+query I
+SELECT quantitySubtract('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":3,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+{"value":7.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+# quantityCompare: equal
+query I
+SELECT quantityCompare('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '==');
+----
+true
+
+# quantityCompare: less than
+query I
+SELECT quantityCompare('{"value":5,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '<');
+----
+true
+
+# quantityCompare: greater than
+query I
+SELECT quantityCompare('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":5,"code":"mg","system":"http://unitsofmeasure.org"}', '>');
+----
+true
+
+# quantityAdd: NULL → NULL
+query I
+SELECT quantityAdd(NULL, '{"value":5,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+NULL
+
+# quantitySubtract: NULL → NULL
+query I
+SELECT quantitySubtract(NULL, '{"value":5,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+NULL
+
+# quantityCompare: NULL → NULL
+query I
+SELECT quantityCompare(NULL, '{"value":5,"code":"mg","system":"http://unitsofmeasure.org"}', '=');
+----
+NULL
+
+# ----- Logical Extended -----
+
+# logicalAllTrue: single false
+query I
+SELECT logicalAllTrue('["false"]');
+----
+false
+
+# logicalAllTrue: single true
+query I
+SELECT logicalAllTrue('["true"]');
+----
+true
+
+# logicalAnyTrue: single true
+query I
+SELECT logicalAnyTrue('["true"]');
+----
+true
+
+# logicalAnyTrue: single null
+query I
+SELECT logicalAnyTrue('[null]');
+----
+false
+
+# logicalAllFalse: single true
+query I
+SELECT logicalAllFalse('["true"]');
+----
+false
+
+# logicalAnyFalse: single false
+query I
+SELECT logicalAnyFalse('["false"]');
+----
+true
+
+# logicalImplies: false, false → true
+query I
+SELECT logicalImplies('false', 'false');
+----
+true
+
+# logicalCoalesce: numeric values
+query I
+SELECT logicalCoalesce('[null, 42, null]');
+----
+42
+
+# ----- Clinical Functions -----
+
+# extractFirstCode: NULL resource
+query I
+SELECT extractFirstCode(NULL, 'code');
+----
+NULL
+
+# extractFirstCodeValue: NULL resource
+query I
+SELECT extractFirstCodeValue(NULL, 'code');
+----
+NULL
+
+# extractFirstCodeSystem: NULL resource
+query I
+SELECT extractFirstCodeSystem(NULL, 'code');
+----
+NULL
+
+# in_valueset: NULL resource
+query I
+SELECT in_valueset(NULL, 'code', 'http://example.com/vs');
+----
+NULL
+
+# ----- Statistical Functions -----
+
+# statisticalMedian: NULL
+query I
+SELECT statisticalMedian(NULL);
+----
+NULL
+
+# statisticalMode: NULL
+query I
+SELECT statisticalMode(NULL);
+----
+NULL
+
+# statisticalStdDev: NULL
+query I
+SELECT statisticalStdDev(NULL);
+----
+NULL
+
+# statisticalVariance: NULL
+query I
+SELECT statisticalVariance(NULL);
+----
+NULL
+
+# ----- Ratio Functions -----
+
+# ratioValue: NULL
+query I
+SELECT ratioValue(NULL);
+----
+NULL
+
+# ratioNumeratorValue: NULL
+query I
+SELECT ratioNumeratorValue(NULL);
+----
+NULL
+
+# ratioDenominatorValue: NULL
+query I
+SELECT ratioDenominatorValue(NULL);
+----
+NULL
+
+# ratioNumeratorUnit: NULL
+query I
+SELECT ratioNumeratorUnit(NULL);
+----
+NULL
+
+# ratioDenominatorUnit: NULL
+query I
+SELECT ratioDenominatorUnit(NULL);
+----
+NULL
+
+# ----- Interval NULL handling -----
+
+# intervalContains: NULL interval
+query I
+SELECT intervalContains(NULL, '5');
+----
+NULL
+
+# intervalContains: NULL point
+query I
+SELECT intervalContains('{"low":1,"high":10}', NULL);
+----
+NULL
+
+# intervalBefore: NULL
+query I
+SELECT intervalBefore(NULL, '{"low":6,"high":10}');
+----
+NULL
+
+# intervalAfter: NULL
+query I
+SELECT intervalAfter(NULL, '{"low":1,"high":5}');
+----
+NULL
+
+# intervalOverlaps: NULL
+query I
+SELECT intervalOverlaps(NULL, '{"low":1,"high":5}');
+----
+NULL
+
+# intervalMeets: NULL
+query I
+SELECT intervalMeets(NULL, '{"low":1,"high":5}');
+----
+NULL
+
+# intervalIntersect: NULL
+query I
+SELECT intervalIntersect(NULL, '{"low":1,"high":10}');
+----
+NULL
+
+# intervalUnion: NULL
+query I
+SELECT intervalUnion(NULL, '{"low":1,"high":10}');
+----
+NULL
+
+# intervalExcept: NULL
+query I
+SELECT intervalExcept(NULL, '{"low":1,"high":10}');
+----
+NULL
+
+# ----- Integer Interval Comprehensive -----
+
+# intervalContains: at high boundary
+query I
+SELECT intervalContains('{"low":1,"high":10}', '10');
+----
+true
+
+# intervalContains: just outside high
+query I
+SELECT intervalContains('{"low":1,"high":10}', '11');
+----
+false
+
+# intervalContains: at low boundary
+query I
+SELECT intervalContains('{"low":1,"high":10}', '1');
+----
+true
+
+# intervalContains: just below low
+query I
+SELECT intervalContains('{"low":1,"high":10}', '0');
+----
+false
+
+# intervalProperlyContains: boundary → false (not proper)
+query I
+SELECT intervalProperlyContains('{"low":1,"high":10}', '1');
+----
+false
+
+# intervalProperlyContains: interior → true
+query I
+SELECT intervalProperlyContains('{"low":1,"high":10}', '5');
+----
+true
+
+# ----- Decimal Interval -----
+
+# intervalContains: decimal mid-point
+query I
+SELECT intervalContains('{"low":1.5,"high":10.5}', '5.0');
+----
+true
+
+# intervalContains: decimal at boundary
+query I
+SELECT intervalContains('{"low":1.5,"high":10.5}', '1.5');
+----
+true
+
+# intervalBefore: decimal
+query I
+SELECT intervalBefore('{"low":1.0,"high":5.0}', '{"low":6.0,"high":10.0}');
+----
+true
+
+# ----- pointFrom Extended -----
+
+# pointFrom: unit interval
+query I
+SELECT pointFrom('{"low":"2024-01-01","high":"2024-01-01"}');
+----
+2024-01-01
+
+# pointFrom: non-unit interval → NULL
+query I
+SELECT pointFrom('{"low":"2024-01-01","high":"2024-12-31"}');
+----
+NULL
+
+# pointFrom: NULL
+query I
+SELECT pointFrom(NULL);
+----
+NULL
+
+# pointFrom: integer unit interval
+query I
+SELECT pointFrom('{"low":5,"high":5}');
+----
+5
+
+# ----- dateComponent -----
+
+# dateComponent: NULL
+query I
+SELECT dateComponent(NULL, 'year');
+----
+NULL
+
+# ----- dateAddQuantity -----
+
+# dateAddQuantity: NULL
+query I
+SELECT dateAddQuantity(NULL, '{"value":1,"code":"a"}');
+----
+NULL
+
+# dateSubtractQuantity: NULL
+query I
+SELECT dateSubtractQuantity(NULL, '{"value":1,"code":"a"}');
+----
+NULL
+
+# ----- Miscellaneous -----
+
+# parseQuantity: NULL
+query I
+SELECT parseQuantity(NULL);
+----
+NULL
+
+# collapse_intervals: NULL
+query I
+SELECT collapse_intervals(NULL);
+----
+NULL
+
+# resolveProfileUrl: NULL
+query I
+SELECT resolveProfileUrl(NULL);
+----
+NULL
+
+# HighBoundary: NULL
+query I
+SELECT HighBoundary(NULL, 8);
+----
+NULL
+
+# LowBoundary: NULL
+query I
+SELECT LowBoundary(NULL, 8);
+----
+NULL
+
+# =====================================================================
+# Phase 9 (continued): Additional edge cases for 500+ target
+# =====================================================================
+
+# ----- DateTime Boundary Cases -----
+
+# DaysBetween: leap year
+query I
+SELECT DaysBetween('2024-02-28', '2024-03-01');
+----
+2
+
+# DaysBetween: end of year
+query I
+SELECT DaysBetween('2024-12-31', '2025-01-01');
+----
+1
+
+# YearsBetween: same date
+query I
+SELECT YearsBetween('2024-06-15', '2024-06-15');
+----
+0
+
+# MonthsBetween: same month
+query I
+SELECT MonthsBetween('2024-01-01', '2024-01-31');
+----
+0
+
+# ----- Integer Interval Full Algebra -----
+
+# intervalOverlapsBefore: integer
+query I
+SELECT intervalOverlapsBefore('{"low":1,"high":8}', '{"low":5,"high":12}');
+----
+true
+
+# intervalOverlapsAfter: integer
+query I
+SELECT intervalOverlapsAfter('{"low":5,"high":12}', '{"low":1,"high":8}');
+----
+true
+
+# intervalStartsSame: integer
+query I
+SELECT intervalStartsSame('{"low":1,"high":5}', '{"low":1,"high":10}');
+----
+true
+
+# intervalStartsSame: different starts
+query I
+SELECT intervalStartsSame('{"low":2,"high":5}', '{"low":1,"high":10}');
+----
+false
+
+# intervalEndsSame: integer
+query I
+SELECT intervalEndsSame('{"low":5,"high":10}', '{"low":1,"high":10}');
+----
+true
+
+# intervalEndsSame: different ends
+query I
+SELECT intervalEndsSame('{"low":5,"high":9}', '{"low":1,"high":10}');
+----
+false
+
+# intervalStart: integer
+query I
+SELECT intervalStart('{"low":3,"high":8}');
+----
+3
+
+# intervalEnd: integer
+query I
+SELECT intervalEnd('{"low":3,"high":8}');
+----
+8
+
+# intervalFromBounds: integer
+query I
+SELECT intervalContains(intervalFromBounds('1', '10', true, true), '5');
+----
+true
+
+# ----- Decimal Interval Algebra -----
+
+# intervalOverlaps: decimal
+query I
+SELECT intervalOverlaps('{"low":1.0,"high":5.0}', '{"low":3.0,"high":8.0}');
+----
+true
+
+# intervalContains: decimal outside
+query I
+SELECT intervalContains('{"low":1.5,"high":10.5}', '11.0');
+----
+false
+
+# intervalProperlyContains: decimal boundary
+query I
+SELECT intervalProperlyContains('{"low":1.5,"high":10.5}', '1.5');
+----
+false
+
+# intervalProperlyContains: decimal interior
+query I
+SELECT intervalProperlyContains('{"low":1.5,"high":10.5}', '5.0');
+----
+true
+
+# ----- Quantity Interval -----
+
+# intervalContains: quantity
+query I
+SELECT intervalContains('{"low":{"value":0,"code":"mg"},"high":{"value":100,"code":"mg"}}', '{"value":50,"code":"mg"}');
+----
+true
+
+# intervalContains: quantity outside
+query I
+SELECT intervalContains('{"low":{"value":0,"code":"mg"},"high":{"value":100,"code":"mg"}}', '{"value":150,"code":"mg"}');
+----
+false
+
+# ----- Math Edge Cases -----
+
+# mathPower: 1 to any power
+query I
+SELECT mathPower('1', '100');
+----
+1
+
+# mathPower: negative base
+query I
+SELECT mathPower('-2', '3');
+----
+-8
+
+# mathAbs: large number
+query I
+SELECT mathAbs('-999999');
+----
+999999
+
+# mathCeiling: already integer decimal
+query I
+SELECT mathCeiling('5.0');
+----
+5
+
+# mathFloor: already integer decimal
+query I
+SELECT mathFloor('5.0');
+----
+5
+
+# mathRound: zero
+query I
+SELECT mathRound('0', '0');
+----
+0
+
+# ----- Logical Edge Cases -----
+
+# logicalAllTrue: mixed booleans in JSON
+query I
+SELECT logicalAllTrue('[true,true,true]');
+----
+true
+
+# logicalAnyTrue: null-only list
+query I
+SELECT logicalAnyTrue('[null]');
+----
+false
+
+# logicalAllFalse: empty
+query I
+SELECT logicalAllFalse('[]');
+----
+true
+
+# logicalAnyFalse: empty
+query I
+SELECT logicalAnyFalse('[]');
+----
+false
+
+# logicalCoalesce: single non-null
+query I
+SELECT logicalCoalesce('["only"]');
+----
+only
+
+# logicalCoalesce: NULL input
+query I
+SELECT logicalCoalesce(NULL);
+----
+NULL
+
+# ----- HighBoundary / LowBoundary Edge Cases -----
+
+# HighBoundary: full datetime, precision 8 → truncate to date
+query I
+SELECT HighBoundary('2024-06-15T10:30:00', 8);
+----
+2024-06-15
+
+# LowBoundary: full datetime, precision 8 → truncate to date
+query I
+SELECT LowBoundary('2024-06-15T10:30:00', 8);
+----
+2024-06-15
