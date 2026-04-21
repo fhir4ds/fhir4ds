@@ -126,6 +126,17 @@ def parse_cql_literal(text: str) -> Any:
             else:
                 current.append(ch)
         items.append(''.join(current).strip())
+        # Heuristic: if every item is a plain `key: value` pair (identifier
+        # followed by colon), this is a Tuple like `{ A: 2, B: 5 }`, not a
+        # list.  Lists containing typed tuples (`Tuple { ... }`) or nested
+        # sets (`{ ... }`) won't match the simple `^\w+\s*:` pattern.
+        if items and all(re.match(r'^\w+\s*:', it) for it in items if it):
+            result = {}
+            for p in items:
+                if ':' in p:
+                    k, v = p.split(':', 1)
+                    result[k.strip()] = parse_cql_literal(v.strip())
+            return result
         return [parse_cql_literal(t) for t in items if t]
         
     # Tuple/Concept/Code type literals: Tuple { id: 5, name: 'Chris' }, Concept { codes: ... }

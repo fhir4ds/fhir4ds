@@ -1882,8 +1882,80 @@ class QueryMixin:
                             where=_full_cond,
                             joins=_all_joins if _all_joins else None,
                         )
+                    elif _all_list_sources:
+                        # No return clause + all list-literal sources: return
+                        # cross-product as JSON tuples (CQL R1.5 §10.2 — Multi-
+                        # source queries return Tuple rows when no return is
+                        # specified).
+                        # Build:
+                        #   (SELECT list(t.v) FROM (
+                        #     SELECT json_object('A', CAST(A AS VARCHAR), ...) AS v
+                        #     FROM (SELECT unnest AS A FROM unnest([2,3])) _t0
+                        #     CROSS JOIN (SELECT unnest AS B FROM unnest([5,6])) _t1
+                        #     ORDER BY A, B
+                        #   ) t)
+                        # Each unnest source is wrapped in a subquery that renames
+                        # the DuckDB ``unnest`` column to the CQL alias name.
+                        # ORDER BY ensures deterministic cross-product ordering.
+                        _json_obj_args: list = []
+                        _all_aliases = [alias] + [si[0] for si in _sec_infos]
+                        for _a in _all_aliases:
+                            _json_obj_args.append(SQLLiteral(value=_a))
+                            _json_obj_args.append(SQLCast(
+                                expression=SQLIdentifier(name=_a),
+                                target_type="VARCHAR",
+                            ))
+                        _tuple_expr = SQLFunctionCall(
+                            name="json_object", args=_json_obj_args,
+                        )
+                        # Wrap primary unnest: SELECT unnest AS <alias> FROM unnest(...)
+                        _prim_inner = source_expr.from_clause if isinstance(source_expr, SQLSelect) else source_expr
+                        _prim_wrapped = SQLSubquery(query=SQLSelect(
+                            columns=[SQLAlias(
+                                expr=SQLIdentifier(name="unnest"),
+                                alias=alias,
+                            )],
+                            from_clause=_prim_inner,
+                        ))
+                        _prim_from_t = SQLAlias(expr=_prim_wrapped, alias="_t0")
+                        # Wrap each secondary unnest similarly
+                        _all_joins_t: list = []
+                        for _idx, (_sa, _sf, _, _) in enumerate(_sec_infos):
+                            _sec_wrapped = SQLSubquery(query=SQLSelect(
+                                columns=[SQLAlias(
+                                    expr=SQLIdentifier(name="unnest"),
+                                    alias=_sa,
+                                )],
+                                from_clause=_sf,
+                            ))
+                            _all_joins_t.append(SQLJoin(
+                                join_type="CROSS JOIN",
+                                table=SQLAlias(expr=_sec_wrapped, alias=f"_t{_idx + 1}"),
+                                on_condition=None,
+                            ))
+                        # Inner SELECT: rows with tuple JSON, ordered by aliases
+                        _order_by = [(SQLIdentifier(name=_a), "ASC") for _a in _all_aliases]
+                        _inner_select = SQLSelect(
+                            columns=[SQLAlias(expr=_tuple_expr, alias="v")],
+                            from_clause=_prim_from_t,
+                            where=_full_cond,
+                            joins=_all_joins_t if _all_joins_t else None,
+                            order_by=_order_by,
+                        )
+                        # Outer SELECT: aggregate into list
+                        _list_expr = SQLFunctionCall(
+                            name="list",
+                            args=[SQLQualifiedIdentifier(parts=["t", "v"])],
+                        )
+                        source_expr = SQLSubquery(query=SQLSelect(
+                            columns=[_list_expr],
+                            from_clause=SQLAlias(
+                                expr=SQLSubquery(query=_inner_select),
+                                alias="t",
+                            ),
+                        ))
                     else:
-                        # No return clause: use EXISTS pattern
+                        # No return clause + resource sources: use EXISTS pattern
                         _exists_sub = SQLSubquery(query=SQLSelect(
                             columns=[SQLLiteral(value=1)],
                             from_clause=_from_clause,
