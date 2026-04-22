@@ -110,20 +110,22 @@ The DuckDB adapter layer re-exports them from `fhir4ds/fhirpath/duckdb/errors.py
 **Do not** define new error classes in the DuckDB layer that duplicate core classes.
 
 ### Thread Safety
-Multiple global mutable singletons create thread-safety risks under concurrent use:
-- `fhir4ds/fhirpath/engine/invocations/constants.py` — `today()`/`now()` corruption
-- `fhir4ds/fhirpath/engine/nodes.py:1261` — `TypeInfo.model` mutable class variable
-- `fhir4ds/fhirpath/duckdb/udf.py` — `lru_cache` not thread-safe in Python <3.12
-- `fhir4ds/cql/duckdb/udf/variable.py` — `WeakKeyDictionary` race condition
+Thread-safety mitigations applied in 2026-Q2 remediation:
+- `constants.py` — `Constants()` is per-invocation (already safe; no action needed)
+- `TypeInfo.model` — deprecated; never set in production code (documented, planned removal)
+- `variable.py` — `_VARIABLE_STORES_LOCK` added for double-checked locking
+- `profile_registry.py` — `_default_registry_lock` added for singleton init
+- `fhir_loader.py` — `_CACHE_LOCK` added for `WeakKeyDictionary` access
+- `strings.py` — `_MAX_REGEX_LENGTH` guard added against ReDoS
 
 ### CQL Translator Invariants
 The 8 architecture invariants documented in `docs/architecture/translator/AGENTS.md`
-remain in effect. Current violations (2026-Q2 audit):
-- `SQLRaw` mid-pipeline: **46 total usages, ~12 mid-pipeline violations**
-- `to_sql()` mid-pipeline: **~22 violations** (prevents AST optimization)
-- Silent fallbacks: **2 sites** (`context.py:492`, `cte_builder.py:75`)
-- Strategy 2 templates: **1 active system** (`fluent_functions.py` `body_sql`)
-- Hardcoded resource types: **4 sites, ~57 strings**
+remain in effect. Post-remediation status (2026-Q2):
+- `SQLRaw` mid-pipeline: **20+ sites eliminated** (CQL-001/002/012-016/018-020/025)
+- `to_sql()` mid-pipeline: **8 sites fixed** (replaced with proper AST nodes)
+- Silent fallbacks: **Fixed** (context.py warns, cte_builder uses registry)
+- Strategy 2 templates: **1 active system** (`fluent_functions.py` `body_sql`) — blocked, requires Task C4
+- Hardcoded resource types: **Externalized** (query `schema.resources.keys()`, module constants)
 
 See `docs/architecture/CQL_TRANSLATOR_AUDIT_2026Q2.md` for the detailed issue log.
 

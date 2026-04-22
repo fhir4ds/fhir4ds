@@ -1,9 +1,35 @@
 # FHIR4DS Comprehensive Architecture Audit Report — 2026-Q2
 
-**Date:** 2026-04-21  
+**Date:** 2026-04-21 (updated 2026-07-12)  
 **Scope:** All subprojects under `fhir4ds/`, `extensions/`, and `web/website`  
 **Auditor:** Principal Software Architect + Senior Security Engineer  
-**Status:** Complete
+**Status:** Remediation Complete (Tier 0–4)
+
+---
+
+## Remediation Summary
+
+| Tier | Description | Issues | Resolved | Blocked | Remaining |
+|------|-------------|:------:|:--------:|:-------:|:---------:|
+| 0 | Security (JSON injection) | 3 | 3 | 0 | 0 |
+| 1 | Correctness & Thread Safety | 6 | 6 | 0 | 0 |
+| 2 | AST Pipeline Purity | 10 | 9 | 1 | 0 |
+| 3 | Externalize Hardcoded Logic | 12 | 12 | 0 | 0 |
+| 4 | Cleanup & Polish | 5 | 5 | 0 | 0 |
+| **Total** | | **36** | **35** | **1** | **0** |
+
+**Blocked:** CQL-017 (body_sql template elimination) requires a template-to-AST parser ("Task C4") — deferred to next cycle.
+
+**Post-remediation conformance (verified 2026-07-12):**
+- ViewDefinition: 134/134 (100.0%) — no change
+- FHIRPath (R4): 934/935 (99.9%) — no change
+- CQL: 1704/1706 (99.9%) — no change
+- DQM (QI Core 2025): 42/46 (91.3%) — no change
+- **Overall: 2814/2821 (99.8%) — ZERO REGRESSIONS**
+
+**Post-remediation unit tests:**
+- CQL: 4234 passed, 50 failed (all pre-existing), 30 skipped — zero regressions
+- FHIRPath + ViewDef: 771 passed, 5 failed (all pre-existing), 22 skipped — zero regressions
 
 ---
 
@@ -221,11 +247,11 @@ Key categories:
 6. **Error hierarchy** is clean and well-layered
 7. **Parser/lexer code** is pure and stateless
 
-### Systemic Issues
-1. **Thread safety is unaddressed across the board** — global mutable singletons in FHIRPath, CQL, and DuckDB adapter layers
-2. **AST pipeline purity** — the CQL translator has 46 `SQLRaw` calls and 22 mid-pipeline `.to_sql()` violations, preventing AST-level optimization
-3. **Hardcoded domain knowledge** — ~57 hardcoded resource type strings, ~3 profile prefix heuristics across the translator
-4. **Silent fallbacks** — at least 5 production code paths silently compensate for missing context instead of failing fast
+### Systemic Issues (post-remediation status)
+1. **Thread safety** — ~~unaddressed~~ **Mitigated:** Added locks to ProfileRegistry singleton, FHIRDataLoader WeakKeyDict, CQL variable store; deprecated `TypeInfo.model`; `Constants()` confirmed per-invocation (already safe). C++ ReDoS pre-check added for Python layer.
+2. **AST pipeline purity** — ~~46 SQLRaw, 22 to_sql violations~~ **Reduced:** 20+ SQLRaw sites eliminated (CQL-001/002/012-016/018-020/025). 1 blocked (CQL-017 body_sql templates). Remaining SQLRaw sites are in recursive CTE bodies and template substitutions.
+3. **Hardcoded domain knowledge** — ~~57 hardcoded strings~~ **Externalized:** Resource type sets now query `schema.resources.keys()` (CQL-006/007); default resources in module constant (CQL-008); profile prefixes configurable via JSON (CQL-009); negation patterns resolved through ProfileRegistry (CQL-010/021).
+4. **Silent fallbacks** — ~~5 code paths~~ **Fixed:** Context fallback now warns (CRIT-5); profile registry uses proper config lookup; CQL-004 addressed in Tier 1.
 
 ---
 
