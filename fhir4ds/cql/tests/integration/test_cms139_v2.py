@@ -21,7 +21,7 @@ from ...translator import CQLToSQLTranslator, LibraryResolver
 
 # Path to CMS130 measure files (from submodule ecqm-content-qicore-2025)
 REPO_ROOT = Path(__file__).resolve().parents[4]  # fhir4ds/cql/tests/integration -> repo root
-CQL_DIR = REPO_ROOT / "benchmarking" / "data" / "ecqm-content-qicore-2025" / "input" / "cql"
+CQL_DIR = REPO_ROOT / "tests" / "data" / "ecqm-content-qicore-2025" / "input" / "cql"
 CMS130_DIR = CQL_DIR
 CMS130_MAIN_CQL = CQL_DIR / "CMS130FHIRColorectalCancerScreening.cql"
 

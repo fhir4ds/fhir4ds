@@ -10,7 +10,7 @@ from ...translator import CQLToSQLTranslator
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
-_CQL_DIR = _REPO_ROOT / "benchmarking" / "data" / "ecqm-content-qicore-2025" / "input" / "cql"
+_CQL_DIR = _REPO_ROOT / "tests" / "data" / "ecqm-content-qicore-2025" / "input" / "cql"
 
 MEASURES = [
     ("CMS165", str(_CQL_DIR / "CMS165FHIRControllingHighBloodPressure.cql")),

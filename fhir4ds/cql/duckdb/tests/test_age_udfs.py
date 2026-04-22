@@ -260,10 +260,9 @@ def test_age_in_days_at_null_resource():
 
 
 def test_age_in_days_at_before_birth(patient_resource):
-    """Test ageInDaysAt with date before birth (returns 0 due to max)."""
-    # The function uses max(0, ...) so negative days become 0
+    """Test ageInDaysAt with date before birth (returns None for negative age)."""
     result = ageInDaysAt(patient_resource, "1990-05-10")
-    assert result == 0
+    assert result is None
 
 
 # ========================================

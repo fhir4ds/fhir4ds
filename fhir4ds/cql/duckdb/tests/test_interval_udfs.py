@@ -111,23 +111,30 @@ def test_interval_end_empty_string():
 # ========================================
 
 def test_interval_width_year(closed_interval):
-    """Test width of year-long interval."""
-    result = intervalWidth(closed_interval)
-    assert result == 365  # 2024 is a leap year
+    """Test width of date/time interval raises per CQL §19.25."""
+    with pytest.raises(ValueError, match="not defined for date/time"):
+        intervalWidth(closed_interval)
 
 
 def test_interval_width_month():
-    """Test width of month-long interval."""
+    """Test width of date/time interval raises per CQL §19.25."""
     interval = '{"low": "2024-01-01", "high": "2024-01-31", "lowClosed": true, "highClosed": true}'
-    result = intervalWidth(interval)
-    assert result == 30
+    with pytest.raises(ValueError, match="not defined for date/time"):
+        intervalWidth(interval)
 
 
 def test_interval_width_single_day():
-    """Test width of single day interval."""
+    """Test width of date/time interval raises per CQL §19.25."""
     interval = '{"low": "2024-01-01", "high": "2024-01-01", "lowClosed": true, "highClosed": true}'
+    with pytest.raises(ValueError, match="not defined for date/time"):
+        intervalWidth(interval)
+
+
+def test_interval_width_integer():
+    """Test width of integer interval."""
+    interval = '{"low": 1, "high": 10, "lowClosed": true, "highClosed": true}'
     result = intervalWidth(interval)
-    assert result == 0
+    assert result == '9'
 
 
 def test_interval_width_null():
@@ -370,9 +377,9 @@ def test_after_null():
 # ========================================
 
 def test_meets_true():
-    """Test intervals that meet (end of one = start of other)."""
+    """Test intervals that meet (successor of end1 = start of other)."""
     interval1 = '{"low": "2024-01-01", "high": "2024-03-31", "lowClosed": true, "highClosed": true}'
-    interval2 = '{"low": "2024-03-31", "high": "2024-12-31", "lowClosed": true, "highClosed": true}'
+    interval2 = '{"low": "2024-04-01", "high": "2024-12-31", "lowClosed": true, "highClosed": true}'
     result = intervalMeets(interval1, interval2)
     assert result is True
 
@@ -432,12 +439,13 @@ def test_registration_all_functions():
 
     interval1 = '{"low": "2024-01-01", "high": "2024-06-30", "lowClosed": true, "highClosed": true}'
     interval2 = '{"low": "2024-04-01", "high": "2024-12-31", "lowClosed": true, "highClosed": true}'
+    int_interval = '{"low": 1, "high": 10, "lowClosed": true, "highClosed": true}'
     point = "2024-03-15"
 
     functions = [
         ("intervalStart", [interval1]),
         ("intervalEnd", [interval1]),
-        ("intervalWidth", [interval1]),
+        ("intervalWidth", [int_interval]),
         ("intervalContains", [interval1, point]),
         ("intervalProperlyContains", [interval1, point]),
         ("intervalOverlaps", [interval1, interval2]),

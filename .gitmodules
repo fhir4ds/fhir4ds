@@ -1,3 +1,6 @@
 [submodule "benchmarking/ecqm-content-qicore-2025"]
 	path = tests/data/ecqm-content-qicore-2025
 	url = https://github.com/cqframework/ecqm-content-qicore-2025
+[submodule "tests/data/dqm-content-qicore-2026"]
+	path = tests/data/dqm-content-qicore-2026
+	url = https://github.com/cqframework/dqm-content-qicore-2026

@@ -29,13 +29,13 @@ PROJECT_ROOT = BENCHMARKS_DIR.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(BENCHMARKS_DIR))
 
-from fhir4ds.dqm.tests.conformance.config import get_suite_paths, OUTPUT_CQL_PY_DIR
+from fhir4ds.dqm.tests.conformance.config import get_suite_paths
 from fhir4ds.dqm.tests.conformance.cli import _discover_measures
 from fhir4ds.dqm.tests.conformance.database import BenchmarkDatabase
 from fhir4ds.dqm.tests.conformance.loader import load_test_suite
 from fhir4ds.dqm.tests.conformance.runner import run_measure
 
-OUTPUT_RUNS_DIR = BENCHMARKS_DIR / "output" / "comparison_runs"
+OUTPUT_RUNS_DIR = BENCHMARKS_DIR / "output"
 OUTPUT_RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
 JAR = BENCHMARKS_DIR / "clinical-reasoning" / "build" / "libs" / "clinical-reasoning-benchmark-1.0.0-all.jar"
@@ -385,7 +385,7 @@ def compute_stats(cql_py_records: list[dict], cr_records: list[dict]) -> dict:
 def write_report(cql_py_records: list[dict], cr_records: list[dict], stats: dict) -> Path:
     from collections import defaultdict
 
-    out = BENCHMARKING_DIR / "COMPARISON_TESTING.md"
+    out = BENCHMARKS_DIR / "COMPARISON.md"
 
     def fmt(v):
         if v is None: return "—"
@@ -471,7 +471,7 @@ def write_report(cql_py_records: list[dict], cr_records: list[dict], stats: dict
     cql_100 = stats["cql_py_100pct_measures"]
     both_100 = stats["both_100pct_measures"]
 
-    report = f"""# COMPARISON_TESTING.md
+    report = f"""# COMPARISON.md
 *Generated {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}*
 
 ## Overview

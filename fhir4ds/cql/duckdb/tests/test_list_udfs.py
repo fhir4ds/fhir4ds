@@ -204,10 +204,9 @@ class TestSingletonFrom:
         assert result[0] is None
 
     def test_singleton_multiple(self, con):
-        """Test SingletonFrom with multiple elements."""
-        # SingletonFrom([1,2]) should return NULL (not an error)
-        result = con.execute("SELECT SingletonFrom([1, 2])").fetchone()
-        assert result[0] is None
+        """Test SingletonFrom with multiple elements raises error per CQL spec."""
+        with pytest.raises(duckdb.InvalidInputException, match="SingletonFrom"):
+            con.execute("SELECT SingletonFrom([1, 2])").fetchone()
 
     def test_singleton_null_input(self, con):
         """Test SingletonFrom with NULL input."""

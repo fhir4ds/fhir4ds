@@ -10,11 +10,9 @@ WORKSPACE_ROOT = Path(__file__).parent.parent.parent.parent.parent.absolute()
 TESTS_ROOT = WORKSPACE_ROOT / "tests"
 DATA_DIR = TESTS_ROOT / "data"
 BENCHMARKING_DIR = WORKSPACE_ROOT / "benchmarks"
-OUTPUT_DIR = BENCHMARKING_DIR / "output"
 
-# Output subdirs
-OUTPUT_CQL_PY_DIR = OUTPUT_DIR / "cql-py"
-OUTPUT_CLINICAL_REASONING_DIR = OUTPUT_DIR / "clinical-reasoning"
+# Conformance runner output (per-measure SQL, CSV, stats)
+OUTPUT_CQL_PY_DIR = TESTS_ROOT / "output"
 
 # Suite roots (now inside data/)
 SUITE_2025_DIR = DATA_DIR / "ecqm-content-qicore-2025"

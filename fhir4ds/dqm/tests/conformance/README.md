@@ -49,7 +49,7 @@ Running 1 measures...
 Measure: CMS165 - Controlling High Blood Pressure
 ============================================================
 Test cases: 68
-  SQL written to: benchmarks/output/cql-py/sql/CMS165.sql
+  SQL written to: tests/output/sql/CMS165.sql
 
 Results:
   Patients: 68
@@ -66,9 +66,9 @@ Mismatches (3):
   - patient-def456: {'Denominator': {'actual': True, 'expected': False}}
 
 Outputs:
-  sql: benchmarks/output/cql-py/sql/CMS165.sql
-  csv: benchmarks/output/cql-py/results/CMS165.csv
-  stats: benchmarks/output/cql-py/stats/CMS165.json
+  sql: tests/output/sql/CMS165.sql
+  csv: tests/output/results/CMS165.csv
+  stats: tests/output/stats/CMS165.json
 ```
 
 ## Architecture
@@ -93,7 +93,7 @@ fhir4ds/dqm/tests/conformance/
 2.  **Loading**: Parses FHIR bundles from `tests/data/` and loads resources/valuesets.
 3.  **Execution**: Parses CQL, translates to population-level SQL, and executes in DuckDB.
 4.  **Verification**: Compares results against expected values from `MeasureReport` resources in the bundles.
-5.  **Output**: Generates SQL, CSV, and Stats JSON in the `benchmarks/output/` directory.
+5.  **Output**: Generates SQL, CSV, and Stats JSON in the `tests/output/` directory.
 
 ## Test Data Location
 
