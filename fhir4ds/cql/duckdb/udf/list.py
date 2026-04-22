@@ -121,14 +121,14 @@ def singletonFrom_arrow(lists: pa.Array) -> pa.Array:
     non_null_results = [r for r in results if r is not None]
     if non_null_results:
         sample = non_null_results[0]
-        if isinstance(sample, str):
+        if isinstance(sample, bool):
+            return pa.array(results, type=pa.bool_())
+        elif isinstance(sample, str):
             return pa.array(results, type=pa.string())
         elif isinstance(sample, int):
             return pa.array(results, type=pa.int64())
         elif isinstance(sample, float):
             return pa.array(results, type=pa.float64())
-        elif isinstance(sample, bool):
-            return pa.array(results, type=pa.bool_())
 
     # Fallback to generic object type
     return pa.array(results)
@@ -175,14 +175,14 @@ def elementAt_arrow(lists: pa.Array, indices: pa.Array) -> pa.Array:
     non_null_results = [r for r in results if r is not None]
     if non_null_results:
         sample = non_null_results[0]
-        if isinstance(sample, str):
+        if isinstance(sample, bool):
+            return pa.array(results, type=pa.bool_())
+        elif isinstance(sample, str):
             return pa.array(results, type=pa.string())
         elif isinstance(sample, int):
             return pa.array(results, type=pa.int64())
         elif isinstance(sample, float):
             return pa.array(results, type=pa.float64())
-        elif isinstance(sample, bool):
-            return pa.array(results, type=pa.bool_())
 
     # Fallback to generic object type
     return pa.array(results)

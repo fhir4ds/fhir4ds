@@ -8,7 +8,6 @@ New code should use the SQL macro versions (Length, Lower, Upper, etc.) instead.
 """
 from __future__ import annotations
 from typing import TYPE_CHECKING
-import duckdb
 
 if TYPE_CHECKING:
     import duckdb

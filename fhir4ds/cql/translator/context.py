@@ -488,6 +488,12 @@ class SQLTranslationContext:
         # Guarantee profile_registry is always available (Context SSOT invariant).
         # Downstream code must never fall back to get_default_profile_registry().
         if self.profile_registry is None:
+            import logging
+            _logger = logging.getLogger(__name__)
+            _logger.warning(
+                "SQLTranslationContext created without profile_registry; "
+                "falling back to default. This should be fixed at the call site."
+            )
             from ..translator.profile_registry import get_default_profile_registry
             self.profile_registry = get_default_profile_registry()
 

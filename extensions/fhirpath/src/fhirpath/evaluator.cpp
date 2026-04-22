@@ -708,7 +708,7 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 			break;
 		}
 		// Build a JSON string for the type info and parse it
-		std::string json_str = "{\"namespace\":\"" + ns + "\",\"name\":\"" + nm + "\"}";
+		std::string json_str = "{\"namespace\":\"" + escapeJsonString(ns) + "\",\"name\":\"" + escapeJsonString(nm) + "\"}";
 		yyjson_doc *type_doc = yyjson_read(json_str.c_str(), json_str.size(), 0);
 		if (type_doc) {
 			owned_docs_.push_back(type_doc);

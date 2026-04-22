@@ -8,7 +8,6 @@ New code should use the SQL macro versions (Coalesce, Implies, etc.) instead.
 """
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Any
-import duckdb
 
 if TYPE_CHECKING:
     import duckdb

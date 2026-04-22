@@ -110,19 +110,29 @@ The DuckDB adapter layer re-exports them from `fhir4ds/fhirpath/duckdb/errors.py
 **Do not** define new error classes in the DuckDB layer that duplicate core classes.
 
 ### Thread Safety
-The `fhir4ds/fhirpath/engine/invocations/constants.py` module uses a global mutable
-singleton. Concurrent FHIRPath evaluations (e.g., in DuckDB vectorized UDFs) can
-corrupt each other's `today()`/`now()` values. This is tracked for refactoring.
+Multiple global mutable singletons create thread-safety risks under concurrent use:
+- `fhir4ds/fhirpath/engine/invocations/constants.py` — `today()`/`now()` corruption
+- `fhir4ds/fhirpath/engine/nodes.py:1261` — `TypeInfo.model` mutable class variable
+- `fhir4ds/fhirpath/duckdb/udf.py` — `lru_cache` not thread-safe in Python <3.12
+- `fhir4ds/cql/duckdb/udf/variable.py` — `WeakKeyDictionary` race condition
 
 ### CQL Translator Invariants
 The 8 architecture invariants documented in `docs/architecture/translator/AGENTS.md`
-remain in effect. The most common violations are `SQLRaw` mid-pipeline (~20 sites)
-and `to_sql()` called for data extraction (~6 sites). These are tracked for
-incremental remediation.
+remain in effect. Current violations (2026-Q2 audit):
+- `SQLRaw` mid-pipeline: **46 total usages, ~12 mid-pipeline violations**
+- `to_sql()` mid-pipeline: **~22 violations** (prevents AST optimization)
+- Silent fallbacks: **2 sites** (`context.py:492`, `cte_builder.py:75`)
+- Strategy 2 templates: **1 active system** (`fluent_functions.py` `body_sql`)
+- Hardcoded resource types: **4 sites, ~57 strings**
+
+See `docs/architecture/CQL_TRANSLATOR_AUDIT_2026Q2.md` for the detailed issue log.
 
 ### C++ Extension Security
-The C++ extensions have known JSON injection (13 sites) and ReDoS risks that
-require hardening before production deployment with untrusted input.
+17 of 19 JSON injection sites have been remediated with `escapeJsonString()`.
+**2 HIGH-severity sites remain** (`evaluator.cpp:711` type(), `interval.cpp:578`
+width_string()). **3 ReDoS risks** exist in `matches()`/`replaceMatches()` —
+`std::regex` backtracking engine is vulnerable to catastrophic backtracking.
+RE2 migration or complexity limits required before production with untrusted input.
 
 ## Asset Relocation Reference
 
