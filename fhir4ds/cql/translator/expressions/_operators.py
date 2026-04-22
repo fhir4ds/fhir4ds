@@ -1384,15 +1384,17 @@ class OperatorsMixin:
                 lv = self.translate(le.type, boolean_context=False)
                 rv = self.translate(re.type, boolean_context=False)
                 # CQL: both null → true, one null → null, both present → =
+                lv_is_null = SQLUnaryOp(operator="IS NULL", operand=lv, prefix=False)
+                rv_is_null = SQLUnaryOp(operator="IS NULL", operand=rv, prefix=False)
                 elem_cmp = SQLCase(
                     when_clauses=[
                         (SQLBinaryOp(operator="AND",
-                                     left=SQLRaw(f"({lv.to_sql()}) IS NULL"),
-                                     right=SQLRaw(f"({rv.to_sql()}) IS NULL")),
+                                     left=lv_is_null,
+                                     right=rv_is_null),
                          SQLLiteral(value=True)),
                         (SQLBinaryOp(operator="OR",
-                                     left=SQLRaw(f"({lv.to_sql()}) IS NULL"),
-                                     right=SQLRaw(f"({rv.to_sql()}) IS NULL")),
+                                     left=lv_is_null,
+                                     right=rv_is_null),
                          SQLNull()),
                     ],
                     else_clause=SQLBinaryOp(operator="=", left=lv, right=rv),
@@ -2905,7 +2907,15 @@ class OperatorsMixin:
                     )
                     if operator in ("!=", "<>"):
                         # NOT cqlDateTimeEqual(...) — but preserve null propagation
-                        result = SQLRaw(f"CASE WHEN {result.to_sql()} IS NULL THEN NULL WHEN {result.to_sql()} THEN false ELSE true END")
+                        result = SQLCase(
+                            when_clauses=[
+                                (SQLUnaryOp(operator="IS NULL", operand=result, prefix=False),
+                                 SQLNull()),
+                                (result,
+                                 SQLLiteral(value=False)),
+                            ],
+                            else_clause=SQLLiteral(value=True),
+                        )
                     return result
 
         # Quantity comparison: use unit-aware quantity_compare when either

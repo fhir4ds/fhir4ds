@@ -177,12 +177,13 @@ def build_retrieve_cte(
         _profile_registry = _resolve_profile_registry(context)
         profile_suffix = _get_distinguishing_profile_suffix(all_profile_urls, profile_registry=_profile_registry)
         if not profile_suffix:
-            # Check for negation profile suffix
-            _NEGATION_PATTERNS = ('notrequested', 'notdone', 'cancelled')
+            # Check for negation profile suffix via registry
             for _url in all_profile_urls:
-                if _url and any(p in _url.lower() for p in _NEGATION_PATTERNS):
-                    profile_suffix = _url.rsplit('/', 1)[-1].replace('qicore-', '')
-                    break
+                if _url:
+                    neg_suffix = _profile_registry.get_suffix(_url)
+                    if neg_suffix:
+                        profile_suffix = neg_suffix
+                        break
         if profile_suffix:
             cte_name = f"{cte_name} ({profile_suffix})"
     else:

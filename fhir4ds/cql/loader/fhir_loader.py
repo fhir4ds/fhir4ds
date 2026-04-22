@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Union, List, Optional, Any
 from weakref import WeakKeyDictionary, WeakSet
@@ -13,6 +14,10 @@ except ImportError:
 
 _logger = logging.getLogger(__name__)
 
+# Per-connection caches. WeakKeyDictionary ensures entries are cleaned up
+# when DuckDB connections are garbage-collected.  Protected by a lock for
+# thread safety when multiple threads register UDFs on different connections.
+_CACHE_LOCK = threading.Lock()
 _VALUESET_UDF_CACHE_BY_CONNECTION = WeakKeyDictionary()
 _VALUESET_UDF_REGISTERED_CONNECTIONS = WeakSet()
 
@@ -44,10 +49,11 @@ class FHIRDataLoader:
         self.table_name = table_name
         # Share one mutable cache per DuckDB connection so repeated FHIRDataLoader
         # instances update the same _in_valueset_python closure in-place.
-        shared_cache = _VALUESET_UDF_CACHE_BY_CONNECTION.get(con)
-        if shared_cache is None:
-            shared_cache = {}
-            _VALUESET_UDF_CACHE_BY_CONNECTION[con] = shared_cache
+        with _CACHE_LOCK:
+            shared_cache = _VALUESET_UDF_CACHE_BY_CONNECTION.get(con)
+            if shared_cache is None:
+                shared_cache = {}
+                _VALUESET_UDF_CACHE_BY_CONNECTION[con] = shared_cache
         self._valueset_udf_cache: dict = shared_cache
         if create_table:
             self._create_table()
@@ -427,7 +433,8 @@ class FHIRDataLoader:
             if self.con not in _VALUESET_UDF_REGISTERED_CONNECTIONS:
                 udf_func = createValuesetMembershipUdf(self._valueset_udf_cache)
                 self.con.create_function("_in_valueset_python", udf_func, null_handling="special")
-                _VALUESET_UDF_REGISTERED_CONNECTIONS.add(self.con)
+                with _CACHE_LOCK:
+                    _VALUESET_UDF_REGISTERED_CONNECTIONS.add(self.con)
             self.con.execute(
                 "CREATE OR REPLACE MACRO in_valueset(res, path, vs_url) AS "
                 "_in_valueset_python(res, path, vs_url)"

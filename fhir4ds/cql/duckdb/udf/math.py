@@ -111,22 +111,21 @@ def mathTruncate(x: float | None) -> int | None:
     return math.trunc(x)
 
 
-def predecessorOf(x) -> str | float | int | None:
-    """CQL Predecessor (§22.25): returns the value one step less than x.
+def _step_value(x, direction: int) -> str | float | int | None:
+    """Shared implementation for predecessorOf/successorOf.
 
-    Integer/Long: x - 1, Decimal: x - 10^-8, Date: x - 1 day,
-    DateTime: x - 1 ms, Time: x - 1 ms, Quantity: value - step.
+    Args:
+        x: Input value (int, float, Decimal, str, date, datetime, or None).
+        direction: +1 for successor, -1 for predecessor.
     """
     if x is None:
         return None
     from decimal import Decimal
     from datetime import date, datetime, timedelta
-    # Handle date/datetime objects
     if isinstance(x, datetime):
-        return (x - timedelta(milliseconds=1)).isoformat()
+        return (x + timedelta(milliseconds=direction)).isoformat()
     if isinstance(x, date):
-        return (x - timedelta(days=1)).isoformat()
-    # Handle strings: time strings, date/datetime strings, quantity JSON
+        return (x + timedelta(days=direction)).isoformat()
     if isinstance(x, str):
         x_stripped = x.strip()
         # Time string (T-prefixed or HH:MM:SS pattern)
@@ -138,76 +137,12 @@ def predecessorOf(x) -> str | float | int | None:
             s_parts = parts[2].split('.') if len(parts) > 2 else ['0']
             s = int(s_parts[0])
             ms = int(s_parts[1].ljust(3, '0')[:3]) if len(s_parts) > 1 else 0
-            total_ms = ((h * 60 + m) * 60 + s) * 1000 + ms - 1
+            total_ms = ((h * 60 + m) * 60 + s) * 1000 + ms + direction
             if total_ms < 0:
                 raise ValueError(
                     "The result of the predecessor operation precedes "
                     "the minimum value allowed for type Time"
                 )
-            rh, rem = divmod(total_ms, 3600000)
-            rm, rem = divmod(rem, 60000)
-            rs, rms = divmod(rem, 1000)
-            return f"T{rh:02d}:{rm:02d}:{rs:02d}.{rms:03d}"
-        # Quantity JSON
-        if x_stripped.startswith('{') and '"value"' in x_stripped:
-            import json as _json
-            try:
-                q = _json.loads(x_stripped)
-                v = q.get('value', 0)
-                q['value'] = float(Decimal(str(v)) - Decimal("0.00000001"))
-                return _json.dumps(q)
-            except Exception:
-                return None
-        # Date/datetime string
-        try:
-            from datetime import date as _d, datetime as _dt
-            if 'T' in x_stripped or ' ' in x_stripped:
-                dt = _dt.fromisoformat(x_stripped.replace('Z', '+00:00').replace(' ', 'T'))
-                return (dt - timedelta(milliseconds=1)).isoformat()
-            parsed = _d.fromisoformat(x_stripped)
-            return (parsed - timedelta(days=1)).isoformat()
-        except ValueError:
-            pass
-        # Try numeric string
-        try:
-            v = Decimal(x_stripped)
-            return float(v - Decimal("0.00000001"))
-        except Exception:
-            return None
-    if isinstance(x, Decimal) or isinstance(x, float):
-        return x - Decimal("0.00000001") if isinstance(x, Decimal) else float(x) - 1e-8
-    return int(x) - 1
-
-
-def successorOf(x) -> str | float | int | None:
-    """CQL Successor (§22.26): returns the value one step greater than x.
-
-    Integer/Long: x + 1, Decimal: x + 10^-8, Date: x + 1 day,
-    DateTime: x + 1 ms, Time: x + 1 ms, Quantity: value + step.
-    """
-    if x is None:
-        return None
-    from decimal import Decimal
-    from datetime import date, datetime, timedelta
-    # Handle date/datetime objects
-    if isinstance(x, datetime):
-        return (x + timedelta(milliseconds=1)).isoformat()
-    if isinstance(x, date):
-        return (x + timedelta(days=1)).isoformat()
-    # Handle strings
-    if isinstance(x, str):
-        x_stripped = x.strip()
-        # Time string
-        if x_stripped.startswith('T') or (len(x_stripped) >= 5 and x_stripped[2:3] == ':'):
-            t_str = x_stripped.lstrip('T')
-            parts = t_str.split(':')
-            h = int(parts[0])
-            m = int(parts[1]) if len(parts) > 1 else 0
-            s_parts = parts[2].split('.') if len(parts) > 2 else ['0']
-            s = int(s_parts[0])
-            ms = int(s_parts[1].ljust(3, '0')[:3]) if len(s_parts) > 1 else 0
-            total_ms = ((h * 60 + m) * 60 + s) * 1000 + ms + 1
-            # Maximum time is T23:59:59.999 = 86399999 ms
             if total_ms > 86399999:
                 raise ValueError(
                     "The result of the successor operation exceeds "
@@ -223,7 +158,7 @@ def successorOf(x) -> str | float | int | None:
             try:
                 q = _json.loads(x_stripped)
                 v = q.get('value', 0)
-                q['value'] = float(Decimal(str(v)) + Decimal("0.00000001"))
+                q['value'] = float(Decimal(str(v)) + direction * Decimal("0.00000001"))
                 return _json.dumps(q)
             except Exception:
                 return None
@@ -232,20 +167,39 @@ def successorOf(x) -> str | float | int | None:
             from datetime import date as _d, datetime as _dt
             if 'T' in x_stripped or ' ' in x_stripped:
                 dt = _dt.fromisoformat(x_stripped.replace('Z', '+00:00').replace(' ', 'T'))
-                return (dt + timedelta(milliseconds=1)).isoformat()
+                return (dt + timedelta(milliseconds=direction)).isoformat()
             parsed = _d.fromisoformat(x_stripped)
-            return (parsed + timedelta(days=1)).isoformat()
+            return (parsed + timedelta(days=direction)).isoformat()
         except ValueError:
             pass
         # Try numeric string
         try:
             v = Decimal(x_stripped)
-            return float(v + Decimal("0.00000001"))
+            return float(v + direction * Decimal("0.00000001"))
         except Exception:
             return None
     if isinstance(x, Decimal) or isinstance(x, float):
-        return x + Decimal("0.00000001") if isinstance(x, Decimal) else float(x) + 1e-8
-    return int(x) + 1
+        step = Decimal("0.00000001")
+        return x + direction * step if isinstance(x, Decimal) else float(x) + direction * 1e-8
+    return int(x) + direction
+
+
+def predecessorOf(x) -> str | float | int | None:
+    """CQL Predecessor (§22.25): returns the value one step less than x.
+
+    Integer/Long: x - 1, Decimal: x - 10^-8, Date: x - 1 day,
+    DateTime: x - 1 ms, Time: x - 1 ms, Quantity: value - step.
+    """
+    return _step_value(x, -1)
+
+
+def successorOf(x) -> str | float | int | None:
+    """CQL Successor (§22.26): returns the value one step greater than x.
+
+    Integer/Long: x + 1, Decimal: x + 10^-8, Date: x + 1 day,
+    DateTime: x + 1 ms, Time: x + 1 ms, Quantity: value + step.
+    """
+    return _step_value(x, +1)
 
 
 def highBoundary(value, precision: int | None = None) -> str | float | None:

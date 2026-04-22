@@ -34,7 +34,10 @@ def _flatten_audit_tree(expr: "SQLExpression") -> "SQLExpression":
 
     Each leaf term appears at most 2-3 times → linear expansion.
     """
-    from ..translator.types import SQLFunctionCall, SQLRaw  # noqa: PLC0415
+    from ..translator.types import (  # noqa: PLC0415
+        SQLArray, SQLAuditStruct, SQLBinaryOp, SQLCase, SQLFunctionCall,
+        SQLRaw, SQLStructFieldAccess,
+    )
 
     _OR_OPS = {"audit_or", "audit_or_all"}
     _AND_OP = "audit_and"
@@ -64,33 +67,60 @@ def _flatten_audit_tree(expr: "SQLExpression") -> "SQLExpression":
     term_sqls = [t.to_sql() for t in terms]
 
     if top_op in _OR_OPS:
-        result_expr = " OR ".join(f"({s}).result" for s in term_sqls)
+        # Build OR chain of .result from each term
+        result_parts = [SQLStructFieldAccess(expr=t, field_name="result") for t in terms]
+        result_ast: SQLExpression = result_parts[0]
+        for rp in result_parts[1:]:
+            result_ast = SQLBinaryOp(operator="OR", left=result_ast, right=rp)
+
         if top_op == "audit_or_all":
             # Concat evidence from all branches
-            evidence_expr: str = f"COALESCE(({term_sqls[0]}).evidence, [])"
-            for s in term_sqls[1:]:
-                evidence_expr = f"list_concat({evidence_expr}, COALESCE(({s}).evidence, []))"
+            evidence_ast: SQLExpression = SQLFunctionCall(
+                name="COALESCE",
+                args=[SQLStructFieldAccess(expr=terms[0], field_name="evidence"), SQLArray()],
+            )
+            for t in terms[1:]:
+                evidence_ast = SQLFunctionCall(
+                    name="list_concat",
+                    args=[evidence_ast, SQLFunctionCall(
+                        name="COALESCE",
+                        args=[SQLStructFieldAccess(expr=t, field_name="evidence"), SQLArray()],
+                    )],
+                )
         else:
             # True-branch strategy: pick the first true branch's evidence
-            when_clauses = " ".join(
-                f"WHEN ({s}).result THEN COALESCE(({s}).evidence, [])"
-                for s in term_sqls[:-1]
-            )
-            evidence_expr = (
-                f"CASE {when_clauses} ELSE COALESCE(({term_sqls[-1]}).evidence, []) END"
+            when_clauses = [
+                (SQLStructFieldAccess(expr=t, field_name="result"),
+                 SQLFunctionCall(name="COALESCE", args=[SQLStructFieldAccess(expr=t, field_name="evidence"), SQLArray()]))
+                for t in terms[:-1]
+            ]
+            evidence_ast = SQLCase(
+                when_clauses=when_clauses,
+                else_clause=SQLFunctionCall(
+                    name="COALESCE",
+                    args=[SQLStructFieldAccess(expr=terms[-1], field_name="evidence"), SQLArray()],
+                ),
             )
     else:
         # audit_and: ALL must be true; concat all evidence
-        result_expr = " AND ".join(f"({s}).result" for s in term_sqls)
-        evidence_expr = f"COALESCE(({term_sqls[0]}).evidence, [])"
-        for s in term_sqls[1:]:
-            evidence_expr = f"list_concat({evidence_expr}, COALESCE(({s}).evidence, []))"
+        result_parts = [SQLStructFieldAccess(expr=t, field_name="result") for t in terms]
+        result_ast = result_parts[0]
+        for rp in result_parts[1:]:
+            result_ast = SQLBinaryOp(operator="AND", left=result_ast, right=rp)
+        evidence_ast = SQLFunctionCall(
+            name="COALESCE",
+            args=[SQLStructFieldAccess(expr=terms[0], field_name="evidence"), SQLArray()],
+        )
+        for t in terms[1:]:
+            evidence_ast = SQLFunctionCall(
+                name="list_concat",
+                args=[evidence_ast, SQLFunctionCall(
+                    name="COALESCE",
+                    args=[SQLStructFieldAccess(expr=t, field_name="evidence"), SQLArray()],
+                )],
+            )
 
-    # SQLRaw is used here intentionally: this is a final-rendering-step helper called
-    # only from _flatten_audit_tree() after all AST nodes in `terms` have been
-    # serialized into `term_sqls`. Building a struct_pack from already-rendered SQL
-    # strings is acceptable at this stage of the pipeline.
-    return SQLRaw(f"struct_pack(result := {result_expr}, evidence := {evidence_expr})")
+    return SQLAuditStruct(result_expr=result_ast, evidence_expr=evidence_ast)
 
 
 class CTEManagerMixin:

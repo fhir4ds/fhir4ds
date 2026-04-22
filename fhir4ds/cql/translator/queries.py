@@ -541,13 +541,12 @@ class QueryTranslator:
             return SQLIdentifier(name=name), where_conditions
 
         # Check if this is a resource type name (fallback to Retrieve)
-        # Common FHIR resource types
-        fhir_types = {
+        # Query the schema registry for loaded resource types instead of hardcoding
+        fhir_types = set(self.context.fhir_schema.resources.keys()) if self.context.fhir_schema else set()
+        # Ensure common types are always recognized even if schema is partial
+        fhir_types |= {
             "Patient", "Condition", "Observation", "Encounter", "MedicationRequest",
-            "Medication", "Procedure", "DiagnosticReport", "AllergyIntolerance",
-            "Immunization", "CarePlan", "CareTeam", "Goal", "ServiceRequest",
-            "Specimen", "BodyStructure", "Location", "Organization", "Practitioner",
-            "PractitionerRole", "RelatedPerson", "Person", "Group", "Device",
+            "Procedure", "DiagnosticReport", "ServiceRequest", "Immunization",
         }
 
         if name in fhir_types:

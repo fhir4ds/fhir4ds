@@ -3093,12 +3093,12 @@ class QueryMixin:
                 try:
                     self.context.add_alias(
                         accum_name,
-                        ast_expr=SQLRaw("__fold.__acc"),
+                        ast_expr=SQLQualifiedIdentifier(parts=["__fold", "__acc"]),
                     )
                     for _ms_alias, _ in _multi_source_info:
                         self.context.add_alias(
                             _ms_alias,
-                            ast_expr=SQLRaw(f"__xjn.{_ms_alias}"),
+                            ast_expr=SQLQualifiedIdentifier(parts=["__xjn", _ms_alias]),
                         )
                     agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
                 finally:
@@ -3107,6 +3107,10 @@ class QueryMixin:
                 _body_sql = agg_body.to_sql()
                 _start_sql = starting_sql.to_sql() if starting_sql else "NULL"
 
+                # Recursive CTE for multi-source fold: no SQLRecursiveCTE AST node
+                # exists yet, so we build the SQL string. The alias bindings above
+                # are proper AST nodes (SQLQualifiedIdentifier), ensuring the body
+                # expression is translated through the AST pipeline.
                 result = SQLRaw(
                     f"(WITH RECURSIVE __xj AS ("
                     f"SELECT {_distinct_kw}{', '.join(_all_aliases)} FROM "

@@ -35,6 +35,10 @@ class ProfileRegistry:
     that replace the 4 hardcoded profile dicts.
     """
 
+    # Configurable profile-name prefixes to strip during fallback resolution.
+    # Loaded from JSON config key "profile_name_prefixes" (default: QICore patterns).
+    _FALLBACK_PREFIXES: tuple = ("QICore-", "QICore")
+
     def __init__(
         self,
         generic_profiles: Dict[str, str],
@@ -52,6 +56,7 @@ class ProfileRegistry:
         self._extension_paths: Optional[dict] = None
         self._raw_component_profile_keywords: Optional[list] = None
         self._component_profile_keywords: Optional[list] = None
+        self._fallback_prefixes: tuple = self._FALLBACK_PREFIXES
 
     @classmethod
     def from_json(cls, path: Optional[str] = None) -> ProfileRegistry:
@@ -73,6 +78,9 @@ class ProfileRegistry:
         registry._raw_component_profile_keywords = (
             data.get("component_profile_keywords", {}).get("keywords", [])
         )
+        raw_prefixes = data.get("profile_name_prefixes")
+        if raw_prefixes:
+            registry._fallback_prefixes = tuple(raw_prefixes)
         return registry
 
     @classmethod
@@ -146,11 +154,10 @@ class ProfileRegistry:
         info = self._named_profiles.get(profile_name)
         if info is not None:
             return (info["base_type"], info.get("url"))
-        # Fallback: strip common QICore prefixes
-        if profile_name.startswith("QICore-"):
-            return (profile_name[7:], None)
-        if profile_name.startswith("QICore"):
-            return (profile_name[6:], None)
+        # Fallback: strip known profile-name prefixes (configurable via JSON)
+        for prefix in self._fallback_prefixes:
+            if profile_name.startswith(prefix):
+                return (profile_name[len(prefix):], None)
         return None
 
     # --- Lookups replacing USCORE_PROFILE_TO_FHIR_TYPE ---
@@ -216,18 +223,26 @@ class ProfileRegistry:
         1. Profiles explicitly registered in profiles_requiring_suffix (e.g., vital signs)
         2. Named profiles marked with ``meta_profile_filter`` — these need separate
            CTEs so that meta.profile WHERE-clause filtering can be applied.
+        3. Negation profiles (profiles with ``negation_filter``) — these need
+           separate CTEs from their positive counterparts.
         """
         # Check explicit suffix registration first
         explicit = self._profiles_requiring_suffix.get(url)
         if explicit is not None:
             return explicit
 
-        # Check if this is a profile that needs meta.profile filtering;
-        # derive a distinguishing suffix from the URL.
+        # Check named profiles for meta_profile_filter or negation_filter
         for _name, info in self._named_profiles.items():
-            if info.get("url") == url and info.get("meta_profile_filter"):
-                last_segment = url.rsplit("/", 1)[-1]
-                return last_segment
+            if info.get("url") == url:
+                if info.get("meta_profile_filter") or info.get("negation_filter"):
+                    last_segment = url.rsplit("/", 1)[-1]
+                    # Strip common implementation-guide prefixes for readability
+                    for prefix in self._fallback_prefixes:
+                        p = prefix.lower().rstrip("-") + "-"
+                        if last_segment.startswith(p):
+                            last_segment = last_segment[len(p):]
+                            break
+                    return last_segment
 
         return None
 
@@ -288,14 +303,22 @@ class ProfileRegistry:
         return ExtensionInfo(url=entry["url"], value_type=entry["value_type"])
 
 
-# Lazily-initialized default instance
+# Lazily-initialized default instance (thread-safe via lock)
+import threading
 _default_registry: Optional[ProfileRegistry] = None
+_default_registry_lock = threading.Lock()
 
 
 def get_default_profile_registry() -> ProfileRegistry:
-    """Get the default ProfileRegistry using the default ModelConfig (versioned paths)."""
+    """Get the default ProfileRegistry using the default ModelConfig (versioned paths).
+
+    Thread-safe: uses a lock to prevent duplicate initialization in concurrent
+    contexts (e.g., DuckDB vectorized UDF threads).
+    """
     global _default_registry
     if _default_registry is None:
-        from ..translator.model_config import DEFAULT_MODEL_CONFIG
-        _default_registry = ProfileRegistry.from_model_config(DEFAULT_MODEL_CONFIG)
+        with _default_registry_lock:
+            if _default_registry is None:
+                from ..translator.model_config import DEFAULT_MODEL_CONFIG
+                _default_registry = ProfileRegistry.from_model_config(DEFAULT_MODEL_CONFIG)
     return _default_registry

@@ -26,6 +26,7 @@ class _VariableStore:
 
 
 _VARIABLE_STORES: "WeakKeyDictionary[duckdb.DuckDBPyConnection, _VariableStore]" = WeakKeyDictionary()
+_VARIABLE_STORES_LOCK = RLock()
 _DIRECT_VARIABLE_STORE = _VariableStore()
 
 
@@ -36,8 +37,11 @@ def _get_store(con: "duckdb.DuckDBPyConnection | None" = None) -> _VariableStore
 
     store = _VARIABLE_STORES.get(con)
     if store is None:
-        store = _VariableStore()
-        _VARIABLE_STORES[con] = store
+        with _VARIABLE_STORES_LOCK:
+            store = _VARIABLE_STORES.get(con)
+            if store is None:
+                store = _VariableStore()
+                _VARIABLE_STORES[con] = store
     return store
 
 

@@ -1258,6 +1258,11 @@ class ResourceNode:
 
 
 class TypeInfo:
+    # DEPRECATED: ``model`` is a legacy class-level attribute that was intended as a
+    # global hook for FHIR model injection.  It is always ``None`` in the current
+    # codebase.  Callers should pass ``model`` explicitly to ``is_type()`` or rely
+    # on the built-in ``FHIR_TYPE_HIERARCHY``.  Do NOT mutate this from concurrent
+    # threads — it is not thread-safe.  Planned for removal in v2.0.
     model = None
     System = "System"
     FHIR = "FHIR"

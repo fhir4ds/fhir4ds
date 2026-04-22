@@ -40,6 +40,10 @@ class IntervalMixin:
     # Mapping from FHIR resource types to their primary date/period paths.
     # Used by _ensure_resource_to_interval to convert a bare resource alias
     # (e.g., TotalHip.resource) into its canonical interval for temporal ops.
+    #
+    # Source: FHIR R4 StructureDefinitions (https://hl7.org/fhir/R4/resourcelist.html).
+    # Extend via subclass or by adding entries at runtime:
+    #   TemporalIntervalMixin._RESOURCE_PRIMARY_DATE_PATHS["MyResource"] = "dateField"
     _RESOURCE_PRIMARY_DATE_PATHS: dict = {
         "Encounter": "period",
         "Procedure": "performed",

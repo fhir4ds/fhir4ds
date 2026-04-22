@@ -154,8 +154,8 @@ class PropertyMixin:
                 udf = schema.get_udf_for_element(resource_type, path)
                 if udf:
                     return udf
-            # If no resource type, try common resource types
-            for rt in ["Observation", "Condition", "Encounter", "Procedure", "MedicationRequest", "Patient"]:
+            # If no resource type, try all loaded resource types
+            for rt in sorted(schema.resources.keys()):
                 udf = schema.get_udf_for_element(rt, path)
                 if udf:
                     return udf

@@ -16,8 +16,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 from ..translator.types import (
     SQLAlias,
+    SQLAuditStruct,
     SQLQualifiedIdentifier,
     SQLSelect,
+    SQLStructFieldAccess,
 )
 
 if TYPE_CHECKING:
@@ -1653,7 +1655,7 @@ class ASTHelpersMixin:
         When ``definition_name`` is provided, each evidence item's ``trace`` field is
         appended with the definition name to create a breadcrumb trail.
         """
-        from ..translator.types import SQLRaw, SQLFunctionCall
+        from ..translator.types import SQLAuditStruct, SQLFunctionCall, SQLRaw, SQLStructFieldAccess
 
         _audit_fn_names = {"audit_and", "audit_or", "audit_or_all", "audit_not", "audit_leaf"}
 
@@ -1768,10 +1770,15 @@ class ASTHelpersMixin:
             )
 
         if isinstance(expr, SQLFunctionCall) and expr.name in _audit_fn_names:
-            expr_sql = expr.to_sql()
-            return SQLRaw(
-                f"struct_pack(result := ({expr_sql}).result, "
-                f"evidence := list_concat(COALESCE(({expr_sql}).evidence, []), {evidence_sql}))"
+            return SQLAuditStruct(
+                result_expr=SQLStructFieldAccess(expr=expr, field_name="result"),
+                evidence_expr=SQLRaw(f"list_concat(COALESCE({SQLStructFieldAccess(expr=expr, field_name='evidence').to_sql()}, []), {evidence_sql})"),
+            )
+
+        if isinstance(expr, SQLAuditStruct):
+            return SQLAuditStruct(
+                result_expr=expr.result_expr,
+                evidence_expr=SQLRaw(f"list_concat(COALESCE({expr.evidence_expr.to_sql()}, []), {evidence_sql})"),
             )
 
         if isinstance(expr, SQLRaw):

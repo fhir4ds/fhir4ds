@@ -349,6 +349,9 @@ class SQLTranslationContext:
         param_counter: Counter for assigning parameter indices.
     """
 
+    # Default context is "Patient" per CQL specification §2.3:
+    # "CQL is defined to run in the context of a single patient by default."
+    # Override to "Population" for population-level measures.
     current_context: str = "Patient"
     library_name: Optional[str] = None
     library_version: Optional[str] = None

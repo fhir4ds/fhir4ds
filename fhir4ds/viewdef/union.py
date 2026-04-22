@@ -134,9 +134,10 @@ def _extract_column_names(select: 'Select') -> List[str]:
 class UnionGenerator:
     """Manages UNION ALL SQL generation for complex nested structures.
 
-    This class provides a higher-level interface for generating UNION ALL
-    queries, handling validation, column name consistency, and nested
-    unionAll structures.
+    .. deprecated::
+        This class is not used by the main ``SQLGenerator``, which implements
+        union handling inline.  Prefer the module-level ``generate_union_all()``
+        function for new code.  Will be removed in a future release.
     """
 
     def __init__(self, generator: 'SQLGenerator'):

@@ -684,7 +684,13 @@ class FunctionsMixin:
                         # parse_quantity returns VARCHAR (JSON). Extract numeric value via json_extract.
                         cast_source = SQLFunctionCall(
                             name="list_transform",
-                            args=[source_sql, SQLLambda(param="_v", body=SQLRaw("CAST(json_extract_string(_v, '$.value') AS DOUBLE)"))],
+                            args=[source_sql, SQLLambda(param="_v", body=SQLCast(
+                                expression=SQLFunctionCall(
+                                    name="json_extract_string",
+                                    args=[SQLIdentifier(name="_v"), SQLLiteral(value="$.value")],
+                                ),
+                                target_type="DOUBLE",
+                            ))],
                         )
                         agg_result = SQLFunctionCall(
                             name="list_aggregate",
@@ -694,12 +700,27 @@ class FunctionsMixin:
                         first_elem = source_sql.elements[0] if hasattr(source_sql, 'elements') and source_sql.elements else None
                         if first_elem and isinstance(first_elem, SQLFunctionCall) and first_elem.args:
                             unit_json = first_elem.args[0]  # The JSON string arg
-                            unit_sql = unit_json.to_sql()
-                            return SQLRaw(
-                                f"CASE WHEN ({agg_result.to_sql()}) IS NULL THEN NULL "
-                                f"ELSE CAST(json_object('value', ({agg_result.to_sql()})::DOUBLE, "
-                                f"'unit', COALESCE(json_extract_string({unit_sql}, '$.unit'), "
-                                f"json_extract_string({unit_sql}, '$.code'))) AS VARCHAR) END"
+                            agg_as_double = SQLCast(expression=agg_result, target_type="DOUBLE")
+                            unit_expr = SQLFunctionCall(
+                                name="COALESCE",
+                                args=[
+                                    SQLFunctionCall(name="json_extract_string", args=[unit_json, SQLLiteral(value="$.unit")]),
+                                    SQLFunctionCall(name="json_extract_string", args=[unit_json, SQLLiteral(value="$.code")]),
+                                ],
+                            )
+                            json_obj = SQLCast(
+                                expression=SQLFunctionCall(
+                                    name="json_object",
+                                    args=[SQLLiteral(value="value"), agg_as_double, SQLLiteral(value="unit"), unit_expr],
+                                ),
+                                target_type="VARCHAR",
+                            )
+                            return SQLCase(
+                                when_clauses=[
+                                    (SQLUnaryOp(operator="IS NULL", operand=agg_result, prefix=False),
+                                     SQLNull()),
+                                ],
+                                else_clause=json_obj,
                             )
                         return agg_result
                     cast_source = SQLFunctionCall(
@@ -931,8 +952,12 @@ class FunctionsMixin:
         """
         if len(args) >= 2:
             # CQL: Log(value, base) → DuckDB: TRY(system.log(base, value))
-            return SQLRaw(raw_sql=f"TRY(system.log({args[1].to_sql()}, {args[0].to_sql()}))")
-        return SQLRaw(raw_sql=f"TRY(LN({args[0].to_sql()}))")
+            return SQLFunctionCall(name="TRY", args=[
+                SQLFunctionCall(name="system.log", args=[args[1], args[0]])
+            ])
+        return SQLFunctionCall(name="TRY", args=[
+            SQLFunctionCall(name="LN", args=[args[0]])
+        ])
 
     def _translate_ln(self, args: list) -> SQLExpression:
         """Translate CQL Ln (§16.12) — uses UDF that raises on invalid input."""

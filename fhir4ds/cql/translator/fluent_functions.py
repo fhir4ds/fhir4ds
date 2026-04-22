@@ -1252,11 +1252,13 @@ class FluentFunctionTranslator:
                         break
             vs_url = resolved or ""
         else:
-            raw = valueset_arg.to_sql()
-            if raw.startswith("'") and raw.endswith("'"):
-                vs_url = raw[1:-1].replace("''", "'")
-            elif raw.startswith('"') and raw.endswith('"'):
-                vs_url = raw[1:-1]
+            # Extract URL from AST node directly instead of round-tripping through SQL
+            if isinstance(valueset_arg, SQLRaw):
+                raw = valueset_arg.raw_sql
+                if raw.startswith("'") and raw.endswith("'"):
+                    vs_url = raw[1:-1].replace("''", "'")
+                elif raw.startswith('"') and raw.endswith('"'):
+                    vs_url = raw[1:-1]
 
         # fhirpath_text(enc.resource, 'id')
         enc_id_expr = SQLFunctionCall(
@@ -1350,10 +1352,16 @@ class FluentFunctionTranslator:
                 query=SQLSelect(
                     columns=[SQLLiteral("1")],
                     from_clause=SQLAlias(
-                        expr=SQLRaw(
-                            "(SELECT patient_ref AS patient_id, resource"
-                            " FROM resources WHERE resourceType = 'Condition')"
-                        ),
+                        expr=SQLSubquery(query=SQLSelect(
+                            columns=[
+                                (SQLIdentifier(name="patient_ref"), "patient_id"),
+                                SQLIdentifier(name="resource"),
+                            ],
+                            from_clause=SQLIdentifier(name="resources"),
+                            where=SQLBinaryOp(operator="=",
+                                left=SQLIdentifier(name="resourceType"),
+                                right=SQLLiteral(value="Condition")),
+                        )),
                         alias="_cond",
                     ),
                     where=SQLBinaryOp(
@@ -1411,10 +1419,16 @@ class FluentFunctionTranslator:
                 query=SQLSelect(
                     columns=[SQLLiteral("1")],
                     from_clause=SQLAlias(
-                        expr=SQLRaw(
-                            "(SELECT patient_ref AS patient_id, resource"
-                            " FROM resources WHERE resourceType = 'Claim')"
-                        ),
+                        expr=SQLSubquery(query=SQLSelect(
+                            columns=[
+                                (SQLIdentifier(name="patient_ref"), "patient_id"),
+                                SQLIdentifier(name="resource"),
+                            ],
+                            from_clause=SQLIdentifier(name="resources"),
+                            where=SQLBinaryOp(operator="=",
+                                left=SQLIdentifier(name="resourceType"),
+                                right=SQLLiteral(value="Claim")),
+                        )),
                         alias="_c",
                     ),
                     where=full_where,
@@ -1455,11 +1469,13 @@ class FluentFunctionTranslator:
                         break
             vs_url = resolved or ""
         else:
-            raw = valueset_arg.to_sql()
-            if raw.startswith("'") and raw.endswith("'"):
-                vs_url = raw[1:-1].replace("''", "'")
-            elif raw.startswith('"') and raw.endswith('"'):
-                vs_url = raw[1:-1]
+            # Extract URL from AST node directly instead of round-tripping through SQL
+            if isinstance(valueset_arg, SQLRaw):
+                raw = valueset_arg.raw_sql
+                if raw.startswith("'") and raw.endswith("'"):
+                    vs_url = raw[1:-1].replace("''", "'")
+                elif raw.startswith('"') and raw.endswith('"'):
+                    vs_url = raw[1:-1]
 
         enc_id_expr = SQLFunctionCall(
             name="fhirpath_text",
@@ -1548,10 +1564,16 @@ class FluentFunctionTranslator:
                 query=SQLSelect(
                     columns=[SQLLiteral("1")],
                     from_clause=SQLAlias(
-                        expr=SQLRaw(
-                            "(SELECT patient_ref AS patient_id, resource"
-                            " FROM resources WHERE resourceType = 'Procedure')"
-                        ),
+                        expr=SQLSubquery(query=SQLSelect(
+                            columns=[
+                                (SQLIdentifier(name="patient_ref"), "patient_id"),
+                                SQLIdentifier(name="resource"),
+                            ],
+                            from_clause=SQLIdentifier(name="resources"),
+                            where=SQLBinaryOp(operator="=",
+                                left=SQLIdentifier(name="resourceType"),
+                                right=SQLLiteral(value="Procedure")),
+                        )),
                         alias="_pr",
                     ),
                     where=SQLBinaryOp(
@@ -1607,10 +1629,16 @@ class FluentFunctionTranslator:
                 query=SQLSelect(
                     columns=[SQLLiteral("1")],
                     from_clause=SQLAlias(
-                        expr=SQLRaw(
-                            "(SELECT patient_ref AS patient_id, resource"
-                            " FROM resources WHERE resourceType = 'Claim')"
-                        ),
+                        expr=SQLSubquery(query=SQLSelect(
+                            columns=[
+                                (SQLIdentifier(name="patient_ref"), "patient_id"),
+                                SQLIdentifier(name="resource"),
+                            ],
+                            from_clause=SQLIdentifier(name="resources"),
+                            where=SQLBinaryOp(operator="=",
+                                left=SQLIdentifier(name="resourceType"),
+                                right=SQLLiteral(value="Claim")),
+                        )),
                         alias="_c",
                     ),
                     where=full_where,

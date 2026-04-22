@@ -821,14 +821,27 @@ class TemporalTranslator:
         dt_length = precision_lengths_dt.get(precision_lower)
         time_length = precision_lengths_time.get(precision_lower)
         if dt_length:
-            varchar_expr = f"REPLACE(CAST(({expr.to_sql()}) AS VARCHAR), ' ', 'T')"
+            varchar_expr = SQLFunctionCall(
+                name="REPLACE",
+                args=[
+                    SQLCast(expression=expr, target_type="VARCHAR"),
+                    SQLLiteral(value=" "),
+                    SQLLiteral(value="T"),
+                ],
+            )
             if time_length:
-                return SQLRaw(
-                    f"CASE WHEN SUBSTR({varchar_expr}, 1, 1) = 'T' "
-                    f"THEN LEFT({varchar_expr}, {time_length}) "
-                    f"ELSE LEFT({varchar_expr}, {dt_length}) END"
+                return SQLCase(
+                    when_clauses=[
+                        (SQLBinaryOp(
+                            operator="=",
+                            left=SQLFunctionCall(name="SUBSTR", args=[varchar_expr, SQLLiteral(value=1), SQLLiteral(value=1)]),
+                            right=SQLLiteral(value="T"),
+                        ),
+                         SQLFunctionCall(name="LEFT", args=[varchar_expr, SQLLiteral(value=time_length)])),
+                    ],
+                    else_clause=SQLFunctionCall(name="LEFT", args=[varchar_expr, SQLLiteral(value=dt_length)]),
                 )
-            return SQLRaw(f"LEFT({varchar_expr}, {dt_length})")
+            return SQLFunctionCall(name="LEFT", args=[varchar_expr, SQLLiteral(value=dt_length)])
 
         # Unknown precision - return as-is
         return expr

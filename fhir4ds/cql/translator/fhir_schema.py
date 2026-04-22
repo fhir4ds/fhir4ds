@@ -25,6 +25,15 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from ..paths import get_resource_path
 
+# Default resources loaded when load_default_resources() is called.
+# Extend this list if your CQL libraries reference additional resource types.
+DEFAULT_RESOURCE_TYPES = [
+    "Patient", "Observation", "Condition", "Encounter",
+    "Procedure", "MedicationRequest", "DiagnosticReport",
+    "ServiceRequest", "Immunization", "AllergyIntolerance",
+    "Task", "Coverage",
+]
+
 
 @dataclass
 class FHIRElement:
@@ -232,12 +241,7 @@ class FHIRSchemaRegistry:
             RuntimeError: If any default resource schema fails to load.
                 This indicates a broken installation or missing schema files.
         """
-        default_resources = [
-            "Patient", "Observation", "Condition", "Encounter",
-            "Procedure", "MedicationRequest", "DiagnosticReport",
-            "ServiceRequest", "Immunization", "AllergyIntolerance",
-            "Task", "Coverage"
-        ]
+        default_resources = DEFAULT_RESOURCE_TYPES
         
         errors: list[str] = []
         for resource_type in default_resources:

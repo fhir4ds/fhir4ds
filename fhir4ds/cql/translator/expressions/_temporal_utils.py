@@ -569,7 +569,7 @@ class TemporalUtilsMixin:
             # string, quantity JSON, or numeric — use TRY_CAST to avoid
             # errors on non-temporal values
             if fn_lower in ("intervalstart", "intervalend"):
-                return SQLRaw(f"TRY_CAST(({expr.to_sql()}) AS TIMESTAMP)")
+                return SQLCast(expression=expr, target_type="TIMESTAMP", try_cast=True)
             # Interval-returning functions should not be date_trunc'd —
             # they return JSON VARCHAR, not temporal values.
             if fn_lower in (

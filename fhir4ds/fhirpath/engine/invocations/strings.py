@@ -6,10 +6,24 @@ import re
 from ...engine import util as util
 from ...engine.errors import FHIRPathError
 
+# Maximum allowed length for user-supplied regex patterns.
+# Prevents excessive compilation time and mitigates ReDoS risk.
+_MAX_REGEX_LENGTH = 1000
+
+
+def _validate_regex(pattern: str) -> None:
+    """Raise FHIRPathError if a regex pattern exceeds safe limits."""
+    if len(pattern) > _MAX_REGEX_LENGTH:
+        raise FHIRPathError(
+            f"Regex pattern too long ({len(pattern)} chars, max {_MAX_REGEX_LENGTH}). "
+            "This limit exists to prevent ReDoS attacks."
+        )
+
 
 @functools.lru_cache(maxsize=256)
 def _compile_regex(pattern: str, flags: int = 0) -> re.Pattern:
     """Cache compiled regex patterns to avoid recompilation."""
+    _validate_regex(pattern)
     return re.compile(pattern, flags)
 
 
