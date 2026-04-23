@@ -948,6 +948,57 @@ class SQLSubquery(SQLExpression):
 
 
 @dataclass
+class SQLRecursiveCTEFold(SQLExpression):
+    """
+    Represents a recursive CTE fold over a list expression.
+
+    Used for CQL Aggregate clauses with list-typed accumulators where
+    list_reduce cannot handle the type mismatch between the accumulator
+    (array) and the source elements (scalars).
+
+    Generates SQL of the form:
+        (WITH RECURSIVE __src AS (
+            SELECT ROW_NUMBER() OVER () AS __rn,
+                   CAST(elem AS VARCHAR) AS elem
+            FROM (SELECT [DISTINCT] UNNEST(source) AS elem)
+        ), __fold AS (
+            SELECT anchor AS __acc, CAST(0 AS BIGINT) AS __rn
+            UNION ALL
+            SELECT body, __src.__rn
+            FROM __fold JOIN __src ON __src.__rn = __fold.__rn + 1
+        ) SELECT __acc FROM __fold ORDER BY __rn DESC LIMIT 1)
+    """
+
+    source_expr: SQLExpression
+    source_alias: str
+    anchor: SQLExpression
+    body: SQLExpression
+    distinct: bool = False
+    accum_alias: str = "__acc"
+    precedence: int = PRECEDENCE["PRIMARY"]
+
+    def to_sql(self, parent_precedence: int = 0) -> str:
+        src = self.source_expr.to_sql()
+        body_sql = self.body.to_sql()
+        anchor_sql = self.anchor.to_sql()
+        distinct_kw = "DISTINCT " if self.distinct else ""
+        a = self.source_alias
+        acc = self.accum_alias
+        return (
+            f"(WITH RECURSIVE __src AS ("
+            f"SELECT ROW_NUMBER() OVER () AS __rn, "
+            f"CAST({a} AS VARCHAR) AS {a} "
+            f"FROM (SELECT {distinct_kw}UNNEST({src}) AS {a})"
+            f"), __fold AS ("
+            f"SELECT {anchor_sql} AS {acc}, CAST(0 AS BIGINT) AS __rn "
+            f"UNION ALL "
+            f"SELECT {body_sql}, __src.__rn "
+            f"FROM __fold JOIN __src ON __src.__rn = __fold.__rn + 1"
+            f") SELECT {acc} FROM __fold ORDER BY __rn DESC LIMIT 1)"
+        )
+
+
+@dataclass
 class SQLExists(SQLExpression):
     """
     Represents an EXISTS expression.

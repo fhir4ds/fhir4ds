@@ -1639,6 +1639,9 @@ class QueryMixin:
 
                 source_expr = self.translate(node.source[0], usage=ExprUsage.SCALAR)
                 alias = _src0_alias
+                # QA-014: List literals used as query sources need unnesting
+                if isinstance(source_expr, SQLArray):
+                    source_expr = SQLFunctionCall(name="unnest", args=[source_expr])
             else:
                 # Multiple sources: CQL ``from A a, B b where cond return a``
                 # Sources are plain QuerySource(alias, expression) nodes.

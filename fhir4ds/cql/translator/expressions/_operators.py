@@ -1583,9 +1583,12 @@ class OperatorsMixin:
 
         # Case 6b: One array, one non-null scalar → use list_concat
         if isinstance(left, SQLArray) or isinstance(right, SQLArray):
+            # Wrap the non-array operand in SQLArray for list_concat compatibility
+            left_arr = left if isinstance(left, SQLArray) else SQLArray(elements=[left])
+            right_arr = right if isinstance(right, SQLArray) else SQLArray(elements=[right])
             inner = SQLFunctionCall(
                 name='"Distinct"',
-                args=[SQLFunctionCall(name="list_concat", args=[left, right])],
+                args=[SQLFunctionCall(name="list_concat", args=[left_arr, right_arr])],
             )
             # Null check on the non-array side
             non_array = right if isinstance(left, SQLArray) else left
@@ -2372,6 +2375,9 @@ class OperatorsMixin:
                 system_url = self.context.codesystems.get(operand_ast.system, operand_ast.system)
                 return {"code": operand_ast.code, "codesystem": system_url}
             if isinstance(operand_ast, Identifier):
+                # Skip query aliases — they shadow code definitions
+                if self.context.is_alias(operand_ast.name):
+                    return None
                 return self.context.get_code(operand_ast.name)
             if isinstance(operand_ast, QualifiedIdentifier) and len(operand_ast.parts) >= 2:
                 # Library-qualified code ref: QICoreCommon."confirmed" → look up "confirmed"
@@ -2390,6 +2396,16 @@ class OperatorsMixin:
                     system, code = sql_val.value.rsplit('|', 1)
                     return {"code": code, "codesystem": system}
             return None
+
+        # QA-010: When both sides are compile-time code references,
+        # compare directly instead of routing through the terminology translator.
+        _left_code = _resolve_code_ref(expr.left)
+        _right_code = _resolve_code_ref(expr.right)
+        if _left_code and _right_code:
+            _l_sys = self.context.codesystems.get(_left_code.get("codesystem", ""), _left_code.get("codesystem", ""))
+            _r_sys = self.context.codesystems.get(_right_code.get("codesystem", ""), _right_code.get("codesystem", ""))
+            _match = (_left_code.get("code") == _right_code.get("code") and _l_sys == _r_sys)
+            return SQLLiteral(value=_match != is_negated)
 
         code_info = _resolve_code_ref(expr.right)
         if code_info:
