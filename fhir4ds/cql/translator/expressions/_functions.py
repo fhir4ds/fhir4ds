@@ -600,6 +600,31 @@ class FunctionsMixin:
                             )
                 return _maybe_negate(result)
 
+        # Aggregate on distinct(list literal) — e.g., Count(distinct {1,1,2,3}).
+        # Use scalar list_distinct + len instead of SQL COUNT aggregate to avoid
+        # missing GROUP BY errors.
+        if isinstance(arg, DistinctExpression) and isinstance(arg.source, ListExpression):
+            source_sql = self.translate(arg.source, usage=ExprUsage.SCALAR)
+            if isinstance(source_sql, SQLArray):
+                distinct_list = SQLFunctionCall(name="list_distinct", args=[source_sql])
+                if name.lower() == "count":
+                    filtered = SQLFunctionCall(
+                        name="list_filter",
+                        args=[distinct_list, SQLLambda(param="_v", body=SQLUnaryOp(
+                            operator="IS NOT NULL",
+                            operand=SQLIdentifier(name="_v"),
+                            prefix=False,
+                        ))],
+                    )
+                    return SQLFunctionCall(name="len", args=[filtered])
+                # For other aggregates (Sum, Min, Max, etc.) on distinct list literals
+                _list_agg_fn = {
+                    "sum": "list_sum", "min": "list_min", "max": "list_max",
+                    "avg": "list_avg",
+                }.get(name.lower())
+                if _list_agg_fn:
+                    return SQLFunctionCall(name=_list_agg_fn, args=[distinct_list])
+
         if isinstance(arg, CQLQuery):
             source_sql = self.translate(arg, usage=ExprUsage.LIST)
             result = self._wrap_list_aggregate(agg_func, source_sql)

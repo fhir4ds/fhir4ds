@@ -24,7 +24,7 @@ from .types import (
 from .parser import parse_view_definition, validate_view_definition
 from .generator import SQLGenerator
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 __all__ = [
     # Version

@@ -207,17 +207,27 @@ def to_date(ctx, coll):
 
 
 def create_converts_to_fn(to_function, _type):
+    """Create a convertsToX function.
+
+    Supports both invocation forms:
+      - 'value'.convertsToX()  — 0-param form (parentData is the input)
+      - convertsToX(value)     — 1-param form (first param is the input)
+    """
     if isinstance(_type, str):
-        def in_function(ctx, coll):
+        def in_function(ctx, coll, *args):
+            if args:
+                # 1-param form: treat args[0] as the input collection
+                coll = util.arraify(args[0])
             if len(coll) != 1:
                 return []
             return type(to_function(ctx, coll)).__name__ == _type
         return in_function
 
-    def in_function(ctx, coll):
+    def in_function(ctx, coll, *args):
+        if args:
+            coll = util.arraify(args[0])
         if len(coll) != 1:
             return []
-
         return isinstance(to_function(ctx, coll), _type)
 
     return in_function

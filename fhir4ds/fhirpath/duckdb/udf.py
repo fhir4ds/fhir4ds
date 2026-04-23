@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from decimal import Decimal
 from functools import lru_cache
 
 import orjson
@@ -623,13 +624,62 @@ def fhirpath_json_udf(resource: str | None, expression: str | None) -> str | Non
         >>> print(result)
         '["John", "Jane"]'
     """
+    if resource is None or expression is None:
+        return None
     try:
-        result = fhirpath_scalar(resource, expression)
+        if isinstance(resource, str):
+            resource_dict = _parse_json(resource)
+        elif isinstance(resource, dict):
+            resource_dict = resource
+        else:
+            return None
+
+        evaluator = _get_compiled_evaluator(expression)
+        result = evaluator.evaluate(resource_dict)
+
+        if not result and isinstance(resource_dict, dict):
+            result = _resolve_choice_type(resource_dict, expression)
+
+        if result is None or (isinstance(result, list) and len(result) == 0):
+            return None
+
+        # Preserve native types for proper JSON serialization.
+        # FHIRPath nodes need special handling; primitives pass through.
+        def _to_native(item):
+            from ..engine.nodes import FP_TimeBase, FP_Quantity
+            if isinstance(item, bool):
+                return item
+            if isinstance(item, (int, float)):
+                return item
+            if isinstance(item, Decimal):
+                # Preserve precision: use float only if lossless
+                f = float(item)
+                if Decimal(str(f)) == item:
+                    return f
+                # Precision loss — still use float (orjson can't serialize Decimal)
+                # but this is acceptable for JSON which is float64 natively
+                return f
+            if isinstance(item, FP_Quantity):
+                return {"value": float(item.value), "unit": str(item.unit)}
+            if isinstance(item, FP_TimeBase):
+                return str(item)
+            if isinstance(item, (dict, list)):
+                return item
+            return str(item)
+
+        if isinstance(result, list):
+            native = [_to_native(item) for item in result]
+        else:
+            native = [_to_native(result)]
+        return _json_serialize(native)
+    except (FHIRPathSyntaxError, FHIRPathError):
+        raise
     except NotImplementedError:
         return None
-    if result is None:
+    except Exception:
+        if _STRICT_MODE:
+            raise
         return None
-    return _json_serialize(result)
 
 
 def fhirpath_timestamp_udf(resource: str | None, expression: str | None) -> str | None:

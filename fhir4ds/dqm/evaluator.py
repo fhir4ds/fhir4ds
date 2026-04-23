@@ -40,6 +40,10 @@ class MeasureEvaluator:
         # Stored after evaluate() for downstream exports
         self._last_pop_map: PopulationMap | None = None
         self._last_parameters: dict | None = None
+        # Cache expensive registries across evaluate() calls (QA-005)
+        self._cached_fhir_schema: Any = None
+        self._cached_profile_registry: Any = None
+        self._cached_model_config: Any = None
 
     def evaluate(
         self,
@@ -210,6 +214,13 @@ class MeasureEvaluator:
         else:
             performance_rate = 0.0
 
+        # Use distinct patient count if patient_id column exists,
+        # guarding against any residual row duplication from audit JOINs.
+        if "patient_id" in df.columns:
+            total = df["patient_id"].nunique()
+        else:
+            total = len(df)
+
         return {
             "initial_population": ip,
             "denominator": denom,
@@ -220,7 +231,7 @@ class MeasureEvaluator:
             "numerator_exclusion": numer_excl,
             "numerator_final": numer_final,
             "performance_rate": round(performance_rate, 4),
-            "total_patients": len(df),
+            "total_patients": total,
         }
 
     # ── Export Methods ──────────────────────────────────────────────────
@@ -375,6 +386,22 @@ class MeasureEvaluator:
 
         translator = translator_cls(connection=self.conn)
 
+        # Reuse cached registries to avoid ~1.5MB allocation per call
+        if self._cached_fhir_schema is not None:
+            translator._fhir_schema = self._cached_fhir_schema
+            translator._context.fhir_schema = self._cached_fhir_schema
+            translator._context.column_mappings = self._cached_fhir_schema.column_mappings
+            translator._context.choice_type_prefixes = self._cached_fhir_schema.choice_type_prefixes
+        else:
+            self._cached_fhir_schema = translator._fhir_schema
+
+        if self._cached_profile_registry is not None:
+            translator._profile_registry = self._cached_profile_registry
+            translator._context.profile_registry = self._cached_profile_registry
+            translator._context.extension_paths = self._cached_profile_registry.extension_paths
+        else:
+            self._cached_profile_registry = translator._profile_registry
+
         if audit_mode == AuditMode.FULL:
             translator.context.set_audit_mode(True)
             if self._audit_or_strategy == AuditOrStrategy.ALL:
@@ -410,7 +437,25 @@ class MeasureEvaluator:
             # Audit-mode SQL generates deeply nested audit_and/audit_or expressions;
             # raise the limit to avoid DuckDB's default 1000-node cap.
             self.conn.execute("SET max_expression_depth TO 10000")
-            return self.conn.execute(sql).df()
+            df = self.conn.execute(sql).df()
+
+            # Full audit mode may produce Cartesian-product row explosion
+            # (N^K rows per patient) because retrieve CTEs are LEFT JOINed
+            # to capture per-resource evidence.  Deduplicate to one row per
+            # patient by keeping the first occurrence — evidence items across
+            # duplicate rows are identical per patient since the audit macros
+            # (audit_and / audit_or) already merge evidence lists.
+            if audit_mode == AuditMode.FULL and "patient_id" in df.columns:
+                pre_dedup = len(df)
+                df = df.drop_duplicates(subset=["patient_id"], keep="first")
+                if len(df) < pre_dedup:
+                    logger.debug(
+                        "Audit dedup: %d → %d rows (removed %d Cartesian duplicates)",
+                        pre_dedup, len(df), pre_dedup - len(df),
+                    )
+                df = df.reset_index(drop=True)
+
+            return df
         except (DQMError, KeyboardInterrupt):
             raise
         except (duckdb.Error, ValueError, FileNotFoundError, RuntimeError,
@@ -421,6 +466,13 @@ class MeasureEvaluator:
             if type(e).__name__ in ('ParseError', 'TranslationError'):
                 raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
             raise
+        finally:
+            # Clear per-evaluation state to prevent memory accumulation
+            try:
+                from fhir4ds.cql.duckdb.udf.variable import clear_variables
+                clear_variables(self.conn)
+            except ImportError:
+                pass
 
     def _filter_to_initial_population(
         self, df: pd.DataFrame, audit_mode: AuditMode,

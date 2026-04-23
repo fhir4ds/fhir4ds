@@ -1,4 +1,5 @@
 from collections import abc
+import calendar
 import copy
 from datetime import datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
@@ -789,8 +790,21 @@ class FP_Date(FP_TimeBase):
         if not isinstance(dateStr, str):
             return None
 
-        if not re.match(dateRE, dateStr):
+        m = re.match(dateRE, dateStr)
+        if not m:
             return None
+
+        # Validate semantic ranges (FHIRPath §2.3: date must be valid)
+        month = m.group("month")
+        day = m.group("day")
+        if month is not None and not (1 <= int(month) <= 12):
+            return None
+        if day is not None:
+            year_int = int(m.group("year"))
+            month_int = int(month) if month else 1
+            max_day = calendar.monthrange(year_int, month_int)[1]
+            if not (1 <= int(day) <= max_day):
+                return None
 
         return super(FP_Date, cls).__new__(cls)
 
@@ -987,7 +1001,29 @@ class FP_DateTime(FP_TimeBase):
         if not isinstance(dateStr, str):
             return None
 
-        if not re.match(dateTimeRE, dateStr):
+        m = re.match(dateTimeRE, dateStr)
+        if not m:
+            return None
+
+        # Validate semantic ranges
+        month = m.group("month")
+        day = m.group("day")
+        hour = m.group("hour")
+        minute = m.group("minute")
+        second = m.group("second")
+        if month is not None and not (1 <= int(month) <= 12):
+            return None
+        if day is not None:
+            year_int = int(m.group("year"))
+            month_int = int(month) if month else 1
+            max_day = calendar.monthrange(year_int, month_int)[1]
+            if not (1 <= int(day) <= max_day):
+                return None
+        if hour is not None and not (0 <= int(hour) <= 23):
+            return None
+        if minute is not None and not (0 <= int(minute) <= 59):
+            return None
+        if second is not None and not (0 <= int(second) <= 59):
             return None
 
         return super(FP_DateTime, cls).__new__(cls)
@@ -1340,30 +1376,36 @@ class TypeInfo:
         if not isinstance(other, TypeInfo):
             return False
 
-        # FHIRPath §6.3: System types and FHIR types do not match across
-        # namespaces. Only compare names when namespaces are compatible.
-        if (self.namespace and other.namespace
-                and self.namespace != other.namespace):
-            return False
-
         self_name = TypeInfo._normalize_type_name(self.namespace, self.name)
         other_name = TypeInfo._normalize_type_name(other.namespace, other.name)
+
+        # FHIRPath §5.1: FHIR primitive types and their System equivalents
+        # (e.g., FHIR.boolean ↔ System.Boolean) are treated as the same type.
+        # Allow cross-namespace comparison for known primitive equivalences.
+        if (self.namespace and other.namespace
+                and self.namespace != other.namespace):
+            if not (self_name == other_name and self_name in TypeInfo.FHIR_TO_SYSTEM_TYPE):
+                return False
 
         return TypeInfo.is_type(self_name, other_name, model=model)
 
     def is_exact_type(self, other, model=None):
-        """Check if this type is exactly the same as other type (no subtype matching)."""
-        if not isinstance(other, TypeInfo):
-            return False
+        """Check if this type is exactly the same as other type (no subtype matching).
 
-        # FHIRPath §6.3: System types and FHIR types do not match across
-        # namespaces.
-        if (self.namespace and other.namespace
-                and self.namespace != other.namespace):
+        Per FHIRPath §5.1, FHIR primitive types and their System equivalents
+        (e.g., FHIR.string ↔ System.String) are treated as the same type.
+        """
+        if not isinstance(other, TypeInfo):
             return False
 
         self_name = TypeInfo._normalize_type_name(self.namespace, self.name)
         other_name = TypeInfo._normalize_type_name(other.namespace, other.name)
+
+        # If both namespaces are known and differ, only allow the comparison
+        # when the normalized names match a known primitive-type equivalence.
+        if (self.namespace and other.namespace
+                and self.namespace != other.namespace):
+            return self_name == other_name and self_name in TypeInfo.FHIR_TO_SYSTEM_TYPE
 
         return self_name == other_name
 

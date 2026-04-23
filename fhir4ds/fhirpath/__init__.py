@@ -15,7 +15,7 @@ from .engine.util import arraify, get_data, set_paths, process_user_invocation_t
 from .engine.nodes import FP_Type, ResourceNode
 
 __title__ = "fhir4ds.fhirpath"
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 __author__ = "FHIR4DS Team"
 __license__ = "AGPL-3.0-only"
 __copyright__ = "Copyright 2026 FHIR4DS Team"

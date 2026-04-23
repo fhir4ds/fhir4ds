@@ -76,6 +76,38 @@ class FHIRDataLoader:
                 patient_ref VARCHAR
             )
         """)
+        self._register_resolve_macro()
+
+    def _register_resolve_macro(self) -> None:
+        """Register the CQL resolve() macro that follows FHIR references.
+
+        The macro performs a correlated subquery against the resources table
+        to look up the referenced resource by ``ResourceType/id`` or by a
+        JSON Reference object ``{"reference": "ResourceType/id"}``.
+        """
+        tbl = self.table_name
+        try:
+            self.con.execute(f"""
+                CREATE OR REPLACE MACRO resolve(ref) AS (
+                    SELECT r.resource FROM {tbl} r
+                    WHERE ref IS NOT NULL
+                    AND r.id = split_part(
+                        CASE WHEN ref LIKE '{{%'
+                             THEN json_extract_string(ref::VARCHAR, '$.reference')
+                             ELSE ref
+                        END, '/', -1
+                    )
+                    AND r.resourceType = split_part(
+                        CASE WHEN ref LIKE '{{%'
+                             THEN json_extract_string(ref::VARCHAR, '$.reference')
+                             ELSE ref
+                        END, '/', 1
+                    )
+                    LIMIT 1
+                )
+            """)
+        except Exception:
+            _logger.debug("resolve() macro registration skipped (table may not exist)")
 
     def _extract_patient_ref(self, resource: dict) -> Optional[str]:
         """
@@ -131,6 +163,11 @@ class FHIRDataLoader:
                 f"{resource_type!r}"
             )
         resource_id = resource.get("id")
+        if resource_id is not None and not isinstance(resource_id, str):
+            raise ValueError(
+                f"Resource 'id' must be a string per FHIR R4 spec, "
+                f"got {type(resource_id).__name__}: {resource_id!r}"
+            )
         patient_ref = self._extract_patient_ref(resource)
         resource_json = json.dumps(resource)
 
@@ -165,13 +202,14 @@ class FHIRDataLoader:
 
         return count
 
-    def load_file(self, path: Path) -> int:
+    def load_file(self, path: Union[str, Path]) -> int:
         """
         Load from a JSON file.
 
         Automatically detects if it's a Bundle or single resource.
         Returns the number of resources loaded.
         """
+        path = Path(path) if not isinstance(path, Path) else path
         data = json.loads(path.read_text())
         resource_type = data.get("resourceType")
 
@@ -181,7 +219,7 @@ class FHIRDataLoader:
             self.load_resource(data)
             return 1
 
-    def load_ndjson(self, path: Path) -> int:
+    def load_ndjson(self, path: Union[str, Path]) -> int:
         """
         Load from an NDJSON file (one resource per line).
 
@@ -190,6 +228,7 @@ class FHIRDataLoader:
         Raises:
             ValueError: If any line contains malformed JSON (no partial loads).
         """
+        path = Path(path) if not isinstance(path, Path) else path
         # Parse all lines first to avoid partial loads on malformed input
         resources = []
         with open(path) as f:
@@ -208,7 +247,7 @@ class FHIRDataLoader:
 
     def load_directory(
         self,
-        path: Path,
+        path: Union[str, Path],
         recursive: bool = True,
         extensions: List[str] = None
     ) -> int:
@@ -217,6 +256,7 @@ class FHIRDataLoader:
 
         Returns the total number of resources loaded.
         """
+        path = Path(path) if not isinstance(path, Path) else path
         if extensions is None:
             extensions = [".json", ".ndjson"]
 

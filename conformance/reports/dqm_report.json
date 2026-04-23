@@ -15,7 +15,7 @@
         "name": "Full Logic Accuracy",
         "result": {
           "passed": false,
-          "reason": "Accuracy: 92.9%"
+          "error": "Accuracy: 92.9%"
         }
       }
     ]
@@ -126,7 +126,7 @@
         "name": "Full Logic Accuracy",
         "result": {
           "passed": false,
-          "reason": "Accuracy: 91.4%"
+          "error": "Accuracy: 91.4%"
         }
       }
     ]
@@ -167,7 +167,7 @@
         "name": "Full Logic Accuracy",
         "result": {
           "passed": false,
-          "reason": "Accuracy: 96.1%"
+          "error": "Accuracy: 96.1%"
         }
       }
     ]
@@ -208,7 +208,7 @@
         "name": "Full Logic Accuracy",
         "result": {
           "passed": false,
-          "reason": "Accuracy: 70.0%"
+          "error": "Accuracy: 70.0%"
         }
       }
     ]

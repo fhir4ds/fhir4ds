@@ -11,6 +11,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from conformance_log import log_run, _collect_stats
+
 # Configuration
 SCRIPTS = [
     ("ViewDefinition", "conformance/scripts/run_viewdef.py", "conformance/reports/viewdef_report.json"),
@@ -79,6 +82,33 @@ def main():
     grand_rate = (grand_passed / grand_total * 100) if grand_total > 0 else 0
     print(f"{'OVERALL COMPLIANCE':<25} | {grand_passed:<8} | {grand_total:<8} | {grand_rate:>6.1f}%")
     print("=" * 60)
+
+    # Build a synthetic combined report for the master log entry
+    all_failures = []
+    for _, _, report_path in SCRIPTS:
+        _, _, failures = _collect_stats(report_path)
+        all_failures.extend(failures)
+
+    from datetime import datetime, timezone
+    from pathlib import Path as _P
+    LOG_FILE = _P("conformance/reports/conformance.log")
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+    status = "PASS" if not all_failures else "FAIL"
+    lines = [
+        "=" * 80,
+        f"[{ts}]  ALL SUITES (master run)  |  {grand_passed}/{grand_total} ({grand_rate:.1f}%)  |  {status}",
+    ]
+    if all_failures:
+        lines.append(f"  Failures ({len(all_failures)}):")
+        for name, error in all_failures:
+            lines.append(f"    - {name}")
+            if error and error != "no detail":
+                lines.append(f"      {error}")
+    else:
+        lines.append("  Failures: none")
+    with open(LOG_FILE, "a") as f:
+        f.write("\n".join(lines) + "\n")
 
     # Final result
     if grand_rate == 100:

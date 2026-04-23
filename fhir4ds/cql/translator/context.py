@@ -882,7 +882,14 @@ class SQLTranslationContext:
     # -------------------------------------------------------------------------
 
     def clear(self) -> None:
-        """Reset the context to initial state."""
+        """Reset the context to initial state.
+
+        Clears all per-translation state while preserving configuration that
+        is expensive to rebuild (fhir_schema, profile_registry, column_mappings,
+        choice_type_prefixes, extension_paths, connection, audit settings) and
+        definition_meta which is populated during library processing and needed
+        across translate_library → translate_library_to_population_sql calls.
+        """
         self.definitions.clear()
         self.parameters.clear()
         self.includes.clear()
@@ -907,6 +914,27 @@ class SQLTranslationContext:
         self.current_scope_level = 0
         self.function_inliner = None
         self._fluent_translator = None
+        # Per-translation state that was previously missed
+        self.definition_asts.clear()
+        self.let_variables.clear()
+        self.expression_definitions.clear()
+        # NOTE: definition_meta is intentionally NOT cleared here — it is
+        # populated during translate_library() for included libraries and
+        # read during translate_library_to_population_sql().
+        self.warnings = TranslationWarnings()
+        self.column_registry = ColumnRegistry()
+        self.component_code_to_column.clear()
+        self.cte_counter = 0
+        self.param_counter = 0
+        self.query_builder = None
+        self.resource_alias = None
+        self.resource_type = None
+        self.patient_alias = None
+        self.current_patient_id = None
+        self.current_context = "Patient"
+        self.library_name = None
+        self.library_version = None
+        self.has_patient_demographics_cte = False
         # Reset audit retrieve CTE names so stale names don't persist across calls
         if hasattr(self, '_audit_retrieve_cte_names'):
             self._audit_retrieve_cte_names = set()

@@ -14,12 +14,14 @@ from pathlib import Path
 from typing import Any, List, Dict, Tuple
 
 import duckdb
+import jsonschema
 import pandas as pd
 import numpy as np
 
 # Ensure we can import fhir4ds
 sys.path.insert(0, os.getcwd())
 
+from conformance_log import log_run
 from fhir4ds.fhirpath.duckdb import register_fhirpath
 from fhir4ds.viewdef import parse_view_definition, SQLGenerator
 from fhir4ds.viewdef.errors import SQLOnFHIRError, ValidationError
@@ -28,6 +30,42 @@ from fhir4ds.viewdef.parser import ParseError
 # Path to spec test files
 SPEC_TESTS_DIR = Path("fhir4ds/viewdef/tests/spec_tests")
 OUTPUT_FILE = Path("conformance/reports/viewdef_report.json")
+
+# SQL-on-FHIR v2 test report JSON schema (canonical copy from upstream)
+_TEST_REPORT_SCHEMA = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "additionalProperties": False,
+    "patternProperties": {
+        ".*": {
+            "type": "object",
+            "required": ["tests"],
+            "additionalProperties": False,
+            "properties": {
+                "tests": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "required": ["name", "result"],
+                        "properties": {
+                            "name": {"type": "string"},
+                            "result": {
+                                "type": "object",
+                                "required": ["passed"],
+                                "properties": {
+                                    "passed": {"type": "boolean"},
+                                    "error": {"type": "string"},
+                                    "details": {"type": "object"},
+                                },
+                            },
+                        },
+                    },
+                }
+            },
+        }
+    },
+}
 
 def normalize_value(val: Any) -> Any:
     """Normalize a value for comparison."""
@@ -180,10 +218,10 @@ def main():
                 
                 result_obj = {
                     "name": test_title,
-                    "result": { "passed": passed }
+                    "result": {"passed": passed},
                 }
                 if not passed:
-                    result_obj["result"]["reason"] = reason
+                    result_obj["result"]["error"] = reason
                 
                 file_results.append(result_obj)
                 total_tests += 1
@@ -195,12 +233,21 @@ def main():
 
     # Ensure output directory exists
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    
+
     with open(OUTPUT_FILE, "w") as f:
         json.dump(report, f, indent=2)
 
+    # Validate report against the SQL-on-FHIR v2 test report JSON schema
+    try:
+        jsonschema.validate(instance=report, schema=_TEST_REPORT_SCHEMA)
+        print("Report schema validation: PASSED")
+    except jsonschema.ValidationError as exc:
+        print(f"Report schema validation: FAILED — {exc.message}", file=sys.stderr)
+
     print(f"\nConformance report generated at {OUTPUT_FILE}")
     print(f"Summary: {passed_tests}/{total_tests} tests passed ({passed_tests/total_tests:.1%})")
+
+    log_run("ViewDefinition", OUTPUT_FILE)
 
 if __name__ == "__main__":
     main()

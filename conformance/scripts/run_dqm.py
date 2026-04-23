@@ -14,6 +14,8 @@ from pathlib import Path
 
 # Ensure we can import fhir4ds and benchmarking
 sys.path.insert(0, os.getcwd())
+sys.path.insert(0, str(Path(__file__).parent))
+from conformance_log import log_run
 
 # Deeply-nested CQL libraries can exceed Python's default recursion limit
 sys.setrecursionlimit(8000)
@@ -89,7 +91,7 @@ def main():
                 }
             }
             if not passed:
-                test_obj["result"]["reason"] = f"Accuracy: {accuracy:.1f}%"
+                test_obj["result"]["error"] = f"Accuracy: {accuracy:.1f}%"
                 print(f"FAILED ({accuracy:.1f}%)")
             else:
                 passed_measures += 1
@@ -104,7 +106,7 @@ def main():
                     "name": "Full Logic Accuracy",
                     "result": {
                         "passed": False,
-                        "reason": str(e)
+                        "error": str(e),
                     }
                 }]
             }
@@ -118,6 +120,7 @@ def main():
 
     print(f"\nConformance report generated at {OUTPUT_FILE}")
     print(f"Summary: {passed_measures}/{total_measures} measures passed ({passed_measures/total_measures:.1%})")
+    log_run("DQM (QI Core 2025)", OUTPUT_FILE)
 
 if __name__ == "__main__":
     main()

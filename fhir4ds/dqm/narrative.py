@@ -43,17 +43,28 @@ class NarrativeGenerator:
     }
 
     def generate(
-        self, population_code: str, evidence: list[dict], is_satisfied: bool
+        self, population_code: str, evidence: list[dict], is_satisfied: bool,
+        evidence_captured: bool = True,
     ) -> list[str]:
         """Generate narrative fragments for a population result.
 
         Returns a list of short, human-readable strings — one per logic group.
+
+        Args:
+            population_code: The population code (e.g., 'numerator').
+            evidence: List of evidence dicts from audit.
+            is_satisfied: Whether the population criteria were met.
+            evidence_captured: Whether evidence was actively captured. False when
+                audit mode doesn't capture detail (e.g., POPULATION mode).
         """
         templates = self.FAILURE_TEMPLATES if not is_satisfied else self.TEMPLATES
         header = templates.get(population_code, "Evidence")
 
         if not evidence:
-            return [f"{header}: no supporting evidence."]
+            verb = "met" if is_satisfied else "not met"
+            if not evidence_captured:
+                return [f"{header}: criteria {verb} (evidence not captured in this audit mode)."]
+            return [f"{header}: criteria {verb} (no detailed evidence available)."]
 
         fragments = [f"{header}:"]
         for group in evidence:

@@ -2137,9 +2137,12 @@ class OperatorsMixin:
                 left=SQLCast(expression=SQLFunctionCall(name="intervalStart", args=[left]), target_type="DATE"),
                 right=right,
             )
-        # Ensure both args are VARCHAR for the UDF
-        left_arg = left if not isinstance(left, SQLCast) else SQLCast(expression=left.expression, target_type="VARCHAR")
-        right_arg = SQLCast(expression=right, target_type="VARCHAR") if isinstance(right, SQLCast) else right
+        # Promote point operands to degenerate intervals [x, x] so that
+        # intervalStartsSame receives two well-formed interval VARCHARs.
+        left_is_interval = self._is_fhir_interval_expression(left) or isinstance(left, SQLInterval)
+        right_is_interval = self._is_fhir_interval_expression(right) or isinstance(right, SQLInterval)
+        left_arg = left if left_is_interval else self._point_as_interval(left)
+        right_arg = right if right_is_interval else self._point_as_interval(right)
         return SQLFunctionCall(name="intervalStartsSame", args=[left_arg, right_arg])
 
     def _translate_ends_op(self, operator, left, right, expr) -> SQLExpression:
@@ -2345,9 +2348,12 @@ class OperatorsMixin:
                 left=SQLCast(expression=SQLFunctionCall(name="intervalEnd", args=[left]), target_type="DATE"),
                 right=right,
             )
-        # Ensure both args are VARCHAR for the UDF
-        left_arg = left if not isinstance(left, SQLCast) else SQLCast(expression=left.expression, target_type="VARCHAR")
-        right_arg = SQLCast(expression=right, target_type="VARCHAR") if isinstance(right, SQLCast) else right
+        # Promote point operands to degenerate intervals [x, x] so that
+        # intervalEndsSame receives two well-formed interval VARCHARs.
+        left_is_interval = self._is_fhir_interval_expression(left) or isinstance(left, SQLInterval)
+        right_is_interval = self._is_fhir_interval_expression(right) or isinstance(right, SQLInterval)
+        left_arg = left if left_is_interval else self._point_as_interval(left)
+        right_arg = right if right_is_interval else self._point_as_interval(right)
         return SQLFunctionCall(name="intervalEndsSame", args=[left_arg, right_arg])
 
         # Temporal precision operators: same day as, same month as, etc.

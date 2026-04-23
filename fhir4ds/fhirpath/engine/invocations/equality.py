@@ -41,6 +41,21 @@ def equality(ctx, x, y):
     ):
         return a.deep_equal(b)
 
+    # FHIRPath §6.1.1: equality between incompatible types returns empty.
+    # Only implicit conversions are allowed; Integer↔String is explicit.
+    # Unwrap ResourceNode wrappers to get the actual data types.
+    a_raw = util.get_data(a) if hasattr(a, 'data') else a
+    b_raw = util.get_data(b) if hasattr(b, 'data') else b
+    a_type = type(a_raw)
+    b_type = type(b_raw)
+    if a_type != b_type:
+        # Allow numeric type mixing (int/float/Decimal)
+        numeric = (int, float, Decimal)
+        a_numeric = isinstance(a_raw, numeric) and not isinstance(a_raw, bool)
+        b_numeric = isinstance(b_raw, numeric) and not isinstance(b_raw, bool)
+        if not (a_numeric and b_numeric):
+            return None  # incompatible types → empty
+
     return a == b
 
 

@@ -14,6 +14,9 @@ from datetime import datetime
 import json
 import sys
 
+sys.path.insert(0, str(Path(__file__).parent))
+from conformance_log import log_run
+
 
 @dataclass
 class FHIRPathTestCase:
@@ -630,7 +633,7 @@ def generate_report(report: ComplianceReport, output_format: str = "text") -> st
                 }
             }
             if not r.passed:
-                test_obj["result"]["reason"] = r.error_message
+                test_obj["result"]["error"] = r.error_message
             
             grouped_results[filename]["tests"].append(test_obj)
             
@@ -775,6 +778,8 @@ def main():
     if args.output:
         args.output.write_text(report_text)
         print(f"\nReport written to: {args.output}")
+        if args.format == "json":
+            log_run("FHIRPath (R4)", args.output)
     else:
         print("\n" + report_text)
 

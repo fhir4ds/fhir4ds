@@ -19,6 +19,8 @@ import duckdb
 
 # Ensure we can import fhir4ds
 sys.path.insert(0, os.getcwd())
+sys.path.insert(0, str(Path(__file__).parent))
+from conformance_log import log_run
 
 from fhir4ds.cql import register_udfs, translate_cql
 
@@ -426,7 +428,7 @@ def main():
             passed, reason = run_test(conn, test_elem)
             
             test_obj = { "name": test_name, "result": { "passed": passed } }
-            if not passed: test_obj["result"]["reason"] = reason
+            if not passed: test_obj["result"]["error"] = reason
                 
             file_results.append(test_obj)
             total_tests += 1
@@ -442,6 +444,7 @@ def main():
     print(f"\nConformance report generated at {OUTPUT_FILE}")
     if total_tests > 0:
         print(f"Summary: {passed_tests}/{total_tests} tests passed ({passed_tests/total_tests:.1%})")
+    log_run("CQL", OUTPUT_FILE)
 
 if __name__ == "__main__":
     main()
