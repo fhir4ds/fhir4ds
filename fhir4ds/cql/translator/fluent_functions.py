@@ -2318,12 +2318,17 @@ class DeferredTemplateSubstitution(SQLExpression):
         return self._precedence
 
     def to_sql(self, parent_precedence: int = 0) -> str:
-        """Perform the template substitution and return SQL (Phase 3)."""
+        """Perform the template substitution and return SQL (Phase 3).
+
+        Internally builds AST nodes where possible and only renders to SQL
+        string at the very end via a single ``.to_sql()`` call on the final
+        node.  This avoids premature ``.to_sql()`` calls mid-pipeline.
+        """
         from .types import SQLUnion
 
-        # Branch 1: SQLUnion → COALESCE over each operand
+        # Branch 1: SQLUnion → COALESCE over each operand (pure AST)
         if isinstance(self._resource_expr, SQLUnion):
-            return self._apply_to_union()
+            return self._build_union_ast().to_sql(parent_precedence)
 
         # Branch 2: Unresolved placeholders → emit marker for Phase 2
         if self._has_pending_placeholders():
@@ -2331,15 +2336,19 @@ class DeferredTemplateSubstitution(SQLExpression):
 
         # Branch 3: Normal case → render template with substitutions
         return self._render_template()
-    def _apply_to_union(self) -> str:
-        """Apply template to each SQLUnion operand and COALESCE the results."""
+
+    def _build_union_ast(self) -> SQLExpression:
+        """Build a COALESCE AST node over each SQLUnion operand.
+
+        Returns an ``SQLFunctionCall`` node — rendering is deferred to the
+        caller's single ``.to_sql()`` invocation.
+        """
         coalesce_args = []
         for operand in self._resource_expr.operands:
             coalesce_args.append(DeferredTemplateSubstitution(
                 self._template, operand, self._args, self._func_def, self._substitutor
             ))
-        coalesce_node = SQLFunctionCall(name="COALESCE", args=coalesce_args)
-        return coalesce_node.to_sql()
+        return SQLFunctionCall(name="COALESCE", args=coalesce_args)
 
     def _has_pending_placeholders(self) -> bool:
         """Check if the resource expression still contains unresolved placeholders."""
@@ -2356,7 +2365,21 @@ class DeferredTemplateSubstitution(SQLExpression):
         return self._resource_expr.to_sql()
 
     def _render_template(self) -> str:
-        """Render the template with the resolved resource and parameter values."""
+        """Render the template with the resolved resource and parameter values.
+
+        Delegates to ``_apply_optimizations_and_substitute()`` which may return
+        either a rendered SQL string or an ``SQLExpression`` AST node.  When an
+        AST node is returned the final ``.to_sql()`` rendering happens here in
+        a single call, avoiding premature mid-pipeline rendering.
+
+        .. note::
+
+           The ``.to_sql()`` calls on ``self._resource_expr`` (line below) and
+           on ``arg`` in ``_build_param_map()`` are at the rendering boundary
+           of ``DeferredTemplateSubstitution.to_sql()``  — they are the final
+           step, not mid-pipeline construction.  Eliminating them entirely
+           requires converting ``body_sql`` templates to parsed AST (Task C4).
+        """
         from ..translator.ast_utils import is_simple_identifier, ast_is_function_call
 
         resource_sql = self._resource_expr.to_sql()
@@ -2368,6 +2391,10 @@ class DeferredTemplateSubstitution(SQLExpression):
 
         param_map = self._build_param_map(resource_sql)
         result = self._apply_optimizations_and_substitute(resource_sql)
+
+        # If an AST node was returned, render it in one shot — no string ops.
+        if isinstance(result, SQLExpression):
+            return result.to_sql()
 
         # Replace named parameters
         for param_name, param_value in param_map.items():
@@ -2389,8 +2416,15 @@ class DeferredTemplateSubstitution(SQLExpression):
                 param_map[param_name] = arg.to_sql()
         return param_map
 
-    def _apply_optimizations_and_substitute(self, resource_sql: str) -> str:
-        """Apply template optimizations and perform {resource} substitution."""
+    def _apply_optimizations_and_substitute(self, resource_sql: str):
+        """Apply template optimizations and perform {resource} substitution.
+
+        Returns either:
+        - ``str``: A rendered SQL string (template path, default path).
+        - ``SQLExpression``: An AST node (list_filter, boolean-for-list, or
+          FROM-resource paths).  The caller must check the type and defer
+          ``.to_sql()`` to the final rendering step.
+        """
         result = self._template
 
         # Attempt precomputed-column optimization
@@ -2408,13 +2442,13 @@ class DeferredTemplateSubstitution(SQLExpression):
         if "FROM {resource}" in result:
             return self._substitute_from_resource(result, resource_sql)
 
-        # list_filter({resource}...): handle mixed list/scalar input
+        # list_filter({resource}...): return AST node directly (no mid-pipeline .to_sql())
         if "list_filter({resource}" in self._template:
             return self._substitutor._wrap_list_filter_for_mixed_input(
                 self._template, resource_sql, self._resource_expr
-            ).to_sql()
+            )
 
-        # Boolean template on list expression: wrap for list semantics
+        # Boolean template on list expression: return AST node directly
         from ..translator.ast_utils import ast_is_list_operation
         if (ast_is_list_operation(self._resource_expr)
                 and self._func_def.return_type == "Boolean"
@@ -2422,24 +2456,38 @@ class DeferredTemplateSubstitution(SQLExpression):
                 and ("=" in self._template or " IN " in self._template)):
             return self._substitutor._wrap_boolean_for_list(
                 self._template, resource_sql, self._resource_expr
-            ).to_sql()
+            )
 
         # Default: simple string substitution
         return result.replace("{resource}", resource_sql)
 
-    def _substitute_from_resource(self, result: str, resource_sql: str) -> str:
-        """Handle the ``FROM {resource}`` pattern with correlated-ref guard."""
+    def _substitute_from_resource(self, result: str, resource_sql: str) -> SQLExpression:
+        """Handle the ``FROM {resource}`` pattern with correlated-ref guard.
+
+        Returns an ``SQLRaw`` AST node wrapping the fully rendered SQL.
+
+        .. note::
+
+           The ``resource_for_from`` AST node is rendered to a string here
+           because the surrounding ``result`` is a string template that
+           requires splicing.  This is a known residual ``.to_sql()`` call
+           within the template rendering boundary.  Full elimination requires
+           parsing templates to AST (Task C4).
+        """
         from .ast_utils import ast_has_correlated_ref
+        from .types import SQLRaw
         cte_name = self._substitutor._extract_cte_name(self._resource_expr)
         if cte_name and ast_has_correlated_ref(self._resource_expr, cte_name):
             if hasattr(self._substitutor.context, 'warnings') and self._substitutor.context.warnings:
                 self._substitutor.context.warnings.add_performance(
                     message=f"Fluent function {self._func_def.name}() skipped for correlated ref"
                 )
-            return resource_sql
+            return SQLRaw(raw_sql=resource_sql)
         resource_for_from = self._substitutor._wrap_for_table_source(resource_sql, self._resource_expr)
-        result = result.replace("FROM {resource}", f"FROM {resource_for_from.to_sql()}")
-        return result.replace("{resource}", resource_sql)
+        from_sql = resource_for_from.to_sql()
+        rendered = result.replace("FROM {resource}", f"FROM {from_sql}")
+        rendered = rendered.replace("{resource}", resource_sql)
+        return SQLRaw(raw_sql=rendered)
 
 
 class RawSQLExpression(SQLExpression):
