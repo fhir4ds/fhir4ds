@@ -1420,22 +1420,29 @@ class OperatorsMixin:
 
     def _translate_union_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
-        # CQL §19.31 / §20.29: If either argument is null, the result is null.
-        # For non-subquery operands, wrap with null check.
         left_is_rows = isinstance(left, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect))
         right_is_rows = isinstance(right, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect))
-        if not left_is_rows and not right_is_rows:
-            # Check if either side could be null (SQLNull or interval/literal)
-            if isinstance(left, SQLNull) or isinstance(right, SQLNull):
-                return SQLNull()
 
         # CQL §19.31: Interval union — use intervalUnion UDF which returns
         # null when intervals do not overlap or meet.
+        # Null propagation for intervals: §19.31 says null → null.
         if not left_is_rows and not right_is_rows:
             left_is_interval = self._is_fhir_interval_expression(left)
             right_is_interval = self._is_fhir_interval_expression(right)
             if left_is_interval and right_is_interval:
                 return SQLFunctionCall(name="intervalUnion", args=[left, right])
+            if (left_is_interval or right_is_interval) and (isinstance(left, SQLNull) or isinstance(right, SQLNull)):
+                return SQLNull()
+
+        # CQL §20.29: List union — null is treated as empty list.
+        # Return the non-null operand instead of propagating null.
+        if not left_is_rows and not right_is_rows:
+            if isinstance(left, SQLNull) and isinstance(right, SQLNull):
+                return SQLNull()
+            if isinstance(left, SQLNull):
+                return right
+            if isinstance(right, SQLNull):
+                return left
 
         # CQL union -> SQL UNION ALL (preserves duplicates)
         # Use the already-translated SCALAR operands but normalize for union.
@@ -1593,27 +1600,38 @@ class OperatorsMixin:
             # Null check on the non-array side
             non_array = right if isinstance(left, SQLArray) else left
             if isinstance(non_array, SQLNull):
-                return SQLNull()
+                # CQL §20.29: null in list union is empty list — return the array side
+                return left if isinstance(left, SQLArray) else right
             return inner
 
         # Fallback: use jsonConcat UDF which handles scalars, lists, and JSON
         # values from subqueries. Wrap in order-preserving Distinct for CQL dedup.
-        # CQL §19.31 / §20.29: If either argument is null, result is null.
-        # For non-row operands, wrap in CASE WHEN to propagate runtime nulls.
+        # CQL §20.29: For list union, null is treated as empty list — return
+        # the other argument. Use COALESCE to handle runtime nulls.
         inner = SQLFunctionCall(
             name='"Distinct"',
             args=[SQLFunctionCall(name="jsonConcat", args=[left, right])],
         )
         if not left_is_rows and not right_is_rows:
             return SQLCase(
-                when_clauses=[(
-                    SQLBinaryOp(
-                        left=SQLBinaryOp(left=left, operator="IS NOT NULL", right=SQLRaw("")),
-                        operator="AND",
-                        right=SQLBinaryOp(left=right, operator="IS NOT NULL", right=SQLRaw("")),
+                when_clauses=[
+                    (
+                        SQLBinaryOp(
+                            left=SQLBinaryOp(left=left, operator="IS NOT NULL", right=SQLRaw("")),
+                            operator="AND",
+                            right=SQLBinaryOp(left=right, operator="IS NOT NULL", right=SQLRaw("")),
+                        ),
+                        inner,
                     ),
-                    inner,
-                )],
+                    (
+                        SQLBinaryOp(left=left, operator="IS NOT NULL", right=SQLRaw("")),
+                        left,
+                    ),
+                    (
+                        SQLBinaryOp(left=right, operator="IS NOT NULL", right=SQLRaw("")),
+                        right,
+                    ),
+                ],
                 else_clause=SQLNull(),
             )
         return inner

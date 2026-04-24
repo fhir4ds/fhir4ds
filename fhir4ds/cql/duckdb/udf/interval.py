@@ -1265,8 +1265,8 @@ def intervalFromBounds(low: str | None, high: str | None, lowClosed: bool = True
     """Create an interval from bounds.
 
     If both bounds are null and no type annotation exists, result is null.
-    (Typed null bounds like ``null as Integer`` are passed as ``'null'`` string
-    by the translator to indicate unbounded intervals.)
+    (Typed null bounds like ``null as Integer`` are passed as ``'__null__'``
+    string by the translator to indicate unbounded intervals.)
 
     Raises ValueError if the interval is invalid (low > high after bound
     normalization), per CQL §2.17.
