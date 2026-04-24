@@ -1379,13 +1379,11 @@ class TypeInfo:
         self_name = TypeInfo._normalize_type_name(self.namespace, self.name)
         other_name = TypeInfo._normalize_type_name(other.namespace, other.name)
 
-        # FHIRPath §5.1: FHIR primitive types and their System equivalents
-        # (e.g., FHIR.boolean ↔ System.Boolean) are treated as the same type.
-        # Allow cross-namespace comparison for known primitive equivalences.
+        # FHIRPath §6.3: Types in different namespaces are distinct.
+        # FHIR.boolean is NOT System.Boolean (confirmed by FHIRPath test suite).
         if (self.namespace and other.namespace
                 and self.namespace != other.namespace):
-            if not (self_name == other_name and self_name in TypeInfo.FHIR_TO_SYSTEM_TYPE):
-                return False
+            return False
 
         return TypeInfo.is_type(self_name, other_name, model=model)
 
@@ -1447,5 +1445,7 @@ class TypeInfo:
     def from_value(value):
         if isinstance(value, ResourceNode):
             return value.get_type_info()
-        else:
-            return TypeInfo.create_by_value_in_namespace(TypeInfo.System, value)
+        # FHIR resources represented as dicts: detect via resourceType key
+        if isinstance(value, abc.Mapping) and 'resourceType' in value:
+            return TypeInfo(namespace=TypeInfo.FHIR, name=value['resourceType'])
+        return TypeInfo.create_by_value_in_namespace(TypeInfo.System, value)

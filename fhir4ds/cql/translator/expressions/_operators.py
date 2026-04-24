@@ -2415,6 +2415,9 @@ class OperatorsMixin:
             if code_info:
                 resource_expr = right
         if code_info and resource_expr:
+            # CQL §12.2: null ~ X = false (equivalence with null is always false)
+            if isinstance(resource_expr, SQLNull):
+                return SQLLiteral(value=is_negated)
             # Route to terminology translator for system+code matching
             system_url = self.context.codesystems.get(code_info.get("codesystem", ""), code_info.get("codesystem", ""))
             code_value = code_info.get("code", "")

@@ -1218,7 +1218,7 @@ def intervalMeetsAfter(interval1: str | None, interval2: str | None) -> bool:
 
 
 def intervalStartsSame(interval1: str | None, interval2: str | None) -> bool | None:
-    """Check if two intervals start at the same point.
+    """CQL §19.30 Starts: iv1 starts iv2 iff iv1.start == iv2.start AND iv1.end <= iv2.end.
 
     Returns None (NULL) for null/unparseable inputs per CQL three-valued logic.
     """
@@ -1228,11 +1228,19 @@ def intervalStartsSame(interval1: str | None, interval2: str | None) -> bool | N
         return None
     if iv1["low"] is None or iv2["low"] is None:
         return None
-    return iv1["low"] == iv2["low"]
+    if iv1["low"] != iv2["low"]:
+        return False
+    # CQL Starts also requires iv1.end <= iv2.end (containment at end)
+    end1 = _effective_end(iv1)
+    end2 = _effective_end(iv2)
+    if end1 is None or end2 is None:
+        return None
+    e1, e2 = _normalize_for_compare(end1, end2)
+    return e1 <= e2
 
 
 def intervalEndsSame(interval1: str | None, interval2: str | None) -> bool | None:
-    """Check if two intervals end at the same point.
+    """CQL §19.13 Ends: iv1 ends iv2 iff iv1.start >= iv2.start AND iv1.end == iv2.end.
 
     Returns None (NULL) for null/unparseable inputs per CQL three-valued logic.
     """
@@ -1242,7 +1250,15 @@ def intervalEndsSame(interval1: str | None, interval2: str | None) -> bool | Non
         return None
     if iv1["high"] is None or iv2["high"] is None:
         return None
-    return iv1["high"] == iv2["high"]
+    if iv1["high"] != iv2["high"]:
+        return False
+    # CQL Ends also requires iv1.start >= iv2.start (containment at start)
+    start1 = _effective_start(iv1)
+    start2 = _effective_start(iv2)
+    if start1 is None or start2 is None:
+        return None
+    s1, s2 = _normalize_for_compare(start1, start2)
+    return s1 >= s2
 
 
 def intervalFromBounds(low: str | None, high: str | None, lowClosed: bool = True, highClosed: bool = False) -> str | None:
