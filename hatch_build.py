@@ -31,7 +31,7 @@ PLATFORMS = [
     "osx_arm64",
     "windows_amd64",
 ]
-VERSIONS = ["v1.5.1", "v1.5.0", "v1.4.0"]
+VERSIONS = ["v1.5.2", "v1.5.1", "v1.5.0", "v1.4.0"]
 
 EXTENSIONS = [
     {

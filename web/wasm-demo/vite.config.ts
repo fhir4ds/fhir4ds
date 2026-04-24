@@ -113,7 +113,7 @@ function copyExtensionsToAssets(): Plugin {
       }
 
       // Copy Python wheel (needed by Pyodide worker which resolves relative to its script in assets/)
-      const wheelName = "fhir4ds_v2-0.0.1-py3-none-any.whl";
+      const wheelName = "fhir4ds_v2-0.0.2-py3-none-any.whl";
       const wheelSrc = path.join(publicDir, wheelName);
       const wheelDst = path.join(assetsDir, wheelName);
       if (existsSync(wheelSrc)) {

@@ -289,7 +289,7 @@ function CtaSection() {
           <Link className="button button--primary button--lg" to="/docs/getting-started/installation">
             Install fhir4ds
           </Link>
-          <Link className="button button--secondary button--lg" to="/docs/user-guide/index">
+          <Link className="button button--secondary button--lg" to="/docs/user-guide/engine">
             Explore User Guide
           </Link>
           <Link
@@ -316,7 +316,7 @@ function Hero() {
           <Heading as="h1" className="hero__title" style={{marginBottom: 0, background: 'none', WebkitTextFillColor: 'rgb(95, 237, 131)', color: 'rgb(95, 237, 131)'}}>
             FHIR4DS
           </Heading>
-          <span className={styles.versionBadge}>v0.0.1</span>
+          <span className={styles.versionBadge}>v0.0.2</span>
         </div>
         <p style={{fontSize: '1.35rem', fontWeight: 600, color: '#e2e8f0', margin: '0.4rem 0 0.6rem'}}>
           Production-Scale FHIR Analytics. In Your Browser.

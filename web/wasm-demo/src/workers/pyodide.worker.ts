@@ -58,7 +58,7 @@ async function initPyodide() {
 
   // Resolve the wheel URL relative to this worker script.
   // The wheel is copied to the same directory (dist/assets/) as the worker during build.
-  const wheelUrl = new URL("./fhir4ds_v2-0.0.1-py3-none-any.whl", import.meta.url).href;
+  const wheelUrl = new URL("./fhir4ds_v2-0.0.2-py3-none-any.whl", import.meta.url).href;
 
   console.log("[Pyodide Worker] Installing fhir4ds-v2 from:", wheelUrl);
   await micropip.install(wheelUrl);
