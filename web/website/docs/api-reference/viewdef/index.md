@@ -24,7 +24,7 @@ from fhir4ds.viewdef import (
 ## 2. Class Reference
 
 ### `SQLGenerator`
-`SQLGenerator(options=None)`
+`SQLGenerator(dialect='duckdb', *, strict_collection=False, source_table=None)`
 
 Generates optimized SQL from a validated ViewDefinition AST.
 
@@ -38,9 +38,10 @@ Generates optimized SQL from a validated ViewDefinition AST.
 ## 3. Configuration & Logic
 
 ### Generator Options
-The `options` dict supports:
-- `base_table`: (Default: `"resources"`) The name of the table containing FHIR JSON.
-- `column_name`: (Default: `"resource"`) The name of the JSON column.
+The constructor accepts:
+- `dialect`: (Default: `"duckdb"`) The SQL dialect to target.
+- `strict_collection`: (Default: `False`) Enable strict collection semantics.
+- `source_table`: (Default: `None`) Override the source table name. When set, the generated SQL reads from this table instead of per-type pluralized tables.
 
 ### Flattening Strategies
 - **`forEach`**: Translates to a **CROSS JOIN UNNEST**. Creates one row for every matching element. If the collection is empty, the parent row is omitted (Inner Join semantics).

@@ -11,7 +11,7 @@ import styles from './index.module.css';
 
 function StatsBar() {
   const stats = [
-    {value: '~34ms', label: 'SQL per patient'},
+    {value: '~13ms', label: 'SQL per patient'},
     {value: 'Zero', label: 'Server infrastructure'},
     {value: '100%', label: 'Standards Compliance'},
     {value: 'Full', label: 'Audit Evidence'},
@@ -160,8 +160,8 @@ const FEATURES: Feature[] = [
     title: 'Standards Compliant',
     description: (
       <ul style={{listStyleType: 'none', padding: 0, margin: '0.5rem 0 0', fontSize: '0.88rem'}}>
-        <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> CQL (2,981 tests)</li>
-        <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> FHIRPath (913 tests)</li>
+        <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> CQL (3,044 tests)</li>
+        <li><strong style={{color: 'rgb(95, 237, 131)'}}>99.9%</strong> FHIRPath (935 tests)</li>
         <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> SQL-on-FHIR (140 tests)</li>
       </ul>
     ),

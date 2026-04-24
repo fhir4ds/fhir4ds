@@ -68,7 +68,7 @@ To verify these results in your own environment, you can run the benchmark suite
 
 ```bash
 # Navigate to the benchmarking directory
-cd benchmarking
+cd benchmarks
 
 # Run the full 2025 QI-Core suite
 python -m runner --suite 2025 --skip-errors

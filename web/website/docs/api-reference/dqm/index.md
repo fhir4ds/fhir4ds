@@ -37,8 +37,8 @@ The primary class for executing end-to-end quality measures.
 
 #### Methods
 
-- **`evaluate(measure_bundle, cql_library_path, parameters=None, audit=False) -> MeasureResult`**: Evaluate a measure bundle against loaded FHIR data.
-- **`summary_report() -> str`**: Generate a summary report of the last evaluation.
+- **`evaluate(measure_bundle, cql_library_path, parameters=None, audit=False, audit_mode=AuditMode.NONE, generate_narratives=False) -> MeasureResult`**: Evaluate a measure bundle against loaded FHIR data.
+- **`summary_report(result) -> dict`**: Generate a summary report of the given evaluation result.
 
 ---
 
