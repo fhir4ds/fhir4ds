@@ -58,7 +58,17 @@ async function initPyodide() {
 
   // Resolve the wheel URL relative to this worker script.
   // The wheel is copied to the same directory (dist/assets/) as the worker during build.
-  const wheelUrl = new URL("./fhir4ds_v2-0.0.2-py3-none-any.whl", import.meta.url).href;
+  // Discover the wheel name dynamically so it never goes stale on version bumps.
+  const baseUrl = new URL("./", import.meta.url).href;
+  const manifestResp = await fetch(new URL("./fhir4ds-wheel.json", import.meta.url).href).catch(() => null);
+  let wheelUrl: string;
+  if (manifestResp?.ok) {
+    const manifest = await manifestResp.json();
+    wheelUrl = new URL(manifest.wheel, import.meta.url).href;
+  } else {
+    // Fallback: use the known wheel naming convention
+    wheelUrl = new URL("./fhir4ds_v2-0.0.2-py3-none-any.whl", import.meta.url).href;
+  }
 
   console.log("[Pyodide Worker] Installing fhir4ds-v2 from:", wheelUrl);
   await micropip.install(wheelUrl);

@@ -1,6 +1,6 @@
 import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
-import { readFileSync, existsSync, copyFileSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, readdirSync } from "fs";
 import path, { resolve } from "path";
 
 /** COOP/COEP headers required for SharedArrayBuffer (DuckDB-WASM & Pyodide). */
@@ -112,13 +112,20 @@ function copyExtensionsToAssets(): Plugin {
         }
       }
 
-      // Copy Python wheel (needed by Pyodide worker which resolves relative to its script in assets/)
-      const wheelName = "fhir4ds_v2-0.0.2-py3-none-any.whl";
-      const wheelSrc = path.join(publicDir, wheelName);
-      const wheelDst = path.join(assetsDir, wheelName);
-      if (existsSync(wheelSrc)) {
+      // Copy Python wheel — discover by glob so the name never goes stale on version bumps
+      const wheels = readdirSync(publicDir).filter(f => f.startsWith("fhir4ds_v2-") && f.endsWith(".whl"));
+      for (const wheelName of wheels) {
+        const wheelSrc = path.join(publicDir, wheelName);
+        const wheelDst = path.join(assetsDir, wheelName);
         copyFileSync(wheelSrc, wheelDst);
         console.log(`[copyExtensionsToAssets] ${wheelName} → dist/assets/`);
+      }
+
+      // Write a manifest so the Pyodide worker can discover the wheel at runtime
+      if (wheels.length > 0) {
+        const manifest = JSON.stringify({ wheel: wheels[wheels.length - 1] });
+        writeFileSync(path.join(assetsDir, "fhir4ds-wheel.json"), manifest);
+        console.log(`[copyExtensionsToAssets] fhir4ds-wheel.json → dist/assets/`);
       }
     },
   };

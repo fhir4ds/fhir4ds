@@ -31,7 +31,6 @@ PLATFORMS = [
     "osx_arm64",
     "windows_amd64",
 ]
-VERSIONS = ["v1.5.2", "v1.5.1", "v1.5.0", "v1.4.0"]
 
 EXTENSIONS = [
     {
@@ -49,6 +48,22 @@ EXTENSIONS = [
         "dst_dir": "fhir4ds/cql/duckdb/extensions",
     },
 ]
+
+
+def _discover_versions(repo_dir: Path) -> list[str]:
+    """Auto-discover DuckDB versions from the build/release/repository/ tree.
+
+    Scans the directory for ``v*`` subdirectories and returns them sorted
+    newest-first so the most recent build is found first.  Falls back to an
+    empty list when the directory doesn't exist (e.g. clean CI checkout).
+    """
+    if not repo_dir.is_dir():
+        return []
+    versions = sorted(
+        (d.name for d in repo_dir.iterdir() if d.is_dir() and d.name.startswith("v")),
+        reverse=True,
+    )
+    return versions
 
 
 class CustomBuildHook(BuildHookInterface):
@@ -69,31 +84,19 @@ class CustomBuildHook(BuildHookInterface):
             candidates.append(Path(env_path))
 
         # 2. Relocated extensions/ directory (new layout)
+        #    Auto-discover DuckDB versions so the list never goes stale.
+        repo_dir = Path(ext_cfg["cpp_dir"]) / "build" / "release" / "repository"
+        versions = _discover_versions(repo_dir)
         for platform in PLATFORMS:
-            for ver in VERSIONS:
-                candidates.append(
-                    Path(ext_cfg["cpp_dir"])
-                    / "build"
-                    / "release"
-                    / "repository"
-                    / ver
-                    / platform
-                    / ext_cfg["filename"]
-                )
+            for ver in versions:
+                candidates.append(repo_dir / ver / platform / ext_cfg["filename"])
 
         # 3. Legacy sibling directory layout (fallback)
-        legacy_dir = f"duckdb-{ext_cfg['name']}-cpp"
+        legacy_repo = Path(f"duckdb-{ext_cfg['name']}-cpp") / "build" / "release" / "repository"
+        legacy_versions = _discover_versions(legacy_repo)
         for platform in PLATFORMS:
-            for ver in VERSIONS:
-                candidates.append(
-                    Path(legacy_dir)
-                    / "build"
-                    / "release"
-                    / "repository"
-                    / ver
-                    / platform
-                    / ext_cfg["filename"]
-                )
+            for ver in legacy_versions:
+                candidates.append(legacy_repo / ver / platform / ext_cfg["filename"])
 
         for src in candidates:
             if src.exists() and src.is_file():
