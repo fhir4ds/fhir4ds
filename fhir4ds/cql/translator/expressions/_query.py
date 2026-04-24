@@ -1646,8 +1646,10 @@ class QueryMixin:
                 # column name that downstream clauses can reference.
                 if isinstance(source_expr, SQLArray) and alias:
                     _unnest_call = SQLFunctionCall(name="unnest", args=[source_expr])
+                    _inner = SQLSelect(columns=[SQLAlias(expr=_unnest_call, alias=alias)])
                     source_expr = SQLSelect(
-                        columns=[SQLAlias(expr=_unnest_call, alias=alias)],
+                        columns=[SQLIdentifier(name=alias)],
+                        from_clause=SQLAlias(expr=SQLSubquery(query=_inner), alias="_list"),
                     )
                     self.context.add_alias(alias, table_alias=alias)
                 elif isinstance(source_expr, SQLArray):
@@ -2082,6 +2084,18 @@ class QueryMixin:
 
                     source_expr = self.translate(node.source, usage=ExprUsage.SCALAR)
                     alias = getattr(node.source, 'alias', None)
+                    # QA-017: List literals as query source need unnesting AND
+                    # proper alias binding when the query has WHERE/RETURN that
+                    # reference the iteration variable.  Only wrap when the
+                    # query actually uses the alias in a filter or projection.
+                    if isinstance(source_expr, SQLArray) and alias and (node.where or node.return_clause):
+                        _unnest_call = SQLFunctionCall(name="unnest", args=[source_expr])
+                        _inner = SQLSelect(columns=[SQLAlias(expr=_unnest_call, alias=alias)])
+                        source_expr = SQLSelect(
+                            columns=[SQLIdentifier(name=alias)],
+                            from_clause=SQLAlias(expr=SQLSubquery(query=_inner), alias="_list"),
+                        )
+                        self.context.add_alias(alias, table_alias=alias)
 
         # Register alias in context for property access
         # Store the source SQL expression so property access can use it

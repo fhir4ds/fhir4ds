@@ -334,7 +334,7 @@ class ExpressionTranslator(
         if _visited is None:
             _visited = set()
         if name in _visited:
-            return "value"
+            return "resource"
         _visited.add(name)
         meta = self.context.definition_meta.get(name)
         if meta:

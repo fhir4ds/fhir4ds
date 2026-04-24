@@ -244,9 +244,10 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
     # CQL §22.21: If both arguments have precision <= the unit precision,
     # result is an uncertainty interval. If at least one has finer precision,
     # the result is certain (computed using low boundaries for partial values).
-    # Special case: Date values (no time component) at day precision are fully
-    # specified — no sub-day uncertainty unlike DateTime. Year/month-precision
-    # Dates still have uncertainty at finer levels.
+    # Special case: Date values (no time component, detected by absence of 'T')
+    # at day precision are fully specified — no sub-day uncertainty unlike
+    # DateTime. A day-precision DateTime (e.g., 2024-01-15T00:00:00) still has
+    # sub-day uncertainty because time components are specified but imprecise.
     is_date_only = 'T' not in start_str and 'T' not in end_str
     date_unit = unit_key in ('year', 'month', 'day', 'week')
     has_finer_precision = s_idx > unit_idx or e_idx > unit_idx

@@ -576,6 +576,19 @@ class FP_TimeBase(FP_Type):
         thisDateTimeList = self._getMatchAsList()
         otherDateTimeList = otherDateTime._getMatchAsList()
 
+        # Per FHIRPath §6.5: only normalize to UTC when both values carry a
+        # timezone offset.  When one has a timezone and the other does not,
+        # UTC normalization skews the date components and produces incorrect
+        # definitive results where the spec requires uncertainty (empty).
+        this_has_tz = len(thisDateTimeList) > 7 and thisDateTimeList[7] is not None
+        other_has_tz = len(otherDateTimeList) > 7 and otherDateTimeList[7] is not None
+        if this_has_tz != other_has_tz:
+            # Strip timezone from whichever has it so normalization is a no-op
+            if this_has_tz:
+                thisDateTimeList = thisDateTimeList[:7] + [None]
+            if other_has_tz:
+                otherDateTimeList = otherDateTimeList[:7] + [None]
+
         normalized_thisdt_list = self._normalize_datetime(thisDateTimeList)
         normalized_otherdt_list = self._normalize_datetime(otherDateTimeList)
         indices_to_remove = [
