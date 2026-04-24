@@ -9,6 +9,9 @@
 //      macro implementation of fhirpath_text registered in DuckDB.
 
 declare const self: DedicatedWorkerGlobalScope;
+// Injected at build/dev time by vite.config.ts via `define`.
+// Resolves to the actual wheel filename (e.g. "fhir4ds_v2-0.0.2-py3-none-any.whl").
+declare const __FHIR4DS_WHEEL_NAME__: string;
 
 interface WorkerMessage {
   id: number;
@@ -56,19 +59,10 @@ async function initPyodide() {
   await pyodide.loadPackage(["micropip"]);
   const micropip = pyodide.pyimport("micropip");
 
-  // Resolve the wheel URL relative to this worker script.
-  // The wheel is copied to the same directory (dist/assets/) as the worker during build.
-  // Discover the wheel name dynamically so it never goes stale on version bumps.
-  const baseUrl = new URL("./", import.meta.url).href;
-  const manifestResp = await fetch(new URL("./fhir4ds-wheel.json", import.meta.url).href).catch(() => null);
-  let wheelUrl: string;
-  if (manifestResp?.ok) {
-    const manifest = await manifestResp.json();
-    wheelUrl = new URL(manifest.wheel, import.meta.url).href;
-  } else {
-    // Fallback: use the known wheel naming convention
-    wheelUrl = new URL("./fhir4ds_v2-0.0.2-py3-none-any.whl", import.meta.url).href;
-  }
+  // Wheel filename is injected at build/dev time by vite.config.ts via `define`.
+  // No runtime fetch needed — works in dev mode, build, and Docusaurus static hosting.
+  // @vite-ignore prevents Vite's asset URL transformation on the .whl extension.
+  const wheelUrl = new URL(/* @vite-ignore */ `./${__FHIR4DS_WHEEL_NAME__}`, import.meta.url).href;
 
   console.log("[Pyodide Worker] Installing fhir4ds-v2 from:", wheelUrl);
   await micropip.install(wheelUrl);

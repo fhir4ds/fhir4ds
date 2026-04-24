@@ -1,6 +1,6 @@
 import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
-import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, readdirSync } from "fs";
+import { readFileSync, existsSync, copyFileSync, mkdirSync, readdirSync } from "fs";
 import path, { resolve } from "path";
 
 /** COOP/COEP headers required for SharedArrayBuffer (DuckDB-WASM & Pyodide). */
@@ -8,6 +8,16 @@ const ISOLATION_HEADERS = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
 };
+
+/**
+ * Discover the fhir4ds wheel name at config-parse time.
+ * Injected into the Pyodide worker via Vite's `define` so the worker
+ * can resolve the URL without any runtime fetch — works in both dev
+ * and production modes without relying on a manifest file.
+ */
+const _publicDir = path.join(__dirname, "public");
+const _wheels = readdirSync(_publicDir).filter(f => f.startsWith("fhir4ds_v2-") && f.endsWith(".whl"));
+const WHEEL_NAME = _wheels[_wheels.length - 1] ?? "fhir4ds_v2-0.0.2-py3-none-any.whl";
 
 /**
  * Middleware that serves `.duckdb_extension.wasm` files from `public/extensions/`.
@@ -112,20 +122,12 @@ function copyExtensionsToAssets(): Plugin {
         }
       }
 
-      // Copy Python wheel — discover by glob so the name never goes stale on version bumps
-      const wheels = readdirSync(publicDir).filter(f => f.startsWith("fhir4ds_v2-") && f.endsWith(".whl"));
-      for (const wheelName of wheels) {
-        const wheelSrc = path.join(publicDir, wheelName);
-        const wheelDst = path.join(assetsDir, wheelName);
+      // Copy Python wheel — WHEEL_NAME is already resolved at config time
+      const wheelSrc = path.join(publicDir, WHEEL_NAME);
+      const wheelDst = path.join(assetsDir, WHEEL_NAME);
+      if (existsSync(wheelSrc)) {
         copyFileSync(wheelSrc, wheelDst);
-        console.log(`[copyExtensionsToAssets] ${wheelName} → dist/assets/`);
-      }
-
-      // Write a manifest so the Pyodide worker can discover the wheel at runtime
-      if (wheels.length > 0) {
-        const manifest = JSON.stringify({ wheel: wheels[wheels.length - 1] });
-        writeFileSync(path.join(assetsDir, "fhir4ds-wheel.json"), manifest);
-        console.log(`[copyExtensionsToAssets] fhir4ds-wheel.json → dist/assets/`);
+        console.log(`[copyExtensionsToAssets] ${WHEEL_NAME} → dist/assets/`);
       }
     },
   };
@@ -134,6 +136,11 @@ function copyExtensionsToAssets(): Plugin {
 export default defineConfig({
   base: '',
   envDir: "../../",
+  define: {
+    // Bake the wheel filename into the Pyodide worker at compile time.
+    // This avoids any runtime fetch — works identically in dev and build modes.
+    __FHIR4DS_WHEEL_NAME__: JSON.stringify(WHEEL_NAME),
+  },
   plugins: [react(), devWcAlias(), duckdbExtensionMiddleware(), copyExtensionsToAssets()],
   build: {
     rollupOptions: {

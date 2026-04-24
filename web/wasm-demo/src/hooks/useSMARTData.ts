@@ -24,15 +24,16 @@ export interface SMARTDataState {
 // ── Patient reference extraction ─────────────────────────────────────────────
 
 function extractPatientRef(resource: FHIRResource): string | null {
-  if (resource.resourceType === "Patient") return `Patient/${resource.id}`;
+  // Store plain patient ID (no "Patient/" prefix) so CQL-generated SQL
+  // `_pt.id = _outer.patient_ref` resolves correctly.
+  if (resource.resourceType === "Patient") return resource.id ?? null;
   for (const path of ["subject", "patient", "beneficiary"]) {
     const refObj = resource[path] as { reference?: string } | undefined;
     if (refObj?.reference) {
       const ref = refObj.reference;
       if (typeof ref === "string") {
-        if (ref.startsWith("Patient/")) return ref;
-        // If it's just the ID, prefix it
-        return `Patient/${ref.split("/").pop()}`;
+        if (ref.startsWith("Patient/")) return ref.slice("Patient/".length);
+        return ref.split("/").pop() ?? null;
       }
     }
   }

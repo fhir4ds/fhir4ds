@@ -171,14 +171,16 @@ export function useDuckDB(wasmAppUrl?: string) {
 
 function extractPatientRef(resource: any): string | null {
   const { resourceType, id } = resource;
-  if (resourceType === "Patient") return `Patient/${id}`;
+  // Store plain patient ID (no "Patient/" prefix) so CQL-generated SQL
+  // `_pt.id = _outer.patient_ref` resolves correctly.
+  if (resourceType === "Patient") return id;
   for (const path of ["subject", "patient", "beneficiary"]) {
     const refObj = resource[path];
     if (refObj && typeof refObj === "object") {
       const reference = refObj.reference;
       if (typeof reference === "string") {
-        if (reference.startsWith("Patient/")) return reference;
-        return `Patient/${reference.split("/").pop()}`;
+        if (reference.startsWith("Patient/")) return reference.slice("Patient/".length);
+        return reference.split("/").pop() ?? null;
       }
     }
   }
