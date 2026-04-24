@@ -1639,8 +1639,18 @@ class QueryMixin:
 
                 source_expr = self.translate(node.source[0], usage=ExprUsage.SCALAR)
                 alias = _src0_alias
-                # QA-014: List literals used as query sources need unnesting
-                if isinstance(source_expr, SQLArray):
+                # QA-014/QA-017: List literals used as query sources need
+                # unnesting AND proper alias binding so WHERE/RETURN can
+                # reference the iteration variable (e.g., ``from {1,2,3} X
+                # where X > 1``).  Wrap in a SELECT so the alias becomes a
+                # column name that downstream clauses can reference.
+                if isinstance(source_expr, SQLArray) and alias:
+                    _unnest_call = SQLFunctionCall(name="unnest", args=[source_expr])
+                    source_expr = SQLSelect(
+                        columns=[SQLAlias(expr=_unnest_call, alias=alias)],
+                    )
+                    self.context.add_alias(alias, table_alias=alias)
+                elif isinstance(source_expr, SQLArray):
                     source_expr = SQLFunctionCall(name="unnest", args=[source_expr])
             else:
                 # Multiple sources: CQL ``from A a, B b where cond return a``
@@ -2087,39 +2097,50 @@ class QueryMixin:
             if _sn and isinstance(_src, Identifier) and hasattr(self.context, '_definition_names') and _sn in self.context._definition_names:
                 _alias_cte_name = _sn
         if alias:
+            # QA-017: Skip re-registration when the alias was already bound
+            # by the list-literal source handler above (table_alias is set,
+            # no CTE backing).
+            _already_registered = False
+            if not _alias_cte_name:
+                _sym = self.context.lookup_symbol(alias)
+                if _sym and getattr(_sym, 'table_alias', None) == alias and not getattr(_sym, 'ast_expr', None):
+                    _already_registered = True
+
             # Track the FHIR resource type for this alias (for fluent overload resolution)
             alias_rt = self._extract_query_source_resource_type(node)
             if alias_rt:
                 self.context._alias_resource_types[alias] = alias_rt
-            # Don't store SQLUnion as a raw string - it will cause issues in scalar contexts
-            # Instead, mark it so property access can handle it specially
-            if isinstance(source_expr, SQLUnion):
-                # For SQLUnion, we need to handle property access differently
-                # Store a marker that indicates this is a union
-                # Property access will need to apply fhirpath to each operand and COALESCE
-                self.context.add_alias(alias, sql_expr="__UNION__", union_expr=source_expr)
-            elif isinstance(source_expr, SQLCase):
-                # Check if the SQLCase contains a SQLUnion in its THEN clauses
-                # If so, we need special handling - use type checking, NOT to_sql()
-                has_union = False
-                for condition, result in source_expr.when_clauses:
-                    if isinstance(result, SQLUnion):
-                        has_union = True
-                        break
-                    # Check for SQLSubquery containing UNION (without calling to_sql)
-                    if isinstance(result, SQLSubquery) and isinstance(result.query, SQLUnion):
-                        has_union = True
-                        break
-                if has_union:
-                    # Store the entire CASE expression but mark it for special handling
-                    self.context.add_alias(alias, sql_expr="__UNION_CASE__", union_expr=source_expr)
+
+            if not _already_registered:
+                # Don't store SQLUnion as a raw string - it will cause issues in scalar contexts
+                # Instead, mark it so property access can handle it specially
+                if isinstance(source_expr, SQLUnion):
+                    # For SQLUnion, we need to handle property access differently
+                    # Store a marker that indicates this is a union
+                    # Property access will need to apply fhirpath to each operand and COALESCE
+                    self.context.add_alias(alias, sql_expr="__UNION__", union_expr=source_expr)
+                elif isinstance(source_expr, SQLCase):
+                    # Check if the SQLCase contains a SQLUnion in its THEN clauses
+                    # If so, we need special handling - use type checking, NOT to_sql()
+                    has_union = False
+                    for condition, result in source_expr.when_clauses:
+                        if isinstance(result, SQLUnion):
+                            has_union = True
+                            break
+                        # Check for SQLSubquery containing UNION (without calling to_sql)
+                        if isinstance(result, SQLSubquery) and isinstance(result.query, SQLUnion):
+                            has_union = True
+                            break
+                    if has_union:
+                        # Store the entire CASE expression but mark it for special handling
+                        self.context.add_alias(alias, sql_expr="__UNION_CASE__", union_expr=source_expr)
+                    else:
+                        # Store the AST object - don't call to_sql() during Phase 1
+                        self.context.add_alias(alias, ast_expr=source_expr, cte_name=_alias_cte_name)
                 else:
                     # Store the AST object - don't call to_sql() during Phase 1
+                    # Property access will handle extraction if needed
                     self.context.add_alias(alias, ast_expr=source_expr, cte_name=_alias_cte_name)
-            else:
-                # Store the AST object - don't call to_sql() during Phase 1
-                # Property access will handle extraction if needed
-                self.context.add_alias(alias, ast_expr=source_expr, cte_name=_alias_cte_name)
 
         # Start with the source query
         result = source_expr
