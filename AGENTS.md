@@ -130,9 +130,12 @@ remain in effect. Post-remediation status (2026-Q2):
 See `docs/architecture/CQL_TRANSLATOR_AUDIT_2026Q2.md` for the detailed issue log.
 
 ### C++ Extension Security
-17 of 19 JSON injection sites have been remediated with `escapeJsonString()`.
-**2 HIGH-severity sites remain** (`evaluator.cpp:711` type(), `interval.cpp:578`
-width_string()). **3 ReDoS risks** exist in `matches()`/`replaceMatches()` —
+All JSON injection sites have been remediated with `escapeJsonString()`.
+- `evaluator.cpp:711` type() — **fixed** (uses escapeJsonString)
+- `interval.cpp` to_json() string bounds — **fixed** (Pass 4)
+- `interval.cpp` width_string() — already safe (numeric output only)
+- `quantity.cpp` wrapInConcept — **null deref fixed** (Pass 4)
+**3 ReDoS risks** exist in `matches()`/`replaceMatches()` —
 `std::regex` backtracking engine is vulnerable to catastrophic backtracking.
 RE2 migration or complexity limits required before production with untrusted input.
 
