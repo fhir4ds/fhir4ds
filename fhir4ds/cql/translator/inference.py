@@ -354,7 +354,7 @@ class InferenceMixin:
 
         return children
 
-    def _infer_row_shape(self, ast_node: Any) -> "RowShape":
+    def _infer_row_shape(self, ast_node: Any, _visited: set | None = None) -> "RowShape":
         """
         Infer the row shape of an expression from its AST.
 
@@ -365,6 +365,7 @@ class InferenceMixin:
 
         Args:
             ast_node: The AST node to analyze.
+            _visited: Set of definition names already visited (cycle guard).
 
         Returns:
             RowShape enum value indicating the row shape.
@@ -379,6 +380,9 @@ class InferenceMixin:
 
         if ast_node is None:
             return RowShape.UNKNOWN
+
+        if _visited is None:
+            _visited = set()
 
         # Literal values (true, false, 42, 'hello') are patient-independent scalars
         if isinstance(ast_node, Literal):
@@ -415,11 +419,11 @@ class InferenceMixin:
                 return RowShape.PATIENT_SCALAR
             # distinct(X) preserves shape of argument
             if func_name == 'distinct' and ast_node.arguments:
-                return self._infer_row_shape(ast_node.arguments[0])
+                return self._infer_row_shape(ast_node.arguments[0], _visited)
 
         # MethodInvocation (fluent functions like .isProcedurePerformed()) inherits source shape
         if isinstance(ast_node, MethodInvocation):
-            return self._infer_row_shape(ast_node.source)
+            return self._infer_row_shape(ast_node.source, _visited)
 
         # Property access on RESOURCE_ROWS produces PATIENT_MULTI_VALUE (projection)
         if isinstance(ast_node, Property):
@@ -434,8 +438,11 @@ class InferenceMixin:
                 if hasattr(self._context, 'expression_definitions'):
                     ast_def = self._context.expression_definitions.get(prefixed)
                     if ast_def is not None:
-                        return self._infer_row_shape(ast_def)
-            source_shape = self._infer_row_shape(ast_node.source)
+                        if prefixed in _visited:
+                            return RowShape.UNKNOWN
+                        _visited.add(prefixed)
+                        return self._infer_row_shape(ast_def, _visited)
+            source_shape = self._infer_row_shape(ast_node.source, _visited)
             if source_shape == RowShape.RESOURCE_ROWS:
                 return RowShape.PATIENT_MULTI_VALUE
             return source_shape
@@ -459,8 +466,8 @@ class InferenceMixin:
 
             # Set operations: shape depends on operand shapes
             if op in ('union', 'intersect', 'except'):
-                left_shape = self._infer_row_shape(ast_node.left)
-                right_shape = self._infer_row_shape(ast_node.right)
+                left_shape = self._infer_row_shape(ast_node.left, _visited)
+                right_shape = self._infer_row_shape(ast_node.right, _visited)
                 # If either side is RESOURCE_ROWS, result is RESOURCE_ROWS
                 if left_shape == RowShape.RESOURCE_ROWS or right_shape == RowShape.RESOURCE_ROWS:
                     return RowShape.RESOURCE_ROWS
@@ -471,8 +478,8 @@ class InferenceMixin:
 
         # Conditional: if either branch is RESOURCE_ROWS, result is RESOURCE_ROWS
         if isinstance(ast_node, ConditionalExpression):
-            then_shape = self._infer_row_shape(ast_node.then_expr)
-            else_shape = self._infer_row_shape(ast_node.else_expr)
+            then_shape = self._infer_row_shape(ast_node.then_expr, _visited)
+            else_shape = self._infer_row_shape(ast_node.else_expr, _visited)
             if then_shape == RowShape.RESOURCE_ROWS or else_shape == RowShape.RESOURCE_ROWS:
                 return RowShape.RESOURCE_ROWS
             return RowShape.PATIENT_SCALAR
@@ -488,14 +495,13 @@ class InferenceMixin:
             meta = self._context.definition_meta.get(ast_node.name)
             if meta:
                 return meta.shape
-            # Meta not yet available (forward reference).  Look up the
-            # definition's CQL AST and infer shape from it directly so that
-            # definitions whose dependencies haven't been translated yet still
-            # get a correct shape.
             if hasattr(self._context, 'expression_definitions'):
                 ast_def = self._context.expression_definitions.get(ast_node.name)
                 if ast_def is not None:
-                    return self._infer_row_shape(ast_def)
+                    if ast_node.name in _visited:
+                        return RowShape.UNKNOWN
+                    _visited.add(ast_node.name)
+                    return self._infer_row_shape(ast_def, _visited)
 
         # Library-qualified reference (e.g., CQMCommon."Inpatient Encounter")
         if isinstance(ast_node, QualifiedIdentifier) and ast_node.parts:
@@ -512,7 +518,10 @@ class InferenceMixin:
             if hasattr(self._context, 'expression_definitions'):
                 ast_def = self._context.expression_definitions.get(prefixed_name)
                 if ast_def is not None:
-                    return self._infer_row_shape(ast_def)
+                    if prefixed_name in _visited:
+                        return RowShape.UNKNOWN
+                    _visited.add(prefixed_name)
+                    return self._infer_row_shape(ast_def, _visited)
 
         # Query with return clause: shape depends on what's returned
         # Query without return clause inherits shape from source
@@ -534,9 +543,9 @@ class InferenceMixin:
             # Without return clause, shape comes from source
             if ast_node.source:
                 if isinstance(ast_node.source, list) and ast_node.source:
-                    return self._infer_row_shape(ast_node.source[0].expression)
+                    return self._infer_row_shape(ast_node.source[0].expression, _visited)
                 elif hasattr(ast_node.source, 'expression'):
-                    return self._infer_row_shape(ast_node.source.expression)
+                    return self._infer_row_shape(ast_node.source.expression, _visited)
             return RowShape.RESOURCE_ROWS  # Default for queries
 
         # Default: unknown

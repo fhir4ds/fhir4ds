@@ -1613,22 +1613,24 @@ class OperatorsMixin:
             args=[SQLFunctionCall(name="jsonConcat", args=[left, right])],
         )
         if not left_is_rows and not right_is_rows:
+            left_not_null = SQLUnaryOp(operator="IS NOT NULL", operand=left, prefix=False)
+            right_not_null = SQLUnaryOp(operator="IS NOT NULL", operand=right, prefix=False)
             return SQLCase(
                 when_clauses=[
                     (
                         SQLBinaryOp(
-                            left=SQLBinaryOp(left=left, operator="IS NOT NULL", right=SQLRaw("")),
+                            left=left_not_null,
                             operator="AND",
-                            right=SQLBinaryOp(left=right, operator="IS NOT NULL", right=SQLRaw("")),
+                            right=right_not_null,
                         ),
                         inner,
                     ),
                     (
-                        SQLBinaryOp(left=left, operator="IS NOT NULL", right=SQLRaw("")),
+                        left_not_null,
                         left,
                     ),
                     (
-                        SQLBinaryOp(left=right, operator="IS NOT NULL", right=SQLRaw("")),
+                        right_not_null,
                         right,
                     ),
                 ],
