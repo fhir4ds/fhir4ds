@@ -364,8 +364,8 @@ class TestPrecomputedColumns:
         # Observation should have effective_date, status
         assert "effective_date" in sql
         assert "status" in sql
-        # Should use fhirpath functions
-        assert "fhirpath_date" in sql
+        # Should use fhirpath functions (dateTime fields use fhirpath_text)
+        assert "fhirpath_text" in sql
 
     def test_procedure_cte_has_precomputed_columns(self):
         """Test that Procedure CTE includes pre-computed columns."""

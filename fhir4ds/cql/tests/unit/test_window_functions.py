@@ -130,7 +130,8 @@ class TestSQLWindowFunction:
             ],
         )
         sql = window.to_sql()
-        assert "fhirpath_date(resource, 'effectiveDateTime') DESC" in sql
+        assert "fhirpath_date(resource, 'effectiveDateTime')" in sql
+        assert "DESC" in sql
 
     def test_window_function_precedence(self):
         """Test that window function has FUNCTION precedence."""

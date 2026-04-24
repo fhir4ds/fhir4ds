@@ -40,9 +40,9 @@ class TestSchemaAwarePropertyMapping:
         assert udf == "fhirpath_text"
 
     def test_infer_udf_observation_effective(self, fhir_registry):
-        """Observation.effectiveDateTime is type 'dateTime' → fhirpath_date."""
+        """Observation.effectiveDateTime is type 'dateTime' → fhirpath_text (dateTime includes time component)."""
         udf = fhir_registry.get_udf_for_element("Observation", "effectiveDateTime")
-        assert udf == "fhirpath_date"
+        assert udf == "fhirpath_text"
 
     def test_infer_udf_patient_active(self, fhir_registry):
         """Patient.active is type 'boolean' → fhirpath_bool."""
@@ -60,9 +60,9 @@ class TestSchemaAwarePropertyMapping:
         assert udf == "fhirpath_text"
 
     def test_sql_type_date(self, fhir_registry):
-        """Condition.recordedDate should be DATE."""
+        """Condition.recordedDate (dateTime type) maps to VARCHAR (includes time)."""
         sql_type = fhir_registry.get_sql_type_for_element("Condition", "recordedDate")
-        assert sql_type == "DATE"
+        assert sql_type == "VARCHAR"
 
     def test_sql_type_code(self, fhir_registry):
         """Observation.status should be VARCHAR."""
@@ -84,8 +84,8 @@ class TestFhirTypeToUdfMapping:
     """Test the instance-level type→UDF mapping."""
 
     def test_datetime_maps_to_date(self, type_to_udf):
-        """dateTime type should map to fhirpath_date."""
-        assert type_to_udf["dateTime"] == "fhirpath_date"
+        """dateTime type maps to fhirpath_text (dateTime includes time component)."""
+        assert type_to_udf["dateTime"] == "fhirpath_text"
 
     def test_date_maps_to_date(self, type_to_udf):
         """date type should map to fhirpath_date."""
@@ -120,8 +120,8 @@ class TestFhirTypeToSqlMapping:
     """Test the instance-level type→SQL mapping."""
 
     def test_datetime_maps_to_date(self, type_to_sql):
-        """dateTime type should map to DATE."""
-        assert type_to_sql["dateTime"] == "DATE"
+        """dateTime type maps to VARCHAR (includes time component)."""
+        assert type_to_sql["dateTime"] == "VARCHAR"
 
     def test_boolean_maps_to_boolean(self, type_to_sql):
         """boolean type should map to BOOLEAN."""

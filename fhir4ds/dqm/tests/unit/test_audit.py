@@ -12,7 +12,7 @@ class TestNarrativeGenerator:
         ng = NarrativeGenerator()
         result = ng.generate("numerator", [], is_satisfied=True)
         assert isinstance(result, list)
-        assert any("no supporting evidence" in f for f in result)
+        assert any("no detailed evidence available" in f for f in result)
 
     def test_numerator_failure_rich(self):
         ng = NarrativeGenerator()
@@ -214,7 +214,7 @@ class TestNarrativeGenerator:
             fragments = ng.generate(pop, [], is_satisfied=False)
             assert isinstance(fragments, list)
             assert len(fragments) == 1
-            assert "no supporting evidence" in fragments[0]
+            assert "no detailed evidence available" in fragments[0]
             # Header should NOT be "Evidence" (the fallback) for known populations
             assert not fragments[0].startswith("Evidence:")
 

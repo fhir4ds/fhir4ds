@@ -40,7 +40,7 @@ class TestColumnGeneration:
 
         assert "effective_date" in column_defs
         col_def = column_defs["effective_date"]
-        assert col_def.fhirpath_function == "fhirpath_date"
+        assert col_def.fhirpath_function == "fhirpath_text"
         assert col_def.paths == ["effectiveDateTime", "effectivePeriod.start"]
         assert col_def.is_choice_type is True
 

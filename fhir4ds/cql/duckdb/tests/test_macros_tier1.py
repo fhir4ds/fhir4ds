@@ -252,19 +252,19 @@ class TestDateTimeMacros:
 
     def test_days_between(self, con):
         result = con.execute(
-            "SELECT DaysBetween(DATE '2024-01-01', DATE '2024-01-10')"
+            "SELECT DaysBetween('2024-01-01', '2024-01-10')"
         ).fetchone()[0]
         assert result == 9
 
     def test_months_between(self, con):
         result = con.execute(
-            "SELECT MonthsBetween(DATE '2024-01-15', DATE '2024-03-15')"
+            "SELECT MonthsBetween('2024-01-15', '2024-03-15')"
         ).fetchone()[0]
         assert result == 2
 
     def test_years_between(self, con):
         result = con.execute(
-            "SELECT YearsBetween(DATE '2020-01-01', DATE '2024-01-01')"
+            "SELECT YearsBetween('2020-01-01', '2024-01-01')"
         ).fetchone()[0]
         assert result == 4
 

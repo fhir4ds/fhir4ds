@@ -92,7 +92,7 @@ class TestWhereClauses:
         result = con.execute('''
             SELECT fhirpath(resource, 'id')
             FROM resources
-            WHERE fhirpath(resource, 'active') = ['True']
+            WHERE fhirpath(resource, 'active') = ['true']
         ''').fetchall()
         # Patients 0, 2, 4, 6, 8 have active=True
         assert len(result) == 5
@@ -162,10 +162,9 @@ class TestValidation:
         assert result[0] == True
 
     def test_whitespace_expression(self, con):
-        """Test validation of whitespace-only expression - parser accepts but returns empty."""
+        """Test validation of whitespace-only expression - rejected as invalid."""
         result = con.execute("SELECT fhirpath_is_valid('   ')").fetchone()
-        # Parser accepts whitespace as valid (permissive)
-        assert result[0] == True
+        assert result[0] == False
 
     def test_empty_expression(self, con):
         """Test validation of empty expression."""

@@ -453,7 +453,7 @@ class TestGap18TemporalPhrase:
         return ExpressionTranslator(ctx)
 
     def test_on_or_before_end_of_mp_uses_less_than(self, translator):
-        """AC: on or before end of MP produces <= DATE '{mp_end}'."""
+        """AC: on or before end of MP produces cqlSameOrBefore UDF call."""
         expr = BinaryExpression(
             operator="on or before",
             left=Literal(value="2024-06-15"),
@@ -464,12 +464,12 @@ class TestGap18TemporalPhrase:
         )
         result = translator.translate(expr)
         sql = result.to_sql()
-        # "on or before" translates to <=
-        assert result.operator == "<="
-        assert "{mp_end}" in sql
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "cqlSameOrBefore"
+        assert "mp_end" in sql
 
     def test_on_or_after_start_of_mp_uses_gte(self, translator):
-        """AC: on or after start of MP with closed-start MP produces >= DATE '{mp_start}'."""
+        """AC: on or after start of MP produces cqlSameOrAfter UDF call."""
         expr = BinaryExpression(
             operator="on or after",
             left=Literal(value="2024-06-15"),
@@ -480,9 +480,9 @@ class TestGap18TemporalPhrase:
         )
         result = translator.translate(expr)
         sql = result.to_sql()
-        # Start is inclusive, so >= is correct
-        assert result.operator == ">="
-        assert "{mp_start}" in sql
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "cqlSameOrAfter"
+        assert "mp_start" in sql
 
 
 # ---------------------------------------------------------------------------

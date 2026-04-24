@@ -191,11 +191,9 @@ class TestFhirpathJsonDirect:
         assert parsed == ["example-patient-1"]
 
     def test_returns_empty_list_for_missing_field(self, patient_json: str) -> None:
-        """Test that missing fields return empty list as JSON."""
+        """Test that missing fields return None (SQL NULL)."""
         result = fhirpath_json_udf(patient_json, "nonExistentField")
-        assert result is not None
-        parsed = json.loads(result)
-        assert parsed == []
+        assert result is None
 
     def test_returns_none_for_null_resource(self) -> None:
         """Test that null resource returns None."""

@@ -109,8 +109,8 @@ def _resolve_simple_value(value: Any, value_type: str | None) -> str:
     elif isinstance(value, (int, float)):
         return str(value)
     else:
-        # String/code value - escape single quotes with backslash for FHIRPath
-        escaped = str(value).replace("\\", "\\\\").replace("'", "\\'")
+        # String/code value - escape single quotes using SQL standard (double the quote)
+        escaped = str(value).replace("'", "''")
         return f"'{escaped}'"
 
 

@@ -175,7 +175,7 @@ def _time_boundary(data, precision, fill):
                 result += tz
         return ["@" + result]
 
-    result = f"{hour}:{minute}:{second}.{ms}"
+    result = f"T{hour}:{minute}:{second}.{ms}"
     if tz:
         result += tz
     return [result]

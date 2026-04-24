@@ -398,13 +398,15 @@
       {
         "name": "time lowBoundary",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Row 3, column 'time': got 'T12:34:00.000', expected '12:34:00.000'"
         }
       },
       {
         "name": "time highBoundary",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Row 3, column 'time': got 'T12:34:59.999', expected '12:34:59.999'"
         }
       }
     ]
