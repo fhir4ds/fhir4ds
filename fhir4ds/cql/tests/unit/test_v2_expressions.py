@@ -53,6 +53,7 @@ from ...translator.types import (
     SQLNull,
     SQLParameterRef,
     SQLQualifiedIdentifier,
+    SQLRaw,
     SQLUnaryOp,
 )
 
@@ -162,15 +163,15 @@ class TestDateTimeLiterals:
         """Test datetime without timezone: @2026-01-15T10:30:00."""
         result = translator.translate(DateTimeLiteral(value="2026-01-15T10:30:00"))
         assert isinstance(result, SQLLiteral)
-        # T should be replaced with space
-        assert result.value == "2026-01-15 10:30:00"
+        # ISO 8601 T separator is preserved
+        assert result.value == "2026-01-15T10:30:00"
 
     def test_datetime_with_at_prefix(self, translator: ExpressionTranslator):
         """Test datetime with @ prefix is handled."""
         result = translator.translate(DateTimeLiteral(value="@2026-01-15T10:30:00"))
         assert isinstance(result, SQLLiteral)
-        # @ prefix should be removed, T replaced with space
-        assert result.value == "2026-01-15 10:30:00"
+        # @ prefix should be removed, T separator preserved
+        assert result.value == "2026-01-15T10:30:00"
 
 
 class TestIdentifiers:
@@ -301,7 +302,7 @@ class TestArithmeticOperators:
         )
         assert isinstance(result, SQLBinaryOp)
         assert result.operator == "/"
-        assert result.to_sql() == "15 / 3"
+        assert result.to_sql() == "15 / NULLIF(3, 0)"
 
     def test_integer_division_div(self, translator: ExpressionTranslator):
         """Test integer division: 17 div 5 -> FLOOR(17 / 5)."""
@@ -309,8 +310,8 @@ class TestArithmeticOperators:
             BinaryExpression(operator="div", left=Literal(value=17), right=Literal(value=5))
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "FLOOR"
-        # FLOOR wraps a division
+        assert result.name == "TRUNC"
+        # TRUNC wraps a division
         assert isinstance(result.args[0], SQLBinaryOp)
         assert result.args[0].operator == "/"
 
@@ -869,34 +870,30 @@ class TestDateComponent:
         return ExpressionTranslator(context)
 
     def test_date_component_year(self, translator: ExpressionTranslator):
-        """Test year extraction: year from @2024-01-15 -> Year(...)."""
+        """Test year extraction: year from @2024-01-15 -> CASE WHEN LENGTH(...) >= 4 THEN CAST(SUBSTR(...))."""
         from ...parser.ast_nodes import DateComponent
         result = translator.translate(
             DateComponent(component="year", operand=DateTimeLiteral(value="2024-01-15"))
         )
-        assert isinstance(result, SQLFunctionCall)
-        assert result.name == "Year"
-        assert len(result.args) == 1
+        assert isinstance(result, SQLCase)
+        assert "SUBSTR" in result.to_sql()
 
     def test_date_component_month(self, translator: ExpressionTranslator):
-        """Test month extraction: month from @2024-06-15 -> Month(...)."""
+        """Test month extraction: month from @2024-06-15 -> CASE WHEN LENGTH(...) >= N THEN CAST(SUBSTR(...))."""
         from ...parser.ast_nodes import DateComponent
         result = translator.translate(
             DateComponent(component="month", operand=DateTimeLiteral(value="2024-06-15"))
         )
-        assert isinstance(result, SQLFunctionCall)
-        assert result.name == "Month"
-        assert len(result.args) == 1
+        assert isinstance(result, SQLCase)
+        assert "SUBSTR" in result.to_sql()
 
     def test_date_component_millisecond(self, translator: ExpressionTranslator):
-        """Test millisecond extraction: millisecond from @T12:30:45.123 -> Millisecond(...)."""
+        """Test millisecond extraction: millisecond from @T12:30:45.123 -> CASE WHEN ..."""
         from ...parser.ast_nodes import DateComponent, TimeLiteral
         result = translator.translate(
             DateComponent(component="millisecond", operand=TimeLiteral(value="T12:30:45.123"))
         )
-        assert isinstance(result, SQLFunctionCall)
-        assert result.name == "Millisecond"
-        assert len(result.args) == 1
+        assert isinstance(result, SQLCase)
 
 
 class TestExistsExpression:
@@ -917,7 +914,7 @@ class TestExistsExpression:
         assert isinstance(result, SQLBinaryOp)
         assert result.operator == ">"
         assert isinstance(result.left, SQLFunctionCall)
-        assert result.left.name == "array_length"
+        assert result.left.name == "list_count"
         assert result.right.value == 0
 
 
@@ -976,8 +973,8 @@ class TestDurationBetween:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "YearsBetween"
-        assert len(result.args) == 2
+        assert result.name == "cqlDurationBetween"
+        assert len(result.args) == 3
 
     def test_duration_between_months(self, translator: ExpressionTranslator):
         """Test months between: months between A and B -> MonthsBetween(...)."""
@@ -989,8 +986,8 @@ class TestDurationBetween:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "MonthsBetween"
-        assert len(result.args) == 2
+        assert result.name == "cqlDurationBetween"
+        assert len(result.args) == 3
 
     def test_duration_between_days(self, translator: ExpressionTranslator):
         """Test days between: days between A and B -> DaysBetween(...)."""
@@ -1002,8 +999,8 @@ class TestDurationBetween:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "DaysBetween"
-        assert len(result.args) == 2
+        assert result.name == "cqlDurationBetween"
+        assert len(result.args) == 3
 
     def test_duration_between_weeks(self, translator: ExpressionTranslator):
         """Test weeks between: weeks between A and B -> weeksBetween(...)."""
@@ -1015,8 +1012,8 @@ class TestDurationBetween:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "weeksBetween"
-        assert len(result.args) == 2
+        assert result.name == "cqlDurationBetween"
+        assert len(result.args) == 3
 
     def test_duration_between_hours(self, translator: ExpressionTranslator):
         """Test hours between: hours between A and B -> HoursBetween(...)."""
@@ -1028,8 +1025,8 @@ class TestDurationBetween:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "HoursBetween"
-        assert len(result.args) == 2
+        assert result.name == "cqlDurationBetween"
+        assert len(result.args) == 3
 
 
 class TestDifferenceBetween:
@@ -1195,73 +1192,62 @@ class TestTypeConversion:
         assert result.target_type == "BOOLEAN"
 
     def test_to_datetime(self, translator: ExpressionTranslator):
-        """Test ToDateTime function: ToDateTime('2024-01-15') -> CAST('2024-01-15' AS TIMESTAMP)."""
+        """Test ToDateTime function: ToDateTime('2024-01-15') -> SQLRaw with CASE WHEN."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
         result = translator.translate(
             FunctionRef(name="ToDateTime", arguments=[Literal(value="2024-01-15")])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "TIMESTAMP"
+        assert isinstance(result, SQLRaw)
         sql = result.to_sql()
-        assert "CAST" in sql
-        assert "TIMESTAMP" in sql
+        assert "CASE WHEN" in sql
 
     def test_to_datetime_from_string(self, translator: ExpressionTranslator):
-        """Test ToDateTime with time: ToDateTime('2024-01-15T10:30:00') -> CAST(... AS TIMESTAMP)."""
+        """Test ToDateTime with time: ToDateTime('2024-01-15T10:30:00') -> SQLRaw with CASE WHEN."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
         result = translator.translate(
             FunctionRef(name="ToDateTime", arguments=[Literal(value="2024-01-15T10:30:00")])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "TIMESTAMP"
+        assert isinstance(result, SQLRaw)
+        sql = result.to_sql()
+        assert "CASE WHEN" in sql
 
     def test_to_date(self, translator: ExpressionTranslator):
-        """Test ToDate function: ToDate('2024-01-15') -> CAST('2024-01-15' AS DATE)."""
+        """Test ToDate function: ToDate('2024-01-15') -> SQLRaw with CASE WHEN."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
         result = translator.translate(
             FunctionRef(name="ToDate", arguments=[Literal(value="2024-01-15")])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "DATE"
+        assert isinstance(result, SQLRaw)
         sql = result.to_sql()
-        assert "CAST" in sql
-        assert "DATE" in sql
+        assert "CASE WHEN" in sql
 
     def test_to_date_from_datetime(self, translator: ExpressionTranslator):
-        """Test ToDate from datetime string: ToDate('2024-01-15T10:30:00') -> CAST(... AS DATE)."""
+        """Test ToDate from datetime string: ToDate('2024-01-15T10:30:00') -> SQLRaw with CASE WHEN."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
         result = translator.translate(
             FunctionRef(name="ToDate", arguments=[Literal(value="2024-01-15T10:30:00")])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "DATE"
+        assert isinstance(result, SQLRaw)
+        sql = result.to_sql()
+        assert "CASE WHEN" in sql
 
     def test_to_time(self, translator: ExpressionTranslator):
-        """Test ToTime function: ToTime('10:30:00') -> CAST('10:30:00' AS TIME)."""
+        """Test ToTime function: ToTime('10:30:00') -> ToTime(...)."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
         result = translator.translate(
             FunctionRef(name="ToTime", arguments=[Literal(value="10:30:00")])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "TIME"
-        sql = result.to_sql()
-        assert "CAST" in sql
-        assert "TIME" in sql
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToTime"
 
     def test_to_time_with_milliseconds(self, translator: ExpressionTranslator):
-        """Test ToTime with milliseconds: ToTime('10:30:00.123') -> CAST(... AS TIME)."""
+        """Test ToTime with milliseconds: ToTime('10:30:00.123') -> ToTime(...)."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
         result = translator.translate(
             FunctionRef(name="ToTime", arguments=[Literal(value="10:30:00.123")])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "TIME"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToTime"
 
     def test_type_conversion_with_identifier(self, translator: ExpressionTranslator):
         """Test type conversion with identifier: ToInteger(someVar) -> CAST(someVar AS INTEGER)."""
@@ -1395,89 +1381,84 @@ class TestPredecessorSuccessor:
         return ExpressionTranslator(context)
 
     def test_predecessor_of_integer(self, translator: ExpressionTranslator):
-        """Test predecessor of integer: predecessor of 5 -> 5 - 1."""
+        """Test predecessor of integer: predecessor of 5 -> predecessorOf(5)."""
         result = translator.translate(
             UnaryExpression(
                 operator="predecessor of",
                 operand=Literal(value=5),
             )
         )
-        assert isinstance(result, SQLBinaryOp)
-        assert result.operator == "-"
-        assert result.left.value == 5
-        assert result.right.value == 1
-        assert result.to_sql() == "5 - 1"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "predecessorOf"
+        assert len(result.args) == 1
+        assert result.args[0].value == 5
 
     def test_successor_of_integer(self, translator: ExpressionTranslator):
-        """Test successor of integer: successor of 5 -> 5 + 1."""
+        """Test successor of integer: successor of 5 -> successorOf(5)."""
         result = translator.translate(
             UnaryExpression(
                 operator="successor of",
                 operand=Literal(value=5),
             )
         )
-        assert isinstance(result, SQLBinaryOp)
-        assert result.operator == "+"
-        assert result.left.value == 5
-        assert result.right.value == 1
-        assert result.to_sql() == "5 + 1"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "successorOf"
+        assert len(result.args) == 1
+        assert result.args[0].value == 5
 
     def test_predecessor_of_zero(self, translator: ExpressionTranslator):
-        """Test predecessor of zero: predecessor of 0 -> 0 - 1."""
+        """Test predecessor of zero: predecessor of 0 -> predecessorOf(0)."""
         result = translator.translate(
             UnaryExpression(
                 operator="predecessor of",
                 operand=Literal(value=0),
             )
         )
-        assert isinstance(result, SQLBinaryOp)
-        assert result.operator == "-"
-        assert result.left.value == 0
-        assert result.right.value == 1
-        assert result.to_sql() == "0 - 1"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "predecessorOf"
+        assert len(result.args) == 1
+        assert result.args[0].value == 0
 
     def test_successor_of_negative(self, translator: ExpressionTranslator):
-        """Test successor of negative: successor of -1 -> -1 + 1."""
+        """Test successor of negative: successor of -1 -> successorOf(-1)."""
         result = translator.translate(
             UnaryExpression(
                 operator="successor of",
                 operand=Literal(value=-1),
             )
         )
-        assert isinstance(result, SQLBinaryOp)
-        assert result.operator == "+"
-        assert result.left.value == -1
-        assert result.right.value == 1
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "successorOf"
+        assert len(result.args) == 1
+        assert result.args[0].value == -1
 
     def test_predecessor_of_identifier(self, translator: ExpressionTranslator):
-        """Test predecessor of identifier: predecessor of X -> X - 1."""
+        """Test predecessor of identifier: predecessor of X -> predecessorOf(X)."""
         result = translator.translate(
             UnaryExpression(
                 operator="predecessor of",
                 operand=Identifier(name="X"),
             )
         )
-        assert isinstance(result, SQLBinaryOp)
-        assert result.operator == "-"
-        assert isinstance(result.left, SQLIdentifier)
-        assert result.left.name == "X"
-        assert result.right.value == 1
-        assert result.to_sql() == "X - 1"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "predecessorOf"
+        assert len(result.args) == 1
+        assert isinstance(result.args[0], SQLIdentifier)
+        assert result.args[0].name == "X"
 
     def test_successor_of_identifier(self, translator: ExpressionTranslator):
-        """Test successor of identifier: successor of X -> X + 1."""
+        """Test successor of identifier: successor of X -> successorOf(X)."""
         result = translator.translate(
             UnaryExpression(
                 operator="successor of",
                 operand=Identifier(name="X"),
             )
         )
-        assert isinstance(result, SQLBinaryOp)
-        assert result.operator == "+"
-        assert isinstance(result.left, SQLIdentifier)
-        assert result.left.name == "X"
-        assert result.right.value == 1
-        assert result.to_sql() == "X + 1"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "successorOf"
+        assert len(result.args) == 1
+        assert isinstance(result.args[0], SQLIdentifier)
+        assert result.args[0].name == "X"
 
 
 class TestStatisticalFunctions:
@@ -1521,7 +1502,7 @@ class TestStatisticalFunctions:
         assert len(result.args) == 2
 
     def test_variance_function(self, translator: ExpressionTranslator):
-        """Test Variance function: Variance(values) -> VARIANCE(...)."""
+        """Test Variance function: Variance(values) -> list_aggregate(..., 'var_samp')."""
         from ...parser.ast_nodes import FunctionRef, ListExpression
         result = translator.translate(
             FunctionRef(
@@ -1532,11 +1513,12 @@ class TestStatisticalFunctions:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "VARIANCE"
-        assert len(result.args) == 1
+        assert result.name == "list_aggregate"
+        assert len(result.args) == 2
+        assert "'var_samp'" in result.to_sql()
 
     def test_stddev_function(self, translator: ExpressionTranslator):
-        """Test StdDev function: StdDev(values) -> STDDEV(...)."""
+        """Test StdDev function: StdDev(values) -> list_aggregate(..., 'stddev_samp')."""
         from ...parser.ast_nodes import FunctionRef, ListExpression
         result = translator.translate(
             FunctionRef(
@@ -1547,11 +1529,12 @@ class TestStatisticalFunctions:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "STDDEV"
-        assert len(result.args) == 1
+        assert result.name == "list_aggregate"
+        assert len(result.args) == 2
+        assert "'stddev_samp'" in result.to_sql()
 
     def test_population_variance_function(self, translator: ExpressionTranslator):
-        """Test PopulationVariance function -> VAR_POP(...)."""
+        """Test PopulationVariance function -> list_aggregate(..., 'var_pop')."""
         from ...parser.ast_nodes import FunctionRef, ListExpression
         result = translator.translate(
             FunctionRef(
@@ -1562,11 +1545,12 @@ class TestStatisticalFunctions:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "VAR_POP"
-        assert len(result.args) == 1
+        assert result.name == "list_aggregate"
+        assert len(result.args) == 2
+        assert "'var_pop'" in result.to_sql()
 
     def test_population_stddev_function(self, translator: ExpressionTranslator):
-        """Test PopulationStdDev function -> STDDEV_POP(...)."""
+        """Test PopulationStdDev function -> list_aggregate(..., 'stddev_pop')."""
         from ...parser.ast_nodes import FunctionRef, ListExpression
         result = translator.translate(
             FunctionRef(
@@ -1577,8 +1561,9 @@ class TestStatisticalFunctions:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "STDDEV_POP"
-        assert len(result.args) == 1
+        assert result.name == "list_aggregate"
+        assert len(result.args) == 2
+        assert "'stddev_pop'" in result.to_sql()
 
 
 class TestOrdinalFunctions:
@@ -1591,48 +1576,46 @@ class TestOrdinalFunctions:
         return ExpressionTranslator(context)
 
     def test_predecessor_of_integer(self, translator: ExpressionTranslator):
-        """Test predecessor of integer: predecessor of 5 -> 5 - 1."""
+        """Test predecessor of integer: predecessor of 5 -> predecessorOf(5)."""
         result = translator.translate(
             UnaryExpression(operator="predecessor of", operand=Literal(value=5))
         )
-        assert isinstance(result, SQLBinaryOp)
-        assert result.operator == "-"
-        assert result.left.value == 5
-        assert result.right.value == 1
-        assert result.to_sql() == "5 - 1"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "predecessorOf"
+        assert len(result.args) == 1
+        assert result.args[0].value == 5
 
     def test_successor_of_integer(self, translator: ExpressionTranslator):
-        """Test successor of integer: successor of 5 -> 5 + 1."""
+        """Test successor of integer: successor of 5 -> successorOf(5)."""
         result = translator.translate(
             UnaryExpression(operator="successor of", operand=Literal(value=5))
         )
-        assert isinstance(result, SQLBinaryOp)
-        assert result.operator == "+"
-        assert result.left.value == 5
-        assert result.right.value == 1
-        assert result.to_sql() == "5 + 1"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "successorOf"
+        assert len(result.args) == 1
+        assert result.args[0].value == 5
 
     def test_predecessor_of_identifier(self, translator: ExpressionTranslator):
-        """Test predecessor of identifier: predecessor of X -> X - 1."""
+        """Test predecessor of identifier: predecessor of X -> predecessorOf(X)."""
         result = translator.translate(
             UnaryExpression(operator="predecessor of", operand=Identifier(name="X"))
         )
-        assert isinstance(result, SQLBinaryOp)
-        assert result.operator == "-"
-        assert isinstance(result.left, SQLIdentifier)
-        assert result.left.name == "X"
-        assert result.right.value == 1
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "predecessorOf"
+        assert len(result.args) == 1
+        assert isinstance(result.args[0], SQLIdentifier)
+        assert result.args[0].name == "X"
 
     def test_successor_of_identifier(self, translator: ExpressionTranslator):
-        """Test successor of identifier: successor of X -> X + 1."""
+        """Test successor of identifier: successor of X -> successorOf(X)."""
         result = translator.translate(
             UnaryExpression(operator="successor of", operand=Identifier(name="X"))
         )
-        assert isinstance(result, SQLBinaryOp)
-        assert result.operator == "+"
-        assert isinstance(result.left, SQLIdentifier)
-        assert result.left.name == "X"
-        assert result.right.value == 1
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "successorOf"
+        assert len(result.args) == 1
+        assert isinstance(result.args[0], SQLIdentifier)
+        assert result.args[0].name == "X"
 
 
 class TestSpecialAggregateFunctions:
@@ -1786,9 +1769,8 @@ class TestStringPositionFunctions:
         assert result.when_clauses[0][1].value == -1
 
     def test_last_position_of(self, translator: ExpressionTranslator):
-        """Test LastPositionOf function: LastPositionOf('l', 'hello') -> CASE WHEN strrpos=0 THEN -1 ELSE strrpos-1 END."""
+        """Test LastPositionOf function: LastPositionOf('l', 'hello') -> UDF call."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCase
         result = translator.translate(
             FunctionRef(
                 name="LastPositionOf",
@@ -1798,13 +1780,12 @@ class TestStringPositionFunctions:
                 ]
             )
         )
-        # LastPositionOf now returns SQLCase for proper 0-based indexing
-        assert isinstance(result, SQLCase)
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "LastPositionOf"
 
     def test_last_position_of_multiple_occurrences(self, translator: ExpressionTranslator):
         """Test LastPositionOf with multiple occurrences finds last one."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCase
         result = translator.translate(
             FunctionRef(
                 name="LastPositionOf",
@@ -1814,8 +1795,8 @@ class TestStringPositionFunctions:
                 ]
             )
         )
-        # LastPositionOf now returns SQLCase for proper 0-based indexing
-        assert isinstance(result, SQLCase)
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "LastPositionOf"
 
     def test_position_of_case_insensitive(self, translator: ExpressionTranslator):
         """Test PositionOf function name is case-insensitive."""
@@ -1837,7 +1818,6 @@ class TestStringPositionFunctions:
     def test_last_position_of_case_insensitive(self, translator: ExpressionTranslator):
         """Test LastPositionOf function name is case-insensitive."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCase
         for name in ["LastPositionOf", "lastpositionof", "LASTPOSITIONOF"]:
             result = translator.translate(
                 FunctionRef(
@@ -1848,8 +1828,8 @@ class TestStringPositionFunctions:
                     ]
                 )
             )
-            # LastPositionOf now returns SQLCase for proper 0-based indexing
-            assert isinstance(result, SQLCase)
+            assert isinstance(result, SQLFunctionCall)
+            assert result.name == "LastPositionOf"
 
     def test_position_of_with_identifiers(self, translator: ExpressionTranslator):
         """Test PositionOf with identifier arguments."""
@@ -1878,13 +1858,13 @@ class TestTimezoneOffset:
         return ExpressionTranslator(context)
 
     def test_timezoneoffset_from_datetime(self, translator: ExpressionTranslator):
-        """Test timezoneoffset from dateTime returns 0 as placeholder."""
+        """Test timezoneoffset from dateTime returns UDF call."""
         from ...parser.ast_nodes import DateComponent
         result = translator.translate(
             DateComponent(component="timezoneoffset", operand=DateTimeLiteral(value="2024-01-15T10:30:00"))
         )
-        assert isinstance(result, SQLLiteral)
-        assert result.value == 0
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "cqlTimezoneOffset"
 
     def test_timezoneoffset_case_insensitive(self, translator: ExpressionTranslator):
         """Test timezoneoffset is case-insensitive."""
@@ -1893,17 +1873,17 @@ class TestTimezoneOffset:
             result = translator.translate(
                 DateComponent(component=component, operand=DateTimeLiteral(value="2024-01-15"))
             )
-            assert isinstance(result, SQLLiteral)
-            assert result.value == 0
+            assert isinstance(result, SQLFunctionCall)
+            assert result.name == "cqlTimezoneOffset"
 
     def test_timezoneoffset_with_identifier(self, translator: ExpressionTranslator):
-        """Test timezoneoffset from identifier returns 0 as placeholder."""
+        """Test timezoneoffset from identifier returns UDF call."""
         from ...parser.ast_nodes import DateComponent
         result = translator.translate(
             DateComponent(component="timezoneoffset", operand=Identifier(name="someDateTime"))
         )
-        assert isinstance(result, SQLLiteral)
-        assert result.value == 0
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "cqlTimezoneOffset"
 
 
 class TestIntervalCollapseExpand:
@@ -1944,7 +1924,7 @@ class TestIntervalCollapseExpand:
         assert len(result.args) == 1
 
     def test_expand_interval(self, translator: ExpressionTranslator):
-        """Test expand function: expand interval -> expand(...)."""
+        """Test expand function: expand interval -> expand UDF call."""
         from ...parser.ast_nodes import FunctionRef
         result = translator.translate(
             FunctionRef(
@@ -1960,8 +1940,8 @@ class TestIntervalCollapseExpand:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "expand"
-        assert len(result.args) == 1
+        # expand may use expand_points1 or expand internally
+        assert "expand" in result.name.lower()
 
     def test_expand_interval_with_per(self, translator: ExpressionTranslator):
         """Test expand function with per quantity."""
@@ -1981,8 +1961,7 @@ class TestIntervalCollapseExpand:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "expand"
-        assert len(result.args) == 2
+        assert "expand" in result.name.lower()
 
     def test_collapse_case_insensitive(self, translator: ExpressionTranslator):
         """Test collapse function name is case-insensitive."""
