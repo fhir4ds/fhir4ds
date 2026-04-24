@@ -162,20 +162,24 @@ def _time_boundary(data, precision, fill):
     ms = fill["ms"]
     tz = match_list[4] if len(match_list) > 4 and match_list[4] else ""
 
+    # Preserve the 'T' prefix only when the input had it (FHIRPath literals
+    # use @T14:30 format; FHIR resource values use 14:30 without 'T').
+    prefix = "T" if data.asStr.startswith("T") else ""
+
     if precision is not None:
         if precision <= 2:
-            result = f"T{hour}"
+            result = f"{prefix}{hour}"
         elif precision <= 4:
-            result = f"T{hour}:{minute}"
+            result = f"{prefix}{hour}:{minute}"
         elif precision <= 6:
-            result = f"T{hour}:{minute}:{second}"
+            result = f"{prefix}{hour}:{minute}:{second}"
         else:
-            result = f"T{hour}:{minute}:{second}.{ms}"
+            result = f"{prefix}{hour}:{minute}:{second}.{ms}"
             if tz:
                 result += tz
         return ["@" + result]
 
-    result = f"T{hour}:{minute}:{second}.{ms}"
+    result = f"{prefix}{hour}:{minute}:{second}.{ms}"
     if tz:
         result += tz
     return [result]
