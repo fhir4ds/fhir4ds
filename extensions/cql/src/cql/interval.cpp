@@ -638,7 +638,7 @@ oss << "\"low\":" << *low->int_val;
 } else if (low->type == BoundType::Decimal && low->dec_val) {
 oss << "\"low\":" << *low->dec_val;
 } else {
-oss << "\"low\":\"" << s << "\"";
+oss << "\"low\":\"" << escapeJsonString(s) << "\"";
 }
 } else {
 oss << "\"low\":null";
@@ -653,7 +653,7 @@ oss << "\"high\":" << *high->int_val;
 } else if (high->type == BoundType::Decimal && high->dec_val) {
 oss << "\"high\":" << *high->dec_val;
 } else {
-oss << "\"high\":\"" << s << "\"";
+oss << "\"high\":\"" << escapeJsonString(s) << "\"";
 }
 } else {
 oss << "\"high\":null";

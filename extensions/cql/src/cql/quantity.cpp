@@ -411,6 +411,11 @@ Optional<std::string> to_concept(const std::string &code_json) {
 
 	// Copy the input as an element in the codes array
 	yyjson_mut_val *copied = yyjson_val_mut_copy(mut_doc, src_root);
+	if (!copied) {
+		yyjson_mut_doc_free(mut_doc);
+		yyjson_doc_free(doc);
+		return NullOpt<std::string>();
+	}
 	yyjson_mut_arr_append(codes_arr, copied);
 	yyjson_mut_obj_add_val(mut_doc, root, "codes", codes_arr);
 
