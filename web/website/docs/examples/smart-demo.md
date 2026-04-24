@@ -19,5 +19,5 @@ Use the following test accounts to log in to the sandboxes:
 :::
 
 2.  **Ingest:** FHIR4DS fetches your clinical history and loads it into a local, high-performance DuckDB instance.
-3.  **Analyze:** Switch between the **CQL Playground** and **SDC Forms** to query your own real-world medical data.
+3.  **Analyze:** Switch between the **CQL Playground**, **Quality Measures**, and **SDC Forms** to query your own real-world medical data.
 4.  **Verify:** Use the **Patient Data** pane to see exactly which raw resources are being processed by the engine.

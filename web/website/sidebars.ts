@@ -11,6 +11,7 @@ const sidebars: SidebarsConfig = {
         'getting-started/architecture',
         'getting-started/benchmarking',
         'getting-started/whitepaper',
+        'getting-started/releases',
         'getting-started/licensing',
       ],
     },
@@ -112,13 +113,13 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
-          id: 'examples/sdc-playground',
-          label: 'SDC Forms',
+          id: 'examples/cms-measures',
+          label: 'Quality Measures',
         },
         {
           type: 'doc',
-          id: 'examples/cms-measures',
-          label: 'Quality Measures',
+          id: 'examples/sdc-playground',
+          label: 'SDC Forms',
         },
         {
           type: 'doc',
