@@ -1142,8 +1142,21 @@ def intervalProperlyIncludes(interval1: str | None, interval2: str | None) -> bo
     return includes and not is_equal
 
 
-def intervalProperlyIncludedIn(interval1: str | None, interval2: str | None) -> bool:
-    """Check if interval1 is properly included in interval2."""
+def intervalProperlyIncludedIn(interval1: str | None, interval2: str | None) -> bool | None:
+    """Check if interval1 is properly included in interval2 (CQL §19.14).
+
+    Per CQL type semantics, a null container (interval2) in a typed comparison
+    context represents an unbounded interval — null bounds are inferred to typed
+    nulls by the type system, meaning the interval is unbounded.  A finite
+    interval is always properly included in an unbounded container.
+    """
+    # When the container (interval2) is null, treat as unbounded per CQL type inference.
+    # A valid finite interval is always properly included in an unbounded range.
+    # CQL §19.14: typed null bounds → unbounded interval.
+    if interval2 is None and interval1 is not None:
+        iv1 = _parse_interval(interval1)
+        if iv1:
+            return True
     return intervalProperlyIncludes(interval2, interval1)
 
 

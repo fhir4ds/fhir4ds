@@ -1041,22 +1041,38 @@ class QueryMixin:
         alias = inner_alias or source_name
         _sym = self.context.lookup_symbol(source_name)
 
+        # Detect lambda scalar: symbol bound to a direct SQL expression (not a table/CTE).
+        # This occurs in aggregate clause bodies where the source alias is bound to a
+        # lambda parameter (e.g., M → _agg_y via add_alias(M, ast_expr=SQLIdentifier('_agg_y'))).
+        _is_lambda_scalar = (
+            _sym is not None
+            and getattr(_sym, 'ast_expr', None) is not None
+            and getattr(_sym, 'table_alias', None) is None
+            and getattr(_sym, 'cte_name', None) is None
+        )
+
         # Register inner CQL alias mapping to the real SQL table name
         if alias != source_name:
-            _cte = (
-                getattr(_sym, 'cte_name', None)
-                or getattr(_sym, 'table_alias', None)
-                or source_name
-            ) if _sym else source_name
-            self.context.add_alias(
-                alias,
-                table_alias=source_name,
-                cte_name=_cte,
-            )
-            if source_name in self.context._alias_resource_types:
-                self.context._alias_resource_types[alias] = (
-                    self.context._alias_resource_types[source_name]
+            if _is_lambda_scalar:
+                # Source is a lambda scalar — bind inner alias directly to the
+                # same SQL expression so that property accesses on it resolve
+                # to the lambda parameter (e.g., _agg_y), not to M.resource.
+                self.context.add_alias(alias, ast_expr=_sym.ast_expr)
+            else:
+                _cte = (
+                    getattr(_sym, 'cte_name', None)
+                    or getattr(_sym, 'table_alias', None)
+                    or source_name
+                ) if _sym else source_name
+                self.context.add_alias(
+                    alias,
+                    table_alias=source_name,
+                    cte_name=_cte,
                 )
+                if source_name in self.context._alias_resource_types:
+                    self.context._alias_resource_types[alias] = (
+                        self.context._alias_resource_types[source_name]
+                    )
         elif not _sym:
             # Source name not found in scope (barrier).  Register it so
             # property access (e.g., Visit.period) can resolve correctly.
@@ -1069,8 +1085,10 @@ class QueryMixin:
         # Use the real SQL table name as resource_alias so that generated
         # SQL references (e.g., fhirpath(X.resource, ...)) point to a valid
         # table, not to the CQL-level alias which has no FROM clause.
+        # For lambda scalars, resource_alias is not changed (no SQL table exists).
         _saved_resource_alias = self.context.resource_alias
-        self.context.resource_alias = source_name
+        if not _is_lambda_scalar:
+            self.context.resource_alias = source_name
 
         # Process let clauses
         if hasattr(node, 'let_clauses') and node.let_clauses:
@@ -3163,52 +3181,114 @@ class QueryMixin:
                     f") SELECT __acc FROM __fold ORDER BY __rn DESC LIMIT 1)"
                 )
             else:
-                # ── Single-source aggregate: list_reduce pattern ──────────
-                # Apply distinct/all modifiers
-                if agg.distinct:
-                    source_list = SQLFunctionCall(name="list_distinct", args=[source_list])
+                # ── Single-source aggregate ───────────────────────────────
+                # Detect "null as List<T>" starting value.
+                # DuckDB's list_reduce requires the lambda body return type to
+                # match the element type (VARCHAR), but a list accumulator body
+                # returns VARCHAR[] — a type mismatch that causes a runtime
+                # error.  Route these through the same recursive-CTE fold used
+                # for multi-source aggregates so the accumulator is typed as
+                # VARCHAR[] from the outset.  (CQL §19.27)
+                from ...parser.ast_nodes import (
+                    ListTypeSpecifier as _ListTypeSpec,
+                    Literal as _ASTLiteral,
+                )
+                _starting_is_null_list = (
+                    agg.starting is not None
+                    and isinstance(agg.starting, BinaryExpression)
+                    and agg.starting.operator == 'as'
+                    and isinstance(agg.starting.right, _ListTypeSpec)
+                    and isinstance(agg.starting.left, _ASTLiteral)
+                    and agg.starting.left.value is None
+                )
 
-                # Translate the starting value
-                starting_sql = None
-                if agg.starting is not None:
-                    starting_sql = self.translate(agg.starting, usage=ExprUsage.SCALAR)
+                if _starting_is_null_list and alias:
+                    # ── Single-source list-accumulator aggregate: recursive CTE fold ──
+                    # source_list is the array expression (SQLArray or SQLFunctionCall).
+                    if isinstance(source_list, SQLArray):
+                        _arr_sql = source_list.to_sql()
+                    elif isinstance(source_list, SQLFunctionCall) and source_list.name == "unnest":
+                        _arr_sql = source_list.args[0].to_sql()
+                    else:
+                        _arr_sql = f"[{source_list.to_sql()}]"
 
-                # Translate the aggregation expression as a lambda body
-                # The body references both the accumulator and the iteration alias
-                _agg_lambda_x = f"_agg_x"  # accumulator param
-                _agg_lambda_y = f"_agg_y"  # element param
+                    _distinct_kw = "DISTINCT " if agg.distinct else ""
 
-                self.context.push_scope()
-                try:
-                    self.context.add_alias(accum_name, ast_expr=SQLIdentifier(name=_agg_lambda_x))
-                    if alias:
-                        self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_agg_lambda_y))
-                    agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
-                finally:
-                    self.context.pop_scope()
+                    self.context.push_scope()
+                    try:
+                        self.context.add_alias(
+                            accum_name,
+                            ast_expr=SQLQualifiedIdentifier(parts=["__fold", "__acc"]),
+                        )
+                        self.context.add_alias(
+                            alias,
+                            ast_expr=SQLQualifiedIdentifier(parts=["__xjn", alias]),
+                        )
+                        agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
+                    finally:
+                        self.context.pop_scope()
 
-                # Build list_reduce call
-                if starting_sql is not None:
-                    # Prepend starting value so list_reduce uses it as initial accumulator
-                    source_with_start = SQLFunctionCall(
-                        name="list_prepend",
-                        args=[starting_sql, source_list],
-                    )
-                    result = SQLFunctionCall(
-                        name="list_reduce",
-                        args=[source_with_start, SQLLambda2(params=[_agg_lambda_x, _agg_lambda_y], body=agg_body)],
+                    _body_sql = agg_body.to_sql()
+                    result = SQLRaw(
+                        f"(WITH RECURSIVE __xj AS ("
+                        f"SELECT {_distinct_kw}{alias} FROM "
+                        f"unnest({_arr_sql}) AS __t0({alias})"
+                        f"), __xjn AS ("
+                        f"SELECT ROW_NUMBER() OVER () AS __rn, * FROM __xj"
+                        f"), __fold(__acc, __rn) AS ("
+                        f"SELECT CAST(NULL AS VARCHAR[]), CAST(0 AS BIGINT) "
+                        f"UNION ALL "
+                        f"SELECT {_body_sql}, __xjn.__rn "
+                        f"FROM __fold JOIN __xjn ON __xjn.__rn = __fold.__rn + 1"
+                        f") SELECT __acc FROM __fold ORDER BY __rn DESC LIMIT 1)"
                     )
                 else:
-                    # No starting value — per CQL §19.27, accumulator is initialized to null.
-                    # Prepend NULL as initial value for list_reduce.
-                    source_with_null = SQLFunctionCall(
-                        name="list_prepend",
-                        args=[SQLNull(), source_list],
-                    )
-                    result = SQLFunctionCall(
-                        name="list_reduce",
-                        args=[source_with_null, SQLLambda2(params=[_agg_lambda_x, _agg_lambda_y], body=agg_body)],
-                    )
+                    # ── Single-source scalar aggregate: list_reduce pattern ──────────
+                    # Apply distinct/all modifiers
+                    if agg.distinct:
+                        source_list = SQLFunctionCall(name="list_distinct", args=[source_list])
+
+                    # Translate the starting value
+                    starting_sql = None
+                    if agg.starting is not None:
+                        starting_sql = self.translate(agg.starting, usage=ExprUsage.SCALAR)
+
+                    # Translate the aggregation expression as a lambda body
+                    # The body references both the accumulator and the iteration alias
+                    _agg_lambda_x = f"_agg_x"  # accumulator param
+                    _agg_lambda_y = f"_agg_y"  # element param
+
+                    self.context.push_scope()
+                    try:
+                        self.context.add_alias(accum_name, ast_expr=SQLIdentifier(name=_agg_lambda_x))
+                        if alias:
+                            self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_agg_lambda_y))
+                        agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
+                    finally:
+                        self.context.pop_scope()
+
+                    # Build list_reduce call
+                    if starting_sql is not None:
+                        # Prepend starting value so list_reduce uses it as initial accumulator
+                        source_with_start = SQLFunctionCall(
+                            name="list_prepend",
+                            args=[starting_sql, source_list],
+                        )
+                        result = SQLFunctionCall(
+                            name="list_reduce",
+                            args=[source_with_start, SQLLambda2(params=[_agg_lambda_x, _agg_lambda_y], body=agg_body)],
+                        )
+                    else:
+                        # No starting value — per CQL §19.27, accumulator is initialized to null.
+                        # Prepend NULL as initial value for list_reduce.
+                        source_with_null = SQLFunctionCall(
+                            name="list_prepend",
+                            args=[SQLNull(), source_list],
+                        )
+                        result = SQLFunctionCall(
+                            name="list_reduce",
+                            args=[source_with_null, SQLLambda2(params=[_agg_lambda_x, _agg_lambda_y], body=agg_body)],
+                        )
 
         # For boolean context, check if result exists
         if usage == ExprUsage.BOOLEAN:

@@ -1588,20 +1588,34 @@ class OperatorsMixin:
                 args=[SQLFunctionCall(name="list_concat", args=[left, right])],
             )
 
-        # Case 6b: One array, one non-null scalar → use list_concat
+        # Case 6b: One array literal, one list expression → use list_concat.
+        # CQL §20.29: null in list union is treated as empty list.
+        # Use CASE WHEN IS NULL to handle runtime null accumulator (e.g., first iteration
+        # of list_reduce). COALESCE(var, []) cannot be used here because DuckDB cannot
+        # always infer the element type of an empty literal array.
         if isinstance(left, SQLArray) or isinstance(right, SQLArray):
-            # Wrap the non-array operand in SQLArray for list_concat compatibility
-            left_arr = left if isinstance(left, SQLArray) else SQLArray(elements=[left])
-            right_arr = right if isinstance(right, SQLArray) else SQLArray(elements=[right])
+            non_array = right if isinstance(left, SQLArray) else left
+            array_side = left if isinstance(left, SQLArray) else right
+            # Compile-time null: CQL §20.29 null = empty list → return the array side
+            if isinstance(non_array, SQLNull):
+                return array_side
+            # Runtime-nullable list expression: null union [x] = [x] (CQL §20.29)
+            null_check = SQLUnaryOp(operator="IS NULL", operand=non_array, prefix=False)
+            if isinstance(left, SQLArray):
+                concat = SQLFunctionCall(
+                    name="list_concat", args=[array_side, non_array]
+                )
+            else:
+                concat = SQLFunctionCall(
+                    name="list_concat", args=[non_array, array_side]
+                )
             inner = SQLFunctionCall(
                 name='"Distinct"',
-                args=[SQLFunctionCall(name="list_concat", args=[left_arr, right_arr])],
+                args=[SQLCase(
+                    when_clauses=[(null_check, array_side)],
+                    else_clause=concat,
+                )],
             )
-            # Null check on the non-array side
-            non_array = right if isinstance(left, SQLArray) else left
-            if isinstance(non_array, SQLNull):
-                # CQL §20.29: null in list union is empty list — return the array side
-                return left if isinstance(left, SQLArray) else right
             return inner
 
         # Fallback: use jsonConcat UDF which handles scalars, lists, and JSON

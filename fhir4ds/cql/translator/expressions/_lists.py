@@ -440,23 +440,41 @@ class ListsMixin:
             return SQLInterval(low=low, high=high, low_closed=low_closed, high_closed=high_closed)
 
         if inst.type == "Quantity":
-            # Handle Quantity { value: 5, unit: 'mg' }
+            # Handle Quantity { value: 5, unit: 'mg' } and Quantity { value: <expr>, unit: 'mg' }
             value_elem = next((e for e in inst.elements if e.name == "value"), None)
             unit_elem = next((e for e in inst.elements if e.name == "unit"), None)
 
             value = 0.0
             unit = ""
+            dynamic_value_sql = None  # set when value is a non-literal expression
 
             if value_elem:
                 val_expr = self.translate(value_elem.type, boolean_context=False)
                 if isinstance(val_expr, SQLLiteral):
                     value = float(val_expr.value) if not isinstance(val_expr.value, float) else val_expr.value
+                else:
+                    # Dynamic expression (e.g., duration in days of X) — cannot
+                    # serialize to a compile-time literal; build JSON at runtime.
+                    dynamic_value_sql = val_expr
 
             if unit_elem:
                 unit_expr = self.translate(unit_elem.type, boolean_context=False)
                 if isinstance(unit_expr, SQLLiteral) and isinstance(unit_expr.value, str):
                     unit = unit_expr.value
 
+            if dynamic_value_sql is not None:
+                from ...translator.types import SQLFunctionCall as _SFC, SQLLiteral as _SL
+                return _SFC(
+                    name="parse_quantity",
+                    args=[_SFC(
+                        name="json_object",
+                        args=[
+                            _SL(value="value"), dynamic_value_sql,
+                            _SL(value="unit"), _SL(value=unit),
+                            _SL(value="system"), _SL(value="http://unitsofmeasure.org"),
+                        ],
+                    )],
+                )
             return self._translate_quantity(Quantity(value=value, unit=unit), boolean_context)
 
         # Generic instance - build JSON object
