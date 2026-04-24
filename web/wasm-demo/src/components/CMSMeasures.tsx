@@ -90,7 +90,10 @@ export function CMSMeasures({
         <select
           className="sample-select"
           value={selectedMeasureId}
-          onChange={(e) => setSelectedSample(e.target.value)}
+          onChange={(e) => {
+            setSelectedSample(e.target.value);
+            setRunResult(null); // Clear stale results when measure changes
+          }}
         >
           {MEASURES.map((m) => (
             <option key={m.id} value={m.id}>

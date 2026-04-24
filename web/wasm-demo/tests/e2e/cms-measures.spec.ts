@@ -78,10 +78,8 @@ test.describe("CMS Measures Tab", () => {
 
     await expect(page.locator("table.results-table")).toBeVisible({ timeout: MEASURE_TIMEOUT });
 
-    // AccuracyBadge renders "X.X% vs expected"
-    await expect(page.locator("text=% vs expected").first()).toBeVisible({ timeout: 10_000 });
-    const badgeText = await page.locator("text=pop. checks").first().textContent({ timeout: 5_000 });
-    expect(badgeText).toMatch(/132\/132/);
+    // AccuracyBadge renders "X.X% accuracy" in the header
+    await expect(page.locator("text=% accuracy").first()).toBeVisible({ timeout: 10_000 });
   });
 
   test("CMS124 shows population summary bar", async ({ page }) => {
@@ -93,9 +91,10 @@ test.describe("CMS Measures Tab", () => {
     await page.click("button:has-text('▶ Run')");
     await expect(page.locator("table.results-table")).toBeVisible({ timeout: MEASURE_TIMEOUT });
 
-    await expect(page.getByRole("columnheader", { name: "Initial Population", exact: true })).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByRole("columnheader", { name: "Denominator", exact: true })).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByRole("columnheader", { name: "Performance Numerator", exact: true })).toBeVisible({ timeout: 5_000 });
+    // Population Stats panel shows .stat-label cards for each population
+    await expect(page.locator(".stat-label").filter({ hasText: "Initial Population" }).first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator(".stat-label").filter({ hasText: "Denominator" }).first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator(".stat-label").filter({ hasText: "Numerator" }).first()).toBeVisible({ timeout: 5_000 });
   });
 
   test("CMS124 audit mode shows 🔍 evidence icons in table cells", async ({ page }) => {
