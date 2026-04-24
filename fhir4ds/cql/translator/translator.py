@@ -1296,6 +1296,16 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         """
         from ..translator.context import DefinitionMeta
 
+        # Cycle detection: catch circular definition references early
+        # (e.g., define A: B / define B: A) instead of hitting RecursionError.
+        if definition.name in self._context._resolving_definitions:
+            cycle_path = list(self._context._resolving_definitions) + [definition.name]
+            raise TranslationError(
+                message=f"Circular definition detected: {' -> '.join(cycle_path)}",
+                suggestion="Remove circular references between definitions",
+            )
+        self._context._resolving_definitions.add(definition.name)
+
         # Set context if specified
         original_context = self._context.context_type
         if definition.context:
@@ -1408,6 +1418,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         finally:
             # Restore original context
             self._context.set_context_type(original_context)
+            self._context._resolving_definitions.discard(definition.name)
 
     def translate_expression(
         self, expr: Expression, context: SQLTranslationContext

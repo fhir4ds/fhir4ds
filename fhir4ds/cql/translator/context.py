@@ -373,6 +373,9 @@ class SQLTranslationContext:
     # All definition names (for forward reference resolution)
     _definition_names: Set[str] = field(default_factory=set)
 
+    # Cycle detection: definitions currently being translated (guards against circular refs)
+    _resolving_definitions: Set[str] = field(default_factory=set)
+
     # Scope management
     scopes: List[Scope] = field(default_factory=list)
     current_scope_level: int = 0
@@ -904,6 +907,7 @@ class SQLTranslationContext:
         self._parameter_bindings = {}
         self._context_type = "Unfiltered"
         self._definition_names.clear()
+        self._resolving_definitions.clear()
         self._included_definition_names.clear()
         self._alias_scopes.clear()
         self._alias_resource_types.clear()

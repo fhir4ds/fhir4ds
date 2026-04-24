@@ -280,7 +280,7 @@ class ExpressionTranslator(
 
         return registry
 
-    def _is_forward_ref_boolean(self, name: str) -> bool:
+    def _is_forward_ref_boolean(self, name: str, _visited: set | None = None) -> bool:
         """Check if a forward-referenced definition produces a boolean result.
 
         Uses the pre-populated CQL ASTs to inspect the expression type.
@@ -288,6 +288,11 @@ class ExpressionTranslator(
         or resource column), so references must use EXISTS rather than
         ``SELECT value``.
         """
+        if _visited is None:
+            _visited = set()
+        if name in _visited:
+            return False
+        _visited.add(name)
         cql_asts = getattr(self.context, '_definition_cql_asts', {})
         cql_ast = cql_asts.get(name)
         if cql_ast is None:
@@ -317,15 +322,20 @@ class ExpressionTranslator(
                 return True
         # Identifier reference: follow the chain
         if isinstance(cql_ast, CQLIdentifier):
-            return self._is_forward_ref_boolean(cql_ast.name)
+            return self._is_forward_ref_boolean(cql_ast.name, _visited)
         return False
 
-    def _get_definition_value_column(self, name: str) -> str:
+    def _get_definition_value_column(self, name: str, _visited: set | None = None) -> str:
         """Determine correct value column for a definition CTE reference.
 
         Uses definition_meta if available, otherwise checks CQL ASTs
         for forward references (definitions not yet translated).
         """
+        if _visited is None:
+            _visited = set()
+        if name in _visited:
+            return "value"
+        _visited.add(name)
         meta = self.context.definition_meta.get(name)
         if meta:
             if meta.has_resource:
@@ -367,7 +377,7 @@ class ExpressionTranslator(
             # Identifier reference to another definition — follow the chain
             # to inherit the target's column (e.g., "Denominator" = "IP")
             if isinstance(cql_ast, CQLIdentifier):
-                return self._get_definition_value_column(cql_ast.name)
+                return self._get_definition_value_column(cql_ast.name, _visited)
             # Union/intersect/except of definitions — inherit RESOURCE_ROWS
             if isinstance(cql_ast, CQLBinaryExpr):
                 op = getattr(cql_ast, 'operator', '').lower()
