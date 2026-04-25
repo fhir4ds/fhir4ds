@@ -6,6 +6,7 @@ from .evaluator import MeasureEvaluator
 from .models import MeasureResult
 from .narrative import NarrativeGenerator
 from .parser import MeasureParser
+from .reactive import ReactiveEvaluator
 from .types import (
     AuditMode,
     AuditOrStrategy,
@@ -33,5 +34,6 @@ __all__ = [
     "NarrativeGenerator",
     "PopulationEntry",
     "PopulationMap",
+    "ReactiveEvaluator",
     "SupportingEvidenceDef",
 ]

@@ -29,6 +29,10 @@ from .measure import evaluate_measure
 from .connection import create_connection
 from .cql.loader import FHIRDataLoader
 
+# Zero-ETL source adapters
+from .sources.base import SourceAdapter, SchemaValidationError
+from . import sources
+
 # Lazy imports for viewdef convenience functions
 def generate_view_sql(view_definition_or_json, *, source_table=None):
     """Generate DuckDB SQL from a SQL-on-FHIR v2 ViewDefinition.
@@ -78,6 +82,42 @@ def parse_view_definition(json_or_dict):
     return _parse(json_or_dict)
 
 
+def attach(con, adapter: "SourceAdapter") -> None:
+    """
+    Registers a :class:`~fhir4ds.sources.base.SourceAdapter` against an
+    existing DuckDB connection.
+
+    After this call, the connection's ``resources`` view points to the
+    adapter's external source.  Schema validation is enforced by the adapter.
+
+    Args:
+        con: An active DuckDB connection.
+        adapter: Any object implementing the :class:`SourceAdapter` protocol.
+
+    Raises:
+        SchemaValidationError: If the adapter's view does not conform to the
+            required schema.
+        TypeError: If *adapter* does not implement the SourceAdapter protocol.
+    """
+    if not isinstance(adapter, SourceAdapter):
+        raise TypeError(
+            f"Expected a SourceAdapter, got {type(adapter).__name__}. "
+            f"Ensure your adapter implements register() and unregister()."
+        )
+    adapter.register(con)
+
+
+def detach(con, adapter: "SourceAdapter") -> None:
+    """
+    Unregisters a :class:`~fhir4ds.sources.base.SourceAdapter`, dropping the
+    ``resources`` view and releasing any external connections held by the adapter.
+
+    Args:
+        con: An active DuckDB connection.
+        adapter: The adapter to unregister.
+    """
+    adapter.unregister(con)
+
 __all__ = [
     # Connection helper
     "create_connection",
@@ -92,4 +132,10 @@ __all__ = [
     # SQL-on-FHIR v2
     "generate_view_sql",
     "parse_view_definition",
+    # Zero-ETL source adapters
+    "SourceAdapter",
+    "SchemaValidationError",
+    "attach",
+    "detach",
+    "sources",
 ]
