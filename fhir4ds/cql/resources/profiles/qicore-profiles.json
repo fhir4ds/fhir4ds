@@ -190,6 +190,10 @@
             "blood-pressure"
         ]
     },
+    "component_resource_types": {
+        "_comment": "Resource types that support component elements for composite observations",
+        "types": ["Observation"]
+    },
     "property_extensions": {
         "ServiceRequest.recorded": {
             "url": "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-recorded",

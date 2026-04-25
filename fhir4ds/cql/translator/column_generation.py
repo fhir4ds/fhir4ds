@@ -207,10 +207,11 @@ def get_default_property_paths(
     """
     column_mappings = fhir_schema.column_mappings if fhir_schema else {}
     paths = set(column_mappings.keys())
-    if profile_url and resource_type == "Observation" and profile_registry:
-        # Only Observation resources support FHIR `component` elements.
-        # Profile keywords (e.g., "blood-pressure") are loaded from JSON config.
-        keywords = profile_registry.component_profile_keywords
-        if any(kw in profile_url for kw in keywords):
-            paths |= BP_COMPONENT_PROPERTY_PATHS
+    if profile_url and profile_registry:
+        component_resource_types = profile_registry.component_resource_types
+        if resource_type in component_resource_types:
+            # Profile keywords (e.g., "blood-pressure") are loaded from JSON config.
+            keywords = profile_registry.component_profile_keywords
+            if any(kw in profile_url for kw in keywords):
+                paths |= BP_COMPONENT_PROPERTY_PATHS
     return paths
