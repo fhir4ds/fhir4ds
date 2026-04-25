@@ -162,23 +162,27 @@ def _time_boundary(data, precision, fill):
     ms = fill["ms"]
     tz = match_list[4] if len(match_list) > 4 and match_list[4] else ""
 
-    # Preserve the 'T' prefix only when the input had it (FHIRPath literals
-    # use @T14:30 format; FHIR resource values use 14:30 without 'T').
-    prefix = "T" if data.asStr.startswith("T") else ""
-
     if precision is not None:
-        if precision <= 2:
-            result = f"{prefix}{hour}"
-        elif precision <= 4:
-            result = f"{prefix}{hour}:{minute}"
-        elif precision <= 6:
-            result = f"{prefix}{hour}:{minute}:{second}"
-        else:
-            result = f"{prefix}{hour}:{minute}:{second}.{ms}"
+        # When an explicit precision is given, the result is always a FHIRPath
+        # Time literal (@T...).  FHIRPath time literals ALWAYS carry the 'T'
+        # prefix regardless of the source format.  The FHIRPath parser strips
+        # '@T' before constructing FP_Time, so we cannot rely on asStr here.
+        result = f"T{hour}"
+        if precision > 2:
+            result += f":{minute}"
+        if precision > 4:
+            result += f":{second}"
+        if precision > 6:
+            result += f".{ms}"
             if tz:
                 result += tz
         return ["@" + result]
 
+    # No explicit precision: return a raw time string preserving the source
+    # format.  FHIR resource time values omit the 'T' prefix (e.g. "12:34"),
+    # while any input that explicitly included 'T' keeps it.  This raw format
+    # is used by ViewDefinition column projections.
+    prefix = "T" if data.asStr.startswith("T") else ""
     result = f"{prefix}{hour}:{minute}:{second}.{ms}"
     if tz:
         result += tz
