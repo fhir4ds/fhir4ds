@@ -3072,10 +3072,12 @@ class QueryMixin:
                     sort_by = None
                     if _sort_ident_name and _sort_ident_name in _col_aliases:
                         sort_by = SQLIdentifier(name=_sort_ident_name)
-                    else:
-                        # Complex expression (e.g. effective.earliest()) or
-                        # identifier not matching a column alias — translate
+                    elif not _sort_ident_name:
+                        # Complex expression (e.g. effective.earliest()) — translate
                         sort_by = self.translate(sort_item.expression, usage=ExprUsage.SCALAR)
+                    # else: simple identifier doesn't match any output column — skip sort
+                    # to avoid referencing out-of-scope query aliases (e.g. CQL let-bindings
+                    # that resolve to source aliases not present in the SQL scope)
                     if sort_by is not None:
                         result = SQLSelect(
                             columns=result.columns,
