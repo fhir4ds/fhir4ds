@@ -1783,7 +1783,13 @@ class CQLParser:
     def _parse_parenthesized_or_tuple(self) -> Expression:
         """Parse a parenthesized expression or tuple."""
         self.expect(TokenType.LPAREN, "Expected '('")
-        expr = self.parse_expression()
+        try:
+            expr = self.parse_expression()
+        except RecursionError:
+            raise ParseError(
+                message="Expression exceeds maximum nesting depth. "
+                "Simplify the expression or reduce parenthesization."
+            ) from None
 
         if self.match_and_advance(TokenType.COMMA):
             # This is a tuple

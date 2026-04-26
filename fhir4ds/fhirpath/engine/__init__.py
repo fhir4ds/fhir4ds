@@ -6,7 +6,7 @@ from ..engine.evaluators import evaluators
 from ..engine.invocations import (
     invocation_registry as base_invocation_registry,
 )
-from .errors import FHIRPathError
+from .errors import FHIRPathError, FHIRPathEvaluationError
 
 
 def check_integer_param(val):
@@ -43,7 +43,13 @@ def do_eval(ctx, parentData, node):
 
     if node_type in evaluators:
         evaluator = evaluators.get(node_type)
-        return evaluator(ctx, parentData, node)
+        try:
+            return evaluator(ctx, parentData, node)
+        except RecursionError:
+            raise FHIRPathEvaluationError(
+                "Expression exceeds maximum nesting depth. "
+                "Simplify the expression or increase Python's recursion limit."
+            ) from None
 
     raise FHIRPathError("No " + node_type + " evaluator ")
 

@@ -158,6 +158,9 @@ def translate_cql(cql_text: str, connection: Optional[Any] = None) -> Dict[str, 
         results = translate_cql(cql)
         print(results["Active Patients"].to_sql())
     """
+    if not isinstance(cql_text, str) or not cql_text.strip():
+        raise ValueError("cql_text must be a non-empty string")
+
     from ..parser import parse_cql
 
     library = parse_cql(cql_text)

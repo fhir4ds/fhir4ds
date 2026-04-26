@@ -37,10 +37,17 @@ class MeasureParser:
         """Parse a FHIR Measure resource (or Bundle containing one) into a PopulationMap.
 
         Raises:
-            MeasureParseError: If no group element found or required fields missing.
+            MeasureParseError: If no group element found, required fields missing,
+                or resourceType is not 'Measure'.
         """
         if measure.get("resourceType") == "Bundle":
             measure = self._extract_measure_from_bundle(measure)
+
+        rt = measure.get("resourceType")
+        if rt != "Measure":
+            raise MeasureParseError(
+                f"Expected resourceType 'Measure', got '{rt}'"
+            )
 
         measure_id = measure.get("id", "unknown")
         cql_ref = self._extract_cql_library_ref(measure)
