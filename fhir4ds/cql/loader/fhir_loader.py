@@ -187,7 +187,15 @@ class FHIRDataLoader:
         Load all resources from a FHIR Bundle.
 
         Returns the number of resources loaded.
+
+        Raises:
+            TypeError: If bundle is not a dict.
+            ValueError: If bundle is not a FHIR Bundle resource.
         """
+        if not isinstance(bundle, dict):
+            raise TypeError(
+                f"Expected dict for bundle, got {type(bundle).__name__}"
+            )
         if bundle.get("resourceType") != "Bundle":
             raise ValueError("Expected a FHIR Bundle resource")
 

@@ -153,6 +153,15 @@ def register(
     Returns
     -------
     dict  ``{"fhirpath_cpp": bool, "cql_cpp": bool}``
+
+    Raises
+    ------
+    TypeError
+        If *con* is not a DuckDB connection.
     """
+    if con is None:
+        raise TypeError(
+            "Expected a DuckDB connection for 'con', got None"
+        )
     cql_cpp = register_cql(con, valueset_cache=valueset_cache)
     return {"fhirpath_cpp": cql_cpp, "cql_cpp": cql_cpp}

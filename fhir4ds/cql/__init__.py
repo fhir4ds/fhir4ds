@@ -319,6 +319,10 @@ def evaluate_measure(
     from .translator import CQLToSQLTranslator
 
     # Validate connection
+    if conn is None:
+        raise TypeError(
+            "Expected a DuckDB connection for 'conn', got None"
+        )
     try:
         conn.execute("SELECT 1").fetchone()
     except _duckdb_mod.ConnectionException:

@@ -43,6 +43,11 @@ def evaluate_measure(
     """
     from fhir4ds.cql import evaluate_measure as _evaluate
 
+    if conn is None:
+        raise TypeError(
+            "Expected a DuckDB connection for 'conn', got None"
+        )
+
     call_kwargs: dict[str, Any] = {
         "library_path": library_path,
         "conn": conn,
