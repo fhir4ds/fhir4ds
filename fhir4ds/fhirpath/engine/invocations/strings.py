@@ -199,13 +199,16 @@ def join(ctx, coll, separator=""):
 
 
 def matches(ctx, coll, regex):
-    """FHIRPath matches() — partial regex match (R4 semantics)."""
+    """FHIRPath matches() — full-string regex match (FHIRPath §5.7.2).
+
+    Returns true only when the *entire* string matches the given regex.
+    """
     if not regex or not coll:
         return []
 
     string = ensure_string_singleton(coll)
     valid = _compile_regex(regex, re.DOTALL)
-    return re.search(valid, string) is not None
+    return re.fullmatch(valid, string) is not None
 
 
 def replace(ctx, coll, regex, repl):
