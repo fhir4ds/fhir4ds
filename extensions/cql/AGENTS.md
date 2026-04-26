@@ -7,7 +7,7 @@ Native C++ DuckDB extension implementing Clinical Quality Language (CQL) operati
 Requires: Visual Studio 2022 (or compatible C++ compiler), CMake 3.5+
 
 ```bash
-# 1. Ensure submodules are present (duckdb @ v1.5.0, extension-ci-tools)
+# 1. Ensure submodules are present (duckdb @ v1.5.2, extension-ci-tools)
 git submodule update --init --recursive
 
 # 2. Configure
@@ -28,11 +28,11 @@ On Windows with VS 2022, use the full cmake path:
 
 ## DuckDB Version Compatibility
 
-Pinned to **DuckDB v1.5.0**. Key constraints:
+Pinned to **DuckDB v1.5.2**. Key constraints:
 
 - **C++11 only** — DuckDB compiles with C++11. This extension uses `cql::Optional<T>` (in `src/cql/optional.hpp`) instead of `std::optional`. No `std::variant`, `std::string_view`, structured bindings, or other C++17+ features.
 - **yyjson namespace** — yyjson types are in `namespace duckdb_yyjson`. All .cpp files that use yyjson must have `using namespace duckdb_yyjson;`. Do NOT forward-declare `yyjson_doc`/`yyjson_val` in global scope.
-- **No `ExtensionUtil`** — Removed in v1.5.0 (triggers static_assert). Use `ExtensionLoader` and `loader.RegisterFunction()`.
+- **No `ExtensionUtil`** — Removed in v1.5.0. Use `ExtensionLoader` and `loader.RegisterFunction()`.
 - **`ListVector::GetData()` returns a pointer** — Use `auto list_entries = ...` not `auto &list_entries = ...`.
 
 ## Architecture

@@ -48,6 +48,7 @@ def register_cql(
     Returns True if the CQL C++ extension was loaded.
     """
     import logging
+    import duckdb as _duckdb_mod
     _logger = logging.getLogger("fhir4ds.core")
 
     from fhir4ds.fhirpath.duckdb.extension import register_fhirpath as _fhirpath_register
@@ -120,7 +121,7 @@ def register_cql(
     from fhir4ds.cql.duckdb.macros import register_all_macros
     try:
         register_all_macros(con)
-    except Exception:
+    except (_duckdb_mod.CatalogException, _duckdb_mod.InvalidInputException):
         pass  # some macros may conflict with C++ functions; that's OK
 
     # Step 3: ValueSet expansion always uses Python

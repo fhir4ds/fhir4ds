@@ -74,6 +74,16 @@ def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
 
     Returns True if the C++ extension was loaded, False otherwise.
     """
+    # Version pre-flight: bundled binary is built for DuckDB 1.5.x
+    _duckdb_version = duckdb.__version__
+    if not _duckdb_version.startswith("1.5."):
+        _logger.info(
+            "duckdb_fhirpath_py: skipping C++ extension (built for DuckDB 1.5.x, running %s). "
+            "Falling back to Python UDFs.",
+            _duckdb_version,
+        )
+        return False
+
     from pathlib import Path
     ext_path = Path(__file__).parent / "extensions" / "fhirpath.duckdb_extension"
     if not ext_path.exists():

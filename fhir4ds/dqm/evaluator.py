@@ -190,6 +190,12 @@ class MeasureEvaluator:
         denom_final = denom - denom_excl - denom_except
         numer_final = numer - numer_excl
 
+        # CQL §10: Numerator is a subset of Denominator — cap numer_final
+        # to denom_final so excluded-denominator patients are also removed
+        # from the numerator count.
+        if denom_final >= 0 and numer_final > denom_final:
+            numer_final = denom_final
+
         if denom_final < 0:
             raise DQMError(
                 f"Negative denominator_final ({denom_final}): denominator({denom}) < "
@@ -388,19 +394,14 @@ class MeasureEvaluator:
 
         # Reuse cached registries to avoid ~1.5MB allocation per call
         if self._cached_fhir_schema is not None:
-            translator._fhir_schema = self._cached_fhir_schema
-            translator._context.fhir_schema = self._cached_fhir_schema
-            translator._context.column_mappings = self._cached_fhir_schema.column_mappings
-            translator._context.choice_type_prefixes = self._cached_fhir_schema.choice_type_prefixes
+            translator.fhir_schema = self._cached_fhir_schema
         else:
-            self._cached_fhir_schema = translator._fhir_schema
+            self._cached_fhir_schema = translator.fhir_schema
 
         if self._cached_profile_registry is not None:
-            translator._profile_registry = self._cached_profile_registry
-            translator._context.profile_registry = self._cached_profile_registry
-            translator._context.extension_paths = self._cached_profile_registry.extension_paths
+            translator.profile_registry = self._cached_profile_registry
         else:
-            self._cached_profile_registry = translator._profile_registry
+            self._cached_profile_registry = translator.profile_registry
 
         if audit_mode == AuditMode.FULL:
             translator.context.set_audit_mode(True)

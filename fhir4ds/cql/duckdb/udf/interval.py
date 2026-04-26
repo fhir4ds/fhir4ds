@@ -1173,12 +1173,14 @@ def intervalOverlapsBefore(interval1: str | None, interval2: str | None) -> bool
     overlaps = intervalOverlaps(interval1, interval2)
     if not overlaps:
         return False
-    # Compare starts: None low means -infinity (always before)
-    if iv1["low"] is None:
+    # Compare effective starts (accounts for open bounds via successor)
+    s1 = _effective_start(iv1)
+    s2 = _effective_start(iv2)
+    if s1 is None:
         return True  # -infinity is before any start
-    if iv2["low"] is None:
+    if s2 is None:
         return False  # can't start before -infinity
-    l1, l2 = _normalize_for_compare(iv1["low"], iv2["low"])
+    l1, l2 = _normalize_for_compare(s1, s2)
     return l1 < l2
 
 
@@ -1195,12 +1197,14 @@ def intervalOverlapsAfter(interval1: str | None, interval2: str | None) -> bool 
     overlaps = intervalOverlaps(interval1, interval2)
     if not overlaps:
         return False
-    # Compare ends: None high means +infinity (always after)
-    if iv1["high"] is None:
+    # Compare effective ends (accounts for open bounds via predecessor)
+    e1 = _effective_end(iv1)
+    e2 = _effective_end(iv2)
+    if e1 is None:
         return True  # +infinity is after any end
-    if iv2["high"] is None:
+    if e2 is None:
         return False  # can't end after +infinity
-    h1, h2 = _normalize_for_compare(iv1["high"], iv2["high"])
+    h1, h2 = _normalize_for_compare(e1, e2)
     return h1 > h2
 
 
@@ -1241,7 +1245,8 @@ def intervalStartsSame(interval1: str | None, interval2: str | None) -> bool | N
         return None
     if iv1["low"] is None or iv2["low"] is None:
         return None
-    if iv1["low"] != iv2["low"]:
+    l1, l2 = _normalize_for_compare(iv1["low"], iv2["low"])
+    if l1 != l2:
         return False
     # CQL Starts also requires iv1.end <= iv2.end (containment at end)
     end1 = _effective_end(iv1)
@@ -1263,7 +1268,8 @@ def intervalEndsSame(interval1: str | None, interval2: str | None) -> bool | Non
         return None
     if iv1["high"] is None or iv2["high"] is None:
         return None
-    if iv1["high"] != iv2["high"]:
+    h1, h2 = _normalize_for_compare(iv1["high"], iv2["high"])
+    if h1 != h2:
         return False
     # CQL Ends also requires iv1.start >= iv2.start (containment at start)
     start1 = _effective_start(iv1)
@@ -1451,11 +1457,31 @@ def intervalUnion(interval1: str | None, interval2: str | None) -> str | None:
 
             # Check if iv1 is entirely before iv2
             if h1 < l2:
-                overlap = False
+                # Before concluding no overlap, check for adjacency (meets)
+                # via successor: if successor(iv1.high) == iv2.low, they meet
+                try:
+                    succ = _successor(high1)
+                    if succ is not None:
+                        s, l2n = _normalize_for_compare(succ, low2)
+                        if s == l2n:
+                            overlap = True
+                except Exception:
+                    pass
+                if not overlap:
+                    # Also check reverse direction
+                    pass
             elif h1 > l2:
                 # iv1.high > iv2.low → must also check iv2.high >= iv1.low
                 if h2 < l1:
-                    overlap = False
+                    # Check successor for reverse adjacency
+                    try:
+                        succ = _successor(high2)
+                        if succ is not None:
+                            s, l1n = _normalize_for_compare(succ, low1)
+                            if s == l1n:
+                                overlap = True
+                    except Exception:
+                        pass
                 else:
                     overlap = True
             else:

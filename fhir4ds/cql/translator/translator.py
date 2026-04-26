@@ -267,6 +267,31 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         """Get the current translation context."""
         return self._context
 
+    @property
+    def fhir_schema(self):
+        """Get the FHIR schema registry."""
+        return self._fhir_schema
+
+    @fhir_schema.setter
+    def fhir_schema(self, schema):
+        """Set the FHIR schema registry and sync to translation context."""
+        self._fhir_schema = schema
+        self._context.fhir_schema = schema
+        self._context.column_mappings = schema.column_mappings
+        self._context.choice_type_prefixes = schema.choice_type_prefixes
+
+    @property
+    def profile_registry(self):
+        """Get the profile registry."""
+        return self._profile_registry
+
+    @profile_registry.setter
+    def profile_registry(self, registry):
+        """Set the profile registry and sync to translation context."""
+        self._profile_registry = registry
+        self._context.profile_registry = registry
+        self._context.extension_paths = registry.extension_paths
+
     def set_library_loader(
         self, loader: Optional[Callable[[str], Optional[Library]]]
     ) -> None:

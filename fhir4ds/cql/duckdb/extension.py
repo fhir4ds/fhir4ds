@@ -33,6 +33,16 @@ def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
 
     Returns True if loaded successfully, False otherwise.
     """
+    # Version pre-flight: bundled binary is built for DuckDB 1.5.x
+    _duckdb_version = duckdb.__version__
+    if not _duckdb_version.startswith("1.5."):
+        _logger.info(
+            "duckdb_cql_py: skipping C++ extension (built for DuckDB 1.5.x, running %s). "
+            "Falling back to Python UDFs.",
+            _duckdb_version,
+        )
+        return False
+
     ext_path = Path(__file__).parent / "extensions" / "cql.duckdb_extension"
     if not ext_path.exists():
         return False
@@ -82,7 +92,7 @@ def _register_python_supplements(
     from .macros import register_all_macros
     try:
         register_all_macros(con)
-    except Exception:
+    except (duckdb.CatalogException, duckdb.InvalidInputException):
         pass  # some macros may conflict with C++ functions; that's OK
 
     # When C++ is loaded, wrap the connection so create_function silently
@@ -94,7 +104,7 @@ def _register_python_supplements(
         def create_function(self, name, *args, **kwargs):
             try:
                 return self._real.create_function(name, *args, **kwargs)
-            except Exception:
+            except (duckdb.CatalogException, duckdb.InvalidInputException):
                 _logger.debug("Skipping Python UDF %s (C++ conflict)", name)
         def __getattr__(self, name):
             return getattr(self._real, name)
