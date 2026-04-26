@@ -495,6 +495,39 @@ def intervalWidth(interval: str | None) -> str | None:
     return str(high - low)
 
 
+def interval_size(interval: str | None) -> str | None:
+    """Get the size of an interval (number of discrete values).
+
+    CQL §19.18: Size(I) = Width(I) + point-size, where point-size is the
+    smallest meaningful difference for the point type.
+    For integer intervals: Size = high - low + 1.
+    For decimal intervals: Size = high - low + minimum precision.
+    For date/time intervals: same limitation as Width (not defined).
+    """
+    if interval is None:
+        return None
+    iv = _parse_interval(interval)
+    if not iv or iv["low"] is None or iv["high"] is None:
+        return None
+
+    low = iv["low"]
+    high = iv["high"]
+
+    if isinstance(low, (datetime, date)) or isinstance(high, (datetime, date)):
+        raise ValueError(
+            "The Size operator is not defined for date/time intervals. "
+            "Use 'duration in' instead (CQL §19.18)."
+        )
+
+    if isinstance(low, int) and isinstance(high, int):
+        return str(high - low + 1)
+
+    if isinstance(low, (int, float)) and isinstance(high, (int, float)):
+        return str(high - low + 1e-8)
+
+    return str(high - low)
+
+
 def intervalContains(interval: str | None, point: str | None) -> bool | None:
     """Check if interval contains a point or another interval.
 
@@ -2364,6 +2397,7 @@ def registerIntervalUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("intervalStart", intervalStart, null_handling="special")
     con.create_function("intervalEnd", intervalEnd, null_handling="special")
     con.create_function("intervalWidth", intervalWidth, null_handling="special")
+    con.create_function("interval_size", interval_size, null_handling="special")
     con.create_function("intervalContains", intervalContains, null_handling="special")
     con.create_function("intervalProperlyContains", intervalProperlyContains, null_handling="special")
     con.create_function("intervalOverlaps", intervalOverlaps, null_handling="special")
@@ -2399,6 +2433,7 @@ __all__ = [
     "intervalStart",
     "intervalEnd",
     "intervalWidth",
+    "interval_size",
     "intervalContains",
     "intervalProperlyContains",
     "intervalOverlaps",

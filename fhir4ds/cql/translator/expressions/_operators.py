@@ -1138,9 +1138,9 @@ class OperatorsMixin:
 
     def _translate_in_op(self, operator, left, right, expr, boolean_context) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
-        # CQL §20.10/§20.5: X in null_list → false (not null)
+        # CQL §20.10: If the list argument is null, the result is null.
         if isinstance(right, SQLNull) or (isinstance(right, SQLLiteral) and right.value is None):
-            return SQLLiteral(False)
+            return SQLNull()
         # Do NOT short-circuit when left is null — list `in` has special
         # null semantics: null in list → true if list has null elements.
         # (This is handled by the list_has_null check below.)

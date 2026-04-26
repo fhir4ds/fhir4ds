@@ -453,6 +453,17 @@ class FunctionsMixin:
                     ],
                 )
 
+        # Step 2c2: CQL Size — list element count (CQL §12.4)
+        # Size(list) returns the number of elements, null list → 0
+        if name == "Size" and len(args) == 1:
+            return SQLFunctionCall(
+                name="COALESCE",
+                args=[
+                    SQLFunctionCall(name="array_length", args=args),
+                    SQLLiteral(0),
+                ],
+            )
+
         # Step 3: Check registry for simple renames and parameterized translations
         strategy = self._function_registry.get(name, arity)
         if isinstance(strategy, SimpleRename):

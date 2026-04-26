@@ -815,6 +815,10 @@ class CQLParser:
                 elif self.match_and_advance(TokenType.IN):
                     right = self.parse_type_expression()
                     left = BinaryExpression(operator="properly in", left=left, right=right)
+                elif self.match_and_advance(TokenType.DURING):
+                    # CQL §9.17: "properly during" is a synonym for "properly included in"
+                    right = self.parse_type_expression()
+                    left = BinaryExpression(operator="properly included in", left=left, right=right)
                 else:
                     # Unknown properly combination
                     break
