@@ -1781,7 +1781,7 @@ FPCollection Evaluator::fn_matches(const FPCollection &input, const FPCollection
 			}
 		}
 		const auto &re2 = get_cached_regex(dotall_pattern);
-		return {FPValue::FromBoolean(std::regex_search(s, re2))};
+		return {FPValue::FromBoolean(std::regex_match(s, re2))};
 	} catch (const std::exception &) {
 		return {};
 	}

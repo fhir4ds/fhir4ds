@@ -95,7 +95,7 @@ def register_cql(
         def create_function(self, name, *args, **kwargs):
             try:
                 return self._real.create_function(name, *args, **kwargs)
-            except Exception as e:
+            except (_duckdb_mod.CatalogException, _duckdb_mod.InvalidInputException) as e:
                 self._logger.debug("Skipping Python UDF %s (C++ conflict): %s", name, e)
         def __getattr__(self, name):
             return getattr(self._real, name)
@@ -113,7 +113,7 @@ def register_cql(
     ]:
         try:
             fn(reg_con)
-        except Exception as e:
+        except (_duckdb_mod.CatalogException, _duckdb_mod.InvalidInputException) as e:
             _logger.debug("UDF group %s registration: %s", label, e)
 
     # Step 2b: Always register SQL macros — they supplement both C++ and Python UDFs

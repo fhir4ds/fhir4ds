@@ -249,35 +249,48 @@ def _parse_interval(value: str) -> dict | None:
     # Integer: successor/predecessor is ±1
     # Date: successor/predecessor is ±1 day
     # DateTime: successor/predecessor is ±1 millisecond
+    low_normalized = False
+    high_normalized = False
     if low is not None and not low_closed:
         if isinstance(low, int):
             low = low + 1
             low_closed = True
+            low_normalized = True
         elif isinstance(low, date) and not isinstance(low, datetime):
             low = low + timedelta(days=1)
             low_closed = True
+            low_normalized = True
         elif isinstance(low, datetime):
             low = low + timedelta(milliseconds=1)
             low_closed = True
+            low_normalized = True
     if high is not None and not high_closed:
         if isinstance(high, int):
             high = high - 1
             high_closed = True
+            high_normalized = True
         elif isinstance(high, date) and not isinstance(high, datetime):
             high = high - timedelta(days=1)
             high_closed = True
+            high_normalized = True
         elif isinstance(high, datetime):
             high = high - timedelta(milliseconds=1)
             high_closed = True
+            high_normalized = True
+
+    # Raw values for precision-aware comparison.  When a bound was
+    # normalized (open→closed), invalidate the stale raw value so
+    # callers fall back to the already-adjusted parsed value.
+    low_raw = None if low_normalized else (data.get("low") or data.get("start"))
+    high_raw = None if high_normalized else (data.get("high") or data.get("end"))
 
     return {
         "low": low,
         "high": high,
         "low_closed": low_closed,
         "high_closed": high_closed,
-        # Preserve raw string values for precision-aware comparison
-        "low_raw": data.get("low") or data.get("start"),
-        "high_raw": data.get("high") or data.get("end"),
+        "low_raw": low_raw,
+        "high_raw": high_raw,
     }
 
 
