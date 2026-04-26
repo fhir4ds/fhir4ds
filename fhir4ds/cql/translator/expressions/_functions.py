@@ -115,6 +115,20 @@ class FunctionsMixin:
                     return True
         return False
 
+    def _unwrap_list_source(self, arg):
+        """Unwrap a potential list argument for aggregate handling.
+
+        Returns the underlying expression if *arg* is a ``ListExpression`` or
+        a type-cast wrapping one (``{…} as List<T>``).  Returns ``None`` when
+        *arg* is not a recognisable list source.
+        """
+        from ...parser.ast_nodes import ListExpression
+        if isinstance(arg, ListExpression):
+            return arg
+        if self._is_list_typed_ast(arg):
+            return getattr(arg, 'left', None)
+        return None
+
     def _wrap_list_aggregate(
         self, agg_func: str, source_sql: SQLExpression
     ) -> Optional[SQLExpression]:
@@ -453,9 +467,13 @@ class FunctionsMixin:
                     ],
                 )
 
-        # Step 2c2: CQL Size — list element count (CQL §12.4)
-        # Size(list) returns the number of elements, null list → 0
+        # Step 2c2: CQL Size — polymorphic over List and Interval
+        # Size(list)     → number of elements, null list → 0  (CQL §12.4)
+        # Size(interval) → interval width via interval_size UDF (CQL §19.18)
         if name == "Size" and len(args) == 1:
+            raw_arg = func.arguments[0]
+            if isinstance(raw_arg, Interval):
+                return SQLFunctionCall(name="interval_size", args=args)
             return SQLFunctionCall(
                 name="COALESCE",
                 args=[
@@ -674,16 +692,19 @@ class FunctionsMixin:
         if name.lower() in _BOOL_AGG_UDF:
             scalar = self.translate(arg, usage=ExprUsage.SCALAR)
             return SQLFunctionCall(name=_BOOL_AGG_UDF[name.lower()], args=[scalar])
-        # Min/Max on list literals
-        if name.lower() in ("min", "max") and isinstance(arg, ListExpression):
-            source_sql = self.translate(arg, usage=ExprUsage.SCALAR)
-            if isinstance(source_sql, SQLArray):
-                list_func = "list_min" if name.lower() == "min" else "list_max"
-                return SQLFunctionCall(name=list_func, args=[source_sql])
+        # Min/Max on list literals (including type-cast lists — CQL §20.11-20.12)
+        if name.lower() in ("min", "max"):
+            _list_src = self._unwrap_list_source(arg)
+            if _list_src is not None:
+                source_sql = self.translate(_list_src, usage=ExprUsage.SCALAR)
+                if isinstance(source_sql, SQLArray) or _is_list_returning_sql(source_sql):
+                    list_func = "list_min" if name.lower() == "min" else "list_max"
+                    return SQLFunctionCall(name=list_func, args=[source_sql])
 
         # Count/Sum/Avg/StdDev/Variance/Product on list literals — use DuckDB list functions
-        if isinstance(arg, ListExpression):
-            source_sql = self.translate(arg, usage=ExprUsage.SCALAR)
+        _list_src = self._unwrap_list_source(arg)
+        if _list_src is not None:
+            source_sql = self.translate(_list_src, usage=ExprUsage.SCALAR)
             if isinstance(source_sql, SQLArray):
                 if name.lower() == "count":
                     # CQL §20.5: Count returns number of non-null elements
