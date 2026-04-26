@@ -141,7 +141,7 @@ class FunctionsMixin:
             # Inject patient correlation when the inner query sources from a
             # CTE (which contains all patients' rows) and we are inside a
             # patient-scoped context.
-            _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+            _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
             _src_alias = None
             _fc = inner_query.from_clause
             if isinstance(_fc, SQLAlias):
@@ -354,7 +354,7 @@ class FunctionsMixin:
         )
 
         # Inject patient correlation.
-        _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+        _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
         if _src_alias:
             _corr = SQLBinaryOp(
                 operator="=",
@@ -571,7 +571,7 @@ class FunctionsMixin:
                 if agg_func == "COUNT"
                 else SQLFunctionCall(name=agg_func, args=[SQLQualifiedIdentifier(parts=["_agg_src", "resource"])])
             )
-            _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+            _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
             correlated = SQLSubquery(query=SQLSelect(
                 columns=[agg_col],
                 from_clause=SQLAlias(expr=placeholder, alias="_agg_src"),
@@ -1141,7 +1141,7 @@ class FunctionsMixin:
                     outer_pid = (
                         self.context.resource_alias
                         or self.context.patient_alias
-                        or "p"
+                        or "_pt"
                     )
                     arg = SQLSubquery(query=SQLSelect(
                         columns=[SQLFunctionCall(
@@ -1310,9 +1310,9 @@ class FunctionsMixin:
         """
         # Build the subquery: SELECT 1 FROM "CTE" sub WHERE sub.patient_id = outer.patient_id
         # Always correlate on patient_id. During translate_library(),
-        # patient_alias is None; fall back to "p" which gets fixed up
+        # patient_alias is None; fall back to "_pt" which gets fixed up
         # later by replace_qualified_alias in translator.py.
-        outer_alias = self.context.patient_alias or "p"
+        outer_alias = self.context.patient_alias or "_pt"
         if self.context.current_patient_id:
             correlation_where = SQLBinaryOp(
                 operator="=",
@@ -1582,7 +1582,7 @@ class FunctionsMixin:
         else:
             # Use demographics CTE for birthDate access (mirrors _translate_age_at_function)
             self.context._needs_demographics = True
-            _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+            _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
             birth_date = SQLSubquery(query=SQLSelect(
                 columns=[SQLQualifiedIdentifier(parts=["_pd", "birth_date"])],
                 from_clause=SQLAlias(
@@ -1637,7 +1637,7 @@ class FunctionsMixin:
             }
             unit = unit_map.get(name.lower(), "year")
 
-            _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+            _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
             birth_date = SQLSubquery(query=SQLSelect(
                 columns=[SQLQualifiedIdentifier(parts=["_pd", "birth_date"])],
                 from_clause=SQLAlias(

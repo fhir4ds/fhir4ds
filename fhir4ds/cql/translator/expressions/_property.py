@@ -295,7 +295,7 @@ class PropertyMixin:
                     # list_apply() cannot be used here because the CTE reference
                     # resolves to a single JOIN row (j1.resource), not a DuckDB LIST.
                     func_name = self._infer_fhirpath_func_for_property(path, boolean_context)
-                    _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+                    _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
                     result = SQLSubquery(query=SQLSelect(
                         columns=[SQLFunctionCall(
                             name=func_name,

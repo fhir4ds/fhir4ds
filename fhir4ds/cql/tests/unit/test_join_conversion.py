@@ -31,11 +31,11 @@ class TestSQLJoin:
             on_condition=SQLBinaryOp(
                 operator="=",
                 left=SQLQualifiedIdentifier(parts=["j1", "patient_ref"]),
-                right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
             ),
         )
         sql = join.to_sql()
-        assert sql == "LEFT JOIN _sq_14 AS j1 ON j1.patient_ref = p.patient_id"
+        assert sql == "LEFT JOIN _sq_14 AS j1 ON j1.patient_ref = _pt.patient_id"
 
     def test_inner_join(self):
         """Test INNER JOIN generation."""
@@ -46,11 +46,11 @@ class TestSQLJoin:
             on_condition=SQLBinaryOp(
                 operator="=",
                 left=SQLQualifiedIdentifier(parts=["c", "subject"]),
-                right=SQLQualifiedIdentifier(parts=["p", "id"]),
+                right=SQLQualifiedIdentifier(parts=["_pt", "id"]),
             ),
         )
         sql = join.to_sql()
-        assert sql == "INNER JOIN conditions AS c ON c.subject = p.id"
+        assert sql == "INNER JOIN conditions AS c ON c.subject = _pt.id"
 
     def test_join_without_alias(self):
         """Test JOIN without alias."""
@@ -60,11 +60,11 @@ class TestSQLJoin:
             on_condition=SQLBinaryOp(
                 operator="=",
                 left=SQLQualifiedIdentifier(parts=["resources", "patient_ref"]),
-                right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
             ),
         )
         sql = join.to_sql()
-        assert sql == "LEFT JOIN resources ON resources.patient_ref = p.patient_id"
+        assert sql == "LEFT JOIN resources ON resources.patient_ref = _pt.patient_id"
 
     def test_join_without_on_condition(self):
         """Test CROSS JOIN without ON condition."""
@@ -99,21 +99,21 @@ class TestSQLSelectWithJoins:
             on_condition=SQLBinaryOp(
                 operator="=",
                 left=SQLQualifiedIdentifier(parts=["bp", "patient_ref"]),
-                right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
             ),
         )
         select = SQLSelect(
             columns=[
-                SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                 SQLQualifiedIdentifier(parts=["bp", "resource"]),
             ],
-            from_clause=SQLIdentifier(name="patients AS p"),
+            from_clause=SQLIdentifier(name="patients AS _pt"),
             joins=[join],
         )
         sql = select.to_sql()
         # SQLIdentifier quotes names with spaces/reserved words
-        assert 'FROM "patients AS p"' in sql
-        assert "LEFT JOIN _sq_14 AS bp ON bp.patient_ref = p.patient_id" in sql
+        assert 'FROM "patients AS _pt"' in sql
+        assert "LEFT JOIN _sq_14 AS bp ON bp.patient_ref = _pt.patient_id" in sql
 
     def test_select_with_multiple_joins(self):
         """Test SELECT with multiple JOINs."""
@@ -124,7 +124,7 @@ class TestSQLSelectWithJoins:
             on_condition=SQLBinaryOp(
                 operator="=",
                 left=SQLQualifiedIdentifier(parts=["j1", "patient_ref"]),
-                right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
             ),
         )
         join2 = SQLJoin(
@@ -134,12 +134,12 @@ class TestSQLSelectWithJoins:
             on_condition=SQLBinaryOp(
                 operator="=",
                 left=SQLQualifiedIdentifier(parts=["j2", "patient_ref"]),
-                right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
             ),
         )
         select = SQLSelect(
-            columns=[SQLQualifiedIdentifier(parts=["p", "patient_id"])],
-            from_clause=SQLIdentifier(name="patients AS p"),
+            columns=[SQLQualifiedIdentifier(parts=["_pt", "patient_id"])],
+            from_clause=SQLIdentifier(name="patients AS _pt"),
             joins=[join1, join2],
         )
         sql = select.to_sql()
@@ -149,13 +149,13 @@ class TestSQLSelectWithJoins:
     def test_select_without_joins(self):
         """Test that SELECT without joins still works."""
         select = SQLSelect(
-            columns=[SQLQualifiedIdentifier(parts=["p", "patient_id"])],
-            from_clause=SQLIdentifier(name="patients AS p"),
+            columns=[SQLQualifiedIdentifier(parts=["_pt", "patient_id"])],
+            from_clause=SQLIdentifier(name="patients AS _pt"),
         )
         sql = select.to_sql()
         assert "JOIN" not in sql
         # SQLIdentifier quotes names with spaces/reserved words
-        assert 'FROM "patients AS p"' in sql
+        assert 'FROM "patients AS _pt"' in sql
 
     def test_select_with_joins_and_where(self):
         """Test SELECT with JOINs and WHERE clause."""
@@ -166,12 +166,12 @@ class TestSQLSelectWithJoins:
             on_condition=SQLBinaryOp(
                 operator="=",
                 left=SQLQualifiedIdentifier(parts=["c", "patient_ref"]),
-                right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
             ),
         )
         select = SQLSelect(
-            columns=[SQLQualifiedIdentifier(parts=["p", "patient_id"])],
-            from_clause=SQLIdentifier(name="patients AS p"),
+            columns=[SQLQualifiedIdentifier(parts=["_pt", "patient_id"])],
+            from_clause=SQLIdentifier(name="patients AS _pt"),
             joins=[join],
             where=SQLBinaryOp(
                 operator="=",
@@ -240,16 +240,16 @@ class TestSQLQueryBuilder:
         builder.track_cte_reference("_sq_14")
         builder.track_cte_reference("_sq_15")
 
-        joins = builder.generate_joins(patient_alias="p")
+        joins = builder.generate_joins(patient_alias="_pt")
         assert len(joins) == 2
 
         sql1 = joins[0].to_sql()
         sql2 = joins[1].to_sql()
 
         assert "LEFT JOIN _sq_14 AS j1" in sql1
-        assert "j1.patient_id = p.patient_id" in sql1
+        assert "j1.patient_id = _pt.patient_id" in sql1
         assert "LEFT JOIN _sq_15 AS j2" in sql2
-        assert "j2.patient_id = p.patient_id" in sql2
+        assert "j2.patient_id = _pt.patient_id" in sql2
 
     def test_get_column_reference(self):
         """Test getting column reference for tracked CTE."""
@@ -297,13 +297,13 @@ class TestJoinConversionIntegration:
 
         Before:
             SELECT p.patient_id,
-                   fhirpath_text((SELECT sq.resource FROM _sq_14 sq WHERE sq.patient_ref = p.patient_id), 'status')
+                   fhirpath_text((SELECT sq.resource FROM _sq_14 sq WHERE sq.patient_ref = _pt.patient_id), 'status')
             FROM patients p
 
         After:
             SELECT p.patient_id, fhirpath_text(j1.resource, 'status')
             FROM patients p
-            LEFT JOIN _sq_14 j1 ON j1.patient_ref = p.patient_id
+            LEFT JOIN _sq_14 j1 ON j1.patient_ref = _pt.patient_id
         """
         # Track CTE reference
         builder = SQLQueryBuilder()
@@ -313,16 +313,16 @@ class TestJoinConversionIntegration:
         resource_col = builder.get_column_reference("_sq_14", "resource")
 
         # Generate joins
-        joins = builder.generate_joins("p")
+        joins = builder.generate_joins("_pt")
 
         # Build the final SELECT
         select = SQLSelect(
             columns=[
-                SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                 # In real code, this would be a SQLFunctionCall
                 resource_col,
             ],
-            from_clause=SQLIdentifier(name="patients AS p"),
+            from_clause=SQLIdentifier(name="patients AS _pt"),
             joins=joins,
         )
 
@@ -331,8 +331,8 @@ class TestJoinConversionIntegration:
         # Verify the structure
         assert "SELECT p.patient_id, j1.resource" in sql
         # SQLIdentifier quotes names with spaces/reserved words
-        assert 'FROM "patients AS p"' in sql
-        assert "LEFT JOIN _sq_14 AS j1 ON j1.patient_id = p.patient_id" in sql
+        assert 'FROM "patients AS _pt"' in sql
+        assert "LEFT JOIN _sq_14 AS j1 ON j1.patient_id = _pt.patient_id" in sql
 
     def test_join_order_follows_pattern(self):
         """
@@ -348,7 +348,7 @@ class TestJoinConversionIntegration:
         builder.track_cte_reference("_sq_conditions", semantic_alias="c1")
         builder.track_cte_reference("bp_reading", semantic_alias="bp")
 
-        joins = builder.generate_joins("p")
+        joins = builder.generate_joins("_pt")
 
         # Verify order
         sql = " ".join([j.to_sql() for j in joins])

@@ -487,7 +487,7 @@ class CTEManagerMixin:
                     #
                     # If the expression is already an audit_and/audit_or tree (it carries its own
                     # struct semantics), skip the pre-compute step and use it directly.
-                    audit_expr = self._correlate_exists_ast(sql_ast, outer_alias="p")
+                    audit_expr = self._correlate_exists_ast(sql_ast, outer_alias="_pt")
                     is_already_audit = (
                         isinstance(audit_expr, SQLFunctionCall)
                         and audit_expr.name in _audit_fn_names
@@ -495,7 +495,7 @@ class CTEManagerMixin:
 
                     if not is_already_audit and hasattr(self, '_pending_precte'):
                         # Build the non-audit WHERE clause (fast semi-join)
-                        where_expr = self._correlate_exists_ast(sql_ast, outer_alias="p")
+                        where_expr = self._correlate_exists_ast(sql_ast, outer_alias="_pt")
                         is_comparison = (
                             isinstance(where_expr, SQLFunctionCall)
                             and where_expr.name == "audit_comparison"
@@ -516,15 +516,15 @@ class CTEManagerMixin:
                             # derived table so the full struct (including comparison evidence)
                             # is retained. The outer SELECT filters to patients who satisfy
                             # the comparison and also exposes _cmp_result for evidence retrieval.
-                            cmp_expr = self._correlate_exists_ast(sql_ast, outer_alias="p")
+                            cmp_expr = self._correlate_exists_ast(sql_ast, outer_alias="_pt")
                             inner_select = SQLSelect(
                                 columns=[
-                                    SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                                    SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                                     SQLAlias(expr=cmp_expr, alias="_cmp_result"),
                                 ],
                                 from_clause=SQLAlias(
                                     expr=SQLIdentifier(name="_patients"),
-                                    alias="p",
+                                    alias="_pt",
                                 ),
                                 joins=list(joins) if joins else None,
                             )
@@ -544,10 +544,10 @@ class CTEManagerMixin:
                             )
                         else:
                             precte_query = SQLSelect(
-                                columns=[SQLQualifiedIdentifier(parts=["p", "patient_id"])],
+                                columns=[SQLQualifiedIdentifier(parts=["_pt", "patient_id"])],
                                 from_clause=SQLAlias(
                                     expr=SQLIdentifier(name="_patients"),
-                                    alias="p",
+                                    alias="_pt",
                                 ),
                                 where=where_expr,
                                 joins=list(joins) if joins else None,
@@ -613,10 +613,10 @@ class CTEManagerMixin:
                                 safe_name = name.replace('"', '').replace(' ', '_').replace('.', '_')[:60]
                                 precte_name = f'__pre_{safe_name}'
                                 precte_select = SQLSelect(
-                                    columns=[SQLQualifiedIdentifier(parts=["p", "patient_id"])],
+                                    columns=[SQLQualifiedIdentifier(parts=["_pt", "patient_id"])],
                                     from_clause=SQLAlias(
                                         expr=SQLIdentifier(name="_patients"),
-                                        alias="p",
+                                        alias="_pt",
                                     ),
                                     where=demoted_where,
                                     joins=list(joins) if joins else None,
@@ -673,27 +673,27 @@ class CTEManagerMixin:
                     all_joins.extend(evidence_joins)
                     return SQLSelect(
                         columns=[
-                            SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                            SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                             SQLAlias(expr=audit_expr, alias="_audit_result"),
                         ],
                         from_clause=SQLAlias(
                             expr=SQLIdentifier(name="_patients"),
-                            alias="p",
+                            alias="_pt",
                         ),
                         joins=all_joins if all_joins else None,
                     )
 
                 # Normal mode: Boolean: SELECT p.patient_id FROM _patients AS p WHERE <expr>
                 # Process the WHERE expression to convert subqueries to EXISTS
-                where_expr = self._correlate_exists_ast(sql_ast, outer_alias="p")
+                where_expr = self._correlate_exists_ast(sql_ast, outer_alias="_pt")
                 # Audit macros and audit_comparison return structs — extract .result for WHERE clause
                 from ..translator.expressions._query import _demote_audit_struct_to_bool
                 where_expr = _demote_audit_struct_to_bool(where_expr)
                 return SQLSelect(
-                    columns=[SQLQualifiedIdentifier(parts=["p", "patient_id"])],
+                    columns=[SQLQualifiedIdentifier(parts=["_pt", "patient_id"])],
                     from_clause=SQLAlias(
                         expr=SQLIdentifier(name="_patients"),
-                        alias="p",
+                        alias="_pt",
                     ),
                     where=where_expr,
                     joins=joins if joins else None,
@@ -712,12 +712,12 @@ class CTEManagerMixin:
                     value_expr = self._get_join_column_for_scalar(meta, sql_ast)
                     return SQLSelect(
                         columns=[
-                            SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                            SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                             SQLAlias(expr=value_expr, alias=meta.value_column),
                         ],
                         from_clause=SQLAlias(
                             expr=SQLIdentifier(name="_patients"),
-                            alias="p",
+                            alias="_pt",
                         ),
                         joins=joins,
                     )
@@ -754,14 +754,14 @@ class CTEManagerMixin:
                                     where=SQLBinaryOp(
                                         operator="=",
                                         left=SQLQualifiedIdentifier(parts=[alias_str, "patient_id"]),
-                                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                                     ) if not inner_sel.where else SQLBinaryOp(
                                         operator="AND",
                                         left=inner_sel.where,
                                         right=SQLBinaryOp(
                                             operator="=",
                                             left=SQLQualifiedIdentifier(parts=[alias_str, "patient_id"]),
-                                            right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                                            right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                                         ),
                                     ),
                                     order_by=inner_sel.order_by,
@@ -802,7 +802,7 @@ class CTEManagerMixin:
                                     _pid_corr = SQLBinaryOp(
                                         operator="=",
                                         left=SQLQualifiedIdentifier(parts=[_corr_alias, "patient_id"]),
-                                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                                     )
                                     _corr_where = (
                                         SQLBinaryOp(left=_corr_where, operator="AND", right=_pid_corr)
@@ -821,12 +821,12 @@ class CTEManagerMixin:
                                 scalar_expr = SQLSubquery(query=trimmed_sel)
                     return SQLSelect(
                         columns=[
-                            SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                            SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                             SQLAlias(expr=scalar_expr, alias=meta.value_column),
                         ],
                         from_clause=SQLAlias(
                             expr=SQLIdentifier(name="_patients"),
-                            alias="p",
+                            alias="_pt",
                         ),
                         joins=joins if joins else None,
                     )
@@ -835,7 +835,7 @@ class CTEManagerMixin:
             if isinstance(sql_ast, SQLSubquery) and isinstance(sql_ast.query, SQLSelect):
                 sql_ast = sql_ast.query
 
-            # Fix stale "p" alias references (same issue as RESOURCE_ROWS).
+            # Fix stale "_pt" alias references (same issue as RESOURCE_ROWS).
             from ..translator.ast_utils import replace_qualified_alias as _rqa_mv
             if isinstance(sql_ast, SQLSelect):
                 _from_alias = None
@@ -843,8 +843,8 @@ class CTEManagerMixin:
                     _from_alias = sql_ast.from_clause.alias
                 elif isinstance(sql_ast.from_clause, SQLIdentifier) and sql_ast.from_clause.quoted:
                     _from_alias = sql_ast.from_clause.name
-                if _from_alias and _from_alias != "p":
-                    sql_ast = _rqa_mv(sql_ast, "p", _from_alias)
+                if _from_alias and _from_alias != "_pt":
+                    sql_ast = _rqa_mv(sql_ast, "_pt", _from_alias)
             elif isinstance(sql_ast, (SQLUnion, SQLIntersect, SQLExcept)):
                 _fixed_ops = []
                 for _op in sql_ast.operands:
@@ -855,8 +855,8 @@ class CTEManagerMixin:
                             _op_alias = _inner.from_clause.alias
                         elif isinstance(_inner.from_clause, SQLIdentifier) and _inner.from_clause.quoted:
                             _op_alias = _inner.from_clause.name
-                    if _op_alias and _op_alias != "p":
-                        _fixed_ops.append(_rqa_mv(_op, "p", _op_alias))
+                    if _op_alias and _op_alias != "_pt":
+                        _fixed_ops.append(_rqa_mv(_op, "_pt", _op_alias))
                     else:
                         _fixed_ops.append(_op)
                 _cls = type(sql_ast)
@@ -978,16 +978,16 @@ class CTEManagerMixin:
                 if has_patient_id:
                     # Already has patient_id, just add JOINs if needed
                     if joins:
-                        # Fix JOIN conditions: replace "p" alias with actual FROM alias
+                        # Fix JOIN conditions: replace "_pt" alias with actual FROM alias
                         from ..translator.types import SQLAlias as SQLAlias2, SQLQualifiedIdentifier as SQLQI2
                         from_alias = None
                         if isinstance(sql_ast.from_clause, SQLAlias2):
                             from_alias = sql_ast.from_clause.alias
-                        if from_alias and from_alias != "p":
+                        if from_alias and from_alias != "_pt":
                             fixed_joins = []
                             for j in joins:
                                 on_cond = self._replace_patient_alias_in_condition(
-                                    j.on_condition, "p", from_alias
+                                    j.on_condition, "_pt", from_alias
                                 )
                                 fixed_joins.append(SQLJoin(
                                     join_type=j.join_type,
@@ -1025,16 +1025,16 @@ class CTEManagerMixin:
                             value_columns.append((col, "value"))
                     new_columns = [patient_id_col] + value_columns
                     if joins:
-                        # Fix JOIN conditions: replace "p" alias with actual FROM alias
+                        # Fix JOIN conditions: replace "_pt" alias with actual FROM alias
                         from ..translator.types import SQLAlias as SQLAlias3, SQLQualifiedIdentifier as SQLQI3
                         from_alias = None
                         if isinstance(sql_ast.from_clause, SQLAlias3):
                             from_alias = sql_ast.from_clause.alias
-                        if from_alias and from_alias != "p":
+                        if from_alias and from_alias != "_pt":
                             fixed_joins = []
                             for j in joins:
                                 on_cond = self._replace_patient_alias_in_condition(
-                                    j.on_condition, "p", from_alias
+                                    j.on_condition, "_pt", from_alias
                                 )
                                 fixed_joins.append(SQLJoin(
                                     join_type=j.join_type,
@@ -1070,12 +1070,12 @@ class CTEManagerMixin:
                 # Wrap with patient_id from _patients and alias the expression as "value".
                 return SQLSelect(
                     columns=[
-                        SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                         SQLAlias(expr=sql_ast, alias="value"),
                     ],
                     from_clause=SQLAlias(
                         expr=SQLIdentifier(name="_patients"),
-                        alias="p",
+                        alias="_pt",
                     ),
                     joins=joins if joins else None,
                 )
@@ -1097,12 +1097,12 @@ class CTEManagerMixin:
                 # so ensure the column is named "resource".
                 sql_ast = self._normalize_nested_union_columns(sql_ast)
 
-                # Fix stale "p" alias references in the entire AST BEFORE
+                # Fix stale "_pt" alias references in the entire AST BEFORE
                 # _ensure_resource_column wraps with an intermediate alias.
                 # During translate_library(), patient_alias is None so correlated
-                # subqueries fall back to "p.patient_id".  PATIENT_SCALAR CTEs get
+                # subqueries fall back to "_pt.patient_id".  PATIENT_SCALAR CTEs get
                 # wrapped with FROM _patients AS p later, but RESOURCE_ROWS do not.
-                # Replace "p" with the actual FROM alias of this CTE.
+                # Replace "_pt" with the actual FROM alias of this CTE.
                 from ..translator.types import SQLAlias, SQLQualifiedIdentifier
                 from ..translator.ast_utils import replace_qualified_alias
                 from_alias = None
@@ -1114,8 +1114,8 @@ class CTEManagerMixin:
                 elif isinstance(sql_ast.from_clause, SQLIdentifier) and sql_ast.from_clause.quoted:
                     from_alias = sql_ast.from_clause.name
                     from_cte_name = sql_ast.from_clause.name
-                if from_alias and from_alias != "p":
-                    sql_ast = replace_qualified_alias(sql_ast, "p", from_alias)
+                if from_alias and from_alias != "_pt":
+                    sql_ast = replace_qualified_alias(sql_ast, "_pt", from_alias)
 
                 # In audit mode, pass _audit_item through BEFORE _ensure_resource_column
                 # so that the subquery wrapping can propagate it to the outer SELECT.
@@ -1125,12 +1125,12 @@ class CTEManagerMixin:
                 sql_ast = self._ensure_resource_column(sql_ast)
 
                 if joins:
-                    # Fix JOIN conditions: replace "p" alias with the actual FROM alias
-                    if from_alias and from_alias != "p":
+                    # Fix JOIN conditions: replace "_pt" alias with the actual FROM alias
+                    if from_alias and from_alias != "_pt":
                         fixed_joins = []
                         for j in joins:
                             on_cond = self._replace_patient_alias_in_condition(
-                                j.on_condition, "p", from_alias
+                                j.on_condition, "_pt", from_alias
                             )
                             fixed_joins.append(SQLJoin(
                                 join_type=j.join_type,
@@ -1159,7 +1159,7 @@ class CTEManagerMixin:
                 # Also detect column count mismatches (e.g., scalar CTE + resource-row CTE
                 # in population definitions) and normalize to patient_id only.
 
-                # Fix stale "p" alias in each operand.
+                # Fix stale "_pt" alias in each operand.
                 from ..translator.ast_utils import replace_qualified_alias
                 fixed_operands = []
                 for op in sql_ast.operands:
@@ -1172,8 +1172,8 @@ class CTEManagerMixin:
                             op_from_alias = inner_op.from_clause.alias
                         elif isinstance(inner_op.from_clause, SQLIdentifier) and inner_op.from_clause.quoted:
                             op_from_alias = inner_op.from_clause.name
-                    if op_from_alias and op_from_alias != "p":
-                        fixed_operands.append(replace_qualified_alias(op, "p", op_from_alias))
+                    if op_from_alias and op_from_alias != "_pt":
+                        fixed_operands.append(replace_qualified_alias(op, "_pt", op_from_alias))
                     else:
                         fixed_operands.append(op)
 
@@ -1289,12 +1289,12 @@ class CTEManagerMixin:
                 # "resource" so downstream UNION normalization can find it.
                 return SQLSelect(
                     columns=[
-                        SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                         SQLAlias(expr=sql_ast, alias="resource"),
                     ],
                     from_clause=SQLAlias(
                         expr=SQLIdentifier(name="_patients"),
-                        alias="p",
+                        alias="_pt",
                     ),
                     joins=joins if joins else None,
                 )
@@ -1303,9 +1303,9 @@ class CTEManagerMixin:
             # Unwrap SQLSubquery → SQLSelect for structural inspection
             if isinstance(sql_ast, SQLSubquery) and isinstance(sql_ast.query, SQLSelect):
                 sql_ast = sql_ast.query
-            # Fix stale "p" alias references in UNKNOWN-shape CTEs.
+            # Fix stale "_pt" alias references in UNKNOWN-shape CTEs.
             # Same issue as RESOURCE_ROWS: expressions translator falls back to
-            # "p" when patient_alias is None during translate_library().
+            # "_pt" when patient_alias is None during translate_library().
             from ..translator.ast_utils import replace_qualified_alias
             if isinstance(sql_ast, SQLSelect):
                 from_alias = None
@@ -1313,18 +1313,18 @@ class CTEManagerMixin:
                     from_alias = sql_ast.from_clause.alias
                 elif isinstance(sql_ast.from_clause, SQLIdentifier) and sql_ast.from_clause.quoted:
                     from_alias = sql_ast.from_clause.name
-                if from_alias and from_alias != "p":
-                    sql_ast = replace_qualified_alias(sql_ast, "p", from_alias)
+                if from_alias and from_alias != "_pt":
+                    sql_ast = replace_qualified_alias(sql_ast, "_pt", from_alias)
 
                 # Check if it already has patient_id
                 has_patient_id = self._select_has_patient_id(sql_ast)
                 if has_patient_id:
                     if joins:
-                        if from_alias and from_alias != "p":
+                        if from_alias and from_alias != "_pt":
                             fixed_joins = []
                             for j in joins:
                                 on_cond = self._replace_patient_alias_in_condition(
-                                    j.on_condition, "p", from_alias
+                                    j.on_condition, "_pt", from_alias
                                 )
                                 fixed_joins.append(SQLJoin(
                                     join_type=j.join_type,
@@ -1351,7 +1351,7 @@ class CTEManagerMixin:
             # and use RESOURCE_ROWS treatment (pass through) rather than scalar subquery
             from ..translator.types import SQLSubquery, SQLUnion
             if isinstance(sql_ast, (SQLSelect, SQLUnion)):
-                # Fix stale "p" alias in unions
+                # Fix stale "_pt" alias in unions
                 if isinstance(sql_ast, SQLUnion):
                     fixed_operands = []
                     for op in sql_ast.operands:
@@ -1364,8 +1364,8 @@ class CTEManagerMixin:
                                 op_from_alias = inner_op.from_clause.alias
                             elif isinstance(inner_op.from_clause, SQLIdentifier) and inner_op.from_clause.quoted:
                                 op_from_alias = inner_op.from_clause.name
-                        if op_from_alias and op_from_alias != "p":
-                            fixed_operands.append(replace_qualified_alias(op, "p", op_from_alias))
+                        if op_from_alias and op_from_alias != "_pt":
+                            fixed_operands.append(replace_qualified_alias(op, "_pt", op_from_alias))
                         else:
                             fixed_operands.append(op)
                     sql_ast = SQLUnion(operands=fixed_operands, distinct=sql_ast.distinct)
@@ -1410,12 +1410,12 @@ class CTEManagerMixin:
                 column_expr = sql_ast
             return SQLSelect(
                 columns=[
-                    SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                    SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     SQLAlias(expr=column_expr, alias=meta.value_column),
                 ],
                 from_clause=SQLAlias(
                     expr=SQLIdentifier(name="_patients"),
-                    alias="p",
+                    alias="_pt",
                 ),
                 joins=joins if joins else None,
             )
@@ -1578,9 +1578,9 @@ class CTEManagerMixin:
                 return (expr, has_resource)
             # Need to add patient_id
             wrapped = SQLSelect(
-                columns=[SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                columns=[SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                          SQLAlias(expr=SQLSubquery(query=expr), alias="value")],
-                from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="p"),
+                from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="_pt"),
             )
             return (wrapped, False)
 
@@ -1589,9 +1589,9 @@ class CTEManagerMixin:
 
         # Default fallback
         wrapped = SQLSelect(
-            columns=[SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+            columns=[SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                      SQLAlias(expr=SQLSubquery(query=expr), alias="value")],
-            from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="p"),
+            from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="_pt"),
         )
         return (wrapped, False)
 
@@ -1617,10 +1617,10 @@ class CTEManagerMixin:
             SQLBinaryOp, SQLExists, SQLNull, SQLFunctionCall, SQLRaw
         )
 
-        # FROM _patients AS p — the "p" alias is required for p.patient_id references
+        # FROM _patients AS p — the "_pt" alias is required for _pt.patient_id references
         patients_from = SQLAlias(
             expr=SQLIdentifier(name="_patients", quoted=False),
-            alias="p"
+            alias="_pt"
         )
 
         # Check if expression is boolean-like (goes in WHERE clause)
@@ -1644,18 +1644,18 @@ class CTEManagerMixin:
                 # Extract .result from the audit struct for the WHERE predicate
                 from ..translator.expressions._query import _demote_audit_struct_to_bool
                 where_expr = _demote_audit_struct_to_bool(where_expr)
-            # Build: SELECT p.patient_id FROM _patients AS p WHERE <expr>
+            # Build: SELECT _pt.patient_id FROM _patients AS p WHERE <expr>
             return SQLSelect(
-                columns=[SQLQualifiedIdentifier(parts=["p", "patient_id"])],
+                columns=[SQLQualifiedIdentifier(parts=["_pt", "patient_id"])],
                 from_clause=patients_from,
                 where=where_expr,
                 joins=[],  # JOINs will be added by _build_cte_from_ast
             )
         else:
-            # Build: SELECT p.patient_id, <expr> AS value FROM _patients AS p
+            # Build: SELECT _pt.patient_id, <expr> AS value FROM _patients AS p
             return SQLSelect(
                 columns=[
-                    SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                    SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     (expr, "value"),  # Tuple for aliased column
                 ],
                 from_clause=patients_from,
@@ -1702,7 +1702,7 @@ class CTEManagerMixin:
 
         # Determine the patient alias based on which path we'll take
         # This is needed for scalar subquery conversion (JOINs need the right alias)
-        patient_alias = "p"  # Default: FROM patients p
+        patient_alias = "_pt"  # Default: FROM patients _pt
 
         # Check if we have a dependency on another CTE
         dep_cte = None
@@ -1774,8 +1774,8 @@ class CTEManagerMixin:
             if is_aliased_cte_ref or is_cte_ref_without_alias:
                 # Wrap in CROSS JOIN LATERAL pattern for proper per-patient evaluation
                 lateral = SQLSelect(
-                    columns=[SQLQualifiedIdentifier(parts=["p", "patient_id"]), SQLQualifiedIdentifier(parts=["t", "*"])],
-                    from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="p"),
+                    columns=[SQLQualifiedIdentifier(parts=["_pt", "patient_id"]), SQLQualifiedIdentifier(parts=["t", "*"])],
+                    from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="_pt"),
                     joins=[SQLJoin(join_type="CROSS JOIN LATERAL", table=SQLSubquery(query=select), alias="t")],
                 )
                 return (lateral, True)
@@ -1784,9 +1784,9 @@ class CTEManagerMixin:
         # Use AST-based check for patient_id presence
         if not self._select_has_patient_id(select):
             wrapped = SQLSelect(
-                columns=[SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                columns=[SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                          SQLAlias(expr=SQLSubquery(query=select), alias="value")],
-                from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="p"),
+                from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="_pt"),
             )
             return (wrapped, False)
 
@@ -1984,7 +1984,7 @@ class CTEManagerMixin:
             SQLBinaryOp, SQLExists, SQLUnaryOp, SQLLiteral,
         )
         conditions = []
-        p_pid = SQLQualifiedIdentifier(parts=["p", "patient_id"])
+        p_pid = SQLQualifiedIdentifier(parts=["_pt", "patient_id"])
         for op in (union.operands or []):
             inner = op
             if isinstance(inner, SQLSubquery):
@@ -2023,7 +2023,7 @@ class CTEManagerMixin:
         if not conditions:
             return SQLSelect(
                 columns=[p_pid, SQLAlias(expr=SQLLiteral(value=False), alias="value")],
-                from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="p"),
+                from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="_pt"),
                 where=SQLLiteral(value=False),
             )
         combined = conditions[0]
@@ -2031,10 +2031,10 @@ class CTEManagerMixin:
             combined = SQLBinaryOp(operator="OR", left=combined, right=cond)
         return SQLSelect(
             columns=[
-                SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                 SQLAlias(expr=SQLLiteral(value=True), alias="value"),
             ],
-            from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="p"),
+            from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="_pt"),
             where=combined,
         )
 

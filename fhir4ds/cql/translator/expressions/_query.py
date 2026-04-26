@@ -962,7 +962,7 @@ class QueryMixin:
         )
 
         # Build patient_id correlation
-        _outer_alias = self.context.resource_alias or self.context.patient_alias or "p"
+        _outer_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
         _patient_corr = SQLBinaryOp(
             left=SQLQualifiedIdentifier(parts=[_bb_src, "patient_id"]),
             operator="=",
@@ -1824,7 +1824,7 @@ class QueryMixin:
                         self.context.pop_scope()
 
                     # Build FROM clause: first secondary, then CROSS JOINs
-                    _outer_alias = alias or self.context.resource_alias or "p"
+                    _outer_alias = alias or self.context.resource_alias or "_pt"
                     _first_alias, _first_from, _, _ = _sec_infos[0]
                     _from_clause = SQLAlias(expr=_first_from, alias=_first_alias)
                     _joins: list = []
@@ -2436,7 +2436,7 @@ class QueryMixin:
                     self.context.add_alias(alias, table_alias=alias, cte_name=cte_name, ast_expr=_prev_ast)
 
         # Set resource_alias so scalar subquery correlations (e.g., patient_id)
-        # reference the correct outer alias instead of hardcoded "p".
+        # reference the correct outer alias instead of hardcoded "_pt".
         _saved_resource_alias = self.context.resource_alias
         if alias and not self.context.resource_alias:
             self.context.resource_alias = alias
@@ -2840,7 +2840,7 @@ class QueryMixin:
                 # expression from inlined fluent functions over sub-elements
                 # like Claim.item), wrap it in a SELECT that provides
                 # resource and patient_id columns so property access works.
-                outer_corr_alias = alias or self.context.resource_alias or "p"
+                outer_corr_alias = alias or self.context.resource_alias or "_pt"
                 if not isinstance(wc_source_sql, (SQLSelect, SQLSubquery, SQLUnion, SQLIntersect, SQLExcept, SQLIdentifier, SQLQualifiedIdentifier, SQLAlias, RetrievePlaceholder)):
                     wc_source_sql = SQLSubquery(query=SQLSelect(
                         columns=[

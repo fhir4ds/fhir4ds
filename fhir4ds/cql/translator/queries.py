@@ -188,7 +188,7 @@ class SQLQueryBuilder:
             )
             return alias
     
-    def generate_joins(self, patient_alias: str = "p") -> List[SQLJoin]:
+    def generate_joins(self, patient_alias: str = "_pt") -> List[SQLJoin]:
         """
         Generate JOIN clauses for all tracked CTE references.
 

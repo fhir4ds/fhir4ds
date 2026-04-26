@@ -767,7 +767,7 @@ class TestAgeAtFunctions:
         from ...translator.types import SQLBinaryOp
         # Create context with patient_alias set (population context)
         context = SQLTranslationContext()
-        context.patient_alias = "p"  # Simulate "FROM patients p" context
+        context.patient_alias = "_pt"  # Simulate "FROM patients p" context
         translator = ExpressionTranslator(context)
 
         result = translator.translate(

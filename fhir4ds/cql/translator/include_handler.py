@@ -114,11 +114,11 @@ class IncludeHandlerMixin:
             # Wrap with patient_id from _patients
             wrapped = SQLSelect(
                 columns=[
-                    SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                    SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                 ],
                 from_clause=SQLAlias(
                     expr=SQLIdentifier(name="_patients"),
-                    alias="p",
+                    alias="_pt",
                 ),
                 where=SQLSubquery(query=expr) if not isinstance(expr, SQLSelect) else None,
             )
@@ -127,12 +127,12 @@ class IncludeHandlerMixin:
         # For non-SELECT expressions, wrap with patient_id
         return SQLSelect(
             columns=[
-                SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                 SQLAlias(expr=SQLSubquery(query=expr) if isinstance(expr, SQLSelect) else expr, alias="value"),
             ],
             from_clause=SQLAlias(
                 expr=SQLIdentifier(name="_patients"),
-                alias="p",
+                alias="_pt",
             ),
         )
 

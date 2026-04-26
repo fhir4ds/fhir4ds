@@ -206,13 +206,13 @@ class TestSQLQueryBuilderReferences:
         builder.track_cte_reference("_sq_14")
         builder.track_cte_reference("_sq_15")
 
-        joins = builder.generate_joins(patient_alias="p")
+        joins = builder.generate_joins(patient_alias="_pt")
 
         assert len(joins) == 2
         # Verify join structure
         join1_sql = joins[0].to_sql()
         assert "LEFT JOIN _sq_14 AS j1" in join1_sql
-        assert "j1.patient_id = p.patient_id" in join1_sql
+        assert "j1.patient_id = _pt.patient_id" in join1_sql
 
 
 class TestCTEMaterializedHint:
@@ -775,7 +775,7 @@ class TestScalarSubqueryDetection:
         from ...translator import CQLToSQLTranslator
         translator = CQLToSQLTranslator()
 
-        sql = """(SELECT resource FROM "Condition: Essential Hypertension" sq WHERE sq.patient_ref = p.patient_id)"""
+        sql = """(SELECT resource FROM "Condition: Essential Hypertension" sq WHERE sq.patient_ref = _pt.patient_id)"""
         matches = translator._detect_scalar_subquery_references(sql)
 
         assert len(matches) == 1
@@ -790,8 +790,8 @@ class TestScalarSubqueryDetection:
 
         sql = """
         SELECT p.patient_id,
-               (SELECT resource FROM "Condition" sq WHERE sq.patient_ref = p.patient_id),
-               (SELECT resource FROM "Observation" sq WHERE sq.patient_ref = p.patient_id)
+               (SELECT resource FROM "Condition" sq WHERE sq.patient_ref = _pt.patient_id),
+               (SELECT resource FROM "Observation" sq WHERE sq.patient_ref = _pt.patient_id)
         FROM patients p
         """
         matches = translator._detect_scalar_subquery_references(sql)
@@ -827,7 +827,7 @@ class TestScalarSubqueryDetection:
         from ...translator import CQLToSQLTranslator
         translator = CQLToSQLTranslator()
 
-        sql = """(SELECT * FROM "Condition" sq WHERE sq.patient_ref = p.patient_id)"""
+        sql = """(SELECT * FROM "Condition" sq WHERE sq.patient_ref = _pt.patient_id)"""
         matches = translator._detect_scalar_subquery_references(sql)
 
         assert len(matches) == 1
@@ -846,7 +846,7 @@ class TestGenerateJoinForCTE:
 
         assert "LEFT JOIN" in join_sql
         assert '"Condition" j1' in join_sql
-        assert "j1.patient_ref = p.patient_id" in join_sql
+        assert "j1.patient_ref = _pt.patient_id" in join_sql
 
     def test_generate_join_with_quoted_cte_name(self):
         """Should handle quoted CTE names with special characters."""
@@ -868,7 +868,7 @@ class TestReplaceScalarSubqueryWithColumn:
         from ...translator import CQLToSQLTranslator
         translator = CQLToSQLTranslator()
 
-        sql = """fhirpath_text((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = p.patient_id), 'status')"""
+        sql = """fhirpath_text((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = _pt.patient_id), 'status')"""
         result = translator._replace_scalar_subquery_with_column(sql, '"Condition"', 'j1')
 
         assert 'j1.resource' in result
@@ -879,7 +879,7 @@ class TestReplaceScalarSubqueryWithColumn:
         from ...translator import CQLToSQLTranslator
         translator = CQLToSQLTranslator()
 
-        sql = """WHERE fhirpath_text((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = p.patient_id), 'status') = 'active'"""
+        sql = """WHERE fhirpath_text((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = _pt.patient_id), 'status') = 'active'"""
         result = translator._replace_scalar_subquery_with_column(sql, '"Condition"', 'j1')
 
         assert "WHERE fhirpath_text(" in result
@@ -892,8 +892,8 @@ class TestReplaceScalarSubqueryWithColumn:
         translator = CQLToSQLTranslator()
 
         sql = """
-        SELECT fhirpath_text((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = p.patient_id), 'status'),
-               fhirpath_date((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = p.patient_id), 'onsetDateTime')
+        SELECT fhirpath_text((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = _pt.patient_id), 'status'),
+               fhirpath_date((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = _pt.patient_id), 'onsetDateTime')
         """
         result = translator._replace_scalar_subquery_with_column(sql, '"Condition"', 'j1')
 
@@ -935,7 +935,7 @@ class TestGenerateWindowedJoin:
 
         join_sql = translator._generate_windowed_join('"Condition"', 'j1', 'p')
 
-        assert "j1.patient_ref = p.patient_id" in join_sql
+        assert "j1.patient_ref = _pt.patient_id" in join_sql
 
 
 @pytest.mark.skip(reason="String-based SQL manipulation methods removed - now using AST-based approach")
@@ -949,7 +949,7 @@ class TestConvertScalarSubqueriesToJoins:
 
         sql = """
         SELECT p.patient_id,
-               fhirpath_text((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = p.patient_id), 'status')
+               fhirpath_text((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = _pt.patient_id), 'status')
         FROM patients p
         """
         result_sql, join_clauses = translator._convert_scalar_subqueries_to_joins(sql)
@@ -965,8 +965,8 @@ class TestConvertScalarSubqueriesToJoins:
 
         sql = """
         SELECT p.patient_id,
-               fhirpath_text((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = p.patient_id), 'status'),
-               fhirpath_date((SELECT resource FROM "Observation" sq WHERE sq.patient_ref = p.patient_id), 'effectiveDateTime')
+               fhirpath_text((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = _pt.patient_id), 'status'),
+               fhirpath_date((SELECT resource FROM "Observation" sq WHERE sq.patient_ref = _pt.patient_id), 'effectiveDateTime')
         FROM patients p
         """
         result_sql, join_clauses = translator._convert_scalar_subqueries_to_joins(sql)
@@ -993,8 +993,8 @@ class TestConvertScalarSubqueriesToJoins:
 
         sql = """
         SELECT p.patient_id,
-               fhirpath_text((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = p.patient_id), 'status'),
-               fhirpath_date((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = p.patient_id), 'onsetDateTime')
+               fhirpath_text((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = _pt.patient_id), 'status'),
+               fhirpath_date((SELECT resource FROM "Condition" sq WHERE sq.patient_ref = _pt.patient_id), 'onsetDateTime')
         FROM patients p
         """
         result_sql, join_clauses = translator._convert_scalar_subqueries_to_joins(sql)
@@ -1056,7 +1056,7 @@ class TestASTLevelCTEReferenceTracking:
         builder.track_cte_reference("Procedure")
 
         assert len(builder.cte_references) == 3
-        joins = builder.generate_joins(patient_alias="p")
+        joins = builder.generate_joins(patient_alias="_pt")
         assert len(joins) == 3
 
 
@@ -1068,7 +1068,7 @@ class TestASTLevelJOINGeneration:
         from ...translator.types import SQLSelect, SQLJoin, SQLIdentifier, SQLQualifiedIdentifier, SQLBinaryOp
 
         select = SQLSelect(
-            columns=[SQLQualifiedIdentifier(parts=["p", "patient_id"])],
+            columns=[SQLQualifiedIdentifier(parts=["_pt", "patient_id"])],
             from_clause=SQLIdentifier(name="patients AS p"),
         )
 
@@ -1080,7 +1080,7 @@ class TestASTLevelJOINGeneration:
             on_condition=SQLBinaryOp(
                 operator="=",
                 left=SQLQualifiedIdentifier(parts=["j1", "patient_ref"]),
-                right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
             ),
         )
         select.joins.append(join)
@@ -1099,12 +1099,12 @@ class TestASTLevelJOINGeneration:
         builder.track_cte_reference("Condition")
         builder.track_cte_reference("Observation")
 
-        joins = builder.generate_joins(patient_alias="p")
+        joins = builder.generate_joins(patient_alias="_pt")
 
         assert len(joins) == 2
         sql_parts = [j.to_sql() for j in joins]
         assert all("LEFT JOIN" in s for s in sql_parts)
-        assert all("patient_id = p.patient_id" in s for s in sql_parts)
+        assert all("patient_id = _pt.patient_id" in s for s in sql_parts)
 
 
 class TestColumnReferenceReplacement:
@@ -1171,7 +1171,7 @@ class TestSQLValidity:
         # Build a SELECT with JOINs like the translator would
         select = SQLSelect(
             columns=[
-                SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                 SQLFunctionCall(
                     name="fhirpath_text",
                     args=[
@@ -1191,7 +1191,7 @@ class TestSQLValidity:
             on_condition=SQLBinaryOp(
                 operator="=",
                 left=SQLQualifiedIdentifier(parts=["j1", "patient_ref"]),
-                right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
             ),
         ))
 
@@ -1201,7 +1201,7 @@ class TestSQLValidity:
         assert "SELECT" in sql
         assert "FROM" in sql and "patients AS p" in sql  # May be quoted
         assert "LEFT JOIN" in sql
-        assert "ON j1.patient_ref = p.patient_id" in sql
+        assert "ON j1.patient_ref = _pt.patient_id" in sql
         assert "fhirpath_text(j1.resource, 'status')" in sql
 
 

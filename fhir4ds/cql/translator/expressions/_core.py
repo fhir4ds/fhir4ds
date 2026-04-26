@@ -433,7 +433,7 @@ class CoreMixin:
                         # Determine the outer patient_id alias for correlation.
                         # Use resource_alias (e.g., query loop alias) or patient_alias
                         # to avoid broken "p.patient_id" refs inside CTE definitions.
-                        _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "p"
+                        _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
 
                         # For CTEs with value column (scalars), select value
                         if meta and not meta.has_resource:
@@ -553,7 +553,7 @@ class CoreMixin:
             if outer_alias:
                 outer_pid = SQLQualifiedIdentifier(parts=[outer_alias, "patient_id"])
             else:
-                outer_pid = SQLQualifiedIdentifier(parts=["p", "patient_id"])
+                outer_pid = SQLQualifiedIdentifier(parts=["_pt", "patient_id"])
             return SQLSubquery(query=SQLSelect(
                 columns=[SQLQualifiedIdentifier(parts=["_pd", "resource"])],
                 from_clause=SQLAlias(
@@ -612,7 +612,7 @@ class CoreMixin:
                             where=SQLBinaryOp(
                                 operator="=",
                                 left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                                right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                             ),
                             limit=1
                         ))
@@ -627,7 +627,7 @@ class CoreMixin:
                         where=SQLBinaryOp(
                             operator="=",
                             left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                            right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                            right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                         ),
                         limit=1
                     ))
@@ -673,7 +673,7 @@ class CoreMixin:
                     where=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                     limit=1
                 ))
@@ -696,7 +696,7 @@ class CoreMixin:
                     where=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                     limit=1
                 ))
@@ -754,7 +754,7 @@ class CoreMixin:
                             where=SQLBinaryOp(
                                 operator="=",
                                 left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                                right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                             ),
                             limit=1
                         ))
@@ -769,7 +769,7 @@ class CoreMixin:
                         where=SQLBinaryOp(
                             operator="=",
                             left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                            right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                            right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                         ),
                         limit=1
                     ))
@@ -796,7 +796,7 @@ class CoreMixin:
                     where=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                     limit=1
                 ))
@@ -818,7 +818,7 @@ class CoreMixin:
                     where=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                     limit=1
                 ))
@@ -834,7 +834,7 @@ class CoreMixin:
                     where=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                     limit=1
                 ))
@@ -913,7 +913,7 @@ class CoreMixin:
                             where=SQLBinaryOp(
                                 operator="=",
                                 left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                                right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                             ),
                             limit=1
                         ))

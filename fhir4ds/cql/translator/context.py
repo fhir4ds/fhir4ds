@@ -387,7 +387,7 @@ class SQLTranslationContext:
     _alias_resource_types: Dict[str, str] = field(default_factory=dict)
 
     # Patient context tracking for correlated subqueries
-    patient_alias: Optional[str] = None  # e.g., "p" when in "FROM patients p"
+    patient_alias: Optional[str] = None  # e.g., "_pt" when in "FROM patients _pt"
     current_patient_id: Optional[str] = None  # For single-patient evaluation
 
     # Single-patient evaluation context

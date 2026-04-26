@@ -884,7 +884,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         """
         from ..translator.context import RowShape
 
-        columns = [SQLQualifiedIdentifier(parts=["p", "patient_id"])]
+        columns = [SQLQualifiedIdentifier(parts=["_pt", "patient_id"])]
         if meta is not None and meta.shape == RowShape.RESOURCE_ROWS:
             columns.append(SQLAlias(
                 expr=SQLCast(expression=SQLNull(), target_type="JSON"),
@@ -894,7 +894,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             columns.append(SQLAlias(expr=SQLNull(), alias="value"))
         return SQLSelect(
             columns=columns,
-            from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="p"),
+            from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="_pt"),
             where=SQLLiteral(value=False),
         )
 
@@ -976,7 +976,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         # Build SELECT columns
         columns: List[SQLExpression] = [
-            SQLQualifiedIdentifier(parts=["p", "patient_id"])
+            SQLQualifiedIdentifier(parts=["_pt", "patient_id"])
         ]
 
         # Track which defines need LEFT JOINs
@@ -1068,7 +1068,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     where=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=[quoted, "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                 )
                 expr = SQLSubquery(query=inner_select)
@@ -1083,7 +1083,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     left=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=[quoted, "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                     right=SQLBinaryOp(
                         operator="IS NOT",
@@ -1213,7 +1213,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     table=SQLIdentifier(name=def_name, quoted=True),
                     on_condition=SQLBinaryOp(
                         operator="=",
-                        left=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        left=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                         right=SQLQualifiedIdentifier(parts=[f'"{def_name}"', "patient_id"]),
                     ),
                 ))
@@ -1221,10 +1221,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         return SQLSelect(
             columns=columns,
             from_clause=SQLAlias(
-                expr=SQLIdentifier(name="_patients"), alias="p", implicit_alias=True
+                expr=SQLIdentifier(name="_patients"), alias="_pt", implicit_alias=True
             ),
             joins=joins,
-            order_by=[(SQLQualifiedIdentifier(parts=["p", "patient_id"]), "ASC")],
+            order_by=[(SQLQualifiedIdentifier(parts=["_pt", "patient_id"]), "ASC")],
         )
 
     def _collect_population_evidence(self, def_name: str) -> list:
