@@ -42,7 +42,7 @@ def _is_list_returning_sql(node) -> bool:
         return True
     if isinstance(node, SQLFunctionCall):
         if node.name in ("list_transform", "list_filter", "list", "list_sort",
-                         "list_distinct", "list_concat", "flatten",
+                         "list_distinct", "list_concat", "list_intersect", "flatten",
                          "str_split", "STR_SPLIT", "string_split",
                          "Distinct", '"Distinct"', "list_reverse", "list_slice"):
             return True
