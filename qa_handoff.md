@@ -1,33 +1,24 @@
-# QA Handoff — Iterations 71–90
+# QA Handoff — Iterations 91–100 (FINAL)
 
 **Status**: ✅ ALL CLEAN — No MEDIUM+ issues  
-**Conformance**: 2817/2821 (99.9%)  
-**Total tests this batch**: 163 across 20 iterations  
-**Cumulative**: 91 iterations, 80 consecutive clean sweeps
+**Conformance**: 2817/2821 (99.9%) — FHIRPath 935/935, CQL 1706/1706, ViewDef 134/134, DQM 42/46  
+**Total tests this batch**: 141 across 10 iterations  
+**Cumulative**: 101 iterations, 90 consecutive clean sweeps, 2 bugs fixed, 8 issues tracked  
+**Exit evaluation**: PASSED — loop complete
 
 ## Iteration Results
 
 ```
-Iter 71: Error Message Quality Audit — 15 tests, 0 issues
-Iter 72: API Contract Consistency — 20 tests, 0 issues
-Iter 73: CQL Comparison Mutation — 19 tests, 0 issues
-Iter 74: CQL Boolean Logic / De Morgan — 18 tests, 0 issues
-Iter 75: FHIRPath Indexing Mutation — 12 tests, 0 issues
-Iter 76: CQL Date Precision Truncation — 10 tests, 0 issues
-Iter 77: CQL Membership Mutation — 10 tests, 0 issues
-Iter 78: Resource Type Coverage — 10 tests, 0 issues
-Iter 79: CQL Library Metadata — 7 tests, 0 issues
-Iter 80: ViewDef Constant Columns — 4 tests, 0 issues
-Iter 81: Aggregate Boundary Mutation — 13 tests, 0 issues
-Iter 82: CQL Let Clause Scoping — 3 tests, 0 issues
-Iter 83: FHIRPath Type Testing — 7 tests, 0 issues
-Iter 84: CQL Singleton Mutation — 3 tests, 0 issues
-Iter 85: DQM Evidence Trail — 5 tests, 0 issues
-Iter 86: CQL Parameter Types — 5 tests, 0 issues
-Iter 87: CQL String Comparison Mutation — 8 tests, 0 issues
-Iter 88: ViewDef Where Clause — 4 tests, 0 issues
-Iter 89: Full Conformance Suite — 2817/2821, 0 regressions
-Iter 90: Comprehensive Final Sweep — 10 tests, 0 issues
+Iter 91: Adversarial CQL — 10 tests, 0 issues
+Iter 92: FHIR Edge Cases — 12 tests, 0 issues
+Iter 93: CQL Intervals — 20 tests, 0 issues
+Iter 94: ViewDef Resources — 12 tests, 0 issues
+Iter 95: Boundary/Off-by-one — 20 tests, 0 issues
+Iter 96: Security — 10 tests, 0 issues
+Iter 97: Error Handling — 12 tests, 0 issues
+Iter 98: Multi-Library Integration — 10 tests, 0 issues
+Iter 99: Full Conformance Suite — 2817/2821, 0 regressions
+Iter 100: Final Regression — 15 tests, 0 issues
 ```
 
 ## LOW-Severity Observation (Not Actionable)
@@ -39,27 +30,17 @@ integer literals. In practice, production measures use interval parameters
 (Measurement Period) which follow a separate template-based code path and are
 unaffected. No fix required unless scalar CQL parameters become a use case.
 
-## Coverage Summary
+## Coverage Summary (Iterations 91–100)
 
-These 20 iterations verified cross-cutting concerns and mutation-style correctness:
+These final 10 iterations performed comprehensive adversarial, boundary, security, and regression testing:
 
-- **Error messages**: 15 error conditions produce non-empty, informative messages
-- **API contracts**: All public functions return correct types, handle None/empty
-- **Operator mutations**: `<`/`<=`/`>`/`>=`/`=`/`!=` produce distinct results at boundaries
-- **Boolean logic**: AND/OR/NOT truth tables correct including CQL null propagation
-- **De Morgan's laws**: Verified with null semantics
-- **FHIRPath indexing**: `[0]`/`[1]`/`[999]`/`first()`/`last()`/`tail()`/`skip()`/`take()` correct
-- **Date precision**: `same day as`/`same month as`/`same year as` discriminate correctly
-- **Membership**: `in`/`contains`/`~`/`=` semantics verified
-- **Resource types**: 10 FHIR resource types generate valid retrieve SQL
-- **Library metadata**: Graceful handling of missing using/include/valueset/parameter/context
-- **ViewDef constants**: String, integer, boolean constants render in SQL
-- **Aggregates**: Sum/Count/Min/Max/Avg/AllTrue/AnyTrue on lists, singletons, empties
-- **Let clauses**: Scoping, calculation, no cross-definition leakage
-- **Type testing**: `is()`/`ofType()`/`as()` work for string, boolean, resourceType
-- **Singleton**: `singleton from` correct on 0/1/2+ items
-- **DQM**: MeasureParser handles Measure and Bundle, MeasureEvaluator initializes
-- **Parameters**: Integer/String/DateTime/Interval defaults parse correctly
-- **String comparison**: Case sensitivity, empty string ordering, null propagation
-- **ViewDef where**: Simple, nested, function-based, multi-clause filters generate SQL
-- **Conformance**: 2817/2821 confirmed, no regressions
+- **Adversarial CQL**: 50-define libraries, chained/self/mutual references, circular includes, deep nesting, 10KB strings
+- **FHIR edge cases**: Missing resourceType, empty id, 100KB strings, 1000-element arrays, nested extensions, nulls in arrays, unicode, falsy values
+- **CQL intervals**: Full matrix of 20 interval operations (starts, ends, during, includes, properly includes, before, after, overlaps, meets, contains, null boundaries, start/end of)
+- **ViewDef resource types**: 10 FHIR resource types (Patient through AllergyIntolerance), where clauses, constants
+- **Boundary/off-by-one**: first/last/count on empty/single/multi, startsWith/endsWith/contains(""), substring at length, skip(all), take(0), vacuous truth, index access, length of empty string
+- **Security**: SQL injection via CQL strings, FHIRPath injection via values, path traversal in ViewDef, escaped quotes, unicode/null bytes, SQL keywords in names, library name injection
+- **Error handling**: All error paths trigger typed exceptions, complete error hierarchy verified, all error types importable
+- **Multi-library integration**: 3-library include chains, diamond dependencies, parameterized libraries, codesystem libraries, missing loader handling
+- **Conformance (FINAL)**: FHIRPath 935/935, CQL 1706/1706, ViewDef 134/134, DQM 42/46, Overall 2817/2821
+- **Regression (FINAL)**: QA8-001 (unresolvable includes), QA8-002 (circular detection), all OPEN/DEFERRED issues verified at documented status, FHIRPath/CQL/ViewDef core stability confirmed
