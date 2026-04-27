@@ -844,7 +844,38 @@ class CoreMixin:
                 from_clause=SQLIdentifier(name=name, quoted=True)
             ))
 
-        # Default: treat as identifier
+        # QA9-001: Fail fast on undefined definition references instead of
+        # emitting a bare SQL identifier that produces confusing DuckDB errors.
+        # Guard conditions:
+        #   1. Only raise during real library translations (context has definitions).
+        #   2. Skip when the library has includes — inlined function bodies
+        #      may reference symbols from included libraries (codes, concepts,
+        #      sub-definitions) that aren't registered in the main context.
+        _in_library = bool(self.context._definition_names or self.context.expression_definitions)
+        _has_includes = bool(self.context.includes)
+        if _in_library and not _has_includes:
+            from ...errors import TranslationError
+            available = sorted(
+                self.context._definition_names
+                | set(self.context.parameters.keys())
+                | set(getattr(self.context, 'codes', {}).keys())
+            )
+            hint_parts = [
+                f"Undefined reference '{name}': not found in definitions, "
+                f"parameters, aliases, or code references."
+            ]
+            if available:
+                shown = available[:10]
+                hint_parts.append(
+                    f" Available names: {shown}"
+                    + (f" ... and {len(available) - 10} more" if len(available) > 10 else "")
+                )
+            raise TranslationError(
+                message="".join(hint_parts),
+                suggestion=f"Check the spelling of '{name}' or add a matching define statement.",
+            )
+
+        # Bare-context fallback or library with includes (cross-library reference)
         return SQLIdentifier(name=name)
 
     def _translate_qualified_identifier(self, qi: QualifiedIdentifier, boolean_context: bool = False) -> SQLExpression:
