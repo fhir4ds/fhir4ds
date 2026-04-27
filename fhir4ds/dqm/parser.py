@@ -38,8 +38,10 @@ class MeasureParser:
 
         Raises:
             MeasureParseError: If no group element found, required fields missing,
-                or resourceType is not 'Measure'.
+                or resourceType is not 'Measure', or input is None.
         """
+        if measure is None:
+            raise MeasureParseError("Cannot parse None as a Measure resource")
         if measure.get("resourceType") == "Bundle":
             measure = self._extract_measure_from_bundle(measure)
 

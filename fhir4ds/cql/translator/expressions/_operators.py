@@ -651,6 +651,17 @@ class OperatorsMixin:
         _TEMPORAL_PREFIXES = ("on or before", "on or after", "before", "after")
         if any(operator.startswith(p) for p in _TEMPORAL_PREFIXES):
             cleaned_right, extra_temporal_cond_ast = self._strip_and_conditions(expr.right)
+            # QA7-001: When the ON_OR_BEFORE/ON_OR_AFTER token path is used,
+            # the parser emits operator="on or before" with the precision
+            # nested inside the right operand as BinaryExpression(op="precision of").
+            # Detect this and promote the precision into the operator string so
+            # the translator routes to the precision-qualified UDF.
+            if operator in ("on or before", "on or after") and isinstance(cleaned_right, BinaryExpression) and getattr(cleaned_right, 'operator', '') == "precision of":
+                prec_node = getattr(cleaned_right, 'left', None)
+                prec_val = getattr(prec_node, 'value', None) if prec_node else None
+                if isinstance(prec_val, str) and prec_val.lower() in ("year", "month", "week", "day", "hour", "minute", "second", "millisecond"):
+                    operator = f"{operator} {prec_val.lower()} of"
+                    cleaned_right = cleaned_right.right
             left = self.translate(expr.left, usage=ExprUsage.SCALAR)
             right = self.translate(cleaned_right, usage=ExprUsage.SCALAR)
         else:

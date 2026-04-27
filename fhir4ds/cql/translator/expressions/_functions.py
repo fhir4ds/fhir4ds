@@ -118,15 +118,21 @@ class FunctionsMixin:
     def _unwrap_list_source(self, arg):
         """Unwrap a potential list argument for aggregate handling.
 
-        Returns the underlying expression if *arg* is a ``ListExpression`` or
-        a type-cast wrapping one (``{…} as List<T>``).  Returns ``None`` when
-        *arg* is not a recognisable list source.
+        Returns the underlying expression if *arg* is a ``ListExpression``,
+        a type-cast wrapping one (``{…} as List<T>``), a ``FunctionRef`` to
+        ``flatten``, or a ``BinaryExpression`` with ``union``/``except``/
+        ``intersect`` operator.  Returns ``None`` when *arg* is not a
+        recognisable list source.
         """
-        from ...parser.ast_nodes import ListExpression
+        from ...parser.ast_nodes import ListExpression, FunctionRef as ASTFunctionRef, BinaryExpression as ASTBinaryExpression
         if isinstance(arg, ListExpression):
             return arg
         if self._is_list_typed_ast(arg):
             return getattr(arg, 'left', None)
+        if isinstance(arg, ASTFunctionRef) and (arg.name or '').lower() == 'flatten':
+            return arg
+        if isinstance(arg, ASTBinaryExpression) and getattr(arg, 'operator', '') in ('union', 'except', 'intersect'):
+            return arg
         return None
 
     def _wrap_list_aggregate(
@@ -701,11 +707,11 @@ class FunctionsMixin:
                     list_func = "list_min" if name.lower() == "min" else "list_max"
                     return SQLFunctionCall(name=list_func, args=[source_sql])
 
-        # Count/Sum/Avg/StdDev/Variance/Product on list literals — use DuckDB list functions
+        # Count/Sum/Avg/StdDev/Variance/Product on list sources — use DuckDB list functions
         _list_src = self._unwrap_list_source(arg)
         if _list_src is not None:
             source_sql = self.translate(_list_src, usage=ExprUsage.SCALAR)
-            if isinstance(source_sql, SQLArray):
+            if isinstance(source_sql, SQLArray) or _is_list_returning_sql(source_sql):
                 if name.lower() == "count":
                     # CQL §20.5: Count returns number of non-null elements
                     filtered = SQLFunctionCall(
