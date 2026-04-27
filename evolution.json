@@ -65,6 +65,50 @@
       "found_in": "fhir4ds/viewdef/parser.py",
       "resolution": "The SQL-on-FHIR v2 spec does not mandate client-side resource type validation. Adding validation would be net-new code with low ROI since typos result in empty results (not errors). May be revisited as an optional strict mode.",
       "iteration": 8
+    },
+    {
+      "id": "QA9-001",
+      "title": "CQL translator silently passes undefined definition references through as bare SQL identifiers — produces confusing DuckDB parse errors at runtime",
+      "severity": "medium",
+      "category": "correctness",
+      "status": "OPEN",
+      "found_in": "fhir4ds/cql/translator/expressions/_core.py",
+      "details": "When a CQL definition references another definition that does not exist (e.g., `define X: NonExistentDefinition`), the translator emits SQLIdentifier(name='NonExistentDefinition') instead of raising a TranslationError. At runtime DuckDB produces 'Parser Error: syntax error at or near NonExistentDefinition' which gives no indication the issue is a missing CQL definition. The translator should detect that the referenced Identifier is not in the known definitions dict and raise a clear error at translation time.",
+      "repro": "parse_cql(\"library T\\nusing FHIR version '4.0.1'\\ndefine X: NonExistentDefinition\") → translate_library → translate_library_to_sql('X') → DuckDB parse error",
+      "iteration": 9
+    },
+    {
+      "id": "QA9-002",
+      "title": "CQL translator silently passes unknown function calls through to SQL — produces confusing DuckDB errors at runtime",
+      "severity": "medium",
+      "category": "correctness",
+      "status": "OPEN",
+      "found_in": "fhir4ds/cql/translator/expressions/_core.py",
+      "details": "When CQL contains a call to a function not in the known function registry (e.g., `NonExistentFunction(1, 2)`), the translator emits SQLFunctionCall('NonExistentFunction', ...) which produces a DuckDB parse error at runtime. The translator should validate function names against its registry and raise a TranslationError with the function name and available alternatives.",
+      "repro": "parse_cql(\"library T\\nusing FHIR version '4.0.1'\\ndefine X: NonExistentFunction(1,2)\") → translate_library → translate_library_to_sql('X') → DuckDB error 'syntax error at or near NonExistentFunction'",
+      "iteration": 9
+    },
+    {
+      "id": "QA9-003",
+      "title": "CQL parser does not validate date/time literal values — invalid dates like @2023-13-45 pass through silently",
+      "severity": "low",
+      "category": "validation",
+      "status": "OPEN",
+      "found_in": "fhir4ds/cql/parser",
+      "details": "The CQL parser accepts date literals with invalid month/day values (e.g., @2023-13-45 → month 13, day 45). These are passed through as string literals '2023-13-45' in the generated SQL, where DuckDB will reject them at runtime with a type error. The parser or translator should validate date components are within valid ranges and produce a clear error mentioning the invalid date format.",
+      "repro": "parse_cql(\"library T\\nusing FHIR version '4.0.1'\\ndefine X: @2023-13-45\") succeeds; translator emits SQLLiteral('2023-13-45')",
+      "iteration": 9
+    },
+    {
+      "id": "QA9-004",
+      "title": "FHIRPath resolve() returns empty collection for contained resource references (#id) — workaround exists but resolve() spec compliance is incomplete",
+      "severity": "low",
+      "category": "conformance",
+      "status": "OPEN",
+      "found_in": "fhir4ds/fhirpath/engine/invocations",
+      "details": "Per the FHIRPath spec, resolve() on a reference like '#med1' should look up the resource in the containing resource's 'contained' array. Currently resolve() returns an empty collection for fragment references. Users must use the workaround: contained.where(id = 'med1'). This affects MedicationRequest.medicationReference.resolve() and similar patterns common in clinical data.",
+      "repro": "fhirpath(medicationRequest_json, 'medicationReference.resolve()') → [] even though contained[0].id matches",
+      "iteration": 9
     }
   ]
 }
