@@ -1,6 +1,6 @@
 {
-  "iteration": 103,
-  "phase": "ARCHITECT",
+  "iteration": 202,
+  "phase": "COMPLETE",
   "audit_status": "PASSED",
   "issues": [
     {
@@ -224,6 +224,156 @@
           "action": "Implemented fix: Fixed aggregate functions on list expressions by extending _is_list_returning_sql with quoted Distin",
           "outcome": "Fix validated, full conformance passes",
           "reclassified_to": "RESOLVED"
+        }
+      ]
+    },
+    {
+      "id": "QA103-001",
+      "source_phase": "QA",
+      "source_iteration": 103,
+      "domain": "CQL",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "bug_or_feature_determination": "BUG",
+      "title": "Count on intersect list returns 1 instead of element count",
+      "description": "Count({1,2,3} intersect {2,3,4}) returns 1 (row count) instead of 2 (element count). list_intersect was not recognized as list-returning SQL function in _is_list_returning_sql.",
+      "spec_citation": "CQL \u00a720.5 \u2014 Count returns the number of non-null elements in the argument",
+      "evidence": "Count({1,2,3} intersect {2,3,4}) = 1 (expected 2). SQL: COUNT(list_intersect([1,2,3], [2,3,4]))",
+      "proposed_fix": "Add list_intersect to _is_list_returning_sql recognized function set",
+      "resolution_notes": "Added list_intersect to _is_list_returning_sql in _utils.py. Count now correctly returns 2. Conformance: 935/935 FHIRPath, 1706/1706 CQL, 134/134 ViewDef, 42/46 DQM.",
+      "deep_research_dispatched": false,
+      "deep_research_findings": null,
+      "attempt_history": [
+        {
+          "iteration": 103,
+          "action": "Added list_intersect to _is_list_returning_sql",
+          "outcome": "Fix validated, all conformance passes",
+          "reclassified_to": "RESOLVED"
+        }
+      ]
+    },
+    {
+      "id": "QA105-001",
+      "source_phase": "QA",
+      "source_iteration": 105,
+      "domain": "CQL",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "bug_or_feature_determination": "AMBIGUOUS",
+      "title": "Count(collapse{disjoint intervals}) returns 1 instead of element count",
+      "description": "Count(collapse { Interval[1,3], Interval[5,7] }) returns 1 instead of 2. collapse_intervals returns JSON array (not DuckDB list), so SQL COUNT counts rows. In real HEDIS measures, collapse is used within query expressions that handle this correctly.",
+      "spec_citation": "CQL \u00a719.28 \u2014 Collapse",
+      "evidence": "Count(collapse{Interval[1,3], Interval[5,7]}) = 1 (expected 2). SQL: COUNT(collapse_intervals(...))",
+      "proposed_fix": "Handle JSON array results in aggregate translation path, or convert collapse output to DuckDB list",
+      "resolution_notes": "Used json_array_length for Count on collapse/expand (JSON-returning list functions). Added collapse/expand to _unwrap_list_source. Conformance: 935/935, 1706/1706, 134/134, 42/46.",
+      "deep_research_dispatched": false,
+      "deep_research_findings": null,
+      "attempt_history": [
+        {
+          "iteration": 115,
+          "action": "json_array_length for JSON list functions, added collapse/expand to _unwrap_list_source",
+          "outcome": "Fix validated, all conformance passes",
+          "reclassified_to": "RESOLVED"
+        }
+      ]
+    },
+    {
+      "id": "QA105-002",
+      "source_phase": "QA",
+      "source_iteration": 105,
+      "domain": "CQL",
+      "severity": "LOW",
+      "status": "RESOLVED",
+      "bug_or_feature_determination": "BUG",
+      "title": "1.0 is Decimal returns False due to DuckDB typeof precision suffix",
+      "description": "CQL '1.0 is Decimal' returns False because DuckDB typeof(1.0) returns 'DECIMAL(2,1)' not 'DECIMAL'. The type check uses exact string match. Not used in clinical measures.",
+      "spec_citation": "CQL \u00a722.24 \u2014 Is",
+      "evidence": "1.0 is Decimal = False. typeof(1.0) = DECIMAL(2,1), check expects 'DECIMAL'",
+      "proposed_fix": "Use starts_with(typeof(x), 'DECIMAL') instead of exact match for DECIMAL type check",
+      "resolution_notes": "Fixed typeof check for DuckDB parameterized type names. Use starts_with() for DECIMAL type. Conformance: 935/935, 1706/1706, 134/134, 42/46.",
+      "deep_research_dispatched": false,
+      "deep_research_findings": null,
+      "attempt_history": [
+        {
+          "iteration": 110,
+          "action": "Use starts_with(typeof(x), 'DECIMAL') for parameterized types",
+          "outcome": "Fix validated, all conformance passes",
+          "reclassified_to": "RESOLVED"
+        }
+      ]
+    },
+    {
+      "id": "QA120-001",
+      "source_phase": "QA",
+      "source_iteration": 120,
+      "domain": "CQL",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "bug_or_feature_determination": "BUG",
+      "title": "Count(distinct (X union Y)) returns 1 instead of element count",
+      "description": "DistinctExpression wrapping BinaryExpression(union) not handled in _translate_aggregate_pre, causing double Distinct() wrapping and SQL COUNT counting rows.",
+      "spec_citation": "CQL \u00a720.5 \u2014 Count, \u00a719.31 \u2014 Union",
+      "evidence": "Count(distinct ({1,2,3} union {2,3,4})) = 1 (expected 4)",
+      "proposed_fix": "Added DistinctExpression(BinaryExpression) case in aggregate pre-translate",
+      "resolution_notes": "Added isinstance check for DistinctExpression wrapping BinaryExpression(union/except/intersect). Uses list_distinct + len(list_filter(...)). Conformance: 935/935, 1706/1706, 134/134, 42/46.",
+      "deep_research_dispatched": false,
+      "deep_research_findings": null,
+      "attempt_history": [
+        {
+          "iteration": 120,
+          "action": "Added DistinctExpression(BinaryExpression) handling",
+          "outcome": "Fixed",
+          "reclassified_to": "RESOLVED"
+        }
+      ]
+    },
+    {
+      "id": "QA120-002",
+      "source_phase": "QA",
+      "source_iteration": 120,
+      "domain": "CQL",
+      "severity": "MEDIUM",
+      "status": "RESOLVED",
+      "bug_or_feature_determination": "BUG",
+      "title": "ReplaceMatches $N backreferences not converted to DuckDB \\N format",
+      "description": "CQL ReplaceMatches uses Java regex $1-$9 backreferences but DuckDB regexp_replace uses \\1-\\9. The macro did not convert $N to \\N.",
+      "spec_citation": "CQL \u00a717.13 \u2014 ReplaceMatches",
+      "evidence": "ReplaceMatches('2025-01-15', '(\\d{4})-(\\d{2})-(\\d{2})', '$3/$2/$1') returned '$3/$2/$1' instead of '15/01/2025'",
+      "proposed_fix": "Convert $N to \\N in macro using regexp_replace on replacement string",
+      "resolution_notes": "Updated ReplaceMatches macro to use placeholder-based conversion: \\$ \u2192 placeholder, $N \u2192 \\N, placeholder \u2192 $. Conformance: 935/935, 1706/1706, 134/134, 42/46.",
+      "deep_research_dispatched": false,
+      "deep_research_findings": null,
+      "attempt_history": [
+        {
+          "iteration": 120,
+          "action": "Updated ReplaceMatches macro for backreference conversion",
+          "outcome": "Fixed",
+          "reclassified_to": "RESOLVED"
+        }
+      ]
+    },
+    {
+      "id": "QA120-003",
+      "source_phase": "QA",
+      "source_iteration": 120,
+      "domain": "CQL",
+      "severity": "LOW",
+      "status": "NEEDS_CONTEXT",
+      "bug_or_feature_determination": "AMBIGUOUS",
+      "title": "start of Interval[null, 5] returns 0001-01-01 instead of null",
+      "description": "The C++ intervalStart UDF returns 0001-01-01T00:00:00.000+00:00 for null low bound instead of null. Spec says null should propagate.",
+      "spec_citation": "CQL \u00a719.1 \u2014 Interval Boundaries",
+      "evidence": "start of Interval[null, 5] = 0001-01-01T00:00:00.000+00:00 (expected null)",
+      "proposed_fix": "Fix C++ intervalStart to return null when low bound is null",
+      "resolution_notes": "C++ extension change required. Pattern not commonly used in HEDIS measures. LOW severity since conformance passes.",
+      "deep_research_dispatched": true,
+      "deep_research_findings": "Spec determination: CQL \u00a719.1 'start of Interval[null, 5]' should return null when low is null. The C++ intervalFromBounds constructs intervals with minimum sentinels for null bounds (for range comparison efficiency). intervalStart should detect and return null for these sentinels. However, this pattern is not used in any conformance test or HEDIS measure. Recommendation: Fix in C++ extension but defer to next C++ build cycle since no clinical impact.",
+      "attempt_history": [
+        {
+          "iteration": 120,
+          "action": "Deep research: confirmed spec requires null return, C++ extension uses sentinel values",
+          "outcome": "Needs C++ extension modification, no conformance impact",
+          "reclassified_to": "NEEDS_CONTEXT"
         }
       ]
     }
