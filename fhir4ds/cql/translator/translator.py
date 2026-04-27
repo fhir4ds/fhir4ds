@@ -490,6 +490,11 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         for name in ordered_names:
             expr = definitions[name]
             cte_name = self._unique_cte_name(name, seen_lower)
+            # Wrap bare expressions in SELECT so they form valid CTE bodies
+            if not isinstance(expr, (SQLSelect, SQLSubquery)):
+                expr = SQLSelect(columns=[expr])
+            elif isinstance(expr, SQLSubquery):
+                expr = expr.query
             cte_defs.append(CTEDefinition(name=f'"{cte_name}"', query=expr))
 
         # Determine the final definition to select from

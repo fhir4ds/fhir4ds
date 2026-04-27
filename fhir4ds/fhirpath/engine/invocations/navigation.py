@@ -56,6 +56,18 @@ def _resolve_reference(ctx, reference_str):
     # Get the actual data if it's a ResourceNode
     root_data = util.get_data(root_resource)
 
+    # Handle contained resource references (#id)
+    if reference_str.startswith('#'):
+        contained_id = reference_str[1:]  # Remove '#' prefix
+        # Search the current resource's contained array
+        if isinstance(root_data, dict):
+            contained = root_data.get('contained', [])
+            for resource in contained:
+                resource_data = util.get_data(resource)
+                if isinstance(resource_data, dict) and resource_data.get('id') == contained_id:
+                    return resource
+        return None
+
     # Handle Bundle.entry resolution
     if isinstance(root_data, dict) and root_data.get('resourceType') == 'Bundle':
         entries = root_data.get('entry', [])

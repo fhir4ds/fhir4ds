@@ -144,8 +144,13 @@ def _register_python_supplements(
         def _in_valueset_placeholder(resource: str | None, path: str, valueset_url: str) -> bool:
             import duckdb as _duckdb
             raise _duckdb.InvalidInputException(
-                "in_valueset requires valueset data to be loaded first. "
-                "Call registerValuesetUdfs() with a populated valueset cache. See docs."
+                f"in_valueset('{path}', '{valueset_url}') cannot execute: "
+                "value set data has not been loaded into this connection. "
+                "When using the DQM evaluator (MeasureEvaluator), value sets are loaded "
+                "automatically. For standalone CQL queries, call "
+                "fhir4ds.cql.duckdb.valueset.register_valueset_udfs(conn, cache) "
+                "with a populated ValueSetCache before executing queries that use "
+                "value set membership tests."
             )
         con.create_function("in_valueset", _in_valueset_placeholder, null_handling="special")
 

@@ -165,6 +165,7 @@ class ExpressionTranslator(
             "populationstddev": "STDDEV_POP",
             "stddevpop": "STDDEV_POP",
             "distinct": "list_distinct",
+            "flatten": "flatten",
         }
         for cql, sql in _RENAMES.items():
             registry.register_rename(cql, sql)

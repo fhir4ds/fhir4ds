@@ -42,7 +42,9 @@ def _is_list_returning_sql(node) -> bool:
         return True
     if isinstance(node, SQLFunctionCall):
         if node.name in ("list_transform", "list_filter", "list", "list_sort",
-                         "list_distinct", "list_concat"):
+                         "list_distinct", "list_concat", "flatten",
+                         "str_split", "STR_SPLIT", "string_split",
+                         "Distinct", '"Distinct"', "list_reverse", "list_slice"):
             return True
         if node.name == "from_json" and len(node.args) >= 2:
             return True

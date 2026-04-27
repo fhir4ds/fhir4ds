@@ -551,7 +551,15 @@ class FunctionsMixin:
         # Step 7: Fallback — pass through as function call
         _inlining_lib = getattr(self.context, '_current_inlining_library', None)
         if _inlining_lib is None:
-            logger.warning("Unknown CQL function '%s' passed through to SQL verbatim", name)
+            import warnings as _w
+            msg = (
+                f"Unknown CQL function '{name}' passed through to SQL verbatim. "
+                "This will likely cause a DuckDB error at execution time. "
+                "Check that the function name is spelled correctly and that all "
+                "required library includes are present."
+            )
+            logger.warning(msg)
+            _w.warn(msg, stacklevel=2)
         else:
             logger.debug("Function '%s' from inlined library '%s' passed through to SQL", name, _inlining_lib)
         return SQLFunctionCall(name=name, args=args)
