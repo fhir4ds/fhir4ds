@@ -98,7 +98,66 @@ def _get_compiled_evaluator(expression: str) -> FHIRPathEvaluator:
         )
     evaluator = FHIRPathEvaluator()
     evaluator.compile(expression)
+    # QA-010: Warn on unknown function names to flag typos
+    _warn_unknown_functions(stripped)
     return evaluator
+
+
+# Known FHIRPath functions per FHIRPath §5 + FHIR extensions
+_KNOWN_FHIRPATH_FUNCTIONS = frozenset({
+    # Existence (§5.1)
+    'empty', 'exists', 'all', 'allTrue', 'anyTrue', 'allFalse', 'anyFalse',
+    'subsetOf', 'supersetOf', 'count', 'distinct', 'isDistinct',
+    # Filtering and projection (§5.2)
+    'where', 'select', 'repeat', 'ofType',
+    # Subsetting (§5.3)
+    'single', 'first', 'last', 'tail', 'skip', 'take', 'intersect', 'exclude',
+    # Combining (§5.4)
+    'union', 'combine',
+    # Conversion (§5.5)
+    'iif', 'toBoolean', 'convertsToBoolean', 'toInteger', 'convertsToInteger',
+    'toDate', 'convertsToDate', 'toDateTime', 'convertsToDateTime',
+    'toDecimal', 'convertsToDecimal', 'toString', 'convertsToString',
+    'toQuantity', 'convertsToQuantity', 'toTime', 'convertsToTime',
+    # String functions (§5.7)
+    'indexOf', 'substring', 'startsWith', 'endsWith', 'contains', 'upper',
+    'lower', 'replace', 'matches', 'replaceMatches', 'length', 'toChars',
+    'trim', 'split', 'join', 'encode', 'decode',
+    # Math (§5.8)
+    'abs', 'ceiling', 'exp', 'floor', 'ln', 'log', 'power', 'round',
+    'sqrt', 'truncate',
+    # Tree navigation (§5.9)
+    'children', 'descendants',
+    # Utility (§5.10)
+    'trace', 'now', 'timeOfDay', 'today', 'defineVariable',
+    # Types (§5.11/§6)
+    'is', 'as', 'type',
+    # Aggregate (§5.12)
+    'aggregate',
+    # FHIR-specific
+    'resolve', 'extension', 'hasValue', 'getValue', 'memberOf',
+    'htmlChecks', 'conformsTo', 'elementDefinition', 'slice', 'checkModifiers',
+    # Boolean
+    'not',
+})
+
+# Pattern to extract function names from FHIRPath expressions
+_FHIRPATH_FUNC_RE = re.compile(r'\.?([a-zA-Z_]\w*)\s*\(')
+
+
+def _warn_unknown_functions(expression: str) -> None:
+    """Log warnings for unrecognized function names in a FHIRPath expression."""
+    for match in _FHIRPATH_FUNC_RE.finditer(expression):
+        func_name = match.group(1)
+        if func_name not in _KNOWN_FHIRPATH_FUNCTIONS:
+            # Skip common non-function patterns (resource types, string literals)
+            if func_name[0].isupper():
+                continue  # Resource type names like Patient, Observation
+            _logger.warning(
+                "FHIRPath expression contains unknown function '%s' — "
+                "possible typo (will return empty/NULL): %s",
+                func_name, expression,
+            )
 
 
 # Lazily cached choice type lookup table: base_name -> list of suffixed field names
@@ -349,6 +408,10 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         elif isinstance(resource, dict):
             resource_dict = resource
         else:
+            _logger.warning(
+                "fhirpath_scalar: unexpected resource type %s for expression '%s' — returning empty",
+                type(resource).__name__, expression,
+            )
             return []
 
         # Get cached evaluator and evaluate
@@ -379,6 +442,9 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
 
     except orjson.JSONDecodeError:
         # Invalid JSON — data-dependent error. In scalar context, return empty.
+        _logger.warning(
+            "fhirpath_scalar: invalid JSON resource for expression '%s'", expression,
+        )
         if _STRICT_MODE:
             raise
         return []

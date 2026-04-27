@@ -845,6 +845,11 @@ class CoreMixin:
             ))
 
         # Default: treat as identifier
+        _inlining_lib = getattr(self.context, '_current_inlining_library', None)
+        if _inlining_lib is None:
+            logger.warning("Undefined CQL definition '%s' passed through as SQL identifier", name)
+        else:
+            logger.debug("Definition '%s' from inlined library '%s' passed through as SQL identifier", name, _inlining_lib)
         return SQLIdentifier(name=name)
 
     def _translate_qualified_identifier(self, qi: QualifiedIdentifier, boolean_context: bool = False) -> SQLExpression:

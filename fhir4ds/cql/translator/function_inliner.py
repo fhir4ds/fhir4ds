@@ -283,8 +283,10 @@ class FunctionInliner:
             lib_info = context.includes.get(current_library)
             if lib_info:
                 lib_defs = set(lib_info.definitions.keys())
+                lib_funcs = set(lib_info.functions.keys()) if hasattr(lib_info, 'functions') else set()
                 substituted_body = self._prefix_library_refs(
-                    substituted_body, current_library, lib_defs, param_map
+                    substituted_body, current_library, lib_defs, param_map,
+                    library_funcs=lib_funcs,
                 )
 
         # Then, recursively inline any function calls
@@ -303,6 +305,7 @@ class FunctionInliner:
         library_alias: str,
         library_defs: set,
         param_map: Dict[str, SQLExpression],
+        library_funcs: Optional[set] = None,
     ) -> Expression:
         """Prefix definition references from an external library with the library alias.
         
@@ -312,6 +315,10 @@ class FunctionInliner:
         """
         if expr is None:
             return expr
+
+        # Local alias for recursive calls to pass library_funcs through
+        def _r(e):
+            return self._prefix_library_refs(e, library_alias, library_defs, param_map, library_funcs)
 
         from ..translator.function_inliner import ParameterPlaceholder
         if isinstance(expr, ParameterPlaceholder):
@@ -325,19 +332,16 @@ class FunctionInliner:
 
         # Recurse into Property source
         if isinstance(expr, Property):
-            new_source = self._prefix_library_refs(expr.source, library_alias, library_defs, param_map) if expr.source else None
+            new_source = _r(expr.source) if expr.source else None
             return Property(source=new_source, path=expr.path)
 
         # Recurse into BinaryExpression
         if isinstance(expr, BinaryExpression):
-            new_left = self._prefix_library_refs(expr.left, library_alias, library_defs, param_map)
-            new_right = self._prefix_library_refs(expr.right, library_alias, library_defs, param_map)
-            return BinaryExpression(operator=expr.operator, left=new_left, right=new_right)
+            return BinaryExpression(operator=expr.operator, left=_r(expr.left), right=_r(expr.right))
 
         # Recurse into UnaryExpression
         if isinstance(expr, UnaryExpression):
-            new_operand = self._prefix_library_refs(expr.operand, library_alias, library_defs, param_map)
-            return UnaryExpression(operator=expr.operator, operand=new_operand)
+            return UnaryExpression(operator=expr.operator, operand=_r(expr.operand))
 
         # Recurse into ExistsExpression
         from ..parser.ast_nodes import (
@@ -345,32 +349,31 @@ class FunctionInliner:
             WithClause, LetClause
         )
         if isinstance(expr, ExistsExpression):
-            return ExistsExpression(source=self._prefix_library_refs(expr.source, library_alias, library_defs, param_map))
+            return ExistsExpression(source=_r(expr.source))
 
         # Recurse into Query
         if isinstance(expr, Query):
-            # Prefix query sources
             if isinstance(expr.source, list):
                 new_sources = []
                 for src in expr.source:
-                    new_src_expr = self._prefix_library_refs(src.expression, library_alias, library_defs, param_map) if src.expression else None
+                    new_src_expr = _r(src.expression) if src.expression else None
                     new_sources.append(QuerySource(alias=src.alias, expression=new_src_expr))
             else:
-                new_src_expr = self._prefix_library_refs(expr.source.expression, library_alias, library_defs, param_map) if expr.source.expression else None
+                new_src_expr = _r(expr.source.expression) if expr.source.expression else None
                 new_sources = QuerySource(alias=expr.source.alias, expression=new_src_expr)
 
             new_where = None
             if expr.where:
-                new_where = WhereClause(expression=self._prefix_library_refs(expr.where.expression, library_alias, library_defs, param_map))
+                new_where = WhereClause(expression=_r(expr.where.expression))
 
             new_return = None
             if expr.return_clause:
-                new_return = ReturnClause(expression=self._prefix_library_refs(expr.return_clause.expression, library_alias, library_defs, param_map))
+                new_return = ReturnClause(expression=_r(expr.return_clause.expression))
 
             new_withs = []
             for w in expr.with_clauses:
-                new_w_expr = self._prefix_library_refs(w.expression, library_alias, library_defs, param_map)
-                new_w_st = self._prefix_library_refs(w.such_that, library_alias, library_defs, param_map) if w.such_that else None
+                new_w_expr = _r(w.expression)
+                new_w_st = _r(w.such_that) if w.such_that else None
                 new_withs.append(WithClause(
                     alias=w.alias, expression=new_w_expr, such_that=new_w_st,
                     is_without=getattr(w, 'is_without', False),
@@ -378,8 +381,7 @@ class FunctionInliner:
 
             new_lets = []
             for let in expr.let_clauses:
-                new_let_expr = self._prefix_library_refs(let.expression, library_alias, library_defs, param_map)
-                new_lets.append(LetClause(alias=let.alias, expression=new_let_expr))
+                new_lets.append(LetClause(alias=let.alias, expression=_r(let.expression)))
 
             return Query(
                 source=new_sources, where=new_where, return_clause=new_return,
@@ -387,39 +389,61 @@ class FunctionInliner:
                 relationships=expr.relationships, aggregate=expr.aggregate,
             )
 
-        # Recurse into FunctionRef
+        # Recurse into FunctionRef arguments (name prefixing handled by inliner)
         if isinstance(expr, FunctionRef):
-            new_args = [self._prefix_library_refs(a, library_alias, library_defs, param_map) for a in expr.arguments]
+            new_args = [_r(a) for a in expr.arguments]
             return FunctionRef(name=expr.name, arguments=new_args)
 
         # Recurse into MethodInvocation
         if isinstance(expr, MethodInvocation):
-            new_source = self._prefix_library_refs(expr.source, library_alias, library_defs, param_map)
-            new_args = [self._prefix_library_refs(a, library_alias, library_defs, param_map) for a in expr.arguments]
-            return MethodInvocation(source=new_source, method=expr.method, arguments=new_args)
+            return MethodInvocation(source=_r(expr.source), method=expr.method, arguments=[_r(a) for a in expr.arguments])
 
         # Recurse into ConditionalExpression
         if isinstance(expr, ConditionalExpression):
             return ConditionalExpression(
-                condition=self._prefix_library_refs(expr.condition, library_alias, library_defs, param_map),
-                then_expr=self._prefix_library_refs(expr.then_expr, library_alias, library_defs, param_map),
-                else_expr=self._prefix_library_refs(expr.else_expr, library_alias, library_defs, param_map),
+                condition=_r(expr.condition),
+                then_expr=_r(expr.then_expr),
+                else_expr=_r(expr.else_expr),
             )
 
         # Recurse into CaseExpression
         if isinstance(expr, CaseExpression):
             new_items = [
                 CaseItem(
-                    when=self._prefix_library_refs(item.when, library_alias, library_defs, param_map),
-                    then=self._prefix_library_refs(item.then, library_alias, library_defs, param_map),
+                    when=_r(item.when),
+                    then=_r(item.then),
                 ) for item in expr.case_items
             ]
-            new_else = self._prefix_library_refs(expr.else_expr, library_alias, library_defs, param_map) if expr.else_expr else None
+            new_else = _r(expr.else_expr) if expr.else_expr else None
             return CaseExpression(case_items=new_items, else_expr=new_else, comparand=expr.comparand)
 
         # Recurse into ListExpression
         if isinstance(expr, ListExpression):
-            return ListExpression(elements=[self._prefix_library_refs(e, library_alias, library_defs, param_map) for e in expr.elements])
+            return ListExpression(elements=[_r(e) for e in expr.elements])
+
+        # Recurse into First/Last/Distinct/Indexer expressions
+        if isinstance(expr, IndexerExpression):
+            return IndexerExpression(source=_r(expr.source), index=_r(expr.index))
+
+        if hasattr(expr, 'source') and type(expr).__name__ in ('FirstExpression', 'LastExpression', 'DistinctExpression', 'FlattenExpression', 'SingletonFromExpression'):
+            cls = type(expr)
+            return cls(source=_r(expr.source))
+
+        # Recurse into Interval
+        if isinstance(expr, Interval):
+            return Interval(low=_r(expr.low), high=_r(expr.high),
+                          low_closed=expr.low_closed, high_closed=expr.high_closed)
+
+        # Recurse into TupleExpression
+        if isinstance(expr, TupleExpression):
+            new_elements = [TupleElement(name=te.name, type=_r(te.type)) for te in expr.elements]
+            return TupleExpression(elements=new_elements)
+
+        # Recurse into DifferenceBetween / DurationBetween
+        if isinstance(expr, DifferenceBetween):
+            return DifferenceBetween(operand_left=_r(expr.operand_left), operand_right=_r(expr.operand_right), precision=expr.precision)
+        if isinstance(expr, DurationBetween):
+            return DurationBetween(operand_left=_r(expr.operand_left), operand_right=_r(expr.operand_right), precision=expr.precision)
 
         return expr
 
@@ -1049,6 +1073,8 @@ class FunctionInliner:
                     param_map[param_name] = args[i]
 
         self._inlining_stack.append(key)
+        _prev_inlining = getattr(self.context, '_current_inlining_library', None)
+        self.context._current_inlining_library = func_def.library_name
         try:
             substituted = self._substitute_parameters_cql(func_def.body, param_map)
             # Prefix library references if from an external library
@@ -1056,13 +1082,16 @@ class FunctionInliner:
                 lib_info = self.context.includes.get(func_def.library_name)
                 if lib_info:
                     lib_defs = set(lib_info.definitions.keys())
+                    lib_funcs = set(lib_info.functions.keys()) if hasattr(lib_info, 'functions') else set()
                     substituted = self._prefix_library_refs(
-                        substituted, func_def.library_name, lib_defs, {}
+                        substituted, func_def.library_name, lib_defs, {},
+                        library_funcs=lib_funcs,
                     )
             expanded = self._inline_nested_calls_cql(substituted, func_def.library_name)
             return expanded
         finally:
             self._inlining_stack.pop()
+            self.context._current_inlining_library = _prev_inlining
 
     def _substitute_parameters_cql(
         self,
@@ -1282,6 +1311,13 @@ class FunctionInliner:
                 func_name = parts[1]
 
             key = self._make_function_key(func_name, library_name)
+
+            # If not found with explicit key, try suffix search for unqualified
+            # calls inside library bodies (e.g., G(x) in lib FHIRCommon).
+            if key not in self._functions and library_name is None and current_library:
+                qualified_key = self._make_function_key(func_name, current_library)
+                if qualified_key in self._functions:
+                    key = qualified_key
 
             if key in self._functions:
                 func_def = self._functions[key]

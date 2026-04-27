@@ -3072,12 +3072,14 @@ class QueryMixin:
                     sort_by = None
                     if _sort_ident_name and _sort_ident_name in _col_aliases:
                         sort_by = SQLIdentifier(name=_sort_ident_name)
+                    elif _sort_ident_name and _sort_ident_name in self.context.let_variables:
+                        # Let-binding identifier (e.g. CrLabTime from a let clause) —
+                        # use the already-translated SQL expression directly.
+                        sort_by = self.context.let_variables[_sort_ident_name]
                     elif not _sort_ident_name:
                         # Complex expression (e.g. effective.earliest()) — translate
                         sort_by = self.translate(sort_item.expression, usage=ExprUsage.SCALAR)
-                    # else: simple identifier doesn't match any output column — skip sort
-                    # to avoid referencing out-of-scope query aliases (e.g. CQL let-bindings
-                    # that resolve to source aliases not present in the SQL scope)
+                    # else: simple identifier not in columns or let variables — skip sort
                     if sort_by is not None:
                         result = SQLSelect(
                             columns=result.columns,

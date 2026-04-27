@@ -2948,8 +2948,8 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		if (left.size() > 1 || right.size() > 1) {
 			if (left.size() != right.size()) {
 				if (is_equiv) return {FPValue::FromBoolean(op == "!~")};
-				// For =, if sizes differ, result is false
-				return {FPValue::FromBoolean(op == "!=")};
+				// FHIRPath §6.1: equality on multi-item collections returns empty
+				return {};
 			}
 			if (is_equiv) {
 				// Equivalence: compare as sets (same elements regardless of order)
@@ -2974,12 +2974,8 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				}
 				return {FPValue::FromBoolean(op == "~" ? all_match : !all_match)};
 			} else {
-				// Equality: ordered element-by-element comparison
-				bool all_eq = true;
-				for (size_t i = 0; i < left.size(); ++i) {
-					if (toString(left[i]) != toString(right[i])) { all_eq = false; break; }
-				}
-				return {FPValue::FromBoolean(op == "=" ? all_eq : !all_eq)};
+				// FHIRPath §6.1: equality (=, !=) on multi-item collections returns empty
+				return {};
 			}
 		}
 
@@ -3853,9 +3849,10 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 				const char *actual_type = fhirFieldType(val.field_name);
 				if (target == "string") {
 					if (exact) {
-						// Exact: only match if actual type IS string (not code/uri/id)
-						if (!actual_type || std::string(actual_type) == "string") return {FPValue::FromBoolean(true)};
-						return {FPValue::FromBoolean(false)};
+						// Exact for ofType: string is the parent type for all
+						// string subtypes (id, code, uri, etc.) in FHIR type
+						// hierarchy — ofType(string) matches them all.
+						return {FPValue::FromBoolean(true)};
 					}
 					// Non-exact (is()): string is the parent type - matches all string subtypes
 					return {FPValue::FromBoolean(true)};
@@ -3868,8 +3865,44 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 					return {FPValue::FromBoolean(false)};
 				}
 			}
-			if (target == "date") return {FPValue::FromBoolean(t == FPValue::Type::Date)};
-			if (target == "dateTime" || target == "instant") return {FPValue::FromBoolean(t == FPValue::Type::DateTime)};
+			if (target == "date") {
+				if (t == FPValue::Type::Date) return {FPValue::FromBoolean(true)};
+				// FHIR date fields arrive as JSON strings — check field metadata
+				if (t == FPValue::Type::String) {
+					const char *actual_type = fhirFieldType(val.field_name);
+					if (actual_type && std::string(actual_type) == "date") return {FPValue::FromBoolean(true)};
+					// Also check if the string looks like a date and has no field name
+					if (!actual_type && isDateTimeType(val)) {
+						std::string s;
+						if (val.type == FPValue::Type::JsonVal && val.json_val && yyjson_is_str(val.json_val))
+							s = yyjson_get_str(val.json_val);
+						else if (val.type == FPValue::Type::String)
+							s = val.string_val;
+						// Date (not dateTime): YYYY, YYYY-MM, or YYYY-MM-DD (no T)
+						if (!s.empty() && s.find('T') == std::string::npos) return {FPValue::FromBoolean(true)};
+					}
+				}
+				return {FPValue::FromBoolean(false)};
+			}
+			if (target == "dateTime" || target == "instant") {
+				if (t == FPValue::Type::DateTime) return {FPValue::FromBoolean(true)};
+				// FHIR dateTime fields arrive as JSON strings — check field metadata
+				if (t == FPValue::Type::String) {
+					const char *actual_type = fhirFieldType(val.field_name);
+					if (actual_type && (std::string(actual_type) == "dateTime" || std::string(actual_type) == "instant"))
+						return {FPValue::FromBoolean(true)};
+					// String with 'T' is a dateTime
+					if (!actual_type && isDateTimeType(val)) {
+						std::string s;
+						if (val.type == FPValue::Type::JsonVal && val.json_val && yyjson_is_str(val.json_val))
+							s = yyjson_get_str(val.json_val);
+						else if (val.type == FPValue::Type::String)
+							s = val.string_val;
+						if (!s.empty() && s.find('T') != std::string::npos) return {FPValue::FromBoolean(true)};
+					}
+				}
+				return {FPValue::FromBoolean(false)};
+			}
 			if (target == "time") return {FPValue::FromBoolean(t == FPValue::Type::Time)};
 		}
 		// System literals that map to FHIR types

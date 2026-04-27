@@ -549,7 +549,11 @@ class FunctionsMixin:
             return SQLFunctionCall(name="CombineSep", args=args)
 
         # Step 7: Fallback — pass through as function call
-        logger.debug("Unknown function '%s' — passing through to SQL", name)
+        _inlining_lib = getattr(self.context, '_current_inlining_library', None)
+        if _inlining_lib is None:
+            logger.warning("Unknown CQL function '%s' passed through to SQL verbatim", name)
+        else:
+            logger.debug("Function '%s' from inlined library '%s' passed through to SQL", name, _inlining_lib)
         return SQLFunctionCall(name=name, args=args)
 
     # ── Aggregate pre-translate strategy ──────────────────────────────────
