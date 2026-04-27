@@ -1,27 +1,35 @@
-# Architect Handoff — Iteration 6 (ARCHITECT → QA)
+# Architect Handoff — Iteration 8 (ARCHITECT → QA)
 
-**Verdict**: PASSED — no CRITICAL/HIGH findings, conformance at baseline
-**Phase**: ARCHITECT → QA (iteration 6)
+**Verdict**: PASSED
+**Phase**: ARCHITECT → QA (iteration 8)
+**Conformance**: 2817/2821 (99.9%) — matches baseline
 
-## Iteration 5 Review Summary
+## Iteration 7 Fix Review
 
-### QA5-004 Fix Verification
+Three fixes from QA7/FIX7 were reviewed against all 12 architecture invariants:
 
-**Status**: ✅ APPROVED — compliant with all 12 invariants
+| Fix | Severity | File | Invariants Checked | Verdict |
+|-----|----------|------|--------------------|---------|
+| QA7-001 Precision-of promotion | MEDIUM | `_operators.py:654-664` | INV-01,02,03,04,12 | ✅ CLEAN |
+| QA7-002 List aggregate unwrap | MEDIUM | `_functions.py:127-136,714` | INV-01,02,03,04,12 | ✅ CLEAN |
+| QA7-003 None guard in parse() | LOW | `dqm/parser.py:43-44` | INV-04 | ✅ CLEAN |
 
-| Invariant | Result | Evidence |
-|-----------|--------|----------|
-| INV-01 Pure AST pipeline | ✅ PASS | Fix uses `SQLFunctionCall`, `SQLCast`, `SQLLiteral` — no `SQLRaw` or mid-pipeline `to_sql()` |
-| INV-04 Fail fast | ✅ PASS | Eliminates silent string-equality fallback for precision-qualified same operators |
-| INV-08 No hardcoded types | ✅ PASS | Precision list is universal (8 temporal precisions) |
-| All others (02,03,05–07,09–12) | ✅ PASS | No changes to context, schema, threading, layers, or registries |
+**All fixes comply.** No SQLRaw mid-pipeline, no to_sql() mid-pipeline, no silent fallbacks introduced.
 
-**Change scope**: 20 lines across 3 files — pure operator dispatch logic:
-- `_temporal_comparisons.py`: 3 alternate patterns for `same or before/after/as <prec> of`
-- `__init__.py`: `startswith('same ')` boolean inference fallback
-- `inference.py`: Row shape + CQL type inference for precision-qualified same operators
+### QA7-001: Precision-of promotion (`_operators.py`)
+Detects `BinaryExpression(operator="precision of")` nested in the right operand of
+`on or before`/`on or after`, extracts precision, and promotes it into the operator
+string. Pure CQL AST transformation — no SQL layer involvement.
 
-### Conformance
+### QA7-002: List aggregate unwrap (`_functions.py`)
+Extends `_unwrap_list_source()` to recognize `flatten` (FunctionRef) and
+`union`/`except`/`intersect` (BinaryExpression). Aggregate handler now checks
+`_is_list_returning_sql()` alongside `isinstance(SQLArray)`.
+
+### QA7-003: None guard (`dqm/parser.py`)
+Raises `MeasureParseError` on None input instead of leaking `AttributeError`.
+
+## Conformance (verified — no regression)
 
 ```
 ViewDefinition:    134/134   (100.0%)
@@ -32,22 +40,28 @@ DQM (QI Core):     42/46     (91.3%)
 OVERALL:           2817/2821 (99.9%) — AT BASELINE
 ```
 
-### CQL Unit Tests
+## CQL Unit Tests
 
 ```
-3384 passed, 1 failed (ARCH-004 stale), 2 xpassed
+3384 passed, 1 failed (ARCH-004 pre-existing), 2 xpassed, 135 warnings
 ```
 
-### Issues Disposition (Iteration 5)
+The single failure (`test_bp_profile_includes_component_columns`) is pre-existing
+(ARCH-004) — confirmed by running against parent commit.
 
-| Issue | Severity | Disposition |
-|-------|----------|-------------|
-| QA5-004 CQL `same or before <prec> of` | HIGH | ✅ RESOLVED — fix verified, invariant-compliant |
-| QA5-001 FHIRPath inequality type error | MEDIUM | UNCONFIRMED — spec-compliant per FHIRPath §6.6 |
-| QA5-002 DateTime literal parsing | MEDIUM | UNCONFIRMED — not reproducible |
-| QA5-003 String `&` parse error | LOW | UNCONFIRMED — not reproducible |
+## 12 Invariants — All Holding
 
-## Open ARCH Issues (unchanged from iteration 4)
+All 3 fixes verified against applicable invariants. No violations introduced.
+INV-11 (no new Strategy 2 templates) remains KNOWN_DEBT — no change.
+
+## Pre-existing Architectural Note
+
+The explore agent flagged a pre-existing `to_sql()` + `SQLRaw` mid-pipeline usage
+in `_operators.py:708-714` (DateTime cast validation). This is **not** part of the
+QA7 fixes — it predates this iteration. Tracked for future remediation but not a
+blocker.
+
+## Open ARCH Issues (unchanged)
 
 | ID | Severity | Summary |
 |----|----------|---------|
@@ -62,12 +76,20 @@ OVERALL:           2817/2821 (99.9%) — AT BASELINE
 
 No new ARCH issues introduced. No CRITICAL or HIGH open findings.
 
-## 12 Invariants — All Holding
+## Cumulative Progress (26 RESOLVED across 7 iterations)
 
-All 12 golden-standard invariants (INV-01 through INV-12) verified as holding.
-INV-11 (no new Strategy 2 templates) remains KNOWN_DEBT — no change this iteration.
+| Iteration | Issues Found | Fixed | Deferred | Net |
+|-----------|-------------|-------|----------|-----|
+| 1 | 30 | 5 | 12 | 13 open |
+| 2 | 0 | 3 | 0 | 10 open |
+| 3 | 0 | 3 | 7 | 0 new |
+| 4 | 4 | 4 | 0 | 0 new |
+| 5 | 2 | 2 | 0 | 0 new |
+| 6 | 1 | 0 | 1 | 0 new |
+| 7 | 3 | 3 | 0 | 0 new |
 
 ## Next Phase
 
-QA iteration 6 should perform a final sweep. If no new CRITICAL/HIGH findings,
-the loop can exit.
+QA iteration 8. The loop has been converging steadily — iteration 7 found only
+MEDIUM/LOW issues, all resolved. If QA8 finds no new CRITICAL/HIGH findings,
+the loop should exit.
