@@ -463,6 +463,9 @@ class InferenceMixin:
                       'meets', 'meets before', 'meets after',
                       'contains', 'precision of'):
                 return RowShape.PATIENT_SCALAR
+            # Precision-qualified same operators: "same or before month of", etc.
+            if op.startswith('same '):
+                return RowShape.PATIENT_SCALAR
 
             # Set operations: shape depends on operand shapes
             if op in ('union', 'intersect', 'except'):
@@ -838,6 +841,9 @@ class InferenceMixin:
                       'properly includes', 'properly included in',
                       'meets', 'meets before', 'meets after',
                       'contains'):
+                return "Boolean"
+            # Precision-qualified same operators: "same or before month of", etc.
+            if op.startswith('same '):
                 return "Boolean"
             # intersect/union/except preserve the element type
             if op in ('intersect', 'union', 'except'):

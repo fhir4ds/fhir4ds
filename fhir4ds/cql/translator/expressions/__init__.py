@@ -320,6 +320,10 @@ class ExpressionTranslator(
                       'meets', 'meets before', 'meets after',
                       'contains'):
                 return True
+            # Precision-qualified same operators: "same or before month of",
+            # "same month or before", "same day as", etc.
+            if op.startswith('same '):
+                return True
         # Identifier reference: follow the chain
         if isinstance(cql_ast, CQLIdentifier):
             return self._is_forward_ref_boolean(cql_ast.name, _visited)
