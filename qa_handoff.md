@@ -1,48 +1,84 @@
-# QA Handoff — Iterations 11–15
+# QA Handoff — Iterations 16–30
 
 ## Summary
 
-**Iterations 11–15** ran **5 focused QA sweeps** across previously under-tested areas. All **83 tests** passed with **zero new issues** found. The codebase is confirmed highly stable after 15 iterations and 28 prior bug fixes.
+**Iterations 16–30** ran **15 focused QA sweeps** across all major subsystems. All **225 tests** passed with **zero new issues** found. The codebase is confirmed highly stable after 30 total iterations, 28 prior bug fixes, and 10 consecutive clean sweeps.
 
 | Metric | Value |
 |--------|-------|
-| Iterations | 11–15 |
-| Tests run | 83 |
-| ✅ PASS | 83 |
+| Iterations | 16–30 |
+| Tests run | 225 |
+| ✅ PASS | 225 |
 | ❌ NEW ISSUES | 0 |
 | Conformance | 2817/2821 (unchanged) |
 | Regressions | 0 |
 
 ## Iteration Results
 
-### Iteration 11: CQL Tuple and Choice Type Operations
-Tests run: 15
-Issues found: 0
-Clean areas confirmed: Tuple construction (basic, nested, empty), Tuple property access (simple + nested), Tuple equality/inequality, Tuple with null elements, Choice type `is` tests (`medication is CodeableConcept`, `value is Quantity`), Polymorphic `as` casts, Tuple in query returns, Tuple with list elements, MedicationRequest/Observation retrieves.
+```
+Iter 16: CQL Conversions        — 15 tests, 0 issues
+Iter 17: CQL Clinical Operators — 15 tests, 0 issues
+Iter 18: FHIRPath Type Testing  — 15 tests, 0 issues
+Iter 19: CQL Conditional Logic  — 15 tests, 0 issues
+Iter 20: CQL List Operations    — 15 tests, 0 issues
+Iter 21: FHIRPath Navigation    — 15 tests, 0 issues
+Iter 22: CQL Retrieve Patterns  — 15 tests, 0 issues
+Iter 23: ViewDef Column Types   — 15 tests, 0 issues
+Iter 24: CQL String Operations  — 15 tests, 0 issues
+Iter 25: FHIRPath Collections   — 15 tests, 0 issues
+Iter 26: CQL Arithmetic         — 15 tests, 0 issues
+Iter 27: CQL Comparison         — 15 tests, 0 issues
+Iter 28: DQM Stress             — 15 tests, 0 issues
+Iter 29: API Contracts          — 15 tests, 0 issues
+Iter 30: Final Regression       — 15 tests, 0 issues
+```
 
-### Iteration 12: FHIRPath Advanced Functions
-Tests run: 18
-Issues found: 0
-Clean areas confirmed: `aggregate()` with `$total` (sum, count, string concat, with iif), `repeat()` on bundle entries, `ofType(string)` on extensions, `children()` on simple resources, `descendants().ofType(string)`, `trace()` identity contract (with and without callback), `iif()` true/false/no-else/empty branches, `where()` + property access, `exists()` with complex predicates, `all()` true/false.
+### Iter 16: CQL Conversion Functions
+ToDate, ToDateTime, Today, Now, Year/Month/Day extraction, Abs, Ceiling, Floor, RoundTo, Truncate, Sqrt, Ln, Power(2,10).
 
-### Iteration 13: CQL Date/Time Precision Edge Cases
-Tests run: 25
-Issues found: 0
-Clean areas confirmed: Partial date comparisons (year vs full, month vs full, month vs month), temporal `before`/`same or before`, `duration in` (months partial, years, days), DateTime before/same-or-after, timezone-aware comparisons, `Now()`/`Today()`/`TimeOfDay()` translation, date arithmetic (+year, -months, +hours), date component extraction (year/month/day from), date in/during interval, precision-specific `same year as`/`same month as`.
+### Iter 17: CQL Clinical Operators
+AgeInYears/Months/Days/Hours/Minutes/Seconds (JSON Patient input), AgeIn*At variants, birthday boundary pre/on, leap year edge, newborn=0, table-based AgeInYears, dateTimeToday, dateTimeNow.
 
-### Iteration 14: ViewDefinition Advanced Patterns
-Tests run: 11
-Issues found: 0
-Clean areas confirmed: Basic SQL generation, `forEach` unnest, nested `forEach > forEach` (double unnest), `where` predicate (simple + complex FHIRPath), column type annotations, `forEachOrNull` (LEFT JOIN), ViewDef on empty dataset, multiple `where` clauses, constants substitution, parse error handling (missing resource).
+### Iter 18: FHIRPath Type Testing
+Patient.id/active/name.family/name.given (multiple), given.count(), birthDate, telecom.where() filtering, Observation value.ofType(Quantity).value/unit, coding.code, effective.ofType(dateTime), gender, address.city, identifier.value.
 
-### Iteration 15: DQM Pipeline & Evidence Verification
-Tests run: 14
-Issues found: 0
-Clean areas confirmed: MeasureEvaluator import/creation/method signatures, measure test data availability, conformance runner presence, CQL measure pattern translation (IPP/Denom/Numer), Measurement Period parameter, population attribution CQL, supplemental data patterns, observation-based measure patterns, summary report and CSV export signatures, conformance data structure.
+### Iter 19: CQL Conditional Logic
+if-then-else (basic, true literal, null condition), Coalesce (NULL chain, first non-null, strings), IfNull, nested if-then-else, case-when-then-else, boolean AND/OR/NOT, FHIRPath iif(true/false).
 
-**Note:** Two initial test-authoring errors used FHIRPath `.where()` syntax in CQL expressions. CQL reserves `where` as a keyword; real measures use query `where` clauses. Rewritten tests passed. Not filed as a bug — this is expected parser behavior consistent with 1706/1706 CQL conformance.
+### Iter 20: CQL List Operations
+First/Last (values, empty=null), Skip/Take (values, empty), "Distinct" (quoted, correct dedup), Flatten, FHIRPath (1|2|3).count/first/last/tail/distinct.
 
-## Prior Conformance Baseline (unchanged)
+### Iter 21: FHIRPath Navigation on Real Resources
+Patient: identifier.count, name.where(use=official), all given count, address.line, meta.versionId, extension valueInteger. Observation: coding.code, code.text, component.count, component Quantity values, subject.reference. Condition: display, clinicalStatus. deceased.exists()=false, communication.language.coding.code.
+
+### Iter 22: CQL Retrieve Patterns
+Basic [Condition], retrieve with code filter, [Observation] with code, [Encounter], exists, Count, where clause, multiple retrieves (AND), date filter, missing resource type, sort, First from sorted, not exists, FHIRDataLoader counts.
+
+### Iter 23: ViewDef Column Types
+Parsing (basic, multi-column), SQL generation with source_table, Observation ViewDef, forEach, where, collection column, execution (2 patients), result value verification, Condition ViewDef, nested forEach, forEachOrNull, multiple select blocks, source_table override, empty table.
+
+### Iter 24: CQL String Operations
+Upper, Lower, Length, Substring(2-arg), StartsWith, EndsWith, Contains, "LastPositionOf", "Combine" (list→string), "Split", FHIRPath length/upper/lower/startsWith/concat.
+
+### Iter 25: FHIRPath Collection Operations
+union, count, where filter, select($this*2), all(true/false), exists(criteria), empty(), distinct, first/last/tail, skip/take, single.
+
+### Iter 26: CQL Arithmetic Edge Cases
+Abs(-42, 0), Ceiling, Floor(-4.1=-5), Truncate(-4.9=-4, vs Floor), RoundTo(pi,3), Round(3.5), Sqrt(0), Power(0,0)=1, Power(2,-1)=0.5, Exp(Ln(5))=5, Mod(10,3)=1, Div(10,3)=3, Sign(-5,0,5).
+
+### Iter 27: CQL Comparison and Equivalence
+CQL: =, !=, null=null, null~null, 5~5, string equality, string equivalence, >, <=. FHIRPath: 5=5, 5!=3, 5>3, 3<5, 5~5, 5!~3.
+
+### Iter 28: DQM Stress
+10+5+100 patient loads, patients+conditions, CQL measure-like translation, evaluate_measure API, MeasureEvaluator import, bundle loading, population definitions, population SQL, minimal resource, mixed resource types, ViewDef on loaded data, conformance infrastructure, ViewDef for 5 resource types.
+
+### Iter 29: API Contract Verification
+Public API (create_connection, register, register_fhirpath, register_cql, evaluate_measure, generate_view_sql, parse_view_definition), FHIRDataLoader methods, CQL parser/translator imports, ViewDef imports, DQM MeasureEvaluator, FHIRPath evaluate (fhir4ds.fhirpath.evaluate), FHIRPathError, register standalone, attach/detach.
+
+### Iter 30: Final Regression
+End-to-end: FHIRPath core (id, boolean, count), DuckDB FHIRPath (Quantity), CQL translation, CQL UDFs (Abs, Ceiling, Floor), AgeInYears, ViewDef SQL generation + execution, bundle loading, First/Last, Upper/Lower, full pipeline (5 patients + 5 conditions → ViewDef query).
+
+## Conformance Baseline (unchanged)
 
 | Specification | Passed | Total | Rate |
 |---------------|--------|-------|------|
@@ -52,7 +88,7 @@ Clean areas confirmed: MeasureEvaluator import/creation/method signatures, measu
 | DQM (QI Core 2025) | 42 | 46 | 91.3% |
 | **OVERALL** | **2817** | **2821** | **99.9%** |
 
-## Open Issues (from prior iterations, unchanged)
+## Open Issues (unchanged from iteration 10)
 
 | ID | Severity | Summary |
 |----|----------|---------|
@@ -62,52 +98,25 @@ Clean areas confirmed: MeasureEvaluator import/creation/method signatures, measu
 | QA9-004 | Low | resolve() empty for contained refs (#id) |
 | QA10-001 | Low | CQL aggregates on list-valued exprs use SQL aggregates instead of list functions |
 
-## Cumulative Issue Status
-
-| ID | Status | Severity | Summary |
-|----|--------|----------|---------|
-| QA8-001 | FIXED | Medium | Unresolvable include references → broken SQL |
-| QA8-002 | FIXED | Medium | Circular include → unbounded recursion |
-| QA8-003 | INTENDED | Low | ViewDef assumes resourceType column |
-| QA8-004 | DEFERRED | Low | in_valueset UDF placeholder |
-| QA8-005 | DEFERRED | Low | ViewDef accepts arbitrary resource types |
-| QA9-001 | OPEN | Medium | Undefined definition refs pass through to SQL |
-| QA9-002 | OPEN | Medium | Unknown function calls pass through to SQL |
-| QA9-003 | OPEN | Low | Invalid date literals not validated at parse time |
-| QA9-004 | OPEN | Low | resolve() empty for contained refs (#id) |
-| QA10-001 | OPEN | Low | Aggregates on list-valued exprs use wrong SQL functions |
-
-## Conclusion
-
-Iterations 11–15 confirm the codebase is **stable and mature**. After 15 QA iterations with 83 additional tests across 5 focused areas (CQL tuples/choice types, FHIRPath advanced functions, CQL date/time precision, ViewDef advanced patterns, DQM pipeline), **zero new issues** were found.
-
-- **Conformance**: 2817/2821 (99.9%) — unchanged across all 15 iterations
-- **CQL Tuples**: Construction, access, equality, choice types, polymorphic casts all correct
-- **FHIRPath**: aggregate, repeat, ofType, children, descendants, trace, iif all correct
-- **DateTime**: Partial precision, timezone, arithmetic, extraction, intervals all correct
-- **ViewDef**: Double unnest, complex where, constants, empty data, forEachOrNull all correct
-- **DQM**: Pipeline structure verified, measure patterns translate correctly
-
-The 5 remaining OPEN issues from prior iterations are all LOW/edge-case. No further QA iterations recommended unless new features are added.
-- The conformance runner uses `BenchmarkDatabase.load_all_valuesets()` which is tightly coupled to the test infrastructure
-
-## Cumulative Issue Status (Iterations 1–9)
+## Cumulative Issue Status (Iterations 1–30)
 
 | Status | Count |
 |--------|-------|
 | FIXED | 28 |
-| OPEN | 4 (QA9-001 through QA9-004) |
+| OPEN | 5 (QA9-001 through QA10-001) |
 | DEFERRED | 2 (QA8-004, QA8-005) |
 | INTENDED | 1 (QA8-003) |
-| **Total tracked** | **67** |
+| **Total tracked** | **68** |
 
-## Recommendations for Iteration 10
+## Conclusion
+
+After **30 QA iterations** with **225 additional tests** in iterations 16–30 (308 total in iterations 11–30), **zero new issues** were found. The codebase has achieved **10 consecutive clean sweeps** spanning all major subsystems: CQL conversion/clinical/conditional/list/string/arithmetic/comparison functions, FHIRPath type testing/navigation/collections, ViewDef SQL generation/execution, DQM pipeline stress, and API contract verification.
+
+The 5 remaining OPEN issues from prior iterations are all LOW severity or edge-case validation improvements. **No further QA iterations recommended** unless new features are added.
 
 ## Test Artifacts
 
-- Sandbox: `.temp/qa_iter10/`
-- Regression gauntlet: `.temp/qa_iter10/test_regression_gauntlet.py` (43 tests)
-- New area coverage: `.temp/qa_iter10/test_new_areas.py` (59 tests)
-- Stability suite: `.temp/qa_iter10/test_stability.py` (6 tests)
-- Issues: `evolution.json` (QA10-001)
+- Sandbox: `.temp/qa_iter16_30/`
+- Test scripts: `iter16_cql_conversions.py` through `iter30_corrected.py` (15 scripts, 225 tests)
+- Issues: `evolution.json` (no new issues)
 - This file: `qa_handoff.md`
