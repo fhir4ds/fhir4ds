@@ -497,8 +497,8 @@ def intervalWidth(interval: str | None) -> str | None:
                 return _json.dumps({"value": width_val, "unit": unit, "code": unit})
     except ValueError:
         raise
-    except Exception:
-        pass
+    except Exception as e:
+        _logger.debug("Unexpected error in UDF intervalWidth quantity parse: %s", e)
 
     # Numeric intervals
     if isinstance(low, (int, float)) and isinstance(high, (int, float)):
@@ -1388,7 +1388,8 @@ def intervalIntersect(interval1: str | None, interval2: str | None) -> str | Non
     try:
         raw1 = orjson.loads(interval1) if interval1 else {}
         raw2 = orjson.loads(interval2) if interval2 else {}
-    except Exception:
+    except Exception as e:
+        _logger.debug("Unexpected error in UDF intervalIntersect JSON parse: %s", e)
         return None
     raw1_low = raw1.get("low") or raw1.get("start")
     raw1_high = raw1.get("high") or raw1.get("end")
@@ -1511,8 +1512,8 @@ def intervalUnion(interval1: str | None, interval2: str | None) -> str | None:
                         s, l2n = _normalize_for_compare(succ, low2)
                         if s == l2n:
                             overlap = True
-                except Exception:
-                    pass
+                except Exception as e:
+                    _logger.debug("Unexpected error in UDF union successor check: %s", e)
                 if not overlap:
                     # Also check reverse direction
                     pass
@@ -1526,8 +1527,8 @@ def intervalUnion(interval1: str | None, interval2: str | None) -> str | None:
                             s, l1n = _normalize_for_compare(succ, low1)
                             if s == l1n:
                                 overlap = True
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        _logger.debug("Unexpected error in UDF union reverse successor check: %s", e)
                 else:
                     overlap = True
             else:
@@ -1542,8 +1543,8 @@ def intervalUnion(interval1: str | None, interval2: str | None) -> str | None:
                         s, l2n = _normalize_for_compare(succ, low2)
                         if s == l2n:
                             overlap = True
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        _logger.debug("Unexpected error in UDF union adjacency check: %s", e)
 
             # Also check the reverse direction if not yet overlapping
             if not overlap and h2 == l1:
@@ -1555,9 +1556,10 @@ def intervalUnion(interval1: str | None, interval2: str | None) -> str | None:
                         s, l1n = _normalize_for_compare(succ, low1)
                         if s == l1n:
                             overlap = True
-                    except Exception:
-                        pass
-        except Exception:
+                    except Exception as e:
+                        _logger.debug("Unexpected error in UDF union reverse adjacency check: %s", e)
+        except Exception as e:
+            _logger.debug("Unexpected error in UDF intervalUnion overlap detection: %s", e)
             return None
 
     if not overlap:
@@ -1567,7 +1569,8 @@ def intervalUnion(interval1: str | None, interval2: str | None) -> str | None:
     try:
         raw1 = orjson.loads(interval1) if interval1 else {}
         raw2 = orjson.loads(interval2) if interval2 else {}
-    except Exception:
+    except Exception as e:
+        _logger.debug("Unexpected error in UDF intervalUnion JSON parse: %s", e)
         return None
     raw1_low = raw1.get("low") or raw1.get("start")
     raw1_high = raw1.get("high") or raw1.get("end")
@@ -1676,7 +1679,8 @@ def intervalExcept(interval1: str | None, interval2: str | None) -> str | None:
     try:
         raw1 = orjson.loads(interval1) if interval1 else {}
         raw2 = orjson.loads(interval2) if interval2 else {}
-    except Exception:
+    except Exception as e:
+        _logger.debug("Unexpected error in UDF intervalExcept JSON parse: %s", e)
         return None
     raw1_low = raw1.get("low") or raw1.get("start")
     raw1_high = raw1.get("high") or raw1.get("end")
@@ -1941,7 +1945,8 @@ def _expand_points_impl(interval_or_list, per) -> str | None:
         return raw
     try:
         intervals = orjson.loads(raw)
-    except Exception:
+    except Exception as e:
+        _logger.debug("Unexpected error in UDF expand JSON parse: %s", e)
         return raw
     if not isinstance(intervals, list):
         return raw

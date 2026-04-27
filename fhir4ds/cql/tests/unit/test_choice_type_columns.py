@@ -72,15 +72,24 @@ class TestSQLRetrieveCTE:
         assert "COALESCE" in cte.to_sql()
 
     def test_bp_profile_includes_component_columns(self, fhir_schema, profile_registry):
-        """Blood pressure profile should expose systolic/diastolic columns."""
+        """Blood pressure profile CTE should include standard Observation columns.
+
+        Component columns (systolic_value/diastolic_value) are demand-driven —
+        they are generated only when CQL paths reference them, not eagerly.
+        This test validates that the BP profile URL is accepted and standard
+        columns are still present.
+        """
         cte = SQLRetrieveCTE.create_with_precomputed_columns(
             "Observation",
             profile_url=BP_PROFILE_URL,
             fhir_schema=fhir_schema,
             profile_registry=profile_registry,
         )
-        assert "systolic_value" in cte.precomputed_columns
-        assert "diastolic_value" in cte.precomputed_columns
+        assert "effective_date" in cte.precomputed_columns
+        assert "status" in cte.precomputed_columns
+        # systolic/diastolic are demand-driven, not eagerly precomputed
+        assert "systolic_value" not in cte.precomputed_columns
+        assert "diastolic_value" not in cte.precomputed_columns
 
     def test_non_bp_profile_excludes_component_columns(self, fhir_schema):
         """Observation without BP profile should not expose systolic/diastolic."""
@@ -90,20 +99,14 @@ class TestSQLRetrieveCTE:
         assert "systolic_value" not in cte.precomputed_columns
         assert "diastolic_value" not in cte.precomputed_columns
 
-    def test_bp_column_sql_uses_where_and_number(self, fhir_schema, profile_registry):
-        """BP columns should still use FHIRPath .where() predicates and numeric functions."""
+    def test_bp_profile_sql_includes_standard_observation_columns(self, fhir_schema, profile_registry):
+        """BP profile CTE SQL should contain standard Observation column expressions."""
         cte = SQLRetrieveCTE.create_with_precomputed_columns(
             "Observation",
             profile_url=BP_PROFILE_URL,
             fhir_schema=fhir_schema,
             profile_registry=profile_registry,
         )
-        systolic_sql = cte.precomputed_columns["systolic_value"].to_sql()
-        diastolic_sql = cte.precomputed_columns["diastolic_value"].to_sql()
-
-        assert "component.where" in systolic_sql
-        assert "component.where" in diastolic_sql
-        assert "8480-6" in systolic_sql
-        assert "8462-4" in diastolic_sql
-        assert "fhirpath_number" in systolic_sql
-        assert "fhirpath_number" in diastolic_sql
+        sql = cte.to_sql()
+        assert "fhirpath_text" in sql
+        assert "effectiveDateTime" in sql or "effective_date" in sql

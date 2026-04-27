@@ -71,8 +71,7 @@ def _resolve_profile_registry(context) -> "ProfileRegistry":
     if context is not None and context.profile_registry is not None:
         return context.profile_registry
     # Only reachable when called without a context (e.g., standalone utility use).
-    import logging
-    logging.getLogger(__name__).warning(
+    logger.warning(
         "CTE builder called without context.profile_registry; "
         "falling back to default. Fix the call site to pass context."
     )
