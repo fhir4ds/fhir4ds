@@ -1,14 +1,14 @@
-# QA Handoff — Iterations 16–30
+# QA Handoff — Iterations 31–50
 
 ## Summary
 
-**Iterations 16–30** ran **15 focused QA sweeps** across all major subsystems. All **225 tests** passed with **zero new issues** found. The codebase is confirmed highly stable after 30 total iterations, 28 prior bug fixes, and 10 consecutive clean sweeps.
+**Iterations 31–50** ran **20 creative QA sweeps** using diverse strategies (fuzzing, property-based testing, boundary analysis, unicode stress, SQL injection, determinism, timing, and full conformance re-verification). All **294 tests** passed with **zero new issues** found. Conformance re-verified at **2817/2821**.
 
 | Metric | Value |
 |--------|-------|
-| Iterations | 16–30 |
-| Tests run | 225 |
-| ✅ PASS | 225 |
+| Iterations | 31–50 |
+| Tests run | 294 |
+| ✅ PASS | 294 |
 | ❌ NEW ISSUES | 0 |
 | Conformance | 2817/2821 (unchanged) |
 | Regressions | 0 |
@@ -16,67 +16,87 @@
 ## Iteration Results
 
 ```
-Iter 16: CQL Conversions        — 15 tests, 0 issues
-Iter 17: CQL Clinical Operators — 15 tests, 0 issues
-Iter 18: FHIRPath Type Testing  — 15 tests, 0 issues
-Iter 19: CQL Conditional Logic  — 15 tests, 0 issues
-Iter 20: CQL List Operations    — 15 tests, 0 issues
-Iter 21: FHIRPath Navigation    — 15 tests, 0 issues
-Iter 22: CQL Retrieve Patterns  — 15 tests, 0 issues
-Iter 23: ViewDef Column Types   — 15 tests, 0 issues
-Iter 24: CQL String Operations  — 15 tests, 0 issues
-Iter 25: FHIRPath Collections   — 15 tests, 0 issues
-Iter 26: CQL Arithmetic         — 15 tests, 0 issues
-Iter 27: CQL Comparison         — 15 tests, 0 issues
-Iter 28: DQM Stress             — 15 tests, 0 issues
-Iter 29: API Contracts          — 15 tests, 0 issues
-Iter 30: Final Regression       — 15 tests, 0 issues
+Iter 31: FHIRPath Fuzzing        — 50 tests, 0 issues
+Iter 32: CQL Fuzzing             — 30 tests, 0 issues
+Iter 33: CQL Roundtrip           — 20 tests, 0 issues
+Iter 34: FHIRPath Chains         — 30 tests, 0 issues
+Iter 35: Boundary Testing        — 10 tests, 0 issues
+Iter 36: Unicode Stress          — 25 tests, 0 issues
+Iter 37: Performance Regression  — 10 tests, 0 issues
+Iter 38: Connection Lifecycle    —  5 tests, 0 issues
+Iter 39: Python Compatibility    — 10 tests, 0 issues
+Iter 40: CQL Error Recovery      — 10 tests, 0 issues
+Iter 41: Operator Precedence     — 17 tests, 0 issues
+Iter 42: CQL Null Semantics      — 30 tests, 0 issues
+Iter 43: SQL Injection           — 10 tests, 0 issues
+Iter 44: Determinism             —  3 tests, 0 issues
+Iter 45: Multi-Context           —  7 tests, 0 issues
+Iter 46: Extension Navigation    — 17 tests, 0 issues
+Iter 47: Multi-Source Queries    —  7 tests, 0 issues
+Iter 48: Full Pipeline           —  8 tests, 0 issues
+Iter 49: Conformance Re-Verify   —  4 tests, 0 issues (2817/2821)
+Iter 50: Resolved Issue Regress  — 19 tests, 0 issues
 ```
 
-### Iter 16: CQL Conversion Functions
-ToDate, ToDateTime, Today, Now, Year/Month/Day extraction, Abs, Ceiling, Floor, RoundTo, Truncate, Sqrt, Ln, Power(2,10).
+### Iter 31: FHIRPath Fuzzing
+50 randomly-generated syntactically-valid FHIRPath expressions run against a Patient resource. Tested atom access, function chains, operator expressions, nested filters, and complex combinations. Zero crashes.
 
-### Iter 17: CQL Clinical Operators
-AgeInYears/Months/Days/Hours/Minutes/Seconds (JSON Patient input), AgeIn*At variants, birthday boundary pre/on, leap year edge, newborn=0, table-based AgeInYears, dateTimeToday, dateTimeNow.
+### Iter 32: CQL Fuzzing
+30 random CQL define statements with literals, operators, functions, if-then-else, case, lists, intervals, casts, between, and nested functions. All parsed and translated without crashes.
 
-### Iter 18: FHIRPath Type Testing
-Patient.id/active/name.family/name.given (multiple), given.count(), birthDate, telecom.where() filtering, Observation value.ofType(Quantity).value/unit, coding.code, effective.ofType(dateTime), gender, address.city, identifier.value.
+### Iter 33: CQL Roundtrip (Property-Based)
+20 CQL expressions translated to SQL, then validated via DuckDB EXPLAIN. All generated SQL syntactically valid.
 
-### Iter 19: CQL Conditional Logic
-if-then-else (basic, true literal, null condition), Coalesce (NULL chain, first non-null, strings), IfNull, nested if-then-else, case-when-then-else, boolean AND/OR/NOT, FHIRPath iif(true/false).
+### Iter 34: FHIRPath Function Chains
+30 permutations of 2-3 function chains: where().count(), exists().not(), first().empty(), distinct().first().length(), etc. Includes boolean combos, empty collection edge cases. Zero crashes.
 
-### Iter 20: CQL List Operations
-First/Last (values, empty=null), Skip/Take (values, empty), "Distinct" (quoted, correct dedup), Flatten, FHIRPath (1|2|3).count/first/last/tail/distinct.
+### Iter 35: Boundary — Maximum Length Inputs
+10KB FHIRPath (200× .where(true)), 500-union expression, 1MB resource (5K names), 5K-address filter, 50KB CQL (500 defs), 100-column ViewDef, 50-level deep nesting, 100K-char string, 50-level nested if-then-else, empty resource. All handled correctly.
 
-### Iter 21: FHIRPath Navigation on Real Resources
-Patient: identifier.count, name.where(use=official), all given count, address.line, meta.versionId, extension valueInteger. Observation: coding.code, code.text, component.count, component Quantity values, subject.reference. Condition: display, clinicalStatus. deceased.exists()=false, communication.language.coding.code.
+### Iter 36: Unicode Stress
+25 tests across emoji 🔥, CJK 漢字, RTL عربي/עברית, combining characters, zero-width spaces, ZWJ sequences, math symbols, accented text, Cyrillic. Tested FHIRPath reads, string functions (length, upper, contains, startsWith, indexOf), CQL operations, and DuckDB UDF. All pass.
 
-### Iter 22: CQL Retrieve Patterns
-Basic [Condition], retrieve with code filter, [Observation] with code, [Encounter], exists, Count, where clause, multiple retrieves (AND), date filter, missing resource type, sort, First from sorted, not exists, FHIRDataLoader counts.
+### Iter 37: Performance Regression
+10 timed operations: FHIRPath (100x: 0.017s), complex FHIRPath (50x: 0.030s), CQL parse (50x: 0.020s), CQL translate (50x: 5.8s), ViewDef parse (100x: <0.001s), ViewDef SQL gen (100x: 0.35s), connection lifecycle (10x: 0.44s), DuckDB FHIRPath UDF (100 rows × 10: 0.003s), data load (200 patients: 0.16s), large resource FHIRPath (1000 names: 0.018s). All under 10s.
 
-### Iter 23: ViewDef Column Types
-Parsing (basic, multi-column), SQL generation with source_table, Observation ViewDef, forEach, where, collection column, execution (2 patients), result value verification, Condition ViewDef, nested forEach, forEachOrNull, multiple select blocks, source_table override, empty table.
+### Iter 38: Connection Lifecycle
+5 full cycles: create connection → load 10 patients → query count → run FHIRPath UDF → close → reopen → verify clean state. All cycles clean.
 
-### Iter 24: CQL String Operations
-Upper, Lower, Length, Substring(2-arg), StartsWith, EndsWith, Contains, "LastPositionOf", "Combine" (list→string), "Split", FHIRPath length/upper/lower/startsWith/concat.
+### Iter 39: Python Compatibility
+pathlib paths, dataclasses (via asdict), f-string CQL, type-annotated variables, dict comprehensions, generator expressions, walrus operator, ViewDef from typed dict, tuple unpacking, chained comparisons. All pass.
 
-### Iter 25: FHIRPath Collection Operations
-union, count, where filter, select($this*2), all(true/false), exists(criteria), empty(), distinct, first/last/tail, skip/take, single.
+### Iter 40: CQL Error Recovery
+10 syntax errors: missing using, unclosed string, missing define body, invalid operator, unmatched paren/bracket, double comma, missing then, reserved word as identifier, empty library. All produce clear error messages with ParseError/LexerError types.
 
-### Iter 26: CQL Arithmetic Edge Cases
-Abs(-42, 0), Ceiling, Floor(-4.1=-5), Truncate(-4.9=-4, vs Floor), RoundTo(pi,3), Round(3.5), Sqrt(0), Power(0,0)=1, Power(2,-1)=0.5, Exp(Ln(5))=5, Mod(10,3)=1, Div(10,3)=3, Sign(-5,0,5).
+### Iter 41: FHIRPath Operator Precedence
+17 tests: and binds tighter than or, implies lowest precedence, xor between or/and, arithmetic precedence (×/÷ before +/−), string concat, parenthesized override, union with comparison, .not() method, div/mod. All correct.
 
-### Iter 27: CQL Comparison and Equivalence
-CQL: =, !=, null=null, null~null, 5~5, string equality, string equivalence, >, <=. FHIRPath: 5=5, 5!=3, 5>3, 3<5, 5~5, 5!~3.
+### Iter 42: CQL Null Semantics (Exhaustive)
+30 tests: null with all arithmetic operators (6), all comparison operators (8), equivalence/non-equivalence (5), three-valued boolean logic (9), Coalesce (2). All match CQL three-valued logic specification.
 
-### Iter 28: DQM Stress
-10+5+100 patient loads, patients+conditions, CQL measure-like translation, evaluate_measure API, MeasureEvaluator import, bundle loading, population definitions, population SQL, minimal resource, mixed resource types, ViewDef on loaded data, conformance infrastructure, ViewDef for 5 resource types.
+### Iter 43: ViewDef SQL Injection
+10 injection payloads in column names, paths, resource types, where clauses, quotes, unicode null bytes, newlines, backslashes, UNION SELECT, constants. 4 blocked at parse time (ValueError/ValidationError), 6 safe at execution (table intact). No injection succeeded.
 
-### Iter 29: API Contract Verification
-Public API (create_connection, register, register_fhirpath, register_cql, evaluate_measure, generate_view_sql, parse_view_definition), FHIRDataLoader methods, CQL parser/translator imports, ViewDef imports, DQM MeasureEvaluator, FHIRPath evaluate (fhir4ds.fhirpath.evaluate), FHIRPathError, register standalone, attach/detach.
+### Iter 44: Determinism
+3 runs each: CQL translation (SQL output identical), FHIRPath evaluation (JSON output identical), ViewDef SQL generation (SQL identical). All deterministic.
 
-### Iter 30: Final Regression
-End-to-end: FHIRPath core (id, boolean, count), DuckDB FHIRPath (Quantity), CQL translation, CQL UDFs (Abs, Ceiling, Floor), AgeInYears, ViewDef SQL generation + execution, bundle loading, First/Last, Upper/Lower, full pipeline (5 patients + 5 conditions → ViewDef query).
+### Iter 45: CQL Multi-Context
+Patient context, Unfiltered context, multiple definitions, retrieve patterns, SQL execution, no explicit context, population definitions. All 7 tests pass.
+
+### Iter 46: FHIRPath Extension Navigation
+17 tests: extension count, URL access, filter by URL, valueString/Integer/Boolean/Coding access, nested extensions (2 levels), modifierExtension, element-level extensions (name.extension), existence checks. All correct.
+
+### Iter 47: CQL Multi-Source Queries
+Multi-source (Encounter + Condition), let clause, return clause, sort clause, nested definitions, aggregate Count, multi-resource data loading with type verification. All 7 pass.
+
+### Iter 48: Full Pipeline Integration
+End-to-end: loaded 57 resources (15 Patient, 10 Condition, 12 Encounter, 20 Observation) → FHIRPath on loaded data → ViewDef generation + execution (Patient 15 rows, Observation 20 rows) → CQL translation (4 definitions) → core FHIRPath engine → complex DuckDB FHIRPath → cross-resource SQL query. All 8 steps pass.
+
+### Iter 49: Conformance Re-Verification
+Full conformance suite: ViewDef 134/134 (100%), FHIRPath R4 935/935 (100%), CQL 1706/1706 (100%), DQM 42/46 (91.3%). **Overall: 2817/2821 (99.9%)** — unchanged.
+
+### Iter 50: Resolved Issues Regression
+19 tests covering: include error handling (QA8-001, QA8-002), FHIRPath core (id/name/active/count), where/exists/empty, string functions, type testing, collections, CQL literals/arithmetic/strings/conditional/clinical/retrieve, ViewDef parse+gen+execution, DuckDB UDF, bundle loading, list ops, comparison. Zero regressions.
 
 ## Conformance Baseline (unchanged)
 
@@ -98,7 +118,7 @@ End-to-end: FHIRPath core (id, boolean, count), DuckDB FHIRPath (Quantity), CQL 
 | QA9-004 | Low | resolve() empty for contained refs (#id) |
 | QA10-001 | Low | CQL aggregates on list-valued exprs use SQL aggregates instead of list functions |
 
-## Cumulative Issue Status (Iterations 1–30)
+## Cumulative Issue Status (Iterations 1–50)
 
 | Status | Count |
 |--------|-------|
@@ -110,13 +130,13 @@ End-to-end: FHIRPath core (id, boolean, count), DuckDB FHIRPath (Quantity), CQL 
 
 ## Conclusion
 
-After **30 QA iterations** with **225 additional tests** in iterations 16–30 (308 total in iterations 11–30), **zero new issues** were found. The codebase has achieved **10 consecutive clean sweeps** spanning all major subsystems: CQL conversion/clinical/conditional/list/string/arithmetic/comparison functions, FHIRPath type testing/navigation/collections, ViewDef SQL generation/execution, DQM pipeline stress, and API contract verification.
+After **50 QA iterations** with **294 additional creative tests** in iterations 31–50 (602 total in iterations 11–50), **zero new issues** were found. The 20 creative testing strategies — including fuzzing, property-based testing, boundary analysis, unicode stress, SQL injection, determinism, timing, and full conformance re-verification — confirmed the codebase is **extremely stable** with **30 consecutive clean sweeps**.
 
 The 5 remaining OPEN issues from prior iterations are all LOW severity or edge-case validation improvements. **No further QA iterations recommended** unless new features are added.
 
 ## Test Artifacts
 
-- Sandbox: `.temp/qa_iter16_30/`
-- Test scripts: `iter16_cql_conversions.py` through `iter30_corrected.py` (15 scripts, 225 tests)
-- Issues: `evolution.json` (no new issues)
+- Sandbox: `.temp/qa_iter31_50/`
+- Test scripts: `iter31_fhirpath_fuzz.py` through `iter50_regression.py` (20 scripts, 294 tests)
+- Issues: `evolution.json` (no new issues, iteration set to 51)
 - This file: `qa_handoff.md`
