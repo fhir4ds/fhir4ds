@@ -1,8 +1,38 @@
 {
   "iteration": 101,
-  "phase": "QA",
+  "phase": "ARCHITECT",
   "audit_status": "PASSED",
   "issues": [
+    {
+      "id": "ARCH-002",
+      "title": "cte_builder.py _resolve_profile_registry() uses silent fallback",
+      "severity": "medium",
+      "category": "architecture",
+      "status": "RESOLVED",
+      "found_in": "fhir4ds/cql/translator/cte_builder.py",
+      "fixed_in": ["fhir4ds/cql/translator/cte_builder.py"],
+      "resolution_notes": "Fallback already had logger.warning() from prior remediation. Cleaned up redundant inline 'import logging' to use the module-level logger. Fallback is now explicitly non-silent."
+    },
+    {
+      "id": "ARCH-004",
+      "title": "Stale test test_bp_profile_includes_component_columns",
+      "severity": "medium",
+      "category": "test-fragility",
+      "status": "RESOLVED",
+      "found_in": "fhir4ds/cql/tests/unit/test_choice_type_columns.py",
+      "fixed_in": ["fhir4ds/cql/tests/unit/test_choice_type_columns.py"],
+      "resolution_notes": "Updated test to match demand-driven column generation behavior. BP component columns (systolic_value/diastolic_value) are generated on demand when CQL paths reference them, not eagerly. Test now asserts standard columns are present and component columns are absent. Second test updated to verify SQL output contains standard fhirpath expressions."
+    },
+    {
+      "id": "ARCH-009",
+      "title": "UDF-layer broad except Exception catches",
+      "severity": "medium",
+      "category": "architecture",
+      "status": "RESOLVED",
+      "found_in": "fhir4ds/cql/duckdb/udf/interval.py, fhir4ds/cql/duckdb/udf/math.py, fhir4ds/cql/duckdb/udf/quantity.py",
+      "fixed_in": ["fhir4ds/cql/duckdb/udf/interval.py", "fhir4ds/cql/duckdb/udf/math.py", "fhir4ds/cql/duckdb/udf/quantity.py"],
+      "resolution_notes": "Added _logger.debug() calls to all broad except Exception blocks across interval.py (10 sites), math.py (3 sites), and quantity.py (1 site). Catches remain broad to preserve SQL UDF null-return semantics. Errors are now visible at DEBUG log level."
+    },
     {
       "id": "QA8-001",
       "title": "CQL translator silently generates broken SQL for unresolvable include references when no library_loader is set",
