@@ -672,6 +672,30 @@ class FunctionsMixin:
                 if _list_agg_fn:
                     return SQLFunctionCall(name=_list_agg_fn, args=[distinct_list])
 
+        # Aggregate on distinct(union/except/intersect) — Count(distinct (X union Y)).
+        from ...parser.ast_nodes import BinaryExpression as _ASTBinExpr
+        if isinstance(arg, DistinctExpression) and isinstance(arg.source, _ASTBinExpr):
+            if getattr(arg.source, 'operator', '') in ('union', 'except', 'intersect'):
+                source_sql = self.translate(arg.source, usage=ExprUsage.SCALAR)
+                if _is_list_returning_sql(source_sql):
+                    distinct_list = SQLFunctionCall(name="list_distinct", args=[source_sql])
+                    if name.lower() == "count":
+                        filtered = SQLFunctionCall(
+                            name="list_filter",
+                            args=[distinct_list, SQLLambda(param="_v", body=SQLUnaryOp(
+                                operator="IS NOT NULL",
+                                operand=SQLIdentifier(name="_v"),
+                                prefix=False,
+                            ))],
+                        )
+                        return SQLFunctionCall(name="len", args=[filtered])
+                    _list_agg_fn = {
+                        "sum": "list_sum", "min": "list_min", "max": "list_max",
+                        "avg": "list_avg",
+                    }.get(name.lower())
+                    if _list_agg_fn:
+                        return SQLFunctionCall(name=_list_agg_fn, args=[distinct_list])
+
         if isinstance(arg, CQLQuery):
             source_sql = self.translate(arg, usage=ExprUsage.LIST)
             result = self._wrap_list_aggregate(agg_func, source_sql)

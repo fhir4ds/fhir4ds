@@ -93,12 +93,15 @@ def registerStringMacros(con: "duckdb.DuckDBPyConnection") -> None:
     )
 
     # ReplaceMatches: CQL §17.13 — replace regex matches in string
-    # CQL uses Java regex replacement: \$ = literal $, \\ = literal \
-    # DuckDB's regexp_replace treats \$ as empty; convert CQL escapes first.
+    # CQL uses Java regex replacement: $1-$9 = group backrefs, \$ = literal $, \\ = literal \
+    # DuckDB's regexp_replace uses \1-\9 for backrefs (POSIX-style).
+    # Steps: 1) Convert CQL \$ → placeholder, 2) Convert $N → \N, 3) Restore placeholder → $
     con.execute(
         "CREATE MACRO IF NOT EXISTS ReplaceMatches(s, pattern, replacement) AS "
         "CASE WHEN s IS NULL OR pattern IS NULL OR replacement IS NULL THEN NULL "
-        "ELSE regexp_replace(s, pattern, replace(replace(replacement, '\\$', '$'), '\\\\', '\\'), 'g') END"
+        "ELSE regexp_replace(s, pattern, "
+        "replace(regexp_replace(replace(replace(replacement, '\\$', '\x01'), '\\\\', '\\'), "
+        "'[$](\\d)', '\\\\\\1', 'g'), '\x01', '$'), 'g') END"
     )
 
     # Concatenate: CQL §17.1 — if any argument is null, result is null
