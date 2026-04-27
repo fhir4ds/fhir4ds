@@ -129,7 +129,7 @@ class FunctionsMixin:
             return arg
         if self._is_list_typed_ast(arg):
             return getattr(arg, 'left', None)
-        if isinstance(arg, ASTFunctionRef) and (arg.name or '').lower() == 'flatten':
+        if isinstance(arg, ASTFunctionRef) and (arg.name or '').lower() in ('flatten', 'collapse', 'expand'):
             return arg
         if isinstance(arg, ASTBinaryExpression) and getattr(arg, 'operator', '') in ('union', 'except', 'intersect'):
             return arg
@@ -723,6 +723,14 @@ class FunctionsMixin:
         _list_src = self._unwrap_list_source(arg)
         if _list_src is not None:
             source_sql = self.translate(_list_src, usage=ExprUsage.SCALAR)
+            # JSON-returning list functions (collapse_intervals, expand) need json_array_length
+            _JSON_LIST_FUNCS = {"collapse_intervals", "expand"}
+            _is_json_list = isinstance(source_sql, SQLFunctionCall) and source_sql.name in _JSON_LIST_FUNCS
+            if _is_json_list:
+                if name.lower() == "count":
+                    return SQLFunctionCall(name="json_array_length", args=[source_sql])
+                # Other aggregates on JSON interval lists are not meaningful
+                return None
             if isinstance(source_sql, SQLArray) or _is_list_returning_sql(source_sql):
                 if name.lower() == "count":
                     # CQL §20.5: Count returns number of non-null elements
