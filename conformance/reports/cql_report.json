@@ -118,8 +118,7 @@
       {
         "name": "ProductLong",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Product' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Product' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
@@ -661,29 +660,25 @@
       {
         "name": "HighBoundaryDecimal",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'HighBoundary' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'HighBoundary' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "HighBoundaryDateMonth",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'HighBoundary' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'HighBoundary' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "HighBoundaryDateTimeMillisecond",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'HighBoundary' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'HighBoundary' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "HighBoundaryTimeMillisecond",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'HighBoundary' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'HighBoundary' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
@@ -743,29 +738,25 @@
       {
         "name": "LowBoundaryDecimal",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'LowBoundary' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'LowBoundary' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "LowBoundaryDateMonth",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'LowBoundary' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'LowBoundary' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "LowBoundaryDateTimeMillisecond",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'LowBoundary' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'LowBoundary' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "LowBoundaryTimeMillisecond",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'LowBoundary' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'LowBoundary' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
@@ -1443,85 +1434,73 @@
       {
         "name": "TruncateNull",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Truncate' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Truncate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "Truncate0",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Truncate' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Truncate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "Truncate0D0",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Truncate' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Truncate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "Truncate0D1",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Truncate' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Truncate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "Truncate1",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Truncate' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Truncate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "Truncate1D0",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Truncate' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Truncate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "Truncate1D1",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Truncate' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Truncate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "Truncate1D9",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Truncate' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Truncate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TruncateNeg1",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Truncate' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Truncate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TruncateNeg1D0",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Truncate' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Truncate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TruncateNeg1D1",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Truncate' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Truncate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TruncateNeg1D9",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Truncate' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Truncate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
@@ -7671,36 +7650,31 @@
       {
         "name": "FlattenEmpty",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Flatten' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Flatten' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "FlattenListNullAndNull",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Flatten' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Flatten' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "FlattenList12And34",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Flatten' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Flatten' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "FlattenDateTime",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Flatten' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Flatten' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "FlattenTime",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Flatten' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Flatten' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
@@ -8462,113 +8436,97 @@
       {
         "name": "SkipNull",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Skip' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Skip' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "SkipEven",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Skip' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Skip' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "SkipOdd",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Skip' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Skip' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "SkipNone",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Skip' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Skip' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "SkipAll",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Skip' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Skip' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TailNull",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Tail' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Tail' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TailEven",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Tail' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Tail' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TailOdd",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Tail' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Tail' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TailEmpty",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Tail' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Tail' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TailOneElement",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Tail' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Tail' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TakeNull",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Take' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Take' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TakeNullEmpty",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Take' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Take' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TakeEmpty",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Take' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Take' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TakeEven",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Take' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Take' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TakeOdd",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Take' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Take' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "TakeAll",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Take' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Take' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
@@ -8924,78 +8882,67 @@
       {
         "name": "IsNullTrue",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'IsNull' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'IsNull' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IsNullFalseEmptyString",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'IsNull' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'IsNull' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IsNullAlsoFalseAbcString",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'IsNull' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'IsNull' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IsNullAlsoFalseNumber1",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'IsNull' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'IsNull' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IsNullAlsoFalseNumberZero",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'IsNull' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'IsNull' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IsFalseFalse",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'IsFalse' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'IsFalse' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IsFalseTrue",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'IsFalse' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'IsFalse' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IsFalseNull",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'IsFalse' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'IsFalse' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IsTrueTrue",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'IsTrue' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'IsTrue' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IsTrueFalse",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'IsTrue' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'IsTrue' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IsTrueNull",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'IsTrue' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'IsTrue' or ensure the library defining it is included."
+          "passed": true
         }
       }
     ]
@@ -9081,22 +9028,19 @@
       {
         "name": "CombineNull",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Combine' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Combine' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "CombineEmptyList",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Combine' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Combine' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "CombineABC",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Combine' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Combine' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
@@ -9108,29 +9052,25 @@
       {
         "name": "ConcatenateNullNull",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Concatenate' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Concatenate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "ConcatenateANull",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Concatenate' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Concatenate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "ConcatenateNullB",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Concatenate' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Concatenate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "ConcatenateAB",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Concatenate' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Concatenate' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
@@ -9160,50 +9100,43 @@
       {
         "name": "IndexerNullNull",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Indexer' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Indexer' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IndexerANull",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Indexer' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Indexer' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IndexerNull1String",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Indexer' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Indexer' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IndexerAB0",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Indexer' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Indexer' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IndexerAB1",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Indexer' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Indexer' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IndexerAB2",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Indexer' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Indexer' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "IndexerABNeg1",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Indexer' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Indexer' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
@@ -9293,57 +9226,49 @@
       {
         "name": "MatchesNull",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Matches' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Matches' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "MatchesNumberFalse",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Matches' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Matches' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "MatchesNumberTrue",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Matches' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Matches' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "MatchesAllTrue",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Matches' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Matches' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "MatchesWordsAndSpacesTrue",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Matches' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Matches' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "MatchesWordsAndSpacesFalse",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Matches' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Matches' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "MatchesNotWords",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Matches' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Matches' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "MatchesWhiteSpace",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'Matches' with 2 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'Matches' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
@@ -9385,29 +9310,25 @@
       {
         "name": "ReplaceMatchesNull",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'ReplaceMatches' with 3 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'ReplaceMatches' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "ReplaceMatchesAll",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'ReplaceMatches' with 3 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'ReplaceMatches' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "ReplaceMatchesMany",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'ReplaceMatches' with 3 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'ReplaceMatches' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
         "name": "ReplaceMatchesSpaces",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'ReplaceMatches' with 3 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'ReplaceMatches' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {
@@ -9747,8 +9668,7 @@
       {
         "name": "String5D5CMToQuantity",
         "result": {
-          "passed": false,
-          "error": "Unknown function 'ToQuantity' with 1 argument(s): not found in function registry, user-defined functions, or included libraries.\n  Suggestion: Check the spelling of 'ToQuantity' or ensure the library defining it is included."
+          "passed": true
         }
       },
       {

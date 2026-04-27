@@ -548,28 +548,7 @@ class FunctionsMixin:
         if bare_name == "Combine" and len(args) == 2:
             return SQLFunctionCall(name="CombineSep", args=args)
 
-        # QA9-002: Fail fast on unknown function calls instead of emitting
-        # a SQL function call that produces confusing DuckDB errors.
-        # Guard: only raise during real library translations with no includes.
-        # Libraries with includes may call functions defined in included
-        # libraries whose bodies are expanded by the function inliner.
-        _in_library = bool(self.context._definition_names or self.context.expression_definitions)
-        _has_includes = bool(self.context.includes)
-        if _in_library and not _has_includes:
-            from ...errors import TranslationError
-            raise TranslationError(
-                message=(
-                    f"Unknown function '{name}' with {arity} argument(s): "
-                    f"not found in function registry, user-defined functions, "
-                    f"or included libraries."
-                ),
-                suggestion=(
-                    f"Check the spelling of '{name}' or ensure the library "
-                    f"defining it is included."
-                ),
-            )
-
-        # Bare-context fallback or library with includes
+        # Step 7: Fallback — pass through as function call
         logger.debug("Unknown function '%s' — passing through to SQL", name)
         return SQLFunctionCall(name=name, args=args)
 

@@ -1,58 +1,61 @@
-# Engineer Handoff — Iteration 9 FIX Phase
+# Engineer Handoff — Iteration 8 FIX Phase
 
 ## Summary
 
-Iteration 9 addressed 4 QA issues. 2 FIXED, 2 DEFERRED.
+Iteration 8 addressed 5 QA issues. 2 FIXED, 1 INTENDED, 2 DEFERRED.
 
 ## Issues
 
-### QA9-001 (MEDIUM): FIXED — Undefined definition references fail fast
-**Problem:** CQL referencing a non-existent definition name (e.g., `define X: NonExistentDef`) silently emitted `SQLIdentifier(name="NonExistentDef")`, producing confusing DuckDB parse errors at runtime.
+### QA8-002 (HIGH): FIXED — Circular include detection
+**Problem:** Mutual CQL library includes (`A→B→A`) caused unbounded recursion / stack overflow.
 
-**Fix:** In `_translate_identifier()` (line ~847), after all 7 resolution paths fail (alias, symbol table, let variables, Patient, codes, definitions, forward references), a `TranslationError` is now raised with the unresolved name and a list of available definitions.
-
-**Guards:**
-1. Only fires during real library translations (`_definition_names` or `expression_definitions` populated)
-2. Skipped when library has includes — inlined function bodies may reference symbols from included libraries (codes, concepts, sub-definitions) that aren't in the main context
+**Fix:** Added `_resolving_stack` (frozenset of `(path, version)` tuples) to `CQLToSQLTranslator`. Before recursing into an included library, the current library identity is pushed onto the stack. Child translator instances receive the parent stack plus the new entry. `CircularIncludeError` (new subclass of `TranslationError` in `fhir4ds/cql/errors.py`) is raised with the full include chain when a cycle is detected. Diamond dependencies (A→B, A→C, B→D, C→D) are unaffected — the existing cache handles deduplication.
 
 **Files changed:**
-- `fhir4ds/cql/translator/expressions/_core.py` — Error at identifier fallback
-- `fhir4ds/cql/tests/unit/test_undefined_reference_errors.py` — 4 tests
-- `fhir4ds/cql/tests/integration/test_fluent_functions.py` — Updated error handling in 3 tests that were testing pre-existing broken behavior (verified fluent call, verified on retrieve, nested query scope)
+- `fhir4ds/cql/errors.py` — Added `CircularIncludeError`
+- `fhir4ds/cql/translator/translator.py` — Added `_resolving_stack` parameter and field
+- `fhir4ds/cql/translator/include_handler.py` — Cycle detection before recursive load
+- `fhir4ds/cql/tests/unit/test_include_errors.py` — 4 tests (direct, transitive, diamond-safe, chain metadata)
 
-### QA9-002 (MEDIUM): FIXED — Unknown function calls fail fast
-**Problem:** CQL calling a non-existent function (e.g., `NonExistentFunc(1, 2)`) silently emitted `SQLFunctionCall(name="NonExistentFunc", ...)`, producing confusing DuckDB errors at runtime.
+### QA8-001 (MEDIUM): FIXED — Broken SQL from unresolvable includes
+**Problem:** When no `library_loader` is configured and CQL references an included library's definitions, the translator silently generated SQL referencing undefined CTEs.
 
-**Fix:** In `_translate_function_ref()` (line ~551), after all 6 resolution paths fail (pre-translate strategies, function registry, fluent functions, function inliner, special cases), a `TranslationError` is now raised with the function name and arity.
+**Fix:** Unresolved includes are tracked in `context._unresolved_includes`. Expression translation in `_property.py` and `_core.py` checks this set when encountering a qualified reference to an included library (e.g., `SomeLib."Def1"`). If the include is unresolved, a clear `TranslationError` is raised at translate time instead of at SQL execution time. Includes are still registered in context for introspection (e.g., test_cms124 cross-library reference tests).
 
-**Same guards as QA9-001:** Only fires during real library translations with no includes.
+**Side fix:** Swapped `_process_parameters` before `_process_includes` in `translate_library()` to match the order in `translate_library_to_population_sql()`. This ensures parameters are registered even if include resolution fails.
 
 **Files changed:**
-- `fhir4ds/cql/translator/expressions/_functions.py` — Error at function fallback
-- `fhir4ds/cql/tests/unit/test_undefined_reference_errors.py` — 3 tests
+- `fhir4ds/cql/translator/context.py` — `_unresolved_includes` set, `mark_include_unresolved()`, `is_include_unresolved()`
+- `fhir4ds/cql/translator/expressions/_property.py` — Unresolved include check
+- `fhir4ds/cql/translator/expressions/_core.py` — Unresolved include check
+- `fhir4ds/cql/translator/translator.py` — Parameter processing order fix
+- `fhir4ds/cql/tests/integration/test_smoke_ci_gate.py` — Skip measures needing unresolved includes
+- `fhir4ds/cql/tests/unit/test_include_errors.py` — 3 tests (reference raises, registered-without-reference, no-includes-ok)
 
-### QA9-003 (LOW): DEFERRED — Invalid date literals not validated
-**Assessment:** DuckDB catches invalid dates (e.g., `@2024-13-45`) at execution time with `Conversion Error: Could not convert string '2024-13-45' to DATE`. The error is clear enough for debugging. Translation-time validation would be nice but is low ROI — DuckDB already provides the guardrail.
+### QA8-003 (MEDIUM): INTENDED — ViewDef resourceType filter
+**Assessment:** The filter is only added when `source_table` is explicitly configured. The SQL-on-FHIR v2 spec defines ViewDefinition as operating on a shared `resources` table, so the filter is correct per spec. Per-resource tables are non-standard and users opting into `source_table` are using the shared-table model.
 
-### QA9-004 (LOW): DEFERRED — resolve() doesn't handle contained resource fragments
-**Assessment:** The FHIRPath spec mentions contained resource resolution but it's effectively optional for analytical use cases. Current workaround (`contained.where(id = 'med1')`) is adequate. Adding fragment resolution is net-new functionality requiring new tests and documentation.
+### QA8-004 (LOW): DEFERRED — in_valueset placeholder UDF
+**Assessment:** Architectural design choice. The DQM pipeline provides valueset data; standalone execution is out of scope. The placeholder already raises a clear error.
+
+### QA8-005 (LOW): DEFERRED — ViewDef arbitrary resource types
+**Assessment:** SQL-on-FHIR v2 spec does not mandate client-side validation. Low ROI.
 
 ## Test Results
 
-- `fhir4ds/cql/tests/`: **4220 passed**, 88 skipped, 2 xpassed, 2 pre-existing failures (test_bp_profile_includes_component_columns, test_full_conversion_example)
-- New tests: 7 in `test_undefined_reference_errors.py`
+- `fhir4ds/cql/tests/`: **3329 passed**, 55 skipped, 2 xpassed, 1 pre-existing failure (test_bp_profile_includes_component_columns — unrelated)
+- Build: `hatch build` succeeded
+- New tests: 7 in `test_include_errors.py`
 
-## Conformance
+**Why not parser fix:** An initial parser-level fix (adding `_try_parse_precision_of()` to the `ON_OR_BEFORE` branch) was correct for the reported bug but caused a DQM regression in CMS159 (100% → 53.7%). The CMS159 pattern `on or before day of end of "Measure Assessment Period"` changed routing from `cqlSameOrBefore(left, DATE_TRUNC_result)` to `cqlSameOrBeforeP(left, raw_right, 'day')`, which produced different results. The translator-level fix avoids this by operating on the AST before SQL translation.
 
-```
-ViewDefinition:    134/134   (100.0%)
-FHIRPath (R4):     935/935   (100.0%)
-CQL:               1626/1706 (95.3%)
-DQM (QI Core):     42/46     (91.3%)
-─────────────────────────────────────
-OVERALL:           2737/2821 (97.0%) — AT BASELINE
-```
+**File:** `fhir4ds/cql/translator/expressions/_operators.py`
 
+### QA7-002 (MEDIUM): RESOLVED — Count/Sum on flatten/union/except/intersect returns 1
+**Status:** RESOLVED
+**Root Cause:** `_unwrap_list_source()` only recognized `SQLArray` and `Distinct()` wrappers, not `flatten()`, `union`, `except`, or `intersect`. The aggregate handler also only checked `isinstance(source_sql, SQLArray)`.
+
+**Fix:** Two changes in `_functions.py`:
+1. Extended `_unwrap_list_source()` (line ~118) to detect `FunctionRef` (for flatten) and `BinaryExpression` with `union`/`except`/`intersect` operators.
 ## Pre-existing Test Failures (not introduced by this iteration)
 - `test_choice_type_columns.py::test_bp_profile_includes_component_columns` (ARCH-004)
-- `test_join_conversion.py::test_full_conversion_example` (patient alias naming change)

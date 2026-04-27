@@ -1,5 +1,5 @@
 {
-  "iteration": 10,
+  "iteration": 9,
   "phase": "QA",
   "audit_status": "PASSED",
   "issues": [
@@ -22,7 +22,7 @@
     },
     {
       "id": "QA8-002",
-      "title": "CQL translator has no circular include detection \u2014 unbounded recursion on mutually-including libraries",
+      "title": "CQL translator has no circular include detection — unbounded recursion on mutually-including libraries",
       "severity": "high",
       "category": "correctness",
       "status": "FIXED",
@@ -48,7 +48,7 @@
     },
     {
       "id": "QA8-004",
-      "title": "in_valueset UDF is only a placeholder \u2014 CQL population SQL referencing it cannot execute without DQM data loading",
+      "title": "in_valueset UDF is only a placeholder — CQL population SQL referencing it cannot execute without DQM data loading",
       "severity": "low",
       "category": "documentation",
       "status": "DEFERRED",
@@ -68,59 +68,47 @@
     },
     {
       "id": "QA9-001",
-      "title": "CQL translator silently passes undefined definition references through as bare SQL identifiers \u2014 produces confusing DuckDB parse errors at runtime",
+      "title": "CQL translator silently passes undefined definition references through as bare SQL identifiers — produces confusing DuckDB parse errors at runtime",
       "severity": "medium",
       "category": "correctness",
-      "status": "FIXED",
+      "status": "OPEN",
       "found_in": "fhir4ds/cql/translator/expressions/_core.py",
       "details": "When a CQL definition references another definition that does not exist (e.g., `define X: NonExistentDefinition`), the translator emits SQLIdentifier(name='NonExistentDefinition') instead of raising a TranslationError. At runtime DuckDB produces 'Parser Error: syntax error at or near NonExistentDefinition' which gives no indication the issue is a missing CQL definition. The translator should detect that the referenced Identifier is not in the known definitions dict and raise a clear error at translation time.",
-      "repro": "parse_cql(\"library T\\nusing FHIR version '4.0.1'\\ndefine X: NonExistentDefinition\") \u2192 translate_library \u2192 translate_library_to_sql('X') \u2192 DuckDB parse error",
-      "iteration": 9,
-      "fixed_in": [
-        "fhir4ds/cql/translator/expressions/_core.py"
-      ],
-      "fix_summary": "When _translate_identifier() exhausts all 7 resolution paths (alias, symbol table, let variables, Patient, codes, definitions, forward references), a TranslationError is raised with the unresolved name and available definitions. Guarded: only fires during library translations without includes.",
-      "tests": "fhir4ds/cql/tests/unit/test_undefined_reference_errors.py::TestUndefinedDefinitionReference"
+      "repro": "parse_cql(\"library T\\nusing FHIR version '4.0.1'\\ndefine X: NonExistentDefinition\") → translate_library → translate_library_to_sql('X') → DuckDB parse error",
+      "iteration": 9
     },
     {
       "id": "QA9-002",
-      "title": "CQL translator silently passes unknown function calls through to SQL \u2014 produces confusing DuckDB errors at runtime",
+      "title": "CQL translator silently passes unknown function calls through to SQL — produces confusing DuckDB errors at runtime",
       "severity": "medium",
       "category": "correctness",
-      "status": "FIXED",
-      "found_in": "fhir4ds/cql/translator/expressions/_functions.py",
+      "status": "OPEN",
+      "found_in": "fhir4ds/cql/translator/expressions/_core.py",
       "details": "When CQL contains a call to a function not in the known function registry (e.g., `NonExistentFunction(1, 2)`), the translator emits SQLFunctionCall('NonExistentFunction', ...) which produces a DuckDB parse error at runtime. The translator should validate function names against its registry and raise a TranslationError with the function name and available alternatives.",
-      "repro": "parse_cql(\"library T\\nusing FHIR version '4.0.1'\\ndefine X: NonExistentFunction(1,2)\") \u2192 translate_library \u2192 translate_library_to_sql('X') \u2192 DuckDB error 'syntax error at or near NonExistentFunction'",
-      "iteration": 9,
-      "fixed_in": [
-        "fhir4ds/cql/translator/expressions/_functions.py"
-      ],
-      "fix_summary": "When _translate_function_ref() exhausts all 6 resolution paths (pre-translate, registry, fluent, inliner, special cases), a TranslationError is raised with the function name and arity. Guarded: only fires during library translations without includes.",
-      "tests": "fhir4ds/cql/tests/unit/test_undefined_reference_errors.py::TestUnknownFunctionCall"
+      "repro": "parse_cql(\"library T\\nusing FHIR version '4.0.1'\\ndefine X: NonExistentFunction(1,2)\") → translate_library → translate_library_to_sql('X') → DuckDB error 'syntax error at or near NonExistentFunction'",
+      "iteration": 9
     },
     {
       "id": "QA9-003",
-      "title": "CQL parser does not validate date/time literal values \u2014 invalid dates like @2023-13-45 pass through silently",
+      "title": "CQL parser does not validate date/time literal values — invalid dates like @2023-13-45 pass through silently",
       "severity": "low",
       "category": "validation",
-      "status": "DEFERRED",
+      "status": "OPEN",
       "found_in": "fhir4ds/cql/parser",
-      "details": "The CQL parser accepts date literals with invalid month/day values (e.g., @2023-13-45 \u2192 month 13, day 45). These are passed through as string literals '2023-13-45' in the generated SQL, where DuckDB will reject them at runtime with a type error. The parser or translator should validate date components are within valid ranges and produce a clear error mentioning the invalid date format.",
+      "details": "The CQL parser accepts date literals with invalid month/day values (e.g., @2023-13-45 → month 13, day 45). These are passed through as string literals '2023-13-45' in the generated SQL, where DuckDB will reject them at runtime with a type error. The parser or translator should validate date components are within valid ranges and produce a clear error mentioning the invalid date format.",
       "repro": "parse_cql(\"library T\\nusing FHIR version '4.0.1'\\ndefine X: @2023-13-45\") succeeds; translator emits SQLLiteral('2023-13-45')",
-      "iteration": 9,
-      "resolution": "DuckDB validates date literals at execution time with clear Conversion Error messages. Translation-time validation is low ROI given the existing runtime guard."
+      "iteration": 9
     },
     {
       "id": "QA9-004",
-      "title": "FHIRPath resolve() returns empty collection for contained resource references (#id) \u2014 workaround exists but resolve() spec compliance is incomplete",
+      "title": "FHIRPath resolve() returns empty collection for contained resource references (#id) — workaround exists but resolve() spec compliance is incomplete",
       "severity": "low",
       "category": "conformance",
-      "status": "DEFERRED",
+      "status": "OPEN",
       "found_in": "fhir4ds/fhirpath/engine/invocations",
       "details": "Per the FHIRPath spec, resolve() on a reference like '#med1' should look up the resource in the containing resource's 'contained' array. Currently resolve() returns an empty collection for fragment references. Users must use the workaround: contained.where(id = 'med1'). This affects MedicationRequest.medicationReference.resolve() and similar patterns common in clinical data.",
-      "repro": "fhirpath(medicationRequest_json, 'medicationReference.resolve()') \u2192 [] even though contained[0].id matches",
-      "iteration": 9,
-      "resolution": "Contained resource resolve() is net-new functionality. Current workaround (contained.where(id=\"x\")) is adequate for analytical use cases. FHIRPath spec does not mandate contained resource resolution for analytical engines."
+      "repro": "fhirpath(medicationRequest_json, 'medicationReference.resolve()') → [] even though contained[0].id matches",
+      "iteration": 9
     }
   ]
 }

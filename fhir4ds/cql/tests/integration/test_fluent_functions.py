@@ -16,7 +16,6 @@ Reference: docs/PLAN-CQL-TO-SQL-TRANSLATOR.md
 
 import pytest
 from ...parser import parse_cql
-from ...errors import TranslationError
 from ...translator import (
     CQLToSQLTranslator,
     FluentFunctionTranslator,
@@ -234,7 +233,7 @@ class TestVerifiedFunction:
             # The inlined function should use list_filter pattern
             # for filtering by verification status
             assert "list_filter" in sql or "verificationStatus" in sql or "confirmed" in sql
-        except (NotImplementedError, KeyError, TranslationError) as e:
+        except (NotImplementedError, KeyError) as e:
             pytest.skip(f"Translation not yet supported: {e}")
 
     @pytest.mark.integration
@@ -264,7 +263,7 @@ class TestVerifiedFunction:
             # The inlined function should use list_filter pattern
             # for filtering by verification status
             assert "list_filter" in sql or "verificationStatus" in sql or "confirmed" in sql
-        except (NotImplementedError, KeyError, TranslationError) as e:
+        except (NotImplementedError, KeyError) as e:
             pytest.skip(f"Translation not yet supported: {e}")
 
 
@@ -457,7 +456,7 @@ class TestNoUnnestWithCorrelatedReferences:
             if "Encounters with Obs" in results:
                 sql = results["Encounters with Obs"].to_sql()
                 assert len(sql) > 0
-        except (NotImplementedError, KeyError, TranslationError) as e:
+        except (NotImplementedError, KeyError) as e:
             pytest.skip(f"Translation not yet supported: {e}")
 
 
