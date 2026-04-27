@@ -1266,11 +1266,23 @@ class QueryMixin:
             if expected_sql_types and bare_type not in ("String", "string", "Time", "time"):
                 # Build typeof-based check: when typeof(x) is a concrete non-VARCHAR type,
                 # check it matches. When VARCHAR, use not-JSON format check (FHIR fallback).
-                type_checks = [SQLBinaryOp(
-                    operator="=",
-                    left=SQLFunctionCall(name="typeof", args=[resource_expr]),
-                    right=SQLLiteral(value=t),
-                ) for t in expected_sql_types]
+                # DuckDB typeof() may return parameterized names (e.g., 'DECIMAL(2,1)'),
+                # so use starts_with for types that have precision/scale suffixes.
+                _PARAMETERIZED_TYPES = {"DECIMAL"}
+                typeof_call = SQLFunctionCall(name="typeof", args=[resource_expr])
+                type_checks = []
+                for t in expected_sql_types:
+                    if t in _PARAMETERIZED_TYPES:
+                        type_checks.append(SQLFunctionCall(
+                            name="starts_with",
+                            args=[typeof_call, SQLLiteral(value=t)],
+                        ))
+                    else:
+                        type_checks.append(SQLBinaryOp(
+                            operator="=",
+                            left=typeof_call,
+                            right=SQLLiteral(value=t),
+                        ))
                 type_match = type_checks[0]
                 for tc in type_checks[1:]:
                     type_match = SQLBinaryOp(operator="OR", left=type_match, right=tc)
