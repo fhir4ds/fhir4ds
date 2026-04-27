@@ -329,7 +329,7 @@ class TestJoinConversionIntegration:
         sql = select.to_sql()
 
         # Verify the structure
-        assert "SELECT p.patient_id, j1.resource" in sql
+        assert "SELECT _pt.patient_id, j1.resource" in sql
         # SQLIdentifier quotes names with spaces/reserved words
         assert 'FROM "patients AS _pt"' in sql
         assert "LEFT JOIN _sq_14 AS j1 ON j1.patient_id = _pt.patient_id" in sql
