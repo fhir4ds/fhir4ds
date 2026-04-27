@@ -361,6 +361,7 @@ class SQLTranslationContext:
     definitions: Dict[str, str] = field(default_factory=dict)
     definition_asts: Dict[str, Any] = field(default_factory=dict)  # Store AST nodes alongside SQL strings
     includes: Dict[str, LibraryInfo] = field(default_factory=dict)
+    _unresolved_includes: Set[str] = field(default_factory=set)
     valuesets: Dict[str, str] = field(default_factory=dict)
     codesystems: Dict[str, str] = field(default_factory=dict)
     codes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -690,6 +691,14 @@ class SQLTranslationContext:
         lib = LibraryInfo(name=alias, path=path, version=version)
         self.includes[alias] = lib
         return lib
+
+    def mark_include_unresolved(self, alias: str) -> None:
+        """Mark an included library as unresolved (no library_loader available)."""
+        self._unresolved_includes.add(alias)
+
+    def is_include_unresolved(self, alias: str) -> bool:
+        """Check if an included library was not resolved."""
+        return alias in self._unresolved_includes
 
     def add_valueset(self, name: str, url: str) -> None:
         """

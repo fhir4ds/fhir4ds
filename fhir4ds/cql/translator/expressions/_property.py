@@ -402,6 +402,19 @@ class PropertyMixin:
         if isinstance(source, Identifier):
             source_name = source.name
             if source_name in self.context.includes:
+                # Raise early for references to unresolved includes (QA8-001)
+                if self.context.is_include_unresolved(source_name):
+                    from ...errors import TranslationError
+                    raise TranslationError(
+                        message=(
+                            f"Reference to included library '{source_name}' "
+                            f"cannot be resolved: no library_loader was "
+                            f"configured. Provide a library_loader to "
+                            f"CQLToSQLTranslator to resolve include "
+                            f"references like '{source_name}.{path}'."
+                        ),
+                    )
+
                 # Check if this is a well-known library code constant (QICoreCommon, etc.)
                 resolved = _resolve_library_code_constant(source_name, path, context=self.context)
                 if resolved is not None:

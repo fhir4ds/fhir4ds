@@ -182,6 +182,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         library_loader: Optional[Callable[[str], Optional[Library]]] = None,
         model_config: Optional["ModelConfig"] = None,
         _library_cache: Optional[dict] = None,
+        _resolving_stack: Optional[Set[tuple]] = None,
         audit_mode: bool = False,
         audit_expressions: bool = True,
     ) -> None:
@@ -194,6 +195,8 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             library_loader: Optional callable that takes a library alias/path and returns
                            the parsed Library AST, or None if not found.
             model_config: Optional ModelConfig for versioned schema resolution.
+            _resolving_stack: Internal — set of (path, version) tuples for libraries
+                currently being resolved, used for circular include detection.
             audit_mode: If True, emit audit structs wrapping boolean results.
             audit_expressions: If False with audit_mode=True, only add _audit_item
                 to retrieve CTEs without wrapping expressions (population-only audit).
@@ -215,6 +218,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # diamond dependencies (e.g. FHIRHelpers included by many libraries)
         # are translated only once instead of once per include path.
         self._library_cache: dict = _library_cache if _library_cache is not None else {}
+        self._resolving_stack: Set[tuple] = _resolving_stack if _resolving_stack is not None else set()
         self._included_definitions: Dict[str, SQLExpression] = {}
 
         # CTE name tracking for subquery deduplication (to avoid duplicate CTE names)
@@ -373,7 +377,11 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # Set up context from library declarations
         self._setup_context(library)
 
-        # Process includes first
+        # Process parameters before includes so that parameter bindings are
+        # available even if include resolution fails.
+        self._process_parameters(library, self._context)
+
+        # Process includes
         self._process_includes(library, self._context)
 
         # Build dynamic component code registry (Tier 7: E2)
@@ -382,9 +390,6 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         
         # Store in context for ExpressionTranslator access
         self._context.component_code_to_column = self._component_code_to_column
-
-        # Process parameters
-        self._process_parameters(library, self._context)
 
         # First pass: collect function definitions
         for statement in library.statements:

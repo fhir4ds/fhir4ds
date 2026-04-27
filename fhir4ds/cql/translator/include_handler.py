@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Set, TYPE_CHECKING
 
 _logger = logging.getLogger(__name__)
 
-from ..errors import TranslationError
+from ..errors import CircularIncludeError, TranslationError
 from ..parser.ast_nodes import (
     Definition,
     FunctionDefinition,
@@ -151,18 +151,46 @@ class IncludeHandlerMixin:
         libraries and collects their retrieve CTEs so they can be emitted in the
         final SQL output.
 
+        Circular include detection (QA8-002):
+        Uses ``_resolving_stack`` to track library identifiers currently being
+        resolved. A circular dependency raises ``CircularIncludeError``.
+
         Args:
             library: The parsed CQL library.
             context: The translation context.
         """
         import copy as _copy  # noqa: PLC0415
 
+        if not library.includes:
+            return
+
+        # Ensure this library is in the resolving stack so children can
+        # detect a cycle back to us.
+        own_key = (library.identifier, getattr(library, "version", None) or "")
+        self._resolving_stack = self._resolving_stack | {own_key}
+
         for inc in library.includes:
             alias = inc.alias or inc.path.rsplit(".", 1)[-1]
             lib_info = context.add_include(alias=alias, path=inc.path, version=inc.version)
 
             if self._library_loader is None:
+                # Track as unresolved for downstream error reporting (QA8-001).
+                context.mark_include_unresolved(alias)
                 continue
+
+            # --- Circular include detection (QA8-002) ---
+            lib_key = (inc.path, inc.version or "")
+            if lib_key in self._resolving_stack:
+                chain = [f"{p} v{v}" if v else p for p, v in self._resolving_stack]
+                chain.append(inc.path)
+                raise CircularIncludeError(
+                    message=(
+                        f"Circular include detected: library '{inc.path}' is "
+                        f"already being resolved in the current include chain"
+                    ),
+                    library_path=inc.path,
+                    include_chain=chain,
+                )
 
             # Check the shared cache first — avoid re-translating the same library
             # when it appears multiple times in the dependency graph (diamond pattern).
@@ -200,14 +228,17 @@ class IncludeHandlerMixin:
             # Store the parsed AST on the library info for downstream analysis.
             lib_info.library_ast = included_library
 
-            # Create a new translator instance, sharing the library cache so that
-            # transitive dependencies are also de-duplicated.
+            # Create a new translator instance, sharing the library cache and
+            # resolving stack so that transitive dependencies are de-duplicated
+            # and circular includes are detected.
             from ..translator.translator import CQLToSQLTranslator
+            child_stack = self._resolving_stack | {lib_key}
             included_translator = CQLToSQLTranslator(
                 connection=self._connection,
                 use_fhirpath_udfs=self._use_fhirpath_udfs,
                 library_loader=self._library_loader,
                 _library_cache=self._library_cache,
+                _resolving_stack=child_stack,
             )
 
             try:

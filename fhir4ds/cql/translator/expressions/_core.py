@@ -858,6 +858,17 @@ class CoreMixin:
 
         # Check if first part is an include reference
         if first in self.context.includes:
+            # Raise early for references to unresolved includes (QA8-001)
+            if self.context.is_include_unresolved(first):
+                from ...errors import TranslationError
+                raise TranslationError(
+                    message=(
+                        f"Reference to included library '{first}' cannot be "
+                        f"resolved: no library_loader was configured. Provide a "
+                        f"library_loader to CQLToSQLTranslator to resolve "
+                        f"include references."
+                    ),
+                )
             # Reference to included library
             # e.g., FHIRHelpers.ToDateTime or AIFrailLTCF."Some Definition"
             if len(parts) >= 2:

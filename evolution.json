@@ -1,0 +1,69 @@
+{
+  "iteration": 8,
+  "phase": "ARCHITECT",
+  "issues": [
+    {
+      "id": "QA8-001",
+      "title": "CQL translator silently generates broken SQL for unresolvable include references when no library_loader is set",
+      "severity": "medium",
+      "category": "correctness",
+      "status": "FIXED",
+      "found_in": "fhir4ds/cql/translator/include_handler.py",
+      "fixed_in": [
+        "fhir4ds/cql/translator/include_handler.py",
+        "fhir4ds/cql/translator/context.py",
+        "fhir4ds/cql/translator/expressions/_property.py",
+        "fhir4ds/cql/translator/expressions/_core.py"
+      ],
+      "fix_summary": "Unresolved includes are tracked in context._unresolved_includes. When expression translation encounters a reference to an unresolved include (Property or QualifiedIdentifier), it raises a clear TranslationError instead of generating broken SQL. Includes are still registered in context for introspection.",
+      "tests": "fhir4ds/cql/tests/unit/test_include_errors.py::TestMissingLibraryLoader",
+      "iteration": 8
+    },
+    {
+      "id": "QA8-002",
+      "title": "CQL translator has no circular include detection — unbounded recursion on mutually-including libraries",
+      "severity": "high",
+      "category": "correctness",
+      "status": "FIXED",
+      "found_in": "fhir4ds/cql/translator/include_handler.py",
+      "fixed_in": [
+        "fhir4ds/cql/translator/include_handler.py",
+        "fhir4ds/cql/translator/translator.py",
+        "fhir4ds/cql/errors.py"
+      ],
+      "fix_summary": "Added _resolving_stack (set of (path, version) tuples) to CQLToSQLTranslator. Before recursing into an included library, the current library is added to the stack. Each child translator receives the parent's stack. CircularIncludeError (new subclass of TranslationError) is raised when an include target is already in the stack. Diamond dependencies are unaffected (cache handles them).",
+      "tests": "fhir4ds/cql/tests/unit/test_include_errors.py::TestCircularIncludeDetection",
+      "iteration": 8
+    },
+    {
+      "id": "QA8-003",
+      "title": "ViewDef SQLGenerator assumes source_table has a 'resourceType' column, fails on single-resource tables",
+      "severity": "medium",
+      "category": "correctness",
+      "status": "INTENDED",
+      "found_in": "fhir4ds/viewdef/generator.py:823-827",
+      "resolution": "The resourceType filter is only added when source_table is explicitly configured (non-default). The SQL-on-FHIR v2 spec defines ViewDefinition as operating on a shared 'resources' table containing all resource types, so the filter is correct per spec. Single-resource tables are a non-standard configuration. Users who set source_table are opting into the shared-table model where resourceType filtering is necessary.",
+      "iteration": 8
+    },
+    {
+      "id": "QA8-004",
+      "title": "in_valueset UDF is only a placeholder — CQL population SQL referencing it cannot execute without DQM data loading",
+      "severity": "low",
+      "category": "documentation",
+      "status": "DEFERRED",
+      "found_in": "fhir4ds/cql/duckdb/extension.py:143-150",
+      "resolution": "Architectural design choice. Value set resolution requires loaded value set data, which is provided by the DQM evaluator pipeline. The placeholder UDF already raises a clear error message. The CQL spec does not mandate standalone value set resolution. Enhancement to improve the error message or add documentation is low-priority.",
+      "iteration": 8
+    },
+    {
+      "id": "QA8-005",
+      "title": "ViewDef parse_view_definition accepts arbitrary resource types without validation",
+      "severity": "low",
+      "category": "validation",
+      "status": "DEFERRED",
+      "found_in": "fhir4ds/viewdef/parser.py",
+      "resolution": "The SQL-on-FHIR v2 spec does not mandate client-side resource type validation. Adding validation would be net-new code with low ROI since typos result in empty results (not errors). May be revisited as an optional strict mode.",
+      "iteration": 8
+    }
+  ]
+}
