@@ -387,7 +387,7 @@ def cqlUncertainAdd(a: str | None, b: str | None) -> str | None:
     try:
         av = _parse_int_or_interval(str(a))
         bv = _parse_int_or_interval(str(b))
-    except Exception:
+    except (ValueError, TypeError, orjson.JSONDecodeError):
         return None
     a_is_int = isinstance(av, int)
     b_is_int = isinstance(bv, int)
@@ -413,7 +413,7 @@ def cqlUncertainSubtract(a: str | None, b: str | None) -> str | None:
     try:
         av = _parse_int_or_interval(str(a))
         bv = _parse_int_or_interval(str(b))
-    except Exception:
+    except (ValueError, TypeError, orjson.JSONDecodeError):
         return None
     a_is_int = isinstance(av, int)
     b_is_int = isinstance(bv, int)
@@ -439,7 +439,7 @@ def cqlUncertainMultiply(a: str | None, b: str | None) -> str | None:
     try:
         av = _parse_int_or_interval(str(a))
         bv = _parse_int_or_interval(str(b))
-    except Exception:
+    except (ValueError, TypeError, orjson.JSONDecodeError):
         return None
     a_is_int = isinstance(av, int)
     b_is_int = isinstance(bv, int)
@@ -467,7 +467,7 @@ def cqlUncertainCompare(a: str | None, b: str | None, op: str | None) -> bool | 
     try:
         av = _parse_int_or_interval(str(a))
         bv = _parse_int_or_interval(str(b))
-    except Exception:
+    except (ValueError, TypeError, orjson.JSONDecodeError):
         return None
     a_is_int = isinstance(av, int)
     b_is_int = isinstance(bv, int)

@@ -210,7 +210,10 @@ def _parse_join(join_data: Dict[str, Any]) -> Join:
     for on_item in join_data.get('on', []):
         if isinstance(on_item, dict):
             on_conditions.append(dict(on_item))
-
+        else:
+            raise ParseError(
+                f"Join 'on' items must be dicts, got {type(on_item).__name__}: {on_item}"
+            )
     return Join(
         name=name,
         resource=resource,

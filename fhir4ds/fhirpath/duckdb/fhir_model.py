@@ -12,6 +12,7 @@ polymorphic field navigation.
 
 from __future__ import annotations
 
+import threading
 from typing import Any, Dict, List, Optional
 
 # Import generated type data
@@ -329,6 +330,7 @@ def _get_backbone_element_paths() -> Dict[str, str]:
 
 # Singleton model instance
 _fhir_model: Optional[Dict[str, Any]] = None
+_fhir_model_lock = threading.Lock()
 
 
 def get_fhir_model() -> Dict[str, Any]:
@@ -336,6 +338,7 @@ def get_fhir_model() -> Dict[str, Any]:
     Get the FHIR model for fhirpathpy.
 
     Returns a cached model instance, building it on first call.
+    Thread-safe via double-checked locking.
 
     Returns:
         The FHIR model dict for fhirpathpy
@@ -343,7 +346,9 @@ def get_fhir_model() -> Dict[str, Any]:
     global _fhir_model
 
     if _fhir_model is None:
-        _fhir_model = build_fhir_model()
+        with _fhir_model_lock:
+            if _fhir_model is None:
+                _fhir_model = build_fhir_model()
 
     return _fhir_model
 
@@ -351,7 +356,8 @@ def get_fhir_model() -> Dict[str, Any]:
 def reset_model_cache() -> None:
     """Reset the cached model (useful for testing)."""
     global _fhir_model
-    _fhir_model = None
+    with _fhir_model_lock:
+        _fhir_model = None
 
 
 __all__ = [

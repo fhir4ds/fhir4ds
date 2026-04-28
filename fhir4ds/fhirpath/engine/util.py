@@ -59,7 +59,7 @@ def is_number(value):
 
 
 def is_capitalized(x):
-    return isinstance(x, str) and x[0] == x[0].upper()
+    return isinstance(x, str) and len(x) > 0 and x[0] == x[0].upper()
 
 
 def is_empty(x):

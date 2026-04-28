@@ -543,11 +543,6 @@ class QueryTranslator:
         # Check if this is a resource type name (fallback to Retrieve)
         # Query the schema registry for loaded resource types instead of hardcoding
         fhir_types = set(self.context.fhir_schema.resources.keys()) if self.context.fhir_schema else set()
-        # Ensure common types are always recognized even if schema is partial
-        fhir_types |= {
-            "Patient", "Condition", "Observation", "Encounter", "MedicationRequest",
-            "Procedure", "DiagnosticReport", "ServiceRequest", "Immunization",
-        }
 
         if name in fhir_types:
             # Treat as a retrieve

@@ -18,6 +18,10 @@ if TYPE_CHECKING:
 from ..translator.column_registry import ColumnRegistry
 from ..translator.warnings import TranslationWarnings
 
+# Well-known CQL identifiers from the specification
+CQL_PATIENT_CONTEXT = "Patient"
+CQL_MEASUREMENT_PERIOD = "Measurement Period"
+
 
 class ExprUsage(Enum):
     """
@@ -352,7 +356,7 @@ class SQLTranslationContext:
     # Default context is "Patient" per CQL specification §2.3:
     # "CQL is defined to run in the context of a single patient by default."
     # Override to "Population" for population-level measures.
-    current_context: str = "Patient"
+    current_context: str = CQL_PATIENT_CONTEXT
     library_name: Optional[str] = None
     library_version: Optional[str] = None
 
@@ -489,8 +493,8 @@ class SQLTranslationContext:
         # translation emits {mp_start}/{mp_end} template placeholders even when no
         # concrete dates have been set.  This mirrors what _process_parameters does
         # for CQL-declared interval parameters.
-        if "Measurement Period" not in self._parameter_bindings:
-            self._parameter_bindings["Measurement Period"] = (None, None)
+        if CQL_MEASUREMENT_PERIOD not in self._parameter_bindings:
+            self._parameter_bindings[CQL_MEASUREMENT_PERIOD] = (None, None)
 
         # Guarantee profile_registry is always available (Context SSOT invariant).
         # Downstream code must never fall back to get_default_profile_registry().
@@ -874,7 +878,7 @@ class SQLTranslationContext:
 
     def is_patient_context(self) -> bool:
         """Check if we're in Patient context."""
-        return self.current_context == "Patient"
+        return self.current_context == CQL_PATIENT_CONTEXT
 
     def is_population_context(self) -> bool:
         """Check if we're in Population context."""
@@ -943,7 +947,7 @@ class SQLTranslationContext:
         self.resource_type = None
         self.patient_alias = None
         self.current_patient_id = None
-        self.current_context = "Patient"
+        self.current_context = CQL_PATIENT_CONTEXT
         self.library_name = None
         self.library_version = None
         self.has_patient_demographics_cte = False
@@ -1081,7 +1085,7 @@ class SQLTranslationContext:
         # Always keep generic bindings in sync for "Measurement Period".
         # Registers (None, None) even when no dates are set so that template
         # placeholders ({mp_start}/{mp_end}) are emitted by the expression translator.
-        self._parameter_bindings["Measurement Period"] = (
+        self._parameter_bindings[CQL_MEASUREMENT_PERIOD] = (
             self._measurement_period.start,
             self._measurement_period.end,
         )

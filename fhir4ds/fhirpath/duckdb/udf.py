@@ -351,9 +351,12 @@ def fhirpath_udf_typed(
     if results.type != return_type:
         try:
             results = results.cast(return_type)
-        except (pa.ArrowInvalid, pa.ArrowNotImplementedError):
-            # If cast fails, return original results
-            pass
+        except (pa.ArrowInvalid, pa.ArrowNotImplementedError) as e:
+            _logger.warning(
+                "Arrow type cast from %s to %s failed: %s. "
+                "Returning results with original type.",
+                results.type, return_type, e,
+            )
 
     return results
 

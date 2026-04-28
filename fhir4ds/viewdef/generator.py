@@ -301,7 +301,8 @@ class SQLGenerator:
 
     # Built-in variables recognised by the SQL-on-FHIR v2 spec that do NOT
     # need to appear in the ViewDefinition's ``constants`` section.
-    _BUILTIN_VARIABLES = {"rowIndex", "context", "resource", "rootResource", "ucum"}
+    # Imported from the canonical definition in constants.py.
+    from .constants import FHIRPATH_BUILTIN_VARIABLES as _BUILTIN_VARIABLES
 
     def _extract_constant_references(self, path: str) -> Set[str]:
         """Extract all constant references (%name) from a FHIRPath expression.

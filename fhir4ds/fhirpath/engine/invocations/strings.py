@@ -10,13 +10,27 @@ from ...engine.errors import FHIRPathError
 # Prevents excessive compilation time and mitigates ReDoS risk.
 _MAX_REGEX_LENGTH = 1000
 
+# Patterns that indicate potential catastrophic backtracking in Python's
+# NFA-based re engine.  These detect nested quantifiers and overlapping
+# alternations — the two main classes of ReDoS triggers.
+_REDOS_PATTERNS = re.compile(
+    r"(\((?:[^()]*[+*])[^()]*\)[+*])"   # nested quantifier: (a+)+
+    r"|(\([^()]*\|[^()]*\)[+*])"        # quantified alternation: (a|a)+
+)
+
 
 def _validate_regex(pattern: str) -> None:
-    """Raise FHIRPathError if a regex pattern exceeds safe limits."""
+    """Raise FHIRPathError if a regex pattern exceeds safe limits or
+    contains structures known to cause catastrophic backtracking."""
     if len(pattern) > _MAX_REGEX_LENGTH:
         raise FHIRPathError(
             f"Regex pattern too long ({len(pattern)} chars, max {_MAX_REGEX_LENGTH}). "
             "This limit exists to prevent ReDoS attacks."
+        )
+    if _REDOS_PATTERNS.search(pattern):
+        raise FHIRPathError(
+            "Regex pattern contains nested quantifiers or quantified alternations "
+            "that may cause catastrophic backtracking. Simplify the pattern."
         )
 
 
@@ -182,7 +196,7 @@ def decode(ctx, coll, format):
 
         if format == "base64":
             return base64.b64decode(str_to_decode, validate=True).decode()
-    except Exception:
+    except (ValueError, UnicodeDecodeError):
         return []
 
     if format == "hex":

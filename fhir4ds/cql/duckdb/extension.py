@@ -137,7 +137,7 @@ def _register_python_supplements(
         try:
             fn(reg_con)
         except Exception as e:
-            _logger.debug("UDF group %s registration: %s", label, e)
+            _logger.warning("UDF group '%s' registration failed: %s", label, e)
 
     if not cpp_loaded:
         # Register a placeholder in_valueset UDF that raises a clear error.

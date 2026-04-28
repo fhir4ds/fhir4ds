@@ -31,6 +31,10 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TYPE_CHECKIN
 
 _logger = logging.getLogger(__name__)
 
+# Well-known CQL definition name used as the default final definition
+# when no explicit final_definition is provided to translate().
+_DEFAULT_FINAL_DEFINITION = "Initial Population"
+
 if TYPE_CHECKING:
     import duckdb
     from ..translator.queries import SQLQueryBuilder
@@ -500,8 +504,8 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # Determine the final definition to select from
         if final_definition:
             final_name = final_definition
-        elif "Initial Population" in definitions:
-            final_name = "Initial Population"
+        elif _DEFAULT_FINAL_DEFINITION in definitions:
+            final_name = _DEFAULT_FINAL_DEFINITION
         else:
             # Use the last definition in order
             final_name = ordered_names[-1] if ordered_names else None
@@ -1595,7 +1599,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 # Try to extract default value
                 try:
                     default = self._extract_default_value(param.default)
-                except Exception as e:
+                except (AttributeError, TypeError, ValueError) as e:
                     _logger.warning("Failed to extract default value for parameter '%s': %s", param.name, e)
             context.add_parameter(param.name, param_type, default)
 

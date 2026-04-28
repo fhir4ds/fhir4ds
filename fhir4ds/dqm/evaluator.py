@@ -468,8 +468,9 @@ class MeasureEvaluator:
                 SyntaxError, TypeError) as e:
             raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
         except Exception as e:
-            # Catch CQL ParseError, TranslationError, and other downstream errors
-            if type(e).__name__ in ('ParseError', 'TranslationError'):
+            # Import actual exception classes instead of string-matching type names
+            from fhir4ds.cql.errors import ParseError, TranslationError
+            if isinstance(e, (ParseError, TranslationError)):
                 raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
             raise
         finally:
