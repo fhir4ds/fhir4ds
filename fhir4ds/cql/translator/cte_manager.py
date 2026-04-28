@@ -683,6 +683,12 @@ class CTEManagerMixin:
                         joins=all_joins if all_joins else None,
                     )
 
+                # In POPULATION audit mode, compute source resource CTEs for evidence collection
+                if self._context.audit_mode:
+                    src = self._resolve_source_resource_ctes(sql_ast)
+                    if src:
+                        meta.source_resource_ctes = sorted(src)
+
                 # Normal mode: Boolean: SELECT p.patient_id FROM _patients AS p WHERE <expr>
                 # Process the WHERE expression to convert subqueries to EXISTS
                 where_expr = self._correlate_exists_ast(sql_ast, outer_alias="_pt")

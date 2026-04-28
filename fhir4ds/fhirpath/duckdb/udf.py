@@ -531,7 +531,8 @@ def fhirpath_text_udf(resource: str | None, expression: str | None) -> str | Non
     """
     try:
         result = fhirpath_scalar(resource, expression)
-    except (NotImplementedError, FHIRPathSyntaxError, FHIRPathError):
+    except (NotImplementedError, FHIRPathSyntaxError, FHIRPathError) as e:
+        _logger.warning("fhirpath_text evaluation error for expression %r: %s", expression, e)
         return None
     if not result:
         return None

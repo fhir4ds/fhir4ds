@@ -442,7 +442,9 @@ class QueryMixin:
 
             # If it's not already a URL, try common prefixes
             if valueset and not valueset.startswith('http') and not valueset.startswith('urn:'):
-                valueset = f"http://cts.nlm.nih.gov/fhir/ValueSet/{valueset}"
+                from ..patterns.retrieve import _VALUESET_PREFIX_CONFIG
+                default_prefix = _VALUESET_PREFIX_CONFIG.get("default_prefix", "http://cts.nlm.nih.gov/fhir/ValueSet/")
+                valueset = f"{default_prefix}{valueset}"
 
         # Return placeholder
         return RetrievePlaceholder(

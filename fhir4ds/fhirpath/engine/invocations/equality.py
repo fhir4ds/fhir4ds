@@ -12,8 +12,9 @@ DATETIME_NODES_LIST = (nodes.FP_Date, nodes.FP_DateTime, nodes.FP_Time)
 
 
 def equality(ctx, x, y):
+    # FHIRPath §6.1.3: If either or both operands are empty, the result is empty (null propagation)
     if util.is_empty(x) or util.is_empty(y):
-        return False
+        return None
 
     if type(x[0]) in DATETIME_NODES_LIST or type(y[0]) in DATETIME_NODES_LIST:
         return datetime_equality(ctx, x, y)
@@ -263,13 +264,18 @@ def typecheck(a, b):
         a = a_parsed
         b = b_parsed
 
-    # Try to convert string values that represent numbers to actual numbers
-    # This handles cases where FHIR XML has numeric values as strings
-    a_converted = _try_convert_to_number(a)
-    b_converted = _try_convert_to_number(b)
-    if util.is_number(a_converted) or util.is_number(b_converted):
-        a = a_converted
-        b = b_converted
+    # Try to convert string values that represent numbers to actual numbers.
+    # This handles cases where FHIR XML has numeric values as strings.
+    # Only apply numeric conversion when the other operand is not a date/time type,
+    # because year-only date strings like "2007" would otherwise be coerced to int.
+    a_is_time = isinstance(a, nodes.FP_TimeBase)
+    b_is_time = isinstance(b, nodes.FP_TimeBase)
+    if not a_is_time and not b_is_time:
+        a_converted = _try_convert_to_number(a)
+        b_converted = _try_convert_to_number(b)
+        if util.is_number(a_converted) or util.is_number(b_converted):
+            a = a_converted
+            b = b_converted
 
     lClass = a.__class__
     rClass = b.__class__
@@ -325,13 +331,10 @@ def _compare(ctx, a, b, fp_check, py_op):
 
     if isinstance(a0, nodes.FP_Type):
         try:
-            if (
-                isinstance(a0, nodes.FP_TimeBase)
-                and a0.compare(b0) is None
-                and a0._precision != b0._precision
-            ):
+            cmp_result = a0.compare(b0)
+            if cmp_result is None:
                 return None
-            return fp_check(a0.compare(b0))
+            return fp_check(cmp_result)
         except TypeError:
             return None
 

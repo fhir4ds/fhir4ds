@@ -1,11 +1,14 @@
 """
 Database initialization and data loading.
 """
+import logging
 import duckdb
 import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import time
+
+logger = logging.getLogger(__name__)
 
 def _fix_claim_encounter_refs(
     claim: dict, encounter_ids: set,
@@ -325,8 +328,9 @@ class BenchmarkDatabase:
                 "SELECT COUNT(DISTINCT patient_ref) FROM resources"
             ).fetchone()
             total_patients = result[0] if result else 0
-        except:
-            total_patients = total_resources  # Fallback
+        except Exception as e:
+            logger.warning("Could not count distinct patients: %s, using total_resources as fallback", e)
+            total_patients = total_resources
 
         return {
             "load_time_s": self._setup_timings["data_load"],

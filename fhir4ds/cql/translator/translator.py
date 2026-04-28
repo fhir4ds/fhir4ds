@@ -582,6 +582,16 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         self._process_includes(library, self._context)
 
+        # Validate that all declared parameters have bindings
+        for param in library.parameters:
+            binding = self._context._parameter_bindings.get(param.name)
+            if binding is None or (isinstance(binding, tuple) and all(v is None for v in binding)):
+                if not param.default:
+                    raise TranslationError(
+                        f"Required CQL parameter '{param.name}' has no supplied value and no default. "
+                        f"Supply the parameter via evaluate_measure(parameters={{...}})."
+                    )
+
         # Build dynamic component code registry (Tier 7: E2)
         self._build_component_code_registry(library)
         self._context.component_code_to_column = self._component_code_to_column
@@ -610,9 +620,22 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # Phase 1: Translate definitions with placeholders, scan for properties
         # Phase 2: Build retrieve CTEs with precomputed columns
         # Phase 3: Resolve placeholders in definition ASTs
-        resolved_asts, phase1_result, phase2_result, opt_stats = run_optimization_phases(
-            library, self._context, self
-        )
+        try:
+            resolved_asts, phase1_result, phase2_result, opt_stats = run_optimization_phases(
+                library, self._context, self
+            )
+        except RecursionError:
+            resolving = list(self._context._resolving_definitions)
+            if resolving:
+                raise TranslationError(
+                    f"Circular definition reference detected (stack overflow). "
+                    f"Definitions being resolved: {' → '.join(resolving)}"
+                )
+            else:
+                raise TranslationError(
+                    "CQL expression exceeds maximum nesting depth (stack overflow). "
+                    "Simplify deeply nested expressions or break them into named definitions."
+                )
 
         # Copy column registry from phase2_result to context for property access optimization.
         # Only overwrite if the new entry has at least as many columns — included-library
@@ -1268,7 +1291,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 quoted = f'"{cte_name}"'
                 parts.append(
                     f"COALESCE((SELECT LIST({quoted}._audit_item) "
-                    f"FROM {quoted} WHERE {quoted}.patient_id = p.patient_id "
+                    f"FROM {quoted} WHERE {quoted}.patient_id = _pt.patient_id "
                     f"AND {quoted}._audit_item IS NOT NULL), [])"
                 )
             else:
@@ -1283,7 +1306,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                         f"attribute := CAST(NULL AS VARCHAR), value := CAST(NULL AS VARCHAR), "
                         f"operator := 'exists', threshold := '{cte_name}', "
                         f"trace := CAST([] AS VARCHAR[]))) "
-                        f"FROM {quoted} WHERE {quoted}.patient_id = p.patient_id "
+                        f"FROM {quoted} WHERE {quoted}.patient_id = _pt.patient_id "
                         f"AND {quoted}.resource IS NOT NULL), [])"
                     )
         return parts
@@ -1397,6 +1420,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # Only RESOURCE_ROWS shape produces CTEs with resource columns.
             # PATIENT_SCALAR produces CTEs with only patient_id (and optionally value).
             from ..translator.context import RowShape
+            if shape == RowShape.UNKNOWN:
+                _logger.warning(
+                    "Could not determine row shape for definition '%s' — "
+                    "defaulting to non-resource",
+                    definition.name,
+                )
             has_resource = shape == RowShape.RESOURCE_ROWS
 
             # For PATIENT_SCALAR definitions that store a FHIR resource
@@ -1411,7 +1440,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 "Interval", "Period",
             })
             value_column = "value"
-            if shape == RowShape.PATIENT_SCALAR and cql_type not in _CQL_PRIMITIVE_TYPES:
+            if shape in (RowShape.PATIENT_SCALAR, RowShape.UNKNOWN) and cql_type not in _CQL_PRIMITIVE_TYPES:
                 if not cql_type.startswith("List<") and not cql_type.startswith("Interval<"):
                     value_column = "resource"
                     has_resource = True

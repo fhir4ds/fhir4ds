@@ -277,6 +277,9 @@ static fhirpath::FPCollection EvaluateFhirpath(FhirpathState &state, const char 
 	fhirpath::FPCollection results;
 	try {
 		results = evaluator.evaluate(*ast, doc, yyjson_doc_get_root(doc));
+	} catch (const fhirpath::FHIRPathSpecError&) {
+		yyjson_doc_free(doc);
+		throw;
 	} catch (const std::bad_alloc&) {
 		yyjson_doc_free(doc);
 		throw;

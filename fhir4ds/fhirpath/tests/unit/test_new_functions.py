@@ -387,7 +387,9 @@ class TestMatchesFullString:
         assert matches({}, [], "hello") == []
 
     def test_empty_regex_returns_empty(self) -> None:
-        assert matches({}, ["hello"], "") == []
+        # Empty regex matches only empty string (FHIRPath matches uses fullmatch)
+        assert matches({}, ["hello"], "") is False
+        assert matches({}, [""], "") is True
 
     def test_dotall_flag_matches_newlines(self) -> None:
         """The dot should match newlines (DOTALL behaviour)."""

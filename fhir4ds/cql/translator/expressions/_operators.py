@@ -6,6 +6,8 @@ import logging
 import re as _re
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
+_logger = logging.getLogger(__name__)
+
 
 def _is_patient_id_correlation(w) -> bool:
     """Return True if *w* is purely ``sub.patient_id = X.patient_id``."""
@@ -1118,7 +1120,28 @@ class OperatorsMixin:
                 )
 
         # Detect list context by checking if left translated to a subquery
+        # BUT first check if it's an interval reference (CTE producing interval)
+        if isinstance(left, SQLSubquery) and self._is_fhir_interval_expression(left):
+            if self._is_fhir_interval_expression(right):
+                # Interval includes interval
+                return SQLFunctionCall(name="intervalIncludes", args=[left, right])
+            # Interval contains point
+            return SQLFunctionCall(
+                name="intervalContains",
+                args=[left, self._ensure_interval_varchar(right)],
+            )
         if isinstance(left, SQLSubquery):
+            # Check if the CQL type system indicates this should be an interval
+            cql_left = getattr(expr, 'left', None) if expr else None
+            if cql_left is not None:
+                left_type = self._infer_cql_type(cql_left) if hasattr(self, '_infer_cql_type') else None
+                if left_type and (left_type.startswith("Interval") or left_type == "Period"):
+                    _logger.warning(
+                        "Contains operator: CQL type indicates interval (%s) but "
+                        "interval detection failed for SQLSubquery — falling through "
+                        "to list containment.",
+                        left_type,
+                    )
             # List containment: right IN (left subquery)
             return SQLBinaryOp(
                 operator="IN",
@@ -3150,7 +3173,7 @@ class OperatorsMixin:
 
             def _is_numeric(expr):
                 """Check if expression is known to be numeric."""
-                if isinstance(expr, SQLLiteral) and isinstance(expr.value, (int, float)):
+                if isinstance(expr, SQLLiteral) and isinstance(expr.value, (int, float)) and not isinstance(expr.value, bool):
                     return True
                 if isinstance(expr, SQLCast) and expr.target_type in ('INTEGER', 'DOUBLE', 'BIGINT', 'FLOAT'):
                     return True
@@ -3185,7 +3208,7 @@ class OperatorsMixin:
         if sql_op in (">", "<", ">=", "<=", "=", "!="):
             def _is_numeric_literal(expr):
                 """Check if expression is known to produce a numeric result."""
-                if isinstance(expr, SQLLiteral) and isinstance(expr.value, (int, float)):
+                if isinstance(expr, SQLLiteral) and isinstance(expr.value, (int, float)) and not isinstance(expr.value, bool):
                     return True
                 if isinstance(expr, SQLCast) and expr.target_type in ('INTEGER', 'DOUBLE', 'BIGINT', 'FLOAT', 'DECIMAL'):
                     return True

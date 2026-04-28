@@ -2071,11 +2071,13 @@ class CQLParser:
 
     def _parse_identifier_or_function(self) -> Expression:
         """Parse an identifier that may be a function call."""
+        prev_token = self.peek()
+        is_quoted = prev_token and prev_token.type == TokenType.QUOTED_IDENTIFIER
         name = self._parse_identifier_name()
 
         # Check for function call with parentheses
         if self.match(TokenType.LPAREN):
-            return self._parse_function_call(Identifier(name=name))
+            return self._parse_function_call(Identifier(name=name, quoted=is_quoted))
 
         # Check for function call with curly braces (e.g., collapse { ... }, expand { ... })
         # This is valid CQL syntax for aggregate functions that take a list
@@ -2092,7 +2094,7 @@ class CQLParser:
                 return FunctionRef(name=name, arguments=[interval_arg, per_value])
             return FunctionRef(name=name, arguments=[interval_arg])
 
-        return Identifier(name=name)
+        return Identifier(name=name, quoted=is_quoted)
 
     def _parse_function_call_with_braces(self, name: str) -> FunctionRef:
         """Parse a function call with curly brace syntax (e.g., collapse { ... })."""

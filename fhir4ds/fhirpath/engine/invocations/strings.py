@@ -88,7 +88,7 @@ def substring(ctx, coll, start, length=None):
         # FHIRPath §5.6.3: "If start lies outside the length of the string,
         # the function returns an empty collection."
         return []
-    if start >= len(string):
+    if start > len(string):
         return []
 
     if length is None or length == []:
@@ -116,6 +116,8 @@ def ends_with(ctx, coll, postfix):
 
 
 def contains_fn(ctx, coll, substr):
+    if util.is_empty(substr):
+        return []
     string = ensure_string_singleton(coll)
     return substr in string
 
@@ -131,7 +133,11 @@ def lower(ctx, coll):
 
 
 def split(ctx, coll, delimiter):
+    if util.is_empty(delimiter):
+        return []
     string = ensure_string_singleton(coll)
+    if delimiter == '':
+        return list(string)
     return string.split(delimiter)
 
 
@@ -144,8 +150,8 @@ def encode(ctx, coll, format):
     if not coll:
         return []
 
-    str_to_encode = coll[0] if isinstance(coll, list) else coll
-    if not str_to_encode:
+    str_to_encode = util.get_data(coll[0]) if isinstance(coll, list) else coll
+    if not str_to_encode or not isinstance(str_to_encode, str):
         return []
 
     if format in ["urlbase64", "base64url"]:
@@ -165,16 +171,19 @@ def decode(ctx, coll, format):
     if not coll:
         return []
 
-    str_to_decode = coll[0] if isinstance(coll, list) else coll
-    if not str_to_decode:
+    str_to_decode = util.get_data(coll[0]) if isinstance(coll, list) else coll
+    if not str_to_decode or not isinstance(str_to_decode, str):
         return []
 
-    if format in ["urlbase64", "base64url"]:
-        decoded = str_to_decode.replace("-", "+").replace("_", "/")
-        return base64.b64decode(decoded).decode()
+    try:
+        if format in ["urlbase64", "base64url"]:
+            decoded = str_to_decode.replace("-", "+").replace("_", "/")
+            return base64.b64decode(decoded, validate=True).decode()
 
-    if format == "base64":
-        return base64.b64decode(str_to_decode).decode()
+        if format == "base64":
+            return base64.b64decode(str_to_decode, validate=True).decode()
+    except Exception:
+        return []
 
     if format == "hex":
         if len(str_to_decode) % 2 != 0:
@@ -203,7 +212,7 @@ def matches(ctx, coll, regex):
 
     Returns true only when the *entire* string matches the given regex.
     """
-    if not regex or not coll:
+    if not coll or util.is_empty(regex) or regex is None:
         return []
 
     string = ensure_string_singleton(coll)
@@ -235,16 +244,21 @@ def replace_matches(ctx, coll, regex, repl):
     if regex == "":
         return string
 
-    # extract capture groups $1, $2, $3 etc as in python \1, \2, \3
-    repl = re.sub(r"\$(\d+)", r"\\\1", repl)
+    # Convert FHIRPath $N capture group references to Python \g<N> syntax.
+    # Using \g<N> avoids ambiguity: $0 → \g<0> (full match), $1 → \g<1>, etc.
+    repl = re.sub(r"\$(\d+)", r"\\g<\1>", repl)
 
     valid = _compile_regex(regex)
     return re.sub(valid, repl, string)
 
 
 def length(ctx, coll):
-    str = ensure_string_singleton(coll)
-    return len(str)
+    if not coll:
+        return []
+    data = util.get_data(coll[0])
+    if not isinstance(data, str):
+        return []
+    return len(data)
 
 
 def toChars(ctx, coll):

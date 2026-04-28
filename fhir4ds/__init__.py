@@ -21,7 +21,7 @@ Subpackages::
     fhir4ds.dqm            - Digital Quality Measures
 """
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 # Core convenience functions
 from .core import register, register_fhirpath, register_cql
@@ -34,16 +34,16 @@ from .sources.base import SourceAdapter, SchemaValidationError
 from . import sources
 
 # Lazy imports for viewdef convenience functions
-def generate_view_sql(view_definition_or_json, *, source_table=None):
+def generate_view_sql(view_definition_or_json, *, source_table="resources"):
     """Generate DuckDB SQL from a SQL-on-FHIR v2 ViewDefinition.
 
     Args:
         view_definition_or_json: A ViewDefinition object, JSON string,
             or dict representing a ViewDefinition.
-        source_table: Override the source table name. When set, the
-            generated SQL reads from this table (with a ``resource_type``
-            filter) instead of per-type pluralized tables. Use
-            ``"resources"`` to match the FHIRDataLoader default schema.
+        source_table: Source table name. Defaults to ``"resources"`` to
+            match the :class:`FHIRDataLoader` schema. The generated SQL
+            includes a ``resource_type`` filter. Set to ``None`` to use
+            per-type pluralized tables (e.g., ``patients``).
 
     Returns:
         Complete SQL query string.

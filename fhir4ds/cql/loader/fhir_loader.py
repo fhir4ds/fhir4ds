@@ -45,6 +45,12 @@ class FHIRDataLoader:
         table_name: str = "resources",
         create_table: bool = True,
     ):
+        if con is None:
+            raise TypeError("Expected a DuckDB connection for 'con', got None")
+        if not isinstance(con, duckdb.DuckDBPyConnection):
+            raise TypeError(
+                f"Expected a DuckDB connection for 'con', got {type(con).__name__}"
+            )
         self.con = con
         self.table_name = table_name
         # Share one mutable cache per DuckDB connection so repeated FHIRDataLoader
@@ -182,6 +188,78 @@ class FHIRDataLoader:
             [resource_id, resource_type, resource_json, patient_ref],
         )
 
+    def load_resources(self, resources: list[dict]) -> int:
+        """Load multiple FHIR resources in a single batch.
+
+        Uses executemany for better performance than individual
+        load_resource() calls. Deduplicates by (id, resourceType) — when
+        the same identity appears multiple times, only the last entry is kept.
+
+        Args:
+            resources: List of FHIR resource dicts.
+
+        Returns:
+            Number of unique resources loaded.
+
+        Raises:
+            TypeError: If any resource is not a dict.
+            ValueError: If any resource lacks a valid 'resourceType' field.
+        """
+        if not resources:
+            return 0
+
+        # Build rows and deduplicate: last-write-wins for same (id, resourceType)
+        seen: dict[tuple[str, str], int] = {}
+        rows: list[tuple] = []
+        dedup_count = 0
+        for resource in resources:
+            if not isinstance(resource, dict):
+                raise TypeError(f"Expected dict, got {type(resource).__name__}")
+            resource_type = resource.get("resourceType")
+            if not resource_type or not isinstance(resource_type, str):
+                raise ValueError(
+                    f"Resource must have a string 'resourceType' field. "
+                    f"Got: {resource_type!r}"
+                )
+            resource_id = resource.get("id")
+            patient_ref = self._extract_patient_ref(resource)
+            resource_json = json.dumps(resource)
+            row = (resource_id, resource_type, resource_json, patient_ref)
+            if resource_id is not None:
+                key = (resource_id, resource_type)
+                if key in seen:
+                    _logger.debug(
+                        "Duplicate resource %s/%s — keeping latest",
+                        resource_type, resource_id,
+                    )
+                    rows[seen[key]] = None  # type: ignore[assignment]
+                    dedup_count += 1
+                seen[key] = len(rows)
+            rows.append(row)
+
+        # Filter out replaced duplicates
+        final_rows = [r for r in rows if r is not None]
+        if dedup_count:
+            _logger.info(
+                "Loaded %d resources (%d duplicates removed)",
+                len(final_rows), dedup_count,
+            )
+
+        # Remove existing duplicates in batch
+        dedup_keys = [(rid, rtype) for rid, rtype in seen.keys()]
+        if dedup_keys:
+            self.con.executemany(
+                f"DELETE FROM {self.table_name} WHERE id = ? AND resourceType = ?",
+                dedup_keys,
+            )
+
+        # Batch insert
+        self.con.executemany(
+            f"INSERT INTO {self.table_name} VALUES (?, ?, ?, ?)",
+            final_rows,
+        )
+        return len(final_rows)
+
     def load_bundle(self, bundle: dict) -> int:
         """
         Load all resources from a FHIR Bundle.
@@ -199,16 +277,17 @@ class FHIRDataLoader:
         if bundle.get("resourceType") != "Bundle":
             raise ValueError("Expected a FHIR Bundle resource")
 
-        count = 0
-        for entry in bundle.get("entry", []):
+        resources = []
+        for entry in bundle.get("entry") or []:
             if entry is None:
                 continue
             resource = entry.get("resource")
             if resource:
-                self.load_resource(resource)
-                count += 1
+                resources.append(resource)
 
-        return count
+        if resources:
+            return self.load_resources(resources)
+        return 0
 
     def load_file(self, path: Union[str, Path]) -> int:
         """
@@ -227,17 +306,24 @@ class FHIRDataLoader:
             self.load_resource(data)
             return 1
 
-    def load_ndjson(self, path: Union[str, Path]) -> int:
+    def load_ndjson(self, path: Union[str, Path], *, strict: bool = True) -> int:
         """
         Load from an NDJSON file (one resource per line).
 
         Returns the number of resources loaded.
 
+        Args:
+            path: Path to the NDJSON file.
+            strict: If True (default), raise on malformed JSON to prevent
+                partial loads. If False, skip bad lines with a warning and
+                continue loading valid resources.
+
         Raises:
-            ValueError: If any line contains malformed JSON (no partial loads).
+            ValueError: If strict=True and any line contains malformed JSON.
         """
+        import logging
+        _logger = logging.getLogger("fhir4ds.loader")
         path = Path(path) if not isinstance(path, Path) else path
-        # Parse all lines first to avoid partial loads on malformed input
         resources = []
         with open(path) as f:
             for line_num, line in enumerate(f, 1):
@@ -246,9 +332,14 @@ class FHIRDataLoader:
                     try:
                         resources.append(json.loads(line))
                     except json.JSONDecodeError as e:
-                        raise ValueError(
-                            f"Malformed JSON at line {line_num} in {path}: {e}"
-                        ) from e
+                        if strict:
+                            raise ValueError(
+                                f"Malformed JSON at line {line_num} in {path}: {e}"
+                            ) from e
+                        _logger.warning(
+                            "Skipping malformed JSON at line %d in %s: %s",
+                            line_num, path, e,
+                        )
         for resource in resources:
             self.load_resource(resource)
         return len(resources)
@@ -262,9 +353,26 @@ class FHIRDataLoader:
         """
         Load all supported files from a directory.
 
-        Returns the total number of resources loaded.
+        Non-FHIR files (missing resourceType, malformed JSON) are skipped
+        with a warning logged. Returns the total number of resources loaded.
+
+        Raises:
+            FileNotFoundError: If the directory does not exist.
+            NotADirectoryError: If the path exists but is not a directory.
         """
+        import logging
+        _logger = logging.getLogger("fhir4ds.loader")
         path = Path(path) if not isinstance(path, Path) else path
+
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Directory not found: {path}"
+            )
+        if not path.is_dir():
+            raise NotADirectoryError(
+                f"Not a directory: {path}"
+            )
+
         if extensions is None:
             extensions = [".json", ".ndjson"]
 
@@ -273,10 +381,13 @@ class FHIRDataLoader:
 
         for file_path in path.glob(pattern):
             if file_path.is_file() and file_path.suffix in extensions:
-                if file_path.suffix == ".ndjson":
-                    total += self.load_ndjson(file_path)
-                else:
-                    total += self.load_file(file_path)
+                try:
+                    if file_path.suffix == ".ndjson":
+                        total += self.load_ndjson(file_path, strict=False)
+                    else:
+                        total += self.load_file(file_path)
+                except (json.JSONDecodeError, ValueError, KeyError) as e:
+                    _logger.warning("Skipping non-FHIR file %s: %s", file_path, e)
 
         return total
 

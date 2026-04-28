@@ -237,6 +237,17 @@ def _parse_interval(value: str) -> dict | None:
     if not isinstance(data, dict):
         _logger.warning("_parse_interval structure parse failed: expected object, got %s", type(data).__name__)
         return None
+
+    # Warn on common snake_case key mistakes and accept them
+    _SNAKE_TO_CAMEL = {"low_closed": "lowClosed", "high_closed": "highClosed"}
+    for snake, camel in _SNAKE_TO_CAMEL.items():
+        if snake in data and camel not in data:
+            _logger.warning(
+                "_parse_interval: found '%s' (snake_case); use '%s' (camelCase) instead. "
+                "Accepting the value.", snake, camel,
+            )
+            data[camel] = data[snake]
+
     # Support both CQL interval format (low/high) and FHIR Period (start/end)
     low_val = data.get("low") or data.get("start")
     high_val = data.get("high") or data.get("end")

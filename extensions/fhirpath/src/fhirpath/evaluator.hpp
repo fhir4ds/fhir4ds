@@ -80,6 +80,15 @@ struct FPValue {
 
 using FPCollection = std::vector<FPValue>;
 
+// Exception for spec-mandated errors that must propagate to the caller
+// (e.g., single() on multi-element collections per FHIRPath §5.2).
+// Distinguished from std::runtime_error so the UDF layer can let
+// data-dependent errors return empty while propagating spec errors.
+class FHIRPathSpecError : public std::runtime_error {
+public:
+	using std::runtime_error::runtime_error;
+};
+
 class Evaluator {
 public:
 	~Evaluator();

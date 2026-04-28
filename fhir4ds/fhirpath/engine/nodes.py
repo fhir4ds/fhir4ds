@@ -192,7 +192,11 @@ class FP_Quantity(FP_Type):
     # Conversion factor groups are intentionally separated by dimension to prevent
     # cross-dimension conversions (e.g., 'cm' to 'seconds' is not possible).
     # conv_unit_to() checks each group independently and returns None if no match.
-    _year_month_conversion_factor = {"'a'": 12, "'mo'": 1}
+    _year_month_conversion_factor = {
+        "'a'": 12, "'mo'": 1,
+        "year": 12, "years": 12,
+        "month": 1, "months": 1,
+    }
     _m_cm_mm_conversion_factor = {"'m'": Decimal("1"), "'cm'": Decimal("0.01"), "'mm'": Decimal("0.001")}
     _lbs_kg_conversion_factor = {"'kg'": Decimal("1"), "'[lb_av]'": Decimal("0.453592")}
     _g_mg_conversion_factor = {"'g'": Decimal("1"), "'mg'": Decimal("0.001")}
@@ -232,6 +236,9 @@ class FP_Quantity(FP_Type):
 
     def __eq__(self, other):
         if isinstance(other, FP_Quantity):
+            # Fast path: same unit → direct value comparison
+            if self.unit == other.unit:
+                return self.value == other.value
             if self.unit in self._years_and_months and other.unit in self._years_and_months:
                 if self.unit == "'a'" or other.unit == "'a'":
                     return False
@@ -241,12 +248,11 @@ class FP_Quantity(FP_Type):
                 other_value_in_seconds = other.value * self.datetime_multipliers[other.unit]
                 return self_value_in_seconds == other_value_in_seconds
             else:
-                if self.unit != other.unit:
-                    converted = FP_Quantity.conv_unit_to(self.unit, self.value, other.unit)
-                    if converted is not None:
-                        return other.value == converted.value and other.unit == converted.unit
-
-                return self.value == other.value and self.unit == other.unit
+                # FHIRPath §6.1: incompatible units → empty (None)
+                converted = FP_Quantity.conv_unit_to(self.unit, self.value, other.unit)
+                if converted is not None:
+                    return other.value == converted.value and other.unit == converted.unit
+                return None
         else:
             return super().__eq__(other)
 
@@ -418,6 +424,8 @@ class FP_Quantity(FP_Type):
                 elif converted.value > other.value:
                     return 1
                 return 0
+            # FHIRPath §6.1: incompatible units → cannot compare
+            return None
 
         # Same units, direct comparison
         if self.value < other.value:
@@ -1264,6 +1272,11 @@ class ResourceNode:
                 # Make sure it's a proper field match (not a partial match)
                 field_name = suffix[1:]
                 if self.path.endswith("." + field_name) or self.path == field_name:
+                    # Guard: if the resolved type is a primitive but the data is a
+                    # complex type (dict), the suffix match is wrong (e.g., .code
+                    # matching Condition.code which is CodeableConcept, not code).
+                    if isinstance(self.data, abc.Mapping) and type_name[0].islower():
+                        continue
                     return TypeInfo(namespace=namespace, name=type_name)
 
         # Detect FHIR choice type paths (e.g., "DetectedIssue.identifiedDateTime")
@@ -1392,8 +1405,10 @@ class TypeInfo:
         self_name = TypeInfo._normalize_type_name(self.namespace, self.name)
         other_name = TypeInfo._normalize_type_name(other.namespace, other.name)
 
-        # FHIRPath §6.3: Types in different namespaces are distinct.
-        # FHIR.boolean is NOT System.Boolean (confirmed by FHIRPath test suite).
+        # Per FHIRPath conformance tests (testType12, testType14):
+        # FHIR types and System types are distinct for is() checks.
+        # FHIR.boolean is NOT System.Boolean, even though they are
+        # interchangeable for operations.
         if (self.namespace and other.namespace
                 and self.namespace != other.namespace):
             return False
@@ -1403,8 +1418,8 @@ class TypeInfo:
     def is_exact_type(self, other, model=None):
         """Check if this type is exactly the same as other type (no subtype matching).
 
-        Per FHIRPath §5.1, FHIR primitive types and their System equivalents
-        (e.g., FHIR.string ↔ System.String) are treated as the same type.
+        Per FHIRPath conformance tests: FHIR types and System types are
+        distinct — FHIR.boolean is NOT System.Boolean for as() checks.
         """
         if not isinstance(other, TypeInfo):
             return False
@@ -1412,11 +1427,10 @@ class TypeInfo:
         self_name = TypeInfo._normalize_type_name(self.namespace, self.name)
         other_name = TypeInfo._normalize_type_name(other.namespace, other.name)
 
-        # If both namespaces are known and differ, only allow the comparison
-        # when the normalized names match a known primitive-type equivalence.
+        # FHIR and System namespaces are always distinct for type identity.
         if (self.namespace and other.namespace
                 and self.namespace != other.namespace):
-            return self_name == other_name and self_name in TypeInfo.FHIR_TO_SYSTEM_TYPE
+            return False
 
         return self_name == other_name
 
@@ -1439,7 +1453,21 @@ class TypeInfo:
         elif isinstance(value, str):
             name = "string"
         elif isinstance(value, abc.Mapping):
-            name = "object"
+            # Detect common FHIR complex types by structural properties
+            if 'coding' in value:
+                name = "CodeableConcept"
+            elif 'system' in value and 'code' in value and 'value' not in value:
+                name = "Coding"
+            elif 'value' in value and ('unit' in value or 'code' in value):
+                name = "Quantity"
+            elif 'reference' in value:
+                name = "Reference"
+            elif 'low' in value or 'high' in value:
+                name = "Range"
+            elif 'start' in value or 'end' in value:
+                name = "Period"
+            else:
+                name = "object"
 
         if name == "bool":
             name = "boolean"

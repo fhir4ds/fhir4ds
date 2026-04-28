@@ -1623,7 +1623,7 @@ FPCollection Evaluator::fn_single(const FPCollection &input) {
 		return {input[0]};
 	}
 	if (input.size() > 1) {
-		throw std::runtime_error("single() called on collection with multiple elements");
+		throw FHIRPathSpecError("single() called on collection with multiple elements");
 	}
 	return {};
 }
@@ -1721,7 +1721,7 @@ FPCollection Evaluator::fn_startsWith(const FPCollection &input, const FPCollect
 		return {};
 	}
 	if (input.size() > 1) {
-		throw std::runtime_error("startsWith() requires a single item input");
+		throw FHIRPathSpecError("startsWith() requires a single item input");
 	}
 	auto t = effectiveType(input[0]);
 	if (t != FPValue::Type::String && input[0].type == FPValue::Type::JsonVal && input[0].json_val &&
@@ -3311,12 +3311,12 @@ FPCollection Evaluator::evalUnaryOp(const ASTNode &node, const FPCollection &inp
 			v.quantity_unit = operand[0].quantity_unit;
 			return {v};
 		}
-		throw std::runtime_error("Unary - applied to non-numeric type");
+		throw FHIRPathSpecError("Unary - applied to non-numeric type");
 	}
 	if (node.op == "+") {
 		if (operand[0].type != FPValue::Type::Integer && operand[0].type != FPValue::Type::Decimal &&
 		    operand[0].type != FPValue::Type::Quantity) {
-			throw std::runtime_error("Unary + applied to non-numeric type");
+			throw FHIRPathSpecError("Unary + applied to non-numeric type");
 		}
 		return operand;
 	}

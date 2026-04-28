@@ -537,47 +537,49 @@ class SQLGenerator:
         validate_select_columns(view_definition.select)
 
     def _validate_unique_column_names(self, view_definition: ViewDefinition) -> None:
-        """Validate that column names are unique within a single select scope.
+        """Validate that column names are unique across the entire select tree.
 
         Per SQL-on-FHIR v2 spec, column names in a ViewDefinition's output
-        must be unique within each select scope. Names within unionAll branches
-        are expected to match (they contribute to the same UNION ALL output).
-        Sibling selects with unionAll at the top level may share names across
-        their branches as they produce independent column groups.
-
-        This validates within each individual select's direct columns plus
-        nested selects (non-unionAll) for duplicates.
+        must be unique across all selects — including siblings and parent-child
+        relationships. Names within unionAll branches are expected to match
+        (they contribute to the same UNION ALL output) and are not checked
+        against siblings.
 
         Args:
             view_definition: The ViewDefinition to validate
 
         Raises:
-            ValidationError: If duplicate column names are found within a single select
+            ValidationError: If duplicate column names are found
         """
-        def validate_select(sel: Select, path: str = "select") -> None:
-            """Check for duplicates within a single select's own columns."""
-            names: List[str] = [col.name for col in sel.column]
-            seen: Set[str] = set()
-            duplicates: Set[str] = set()
-            for name in names:
-                if name in seen:
-                    duplicates.add(name)
-                seen.add(name)
-            if duplicates:
-                raise ValidationError(
-                    f"Duplicate column names in {path}: {sorted(duplicates)}. "
-                    f"Column names must be unique per the SQL-on-FHIR v2 specification.",
-                    details={"duplicate_names": sorted(duplicates), "path": path}
-                )
-            # Recurse into nested selects
+        def collect_names(sel: Select, path: str) -> List[Tuple[str, str]]:
+            """Collect (name, path) pairs from a select and its descendants."""
+            pairs = [(col.name, f"{path}.column[{i}]") for i, col in enumerate(sel.column)]
             for i, nested in enumerate(sel.select):
-                validate_select(nested, f"{path}.select[{i}]")
-            # Recurse into unionAll branches
-            for i, branch in enumerate(sel.unionAll):
-                validate_select(branch, f"{path}.unionAll[{i}]")
+                pairs.extend(collect_names(nested, f"{path}.select[{i}]"))
+            # unionAll branches share columns with their parent — skip sibling checks
+            return pairs
 
+        all_names: List[Tuple[str, str]] = []
         for i, sel in enumerate(view_definition.select):
-            validate_select(sel, f"select[{i}]")
+            all_names.extend(collect_names(sel, f"select[{i}]"))
+
+        seen: dict[str, str] = {}
+        duplicates: dict[str, List[str]] = {}
+        for name, path in all_names:
+            if name in seen:
+                if name not in duplicates:
+                    duplicates[name] = [seen[name]]
+                duplicates[name].append(path)
+            else:
+                seen[name] = path
+
+        if duplicates:
+            dup_names = sorted(duplicates.keys())
+            raise ValidationError(
+                f"Duplicate column names across select tree: {dup_names}. "
+                f"Column names must be unique per the SQL-on-FHIR v2 specification.",
+                details={"duplicate_names": dup_names, "locations": duplicates}
+            )
 
     def _validate_foreach_mutual_exclusion(self, selects: List[Select]) -> None:
         """Validate that no select uses both forEach and forEachOrNull.
