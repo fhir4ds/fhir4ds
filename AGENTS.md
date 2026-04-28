@@ -116,7 +116,10 @@ Thread-safety mitigations applied in 2026-Q2 remediation:
 - `variable.py` — `_VARIABLE_STORES_LOCK` added for double-checked locking
 - `profile_registry.py` — `_default_registry_lock` added for singleton init
 - `fhir_loader.py` — `_CACHE_LOCK` added for `WeakKeyDictionary` access
+- `fhir_model.py` — `_fhir_model_lock` added for singleton init (2026-Q2 refresh)
 - `strings.py` — `_MAX_REGEX_LENGTH` guard added against ReDoS
+- `strings.py` — `_REDOS_PATTERNS` detector added for nested quantifiers (2026-Q2 refresh)
+- `cql/duckdb/udf/string.py` — same ReDoS guards applied to deprecated CQL UDFs
 
 ### CQL Translator Invariants
 The 8 architecture invariants documented in `docs/architecture/translator/AGENTS.md`
@@ -125,7 +128,13 @@ remain in effect. Post-remediation status (2026-Q2):
 - `to_sql()` mid-pipeline: **8 sites fixed** (replaced with proper AST nodes)
 - Silent fallbacks: **Fixed** (context.py warns, cte_builder uses registry)
 - Strategy 2 templates: **1 active system** (`fluent_functions.py` `body_sql`) — blocked, requires Task C4
-- Hardcoded resource types: **Externalized** (query `schema.resources.keys()`, module constants)
+- Hardcoded resource types: **Fully externalized** — fallback set in `queries.py` removed, now uses only `schema.resources.keys()`
+- Magic strings: `"Measurement Period"`, `"Patient"`, `"Initial Population"` extracted to module constants (`CQL_MEASUREMENT_PERIOD`, `CQL_PATIENT_CONTEXT`, `_DEFAULT_FINAL_DEFINITION`)
+
+### ViewDefinition Canonical Constants
+Built-in FHIRPath variables (`%context`, `%resource`, `%rootResource`, `%ucum`, `%rowIndex`)
+are canonically defined in `fhir4ds/viewdef/constants.py:FHIRPATH_BUILTIN_VARIABLES`.
+The generator imports from this canonical source. Do not duplicate this set.
 
 See `docs/architecture/CQL_TRANSLATOR_AUDIT_2026Q2.md` for the detailed issue log.
 
