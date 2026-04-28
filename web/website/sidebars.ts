@@ -21,7 +21,17 @@ const sidebars: SidebarsConfig = {
       link: {type: 'doc', id: 'user-guide/engine'},
       items: [
         'user-guide/engine',
-        'user-guide/data-ingestion',
+        {
+          type: 'category',
+          label: 'Data Sources',
+          link: {type: 'doc', id: 'user-guide/data-sources'},
+          items: [
+            'user-guide/sources/filesystem',
+            'user-guide/sources/relational',
+            'user-guide/sources/csv',
+            'user-guide/sources/existing',
+          ],
+        },
         {
           type: 'category',
           label: 'Data Extraction',
@@ -97,6 +107,11 @@ const sidebars: SidebarsConfig = {
               type: 'doc',
               id: 'api-reference/dqm/dqm',
               label: 'dqm',
+            },
+            {
+              type: 'doc',
+              id: 'api-reference/sources/sources',
+              label: 'sources',
             },
           ],
         },

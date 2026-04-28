@@ -15,6 +15,7 @@ The core components for CQL translation:
 ```python
 from fhir4ds.cql import (
     CQLToSQLTranslator,   # The main translation engine
+    FHIRDataLoader,       # Traditional data loading (ETL)
     translate_cql,         # Translate a CQL expression to SQL
     translate_library,     # Translate a CQL library
     register_udfs,         # Register clinical UDFs in DuckDB
@@ -24,6 +25,20 @@ from fhir4ds.cql import (
 ---
 
 ## 2. Class Reference
+
+### `FHIRDataLoader`
+`FHIRDataLoader(con, table_name="resources", create_table=True)`
+
+Automates the ingestion of FHIR resources into a SQL-native schema. While Zero-ETL is preferred for high performance, the loader is useful for small datasets or specialized preprocessing.
+
+#### Methods
+- **`load_file(path)`**: Load a single JSON file (Resource or Bundle).
+- **`load_directory(path)`**: Recursively load all JSON/NDJSON files in a directory.
+- **`load_ndjson(path)`**: Efficiently stream an NDJSON file into DuckDB.
+- **`load_resource(resource_dict)`**: Insert a single FHIR resource dictionary.
+- **`load_valuesets(valuesets)`**: Load expanded terminology for membership checks.
+
+---
 
 ### `CQLToSQLTranslator`
 `CQLToSQLTranslator(connection=None, audit_mode=False)`
