@@ -12,7 +12,7 @@ FHIR4DS implements the HL7 SQL-on-FHIR v2 specification, providing a standardize
 
 The `viewdef` module translates declarative JSON **ViewDefinitions** into optimized DuckDB SQL. It allows you to define projections of FHIR resources that are independent of the underlying storage engine.
 
--   **Spec Compliant**: 100% compliance with the SQL-on-FHIR v2 specification (140 tests).
+-   **Spec Compliant**: 100% compliance with the SQL-on-FHIR v2 specification (134 tests).
 -   **Portable**: Views defined in FHIR4DS can be used across any spec-compliant implementation.
 -   **SQL-Native**: Generates inspectable DuckDB SQL that leverages columnar performance.
 

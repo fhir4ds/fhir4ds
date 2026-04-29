@@ -62,8 +62,8 @@ Phase 1 and 2 are **pre-compilation steps** that happen once per library version
 FHIR4DS is built for production healthcare environments where accuracy is non-negotiable.
 
 - **CQL Spec Compliance**: 100% compliance across 3,044 tests.
-- **FHIRPath Spec Compliance**: 99.9% compliance across 935 tests.
-- **SQL-on-FHIR v2 Compliance**: 100% compliance across 140 tests.
+- **FHIRPath Spec Compliance**: 100% compliance across 935 tests.
+- **SQL-on-FHIR v2 Compliance**: 100% compliance across 134 tests.
 - **Clinical Accuracy**: Tested against 46 official 2025 QI-Core CMS eCQMs. 42 of 46 achieve 100% accuracy against official test bundles (the remaining 4 have [known upstream test data issues](/docs/getting-started/benchmarking)).
 
 ---

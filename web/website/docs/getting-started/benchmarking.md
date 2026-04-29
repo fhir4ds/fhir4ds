@@ -16,8 +16,8 @@ FHIR4DS achieves near-perfect accuracy across the official CMS quality measure s
 | **Measures Tested** | 46 (QI-Core 2025) |
 | **Measures at 100% Accuracy** | **42 / 46** |
 | **Spec Compliance (CQL)** | 100% (3,044 tests) |
-| **Spec Compliance (FHIRPath)** | 99.9% (935 tests) |
-| **Spec Compliance (SQL-on-FHIR)** | 100% (140 tests) |
+| **Spec Compliance (FHIRPath)** | 100% (935 tests) |
+| **Spec Compliance (SQL-on-FHIR)** | 100% (134 tests) |
 
 ### Known Upstream Issues
 The 4 measures that do not currently achieve 100% accuracy fail due to documented bugs in the official CMS test bundles themselves, rather than implementation errors in FHIR4DS. These measures fail equally in other conformant engines.

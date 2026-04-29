@@ -117,12 +117,12 @@ SELECT fhirpath('{"resourceType":"Patient","name":[{"given":["John","James"]}]}'
 query I
 SELECT fhirpath_date('{"resourceType":"Patient","birthDate":"1990"}', 'birthDate');
 ----
-1990-01-01
+1990
 
 query I
 SELECT fhirpath_date('{"resourceType":"Patient","birthDate":"1990-06"}', 'birthDate');
 ----
-1990-06-01
+1990-06
 
 query I
 SELECT fhirpath_date('{"resourceType":"Patient","birthDate":"1990-06-15"}', 'birthDate');
