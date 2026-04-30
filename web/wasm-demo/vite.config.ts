@@ -17,7 +17,7 @@ const ISOLATION_HEADERS = {
  */
 const _publicDir = path.join(__dirname, "public");
 const _wheels = readdirSync(_publicDir).filter(f => f.startsWith("fhir4ds_v2-") && f.endsWith(".whl"));
-const WHEEL_NAME = _wheels[_wheels.length - 1] ?? "fhir4ds_v2-0.0.2-py3-none-any.whl";
+const WHEEL_NAME = _wheels[_wheels.length - 1] ?? "fhir4ds_v2-0.0.3-py3-none-any.whl";
 
 /**
  * Middleware that serves `.duckdb_extension.wasm` files from `public/extensions/`.

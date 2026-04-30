@@ -109,9 +109,15 @@ const sidebars: SidebarsConfig = {
               label: 'dqm',
             },
             {
-              type: 'doc',
-              id: 'api-reference/sources/sources',
+              type: 'category',
               label: 'sources',
+              link: {type: 'doc', id: 'api-reference/sources/sources'},
+              items: [
+                'api-reference/sources/sources-filesystem',
+                'api-reference/sources/sources-relational',
+                'api-reference/sources/sources-existing',
+                'api-reference/sources/sources-csv',
+              ],
             },
           ],
         },
