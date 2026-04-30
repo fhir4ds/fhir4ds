@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FHIR4DS — Scenario Test Harness</title>
+    <script type="module">
+      /**
+       * Vite React Fast Refresh Preamble.
+       * Required when importing React components directly from source in Dev mode.
+       */
+      try {
+        const RefreshRuntime = await import("/@react-refresh");
+        RefreshRuntime.default.injectIntoGlobalHook(window);
+        window.$RefreshReg$ = () => {};
+        window.$RefreshSig$ = () => (type) => type;
+        window.__vite_plugin_react_preamble_installed__ = true;
+      } catch (e) {
+        console.log("[Harness] React Refresh preamble skipped (normal for production/preview builds)");
+      }
+
+      /**
+       * WC Test Harness: Robust module loader.
+       * 1. Try to load the built bundle (/fhir4ds-demo.js)
+       * 2. If it 404s (Vite dev mode), fall back to the TS source (/src/web-component.tsx)
+       */
+      async function loadComponent() {
+        try {
+          // Attempt built bundle first (production/preview)
+          await import("/fhir4ds-demo.js");
+          console.log("[Harness] Loaded built bundle");
+        } catch (e) {
+          // Fall back to TS source (Vite dev mode)
+          console.warn("[Harness] Bundle not found, falling back to TS source");
+          await import("/src/web-component.tsx");
+        }
+      }
+      loadComponent();
+    </script>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        font-family: system-ui, sans-serif;
+        background: #0f172a;
+        color: #f1f5f9;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* ── Top bar ── */
+      .harness-bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        background: #020617;
+        border-bottom: 1px solid #334155;
+        flex-shrink: 0;
+      }
+
+      .harness-bar .logo {
+        font-size: 13px;
+        font-weight: 700;
+        color: rgb(95, 237, 131);
+        margin-right: 8px;
+        white-space: nowrap;
+      }
+
+      .scenario-btn {
+        padding: 5px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        border: 1px solid #334155;
+        border-radius: 6px;
+        background: #1e293b;
+        color: #94a3b8;
+        cursor: pointer;
+        transition: all 0.15s;
+        white-space: nowrap;
+      }
+
+      .scenario-btn:hover {
+        background: #2d3f55;
+        color: #f1f5f9;
+      }
+
+      .scenario-btn.active {
+        background: #0ea5e9;
+        border-color: rgba(56, 189, 248, 0.4);
+        color: #fff;
+      }
+
+      .harness-hint {
+        margin-left: auto;
+        font-size: 11px;
+        color: #475569;
+        white-space: nowrap;
+      }
+
+      /* ── Demo area ── */
+      .demo-area {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      fhir4ds-demo {
+        display: block;
+        width: 100%;
+        flex: 1;
+        min-height: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="harness-bar">
+      <span class="logo">⚡ FHIR4DS</span>
+
+      <button class="scenario-btn active" data-scenario="cql-sandbox">
+        CQL Playground
+      </button>
+      <button class="scenario-btn" data-scenario="cms-measures">
+        CMS Measures
+      </button>
+      <button class="scenario-btn" data-scenario="sdc-forms">
+        SDC Forms
+      </button>
+      <button class="scenario-btn" data-scenario="smart-flow">
+        SMART on FHIR
+      </button>
+      <button class="scenario-btn" data-scenario="workbench">
+        Full Workbench
+      </button>
+
+      <span class="harness-hint">WC test harness — switch scenarios without reload</span>
+    </div>
+
+    <div class="demo-area">
+      <fhir4ds-demo id="demo" scenario="cql-sandbox" height="100%"></fhir4ds-demo>
+    </div>
+
+    <script>
+      const demo = document.getElementById("demo");
+      const buttons = document.querySelectorAll(".scenario-btn");
+
+      // Switch scenario via attribute (no page reload — React re-renders)
+      buttons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const scenario = btn.dataset.scenario;
+          demo.setAttribute("scenario", scenario);
+          buttons.forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+        });
+      });
+
+      // Also honour ?scenario= URL param on initial load
+      const urlScenario = new URLSearchParams(window.location.search).get("scenario");
+      if (urlScenario) {
+        demo.setAttribute("scenario", urlScenario);
+        buttons.forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.scenario === urlScenario);
+        });
+      }
+    </script>
+  </body>
+</html>

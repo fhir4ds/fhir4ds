@@ -198,6 +198,30 @@ static std::shared_ptr<fhirpath::ASTNode> GetOrCompile(FhirpathState &state, con
 // Phase 7: Fast path for simple dotted path expressions (e.g., "birthDate", "id")
 // Bypasses full evaluator — direct yyjson field lookup
 // Returns <found, value> pair (C++11 compatible, no std::optional)
+// Compute how many leading path segments to skip in the fast path.
+// FHIRPath treats the first segment as a type qualifier when it matches the
+// root resource's resourceType (e.g., "Observation.valueQuantity.value" against
+// an Observation resource — "Observation" is not a field key, it's the type).
+// Returns 0 when no prefix should be skipped (no allocation, pure pointer ops).
+static size_t ComputeSegStart(yyjson_val *root, const std::vector<std::string> &segments) {
+	if (segments.empty() || !root || !yyjson_is_obj(root)) {
+		return 0;
+	}
+	yyjson_val *rt = yyjson_obj_get(root, "resourceType");
+	if (rt && yyjson_is_str(rt)) {
+		const char *resource_type = yyjson_get_str(rt);
+		if (resource_type && segments[0] == resource_type) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+// W1 fix: seg_start computed from the already-parsed root pointer — zero allocation,
+//         single JSON parse per call.
+// W3 fix: return {false,""} when all segments are consumed by the prefix (single-
+//         segment type-only paths like 'Patient') so callers fall through to the full
+//         evaluator rather than serialising the whole root object.
 static std::pair<bool, std::string> FastPathLookup(const char *json_data, idx_t json_len,
                                                    const std::vector<std::string> &segments) {
 	yyjson_doc *doc = yyjson_read(json_data, json_len, 0);
@@ -206,7 +230,19 @@ static std::pair<bool, std::string> FastPathLookup(const char *json_data, idx_t 
 	}
 
 	yyjson_val *current = yyjson_doc_get_root(doc);
-	for (const auto &seg : segments) {
+
+	// Compute seg_start from the already-parsed root — no allocation needed.
+	size_t seg_start = ComputeSegStart(current, segments);
+
+	// Guard (W3): if the prefix skip consumed all segments, yield a miss so the
+	// caller falls through to the full evaluator.
+	if (seg_start >= segments.size()) {
+		yyjson_doc_free(doc);
+		return std::make_pair(false, std::string());
+	}
+
+	for (size_t seg_idx = seg_start; seg_idx < segments.size(); seg_idx++) {
+		const auto &seg = segments[seg_idx];
 		// FHIRPath auto-flattens arrays: descend into first element if current is an array
 		if (current && yyjson_is_arr(current)) {
 			current = yyjson_arr_get_first(current);
@@ -407,7 +443,8 @@ static void FhirpathTextFunction(DataChunk &args, ExpressionState &state, Vector
 			continue;
 		}
 
-		// Phase 7: Simple path fast path — bypass full evaluator
+		// Phase 7: Simple path fast path — bypass full evaluator.
+		// FastPathLookup handles resourceType prefix-skip and W3 guard internally.
 		if (func_state.is_simple_path() && !func_state.path_segments().empty()) {
 			auto fast_result = FastPathLookup(resources[r_idx].GetData(), resources[r_idx].GetSize(),
 			                                  func_state.path_segments());
@@ -415,7 +452,7 @@ static void FhirpathTextFunction(DataChunk &args, ExpressionState &state, Vector
 				result_data[i] = StringVector::AddString(result, fast_result.second);
 				continue;
 			}
-			// Fall through to full evaluator (handles choice types, etc.)
+			// Fall through to full evaluator (handles choice types, arrays, etc.)
 		}
 
 		auto fp_results =
@@ -458,35 +495,57 @@ static void FhirpathNumberFunction(DataChunk &args, ExpressionState &state, Vect
 			continue;
 		}
 
-		// Phase 7: Simple path fast path for numeric extraction
+		// Phase 7: Simple path fast path for numeric extraction.
+		// Uses ComputeSegStart to skip resource-type prefix without allocation.
+		// W2: non-numeric terminal values fall through to the full evaluator
+		// instead of silently returning NULL (matches FhirpathTextFunction behavior).
 		if (func_state.is_simple_path() && !func_state.path_segments().empty()) {
 			yyjson_doc *doc = yyjson_read(resources[r_idx].GetData(), resources[r_idx].GetSize(), 0);
 			if (doc) {
 				yyjson_val *current = yyjson_doc_get_root(doc);
-				bool found = true;
-				for (const auto &seg : func_state.path_segments()) {
-					if (current && yyjson_is_arr(current)) {
-						current = yyjson_arr_get_first(current);
-					}
-					if (!current || !yyjson_is_obj(current)) {
-						found = false;
-						break;
-					}
-					current = yyjson_obj_get(current, seg.c_str());
-				}
-				if (found && current) {
-					if (yyjson_is_int(current)) {
-						result_data[i] = static_cast<double>(yyjson_get_sint(current));
-					} else if (yyjson_is_real(current)) {
-						result_data[i] = yyjson_get_real(current);
-					} else {
-						result_mask.SetInvalid(i);
-					}
+				const auto &segments = func_state.path_segments();
+				size_t seg_start = ComputeSegStart(current, segments);
+
+				// W3: all segments consumed by prefix — fall through
+				if (seg_start >= segments.size()) {
+					yyjson_doc_free(doc);
+					// fall through to full evaluator below
 				} else {
-					result_mask.SetInvalid(i);
+					bool found = true;
+					for (size_t seg_idx = seg_start; seg_idx < segments.size(); seg_idx++) {
+						const auto &seg = segments[seg_idx];
+						if (current && yyjson_is_arr(current)) {
+							current = yyjson_arr_get_first(current);
+						}
+						if (!current || !yyjson_is_obj(current)) {
+							found = false;
+							break;
+						}
+						current = yyjson_obj_get(current, seg.c_str());
+					}
+					yyjson_doc_free(doc);
+					if (found && current) {
+						if (yyjson_is_int(current)) {
+							result_data[i] = static_cast<double>(yyjson_get_sint(current));
+							continue;
+						} else if (yyjson_is_real(current)) {
+							result_data[i] = yyjson_get_real(current);
+							continue;
+						}
+						// Non-numeric type (e.g. string "42"): fall through to full
+						// evaluator which handles toString→toNumber conversions.
+					} else if (!found) {
+						// Path not found in this resource: NULL
+						result_mask.SetInvalid(i);
+						continue;
+					}
+					// current==NULL (key exists but value is null): NULL
+					if (!current) {
+						result_mask.SetInvalid(i);
+						continue;
+					}
+					// fall through for non-numeric types
 				}
-				yyjson_doc_free(doc);
-				continue;
 			}
 		}
 
