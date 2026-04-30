@@ -148,6 +148,25 @@ All JSON injection sites have been remediated with `escapeJsonString()`.
 `std::regex` backtracking engine is vulnerable to catastrophic backtracking.
 RE2 migration or complexity limits required before production with untrusted input.
 
+### C++ Fast Path: FHIRPath Resource-Type Prefix Rule
+
+**Fixed in 2026-Q2 (commit fb920e1e).** This section documents the pattern to prevent future regressions.
+
+FHIRPath expressions may begin with a resource type qualifier that is semantically transparent:
+`Observation.valueQuantity.value` is identical to `valueQuantity.value` when evaluated against an Observation resource. The first segment is **not a JSON key** — it is a type filter.
+
+The Phase 7 fast path in `fhirpath_extension.cpp` must honor this rule. The helper `ComputeSegStart(yyjson_val *root, segments)` reads the `resourceType` field from the already-parsed root object and returns `1` if `segments[0]` matches it, otherwise `0`. Both `FastPathLookup` and `FhirpathNumberFunction`'s inline fast path call this before walking the segment list.
+
+**Three invariants to maintain in `fhirpath_extension.cpp`:**
+
+1. **`ComputeSegStart` always uses the already-parsed root** — never call `yyjson_read` a second time just to compute the prefix skip. The JSON is parsed once; `ComputeSegStart` gets a `yyjson_val*`.
+
+2. **Fast-path misses must fall through to `EvaluateFhirpath`** — if the fast path finds the node but it is not the expected type (e.g. `fhirpath_number` finds a string value), fall through instead of emitting NULL. `fhirpath_text` already does this; `fhirpath_number` was fixed to match.
+
+3. **Guard `seg_start >= segments.size()`** — if the prefix skip consumes all segments (e.g. expression `'Patient'` with no field path), `FastPathLookup` returns `{false,""}` and the caller falls through to the full evaluator rather than serialising the entire root object.
+
+When adding a new `fhirpath_*` UDF function with a fast path, copy this pattern from `FhirpathNumberFunction`. Any new fast path that omits these three invariants will silently return NULL for all resource-type-prefixed expressions.
+
 ## Asset Relocation Reference
 
 - **C++ Source:** `extensions/fhirpath/` and `extensions/cql/`
