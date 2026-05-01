@@ -10,6 +10,7 @@ using namespace duckdb_yyjson; // NOLINT
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <functional>
 #include <iomanip>
 #include <regex>
 #include <sstream>
@@ -29,7 +30,7 @@ static const std::regex &get_cached_regex(const std::string &pattern,
                                           std::regex_constants::syntax_option_type flags = std::regex_constants::ECMAScript) {
 	// Reject patterns that are too long to prevent ReDoS compilation delay.
 	if (pattern.size() > 1024) {
-		throw std::runtime_error("FHIRPath: regex pattern exceeds maximum length of 1024 characters");
+		throw FHIRPathSpecError("FHIRPath: regex pattern exceeds maximum length of 1024 characters");
 	}
 	static thread_local std::unordered_map<std::string, std::regex> cache;
 	// Bound the cache to avoid unbounded memory growth per thread.
@@ -303,7 +304,7 @@ FPCollection Evaluator::eval(const ASTNode &node, const FPCollection &input, yyj
 			    node.name != "%sct" && node.name != "%loinc" && node.name != "%ucum" &&
 			    node.name.substr(0, 4) != "%vs-" && node.name.substr(0, 4) != "%ext" &&
 			    node.name != "%factory" && node.name != "%terminologies") {
-				throw std::runtime_error("Undefined variable: " + node.name);
+				throw FHIRPathSpecError("Undefined variable: " + node.name);
 			}
 		}
 		return {};
@@ -323,9 +324,46 @@ FPCollection Evaluator::eval(const ASTNode &node, const FPCollection &input, yyj
 	}
 }
 
+static std::string infer_fhir_type(const std::string &field_name) {
+	// Common FHIR type suffixes for choice types [x]. 
+	// This ensures direct access like valueQuantity sets fhir_type metadata.
+	static const char* suffixes[] = {
+		"Boolean", "Integer", "Decimal", "String", "Date", "DateTime", "Time", "Quantity",
+		"Attachment", "Identifier", "CodeableConcept", "Coding", "Reference", "Period",
+		"Range", "Ratio", "SampledData", "Signature", "HumanName", "Address", "ContactPoint", "Timing",
+		"Uri", "Url", "Canonical", "Base64Binary", "Code", "Id", "Oid", "UnsignedInt", "PositiveInt",
+		"Markdown", "Uuid", "Age", "Distance", "Duration", "Count", "Money", nullptr
+	};
+	for (int i = 0; suffixes[i]; ++i) {
+		std::string s = suffixes[i];
+		if (field_name.size() > s.size() && field_name.substr(field_name.size() - s.size()) == s) {
+			// Check if it follows camelCase (e.g. valueQuantity)
+			if (std::islower(static_cast<unsigned char>(field_name[field_name.size() - s.size() - 1]))) {
+				return s;
+			}
+		}
+	}
+	return "";
+}
+
 FPCollection Evaluator::evalMemberAccess(const ASTNode &node, const FPCollection &input, yyjson_doc *doc) {
 	FPCollection result;
 	const auto &field_name = node.name;
+
+	std::function<void(yyjson_val*, const std::string&, const std::string&)> add_flattened = 
+		[&](yyjson_val *v, const std::string &fname, const std::string &ftype) {
+			if (yyjson_is_arr(v)) {
+				size_t idx, max; yyjson_val *elem;
+				yyjson_arr_foreach(v, idx, max, elem) {
+					add_flattened(elem, fname, ftype);
+				}
+			} else {
+				FPValue fpv = FPValue::FromJson(v);
+				if (!fname.empty()) fpv.field_name = fname;
+				if (!ftype.empty()) fpv.fhir_type = ftype;
+				result.push_back(fpv);
+			}
+		};
 
 	for (const auto &item : input) {
 		if (item.type != FPValue::Type::JsonVal || !item.json_val) {
@@ -344,19 +382,7 @@ FPCollection Evaluator::evalMemberAccess(const ASTNode &node, const FPCollection
 
 			yyjson_val *child = yyjson_obj_get(val, field_name.c_str());
 			if (child) {
-				if (yyjson_is_arr(child)) {
-					size_t idx2, max2;
-					yyjson_val *elem;
-					yyjson_arr_foreach(child, idx2, max2, elem) {
-						FPValue fpv = FPValue::FromJson(elem);
-						fpv.field_name = field_name;
-						result.push_back(fpv);
-					}
-				} else {
-					FPValue fpv = FPValue::FromJson(child);
-					fpv.field_name = field_name;
-					result.push_back(fpv);
-				}
+				add_flattened(child, field_name, infer_fhir_type(field_name));
 			} else {
 				// Check for choice types (e.g., value[x] pattern)
 				if (field_name.size() > 0) {
@@ -373,19 +399,7 @@ FPCollection Evaluator::evalMemberAccess(const ASTNode &node, const FPCollection
 								std::string choice_type = key_s.substr(prefix.size());
 								yyjson_val *choice_val = yyjson_obj_iter_get_val(key);
 								if (choice_val) {
-									if (yyjson_is_arr(choice_val)) {
-										size_t idx3, max3;
-										yyjson_val *elem2;
-										yyjson_arr_foreach(choice_val, idx3, max3, elem2) {
-											FPValue fpv = FPValue::FromJson(elem2);
-											fpv.fhir_type = choice_type;
-											result.push_back(fpv);
-										}
-									} else {
-										FPValue fpv = FPValue::FromJson(choice_val);
-										fpv.fhir_type = choice_type;
-										result.push_back(fpv);
-									}
+									add_flattened(choice_val, field_name, choice_type);
 								}
 								break;
 							}
@@ -400,15 +414,7 @@ FPCollection Evaluator::evalMemberAccess(const ASTNode &node, const FPCollection
 				if (yyjson_is_obj(elem)) {
 					yyjson_val *child = yyjson_obj_get(elem, field_name.c_str());
 					if (child) {
-						if (yyjson_is_arr(child)) {
-							size_t idx3, max3;
-							yyjson_val *inner_elem;
-							yyjson_arr_foreach(child, idx3, max3, inner_elem) {
-								result.push_back(FPValue::FromJson(inner_elem));
-							}
-						} else {
-							result.push_back(FPValue::FromJson(child));
-						}
+						add_flattened(child, field_name, infer_fhir_type(field_name));
 					}
 				}
 			}
@@ -529,6 +535,22 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 	// Factory method dispatch
 	if (!input.empty() && input[0].type == FPValue::Type::String && input[0].string_val == "__fhirpath_factory__") {
 		return evalFactoryMethod(node, doc);
+	}
+
+	// Singleton Enforcement (FHIRPath 5.2, 5.3, 5.4)
+	if (input.size() > 1) {
+		if (name == "indexOf" || name == "substring" || name == "startsWith" || name == "endsWith" || 
+		    name == "contains" || name == "upper" || name == "lower" || name == "replace" || 
+		    name == "matches" || name == "replaceMatches" || name == "length" || name == "toChars" ||
+		    name == "abs" || name == "ceiling" || name == "exp" || name == "floor" || name == "ln" || 
+		    name == "log" || name == "power" || name == "round" || name == "sqrt" || name == "truncate" ||
+		    name == "toInteger" || name == "toDecimal" || name == "toString" || name == "toDate" || 
+		    name == "toDateTime" || name == "toTime" || name == "toQuantity" || name == "toBoolean" ||
+		    name == "convertsToInteger" || name == "convertsToDecimal" || name == "convertsToString" || 
+		    name == "convertsToDate" || name == "convertsToDateTime" || name == "convertsToTime" || 
+		    name == "convertsToQuantity" || name == "convertsToBoolean") {
+			throw FHIRPathSpecError(name + "() requires a single item input collection");
+		}
 	}
 
 	// No-argument functions
@@ -834,7 +856,7 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 								if (a == url) { found = true; break; }
 							}
 							if (!found) {
-								throw std::runtime_error("Unknown modifier extension: " + url);
+								throw FHIRPathSpecError("Unknown modifier extension: " + url);
 							}
 						}
 					}
@@ -1267,13 +1289,13 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 		}
 		if (name == "repeat") {
 			if (node.children.size() > 1) {
-				throw std::runtime_error("repeat() takes exactly 1 argument");
+				throw FHIRPathSpecError("repeat() takes exactly 1 argument");
 			}
 			return fn_repeat(*node.children[0], input, doc);
 		}
 		if (name == "repeatAll") {
 			if (node.children.size() > 1) {
-				throw std::runtime_error("repeatAll() takes exactly 1 argument");
+				throw FHIRPathSpecError("repeatAll() takes exactly 1 argument");
 			}
 			FPCollection result;
 			FPCollection work = input;
@@ -1326,7 +1348,7 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 				result.insert(result.end(), batch.begin(), batch.end());
 				work = next;
 				if (++iterations > 1000 || result.size() > 10000) {
-					throw std::runtime_error("repeatAll() infinite loop detected");
+					throw FHIRPathSpecError("repeatAll() infinite loop detected");
 				}
 			}
 			// Include seeds only for numeric/temporal sequences
@@ -1556,12 +1578,12 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 				};
 				for (int i = 0; system_vars[i]; ++i) {
 					if (var_name == system_vars[i]) {
-						throw std::runtime_error("Cannot overwrite system variable %" + var_name);
+						throw FHIRPathSpecError("Cannot overwrite system variable %" + var_name);
 					}
 				}
 				// Check for redefinition in same chain
 				if (chain_defined_vars_.count(var_name)) {
-					throw std::runtime_error("Variable %" + var_name + " is already defined in this scope");
+					throw FHIRPathSpecError("Variable %" + var_name + " is already defined in this scope");
 				}
 				chain_defined_vars_.insert(var_name);
 				FPCollection var_value = input;
@@ -1633,7 +1655,13 @@ FPCollection Evaluator::fn_empty(const FPCollection &input) {
 }
 
 FPCollection Evaluator::fn_hasValue(const FPCollection &input) {
-	return {FPValue::FromBoolean(!input.empty())};
+	if (input.empty() || input.size() > 1) {
+		return {FPValue::FromBoolean(false)};
+	}
+	auto &val = input[0];
+	bool is_primitive = (val.type != FPValue::Type::JsonVal) || 
+	                    (val.json_val && !yyjson_is_obj(val.json_val) && !yyjson_is_arr(val.json_val));
+	return {FPValue::FromBoolean(is_primitive)};
 }
 
 FPCollection Evaluator::fn_not(const FPCollection &input) {
@@ -1641,7 +1669,7 @@ FPCollection Evaluator::fn_not(const FPCollection &input) {
 		return {};
 	}
 	if (input.size() != 1) {
-		return {};
+		throw FHIRPathSpecError("not() requires a single boolean item input");
 	}
 	auto &val = input[0];
 	// FHIRPath singleton boolean evaluation:
@@ -1726,7 +1754,7 @@ FPCollection Evaluator::fn_startsWith(const FPCollection &input, const FPCollect
 	auto t = effectiveType(input[0]);
 	if (t != FPValue::Type::String && input[0].type == FPValue::Type::JsonVal && input[0].json_val &&
 	    yyjson_is_obj(input[0].json_val)) {
-		throw std::runtime_error("startsWith() requires a string input, got complex type");
+		throw FHIRPathSpecError("startsWith() requires a string input, got complex type");
 	}
 	std::string s = toString(input[0]);
 	std::string prefix = toString(arg[0]);
@@ -1832,23 +1860,9 @@ FPCollection Evaluator::fn_substring(const FPCollection &input, const FPCollecti
 		start_idx = static_cast<int64_t>(toNumber(start[0]));
 	}
 
-	// FHIRPath §5.7.3: negative start → clamp to 0, reduce length by |start|
+	// FHIRPath 5.2. substring: If startIndex is less than 0, the result is empty.
 	if (start_idx < 0) {
-		if (length && !length->empty()) {
-			int64_t len = 0;
-			if ((*length)[0].type == FPValue::Type::Integer) {
-				len = (*length)[0].int_val;
-			} else {
-				len = static_cast<int64_t>(toNumber((*length)[0]));
-			}
-			len = len + start_idx;  // start_idx is negative, so this reduces len
-			if (len <= 0) {
-				return {};
-			}
-			start_idx = 0;
-			return {FPValue::FromString(s.substr(0, static_cast<size_t>(len)))};
-		}
-		start_idx = 0;
+		return {};
 	}
 	// Start beyond string → empty
 	if (static_cast<size_t>(start_idx) >= s.size()) {
@@ -2402,7 +2416,7 @@ FPCollection Evaluator::fn_repeat(const ASTNode &projection, const FPCollection 
 		}
 		work = next;
 		if (++iterations > 1000 || result.size() > 10000) {
-			throw std::runtime_error("repeat() infinite loop detected");
+			throw FHIRPathSpecError("repeat() infinite loop detected");
 		}
 	}
 
@@ -2874,6 +2888,9 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 
 	// String concatenation (&) - empty treated as empty string, not propagated
 	if (op == "&") {
+		if (left.size() > 1 || right.size() > 1) {
+			throw FHIRPathSpecError("String concatenation requires collections with at most one item");
+		}
 		std::string l_str = left.empty() ? "" : toString(left[0]);
 		std::string r_str = right.empty() ? "" : toString(right[0]);
 		return {FPValue::FromString(l_str + r_str)};
@@ -3043,7 +3060,12 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 					double tolerance = std::max(l_half, r_half);
 					is_eq = (std::abs(l_conv - r_conv) < tolerance);
 				} else {
-					is_eq = (std::abs(l_conv - r_conv) < 1e-10);
+					// FHIRPath 6.1: For quantities, equality requires units to match exactly.
+					if (lv.quantity_unit != rv.quantity_unit) {
+						is_eq = false;
+					} else {
+						is_eq = (std::abs(lv.quantity_value - rv.quantity_value) < 1e-10);
+					}
 				}
 			} else {
 				// Incompatible units: return empty for = and !=
@@ -3089,6 +3111,9 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 
 	// Comparison
 	if (op == "<" || op == ">" || op == "<=" || op == ">=") {
+		if (left.size() > 1 || right.size() > 1) {
+			return {};
+		}
 		auto &lv = left[0];
 		auto &rv = right[0];
 
@@ -3157,6 +3182,9 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 
 	// Arithmetic
 	if (op == "+" || op == "-" || op == "*" || op == "/" || op == "div" || op == "mod") {
+		if (left.size() > 1 || right.size() > 1) {
+			throw FHIRPathSpecError(std::string("Operator '") + op + "' requires a single item input collection");
+		}
 		auto &lv = left[0];
 		auto &rv = right[0];
 
@@ -3450,7 +3478,7 @@ bool Evaluator::toBoolean(const FPValue &val) const {
 		// FHIRPath §6.4: only 0 and 1 convert to boolean
 		if (val.int_val == 0) return false;
 		if (val.int_val == 1) return true;
-		throw std::runtime_error("Cannot convert integer " + std::to_string(val.int_val) + " to boolean (only 0 and 1 are valid)");
+		throw FHIRPathSpecError("Cannot convert integer " + std::to_string(val.int_val) + " to boolean (only 0 and 1 are valid)");
 	case FPValue::Type::String: {
 		std::string lower;
 		for (auto c : val.string_val) lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -3460,7 +3488,7 @@ bool Evaluator::toBoolean(const FPValue &val) const {
 		if (lower == "false" || lower == "f" || lower == "no" || lower == "n" || lower == "0") {
 			return false;
 		}
-		throw std::runtime_error("Cannot convert string '" + val.string_val + "' to boolean");
+		throw FHIRPathSpecError("Cannot convert string '" + val.string_val + "' to boolean");
 	}
 	case FPValue::Type::JsonVal:
 		if (val.json_val) {
@@ -3473,18 +3501,18 @@ bool Evaluator::toBoolean(const FPValue &val) const {
 				for (auto c : s) lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 				if (lower == "true" || lower == "t" || lower == "yes" || lower == "y" || lower == "1") return true;
 				if (lower == "false" || lower == "f" || lower == "no" || lower == "n" || lower == "0") return false;
-				throw std::runtime_error("Cannot convert string '" + s + "' to boolean");
+				throw FHIRPathSpecError("Cannot convert string '" + s + "' to boolean");
 			}
 			if (yyjson_is_int(val.json_val)) {
 				int64_t v = yyjson_get_sint(val.json_val);
 				if (v == 0) return false;
 				if (v == 1) return true;
-				throw std::runtime_error("Cannot convert integer to boolean (only 0 and 1 are valid)");
+				throw FHIRPathSpecError("Cannot convert integer to boolean (only 0 and 1 are valid)");
 			}
 		}
-		throw std::runtime_error("Cannot convert value to boolean");
+		throw FHIRPathSpecError("Cannot convert value to boolean");
 	default:
-		throw std::runtime_error("Cannot convert value to boolean");
+		throw FHIRPathSpecError("Cannot convert value to boolean");
 	}
 }
 

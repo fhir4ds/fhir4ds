@@ -314,8 +314,9 @@ static fhirpath::FPCollection EvaluateFhirpath(FhirpathState &state, const char 
 	try {
 		results = evaluator.evaluate(*ast, doc, yyjson_doc_get_root(doc));
 	} catch (const fhirpath::FHIRPathSpecError&) {
+		// Resilience: per user mandate, row-level spec violations return empty, not crash.
 		yyjson_doc_free(doc);
-		throw;
+		return {};
 	} catch (const std::bad_alloc&) {
 		yyjson_doc_free(doc);
 		throw;

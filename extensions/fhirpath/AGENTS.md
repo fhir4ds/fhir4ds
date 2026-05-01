@@ -123,3 +123,11 @@ See `docs/architecture/AUDIT_REPORT.md` §7 for full details.
 - Thread-local regex cache (get_cached_regex) eliminating per-call compilation
 - Complete JSON escaping including all control characters (0x00-0x1F, \b, \f)
 - Build: ✅ | Tests: 72 SQL assertions pass
+
+### Known Fragile Areas (Found by QA - 2026-04-30)
+- **Quantity Equality**: `=` incorrectly treats equivalent quantities as equal (converts units instead of strict match).
+- **String Concatenation (`&`)**: Incorrectly accepts multi-item collections, concatenating their first elements instead of throwing an error.
+- **Nested Collections**: Navigation into nested JSON arrays (e.g., `[[1, 2]]`) does not flatten them into the FHIRPath collection; instead, inner arrays are serialized to JSON strings.
+- **Substring boundaries**: Negative start indexes wrap or default to 0 instead of returning empty as required by spec.
+- **Singleton Enforcement (Systemic)**: Binary math operators, comparison operators, and most string/math functions silently use the first element of multi-item collections instead of throwing an error or returning empty per the FHIRPath specification.
+- **Polymorphic Metadata**: Accessing choice types directly by their full name (e.g., `valueQuantity`) fails to populate `fhir_type` metadata, causing `ofType()` filters to fail.
