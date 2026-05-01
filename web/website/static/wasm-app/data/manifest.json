@@ -1,0 +1,84 @@
+{
+  "measures": {
+    "CMS124": {
+      "title": "Cervical Cancer Screening",
+      "populations": [
+        "Initial Population",
+        "Denominator",
+        "Denominator Exclusions",
+        "Numerator"
+      ],
+      "files": {
+        "sql": "cms124.sql",
+        "auditSql": "cms124_audit.sql",
+        "resources": "cms124_resources.ndjson",
+        "valuesets": "cms124_valuesets.json",
+        "expected": "cms124_expected.json"
+      }
+    },
+    "CMS349": {
+      "title": "HIV Screening",
+      "populations": [
+        "Initial Population",
+        "Denominator",
+        "Denominator Exclusions",
+        "Numerator"
+      ],
+      "files": {
+        "sql": "cms349.sql",
+        "auditSql": "cms349_audit.sql",
+        "resources": "cms349_resources.ndjson",
+        "valuesets": "cms349_valuesets.json",
+        "expected": "cms349_expected.json"
+      }
+    },
+    "CMS159": {
+      "title": "Depression Remission at Twelve Months",
+      "populations": [
+        "Initial Population",
+        "Denominator",
+        "Denominator Exclusions",
+        "Numerator"
+      ],
+      "files": {
+        "sql": "cms159.sql",
+        "auditSql": "cms159_audit.sql",
+        "resources": "cms159_resources.ndjson",
+        "valuesets": "cms159_valuesets.json",
+        "expected": "cms159_expected.json"
+      }
+    },
+    "CMS74": {
+      "title": "Primary Caries Prevention as Offered by Dentists",
+      "populations": [
+        "Initial Population",
+        "Denominator",
+        "Denominator Exclusions",
+        "Numerator"
+      ],
+      "files": {
+        "sql": "cms74.sql",
+        "auditSql": "cms74_audit.sql",
+        "resources": "cms74_resources.ndjson",
+        "valuesets": "cms74_valuesets.json",
+        "expected": "cms74_expected.json"
+      }
+    },
+    "CMS75": {
+      "title": "Children Who Have Dental Decay or Cavities",
+      "populations": [
+        "Initial Population",
+        "Denominator",
+        "Denominator Exclusions",
+        "Numerator"
+      ],
+      "files": {
+        "sql": "cms75.sql",
+        "auditSql": "cms75_audit.sql",
+        "resources": "cms75_resources.ndjson",
+        "valuesets": "cms75_valuesets.json",
+        "expected": "cms75_expected.json"
+      }
+    }
+  }
+}

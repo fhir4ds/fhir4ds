@@ -556,6 +556,10 @@ body,
   background: rgba(56, 189, 248, 0.04);
 }
 
+.clickable-row {
+  cursor: pointer;
+}
+
 .clickable-row:hover td {
   background: rgba(56, 189, 248, 0.08) !important;
 }

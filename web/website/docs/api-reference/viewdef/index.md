@@ -53,6 +53,6 @@ The constructor accepts:
 
 | Metric | Status |
 |--------|--------|
-| **SQL-on-FHIR v2 Spec** | **100% Compliance** (140 tests) |
+| **SQL-on-FHIR v2 Spec** | **100% Compliance** (134 tests) |
 | **Nested Selects** | Supported |
 | **Recursive Joins** | Optimized via CTEs |

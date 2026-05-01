@@ -32,7 +32,39 @@ Example:
 
 from __future__ import annotations
 
-import duckdb as _duckdb_mod
+try:
+    import duckdb as _duckdb_mod
+except ImportError:
+    # In environments without the native duckdb package (e.g. Pyodide/WASM),
+    # create a minimal stub so the module-level imports succeed.
+    # Functions that require a live DuckDB connection (register_udfs,
+    # evaluate_measure) will raise ImportError at call time as expected.
+    # The CQL translator (CQLToSQLTranslator) works without duckdb.
+    from types import ModuleType as _ModuleType
+    _duckdb_mod = _ModuleType("duckdb")  # type: ignore[assignment]
+
+    class _DuckDBError(Exception):
+        pass
+
+    class _DuckDBConnectionException(_DuckDBError):
+        pass
+
+    class _DuckDBCatalogException(_DuckDBError):
+        pass
+
+    _duckdb_mod.Error = _DuckDBError  # type: ignore[attr-defined]
+    _duckdb_mod.ConnectionException = _DuckDBConnectionException  # type: ignore[attr-defined]
+    _duckdb_mod.CatalogException = _DuckDBCatalogException  # type: ignore[attr-defined]
+
+    def _unavailable_connect(*a, **kw):  # type: ignore[return]
+        raise ImportError(
+            "duckdb is not available in this environment. "
+            "Install fhir4ds-v2 in a standard Python environment to use "
+            "connection-dependent features."
+        )
+
+    _duckdb_mod.connect = _unavailable_connect  # type: ignore[attr-defined]
+
 import logging
 from datetime import date, datetime, time
 from pathlib import Path
@@ -42,7 +74,7 @@ from .paths import get_resource_path
 
 _logger = logging.getLogger(__name__)
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 
 def parse_cql(cql_text: str):

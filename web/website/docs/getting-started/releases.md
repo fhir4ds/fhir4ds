@@ -7,6 +7,100 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.3
+*April 2026*
+
+Version 0.0.3 introduces the **Zero-ETL Source Adapter** architecture, enabling CQL measures, FHIRPath queries, and ViewDefinitions to run directly against external data without copying it into DuckDB.
+
+### Highlights
+
+- **Zero-ETL Source Adapters**: Run clinical logic directly against Parquet data lakes, PostgreSQL databases, and CSV files — no data movement, no PHI duplication.
+- **New API**: `fhir4ds.attach()`, `fhir4ds.detach()`, and `create_connection(source=...)` provide a uniform lifecycle for all data sources.
+- **Schema Validation at Registration**: `SchemaValidationError` is raised immediately at `attach()` time if the adapter's view doesn't conform — fail fast, not during measure evaluation.
+- **Backward Compatibility**: `ExistingTableSource` provides the adapter interface over pre-loaded data. No breaking changes for `FHIRDataLoader` users.
+
+### New: Source Adapters
+
+| Adapter | Purpose |
+|---------|---------|
+| `FileSystemSource` | Parquet, NDJSON, Iceberg files — local or cloud (S3, Azure, GCS) |
+| `PostgresSource` | FHIR JSON stored in PostgreSQL columns |
+| `ExistingTableSource` | Wraps pre-loaded DuckDB tables in the adapter API |
+| `CSVSource` | Flat CSV files with user-defined SQL projection |
+
+#### FileSystemSource
+- Supports Parquet (default), NDJSON, JSON, and Iceberg formats.
+- Cloud storage via `CloudCredentials` (S3, Azure, GCS).
+- Hive partition pruning for large datasets.
+- Incremental delta tracking via file mtime.
+
+#### PostgresSource
+- Attaches to Postgres via DuckDB's `postgres` extension (read-only).
+- `PostgresTableMapping` defines column-to-schema mappings per table.
+- All identifiers quoted via `quote_identifier()` — prevents SQL injection from user-supplied names.
+- **Scope boundary**: Requires FHIR JSON in a column. Relational-to-FHIR column mapping is out of scope.
+
+#### ExistingTableSource
+- Wraps any existing DuckDB table/view in the adapter API.
+- Validates schema at registration time.
+- Zero migration cost for current `FHIRDataLoader` users.
+
+#### CSVSource
+- User provides a `projection_sql` with a `{source}` placeholder.
+- Full control over how flat CSV columns map to FHIR JSON (via `json_object()`).
+
+### New API
+
+- **`fhir4ds.attach(con, adapter)`** — Registers a source adapter on an existing connection.
+- **`fhir4ds.detach(con, adapter)`** — Unregisters an adapter, dropping the view and cleaning up.
+- **`fhir4ds.create_connection(source=adapter)`** — Mounts a source immediately on connection creation.
+- **`SourceAdapter` Protocol** — Interface contract for third-party adapter implementations (`register()`, `unregister()`).
+- **`SchemaValidationError`** — Raised at registration time if the adapter schema doesn't conform.
+- **`validate_schema()`** — Validates the `resources` view against the required schema contract.
+- **`quote_identifier()`** — Safely quotes identifiers to prevent SQL injection.
+- **`CloudCredentials`** — Encapsulates DuckDB secret configuration for S3, Azure, and GCS.
+
+### Security
+
+- **Identifier Quoting**: `PostgresSource` and `ExistingTableSource` use `quote_identifier()` to prevent SQL injection from user-supplied table and column names.
+- **Scope Boundary**: `PostgresSource` documentation clearly states it requires FHIR JSON in a column — preventing misuse as a generic relational mapper.
+
+### Known Limitations
+
+- `PostgresSource` requires FHIR JSON in a Postgres column — constructing FHIR JSON from arbitrary relational schemas is not supported in this release.
+- `CSVSource` does not support incremental delta tracking.
+- `FileSystemSource` incremental tracking is mtime-based and may produce false positives.
+- Iceberg format does not support incremental delta tracking.
+
+### Migration Guide
+
+Existing `FHIRDataLoader` users have **no breaking changes**. To adopt the adapter pattern:
+
+```python
+# Before (still works, no changes needed):
+loader = FHIRDataLoader(con)
+loader.load_directory('/data/fhir/')
+
+# After (optional — adds uniform adapter API):
+from fhir4ds.sources import ExistingTableSource
+source = ExistingTableSource()
+fhir4ds.attach(con, source)
+```
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.3
+```
+
+### API Changes
+
+- **Version Bump**: All `fhir4ds` packages bumped to version `0.0.3`.
+- **WASM Assets**: Updated translator wheel to `fhir4ds_v2-0.0.3-py3-none-any.whl`.
+- **New Module**: `fhir4ds.sources` — exported from the top-level `fhir4ds` namespace.
+
+---
+
 ## Version 0.0.2
 *April 2026*
 

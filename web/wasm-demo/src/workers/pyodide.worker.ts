@@ -10,7 +10,7 @@
 
 declare const self: DedicatedWorkerGlobalScope;
 // Injected at build/dev time by vite.config.ts via `define`.
-// Resolves to the actual wheel filename (e.g. "fhir4ds_v2-0.0.2-py3-none-any.whl").
+// Resolves to the actual wheel filename (e.g. "fhir4ds_v2-0.0.3-py3-none-any.whl").
 declare const __FHIR4DS_WHEEL_NAME__: string;
 
 interface WorkerMessage {
@@ -57,7 +57,6 @@ async function initPyodide() {
 
   // Only micropip is needed — fhir4ds-v2 is pure Python (no native deps)
   await pyodide.loadPackage(["micropip"]);
-  const micropip = pyodide.pyimport("micropip");
 
   // Wheel filename is injected at build/dev time by vite.config.ts via `define`.
   // No runtime fetch needed — works in dev mode, build, and Docusaurus static hosting.
@@ -65,7 +64,25 @@ async function initPyodide() {
   const wheelUrl = new URL(/* @vite-ignore */ `./${__FHIR4DS_WHEEL_NAME__}`, import.meta.url).href;
 
   console.log("[Pyodide Worker] Installing fhir4ds-v2 from:", wheelUrl);
-  await micropip.install(wheelUrl);
+
+  // Install with deps=False because duckdb (a declared dependency) has no
+  // pure Python wheel and is already provided by DuckDB-WASM on the JS side.
+  // We install the required pure-Python deps separately first.
+  pyodide.globals.set("__wheel_url__", wheelUrl);
+  await pyodide.runPythonAsync(`
+import micropip
+
+# Install pure-Python runtime dependencies first.
+# duckdb is intentionally excluded — it's provided by DuckDB-WASM.
+await micropip.install([
+    "antlr4-python3-runtime>=4.10",
+    "python-dateutil>=2.8",
+])
+
+# Install fhir4ds-v2 without auto-resolving deps to avoid the duckdb
+# dependency resolution failure (duckdb has no pure Python wheel).
+await micropip.install(__wheel_url__, deps=False)
+`);
 
   // Smoke-test the import
   pyodide.runPython(`

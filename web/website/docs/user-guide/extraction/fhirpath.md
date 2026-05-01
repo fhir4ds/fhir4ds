@@ -12,7 +12,7 @@ FHIRPath is the standard expression language used throughout the FHIR ecosystem 
 
 The FHIRPath engine in FHIR4DS is built for accuracy and speed. It serves as the primary mechanism for extracting data from nested FHIR JSON during both CQL translation and direct SQL queries.
 
-- **Full R4 Support**: 99.9% compliance with the FHIRPath R4 specification (935 tests).
+- **Full R4 Support**: 100% compliance with the FHIRPath R4 specification (935 tests).
 - **Dual-Engine Architecture**: Seamless fallback between a native C++ DuckDB extension and a vectorized Python evaluator.
 - **Set-Based Evaluation**: Designed to process entire populations simultaneously when used within the database.
 

@@ -159,6 +159,40 @@ pytest fhir4ds/dqm/tests/
 python3 conformance/scripts/run_all.py
 ```
 
+### WASM Demo Release Process
+
+The interactive CQL playground at `web/wasm-demo/` embeds a Python wheel served to Pyodide. After any Python source change or version bump, update the WASM demo:
+
+```bash
+# 1. Build the Python wheel
+hatch build -t wheel
+
+# 2. Copy to public/ and remove the old version
+cp dist/fhir4ds_v2-NEW_VERSION-py3-none-any.whl web/wasm-demo/public/
+rm web/wasm-demo/public/fhir4ds_v2-OLD_VERSION-py3-none-any.whl
+
+# 3. Build the WASM demo
+cd web/wasm-demo && npm run build
+
+# 4. ⚠️ Deploy to website static directory (required — website uses a pre-built snapshot)
+cd ..  # back to repo root
+rm -rf web/website/static/wasm-app
+cp -r web/wasm-demo/dist/. web/website/static/wasm-app/
+
+# 5. Verify — all 11 tests must pass
+cd web/wasm-demo && npx playwright test tests/e2e/playground.spec.ts tests/e2e/web-component.spec.ts
+```
+
+> **Why step 4 matters:** The website's `static/wasm-app/` is a pre-built snapshot served
+> by Docusaurus. It is NOT auto-updated when `web/wasm-demo/` is rebuilt. Skipping step 4
+> causes the standalone demo to work while the website CQL playground fails with a Pyodide error.
+>
+> **Why `duckdb` is excluded from Pyodide:** `duckdb` has no pure Python wheel on PyPI.
+> The Pyodide worker uses `deps=False` and manually installs only the required pure-Python
+> dependencies. Do not add native C extension packages as hard imports in `fhir4ds.cql`
+> or any module imported by the WASM worker. See `AGENTS.md` and `web/wasm-demo/AGENTS.md`
+> for full details.
+
 ## Benchmarks
 
 Performance benchmarking tools and results are located in the `benchmarks/` directory. See [benchmarks/AGENTS.md](./benchmarks/AGENTS.md) for details.

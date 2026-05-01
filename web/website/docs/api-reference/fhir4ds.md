@@ -71,9 +71,14 @@ Registers a `SourceAdapter` against an active connection. This creates the virtu
 ---
 
 ### `detach`
-`detach(con) -> None`
+`detach(con, adapter: SourceAdapter) -> None`
 
-Drops the `resources` view and releases any external resources held by the attached source.
+Unregisters a `SourceAdapter`, dropping the `resources` view and releasing any external connections held by the adapter.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `con` | `duckdb.DuckDBPyConnection` | An active connection. |
+| `adapter` | `SourceAdapter` | The adapter to unregister. |
 
 ---
 

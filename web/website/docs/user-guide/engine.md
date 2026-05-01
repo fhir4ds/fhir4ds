@@ -23,24 +23,25 @@ The primary goal of the unified engine is **transparency** and **performance** a
 
 The common pattern for using FHIR4DS involves four simple steps:
 
-1.  **Connect**: Create or attach a DuckDB connection.
-2.  **Register**: Load UDFs and extensions via `fhir4ds.register()`.
-3.  **Ingest**: Load patient data into the `resources` table.
-4.  **Execute**: Run FHIRPath queries, evaluate CQL measures, or generate SQL views.
+1.  **Connect**: Create a DuckDB connection.
+2.  **Attach**: Mount your data using a `SourceAdapter` (e.g., `FileSystemSource`).
+3.  **Execute**: Run FHIRPath queries, evaluate CQL measures, or generate SQL views.
+4.  **Analyze**: Process results as standard DataFrames or DuckDB relations.
 
 ```python
 import fhir4ds
-from fhir4ds.cql import FHIRDataLoader
+from fhir4ds.sources import FileSystemSource
 
-# 1. Connect (UDFs are registered automatically)
-con = fhir4ds.create_connection()
-
-# 2. Ingest
-loader = FHIRDataLoader(con)
-loader.load_directory("./data/")
+# 1. Connect & 2. Attach (Recommended Zero-ETL pattern)
+con = fhir4ds.create_connection(
+    source=FileSystemSource("./data/**/*.parquet")
+)
 
 # 3. Execute (High-level API)
 result = fhir4ds.evaluate_measure("CMS124.cql", conn=con)
+
+# 4. Analyze
+df = result.df()
 ```
 
 ---
