@@ -433,7 +433,7 @@ class CoreMixin:
                         # Determine the outer patient_id alias for correlation.
                         # Use resource_alias (e.g., query loop alias) or patient_alias
                         # to avoid broken "p.patient_id" refs inside CTE definitions.
-                        _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "p"
+                        _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
 
                         # For CTEs with value column (scalars), select value
                         if meta and not meta.has_resource:
@@ -553,7 +553,7 @@ class CoreMixin:
             if outer_alias:
                 outer_pid = SQLQualifiedIdentifier(parts=[outer_alias, "patient_id"])
             else:
-                outer_pid = SQLQualifiedIdentifier(parts=["p", "patient_id"])
+                outer_pid = SQLQualifiedIdentifier(parts=["_pt", "patient_id"])
             return SQLSubquery(query=SQLSelect(
                 columns=[SQLQualifiedIdentifier(parts=["_pd", "resource"])],
                 from_clause=SQLAlias(
@@ -612,7 +612,7 @@ class CoreMixin:
                             where=SQLBinaryOp(
                                 operator="=",
                                 left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                                right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                             ),
                             limit=1
                         ))
@@ -627,7 +627,7 @@ class CoreMixin:
                         where=SQLBinaryOp(
                             operator="=",
                             left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                            right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                            right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                         ),
                         limit=1
                     ))
@@ -673,7 +673,7 @@ class CoreMixin:
                     where=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                     limit=1
                 ))
@@ -696,7 +696,7 @@ class CoreMixin:
                     where=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                     limit=1
                 ))
@@ -754,7 +754,7 @@ class CoreMixin:
                             where=SQLBinaryOp(
                                 operator="=",
                                 left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                                right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                             ),
                             limit=1
                         ))
@@ -769,7 +769,7 @@ class CoreMixin:
                         where=SQLBinaryOp(
                             operator="=",
                             left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                            right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                            right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                         ),
                         limit=1
                     ))
@@ -796,7 +796,7 @@ class CoreMixin:
                     where=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                     limit=1
                 ))
@@ -818,7 +818,7 @@ class CoreMixin:
                     where=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                     limit=1
                 ))
@@ -834,7 +834,7 @@ class CoreMixin:
                     where=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                     limit=1
                 ))
@@ -845,6 +845,19 @@ class CoreMixin:
             ))
 
         # Default: treat as identifier
+        _inlining_lib = getattr(self.context, '_current_inlining_library', None)
+        if _inlining_lib is None:
+            import warnings as _w
+            msg = (
+                f"Undefined CQL definition '{name}' passed through as SQL identifier. "
+                "This will likely cause a DuckDB error at execution time. "
+                "Check that the definition is spelled correctly and that all "
+                "required library includes are present."
+            )
+            logger.warning(msg)
+            _w.warn(msg, stacklevel=2)
+        else:
+            logger.debug("Definition '%s' from inlined library '%s' passed through as SQL identifier", name, _inlining_lib)
         return SQLIdentifier(name=name)
 
     def _translate_qualified_identifier(self, qi: QualifiedIdentifier, boolean_context: bool = False) -> SQLExpression:
@@ -858,6 +871,17 @@ class CoreMixin:
 
         # Check if first part is an include reference
         if first in self.context.includes:
+            # Raise early for references to unresolved includes (QA8-001)
+            if self.context.is_include_unresolved(first):
+                from ...errors import TranslationError
+                raise TranslationError(
+                    message=(
+                        f"Reference to included library '{first}' cannot be "
+                        f"resolved: no library_loader was configured. Provide a "
+                        f"library_loader to CQLToSQLTranslator to resolve "
+                        f"include references."
+                    ),
+                )
             # Reference to included library
             # e.g., FHIRHelpers.ToDateTime or AIFrailLTCF."Some Definition"
             if len(parts) >= 2:
@@ -913,7 +937,7 @@ class CoreMixin:
                             where=SQLBinaryOp(
                                 operator="=",
                                 left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
-                                right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                             ),
                             limit=1
                         ))

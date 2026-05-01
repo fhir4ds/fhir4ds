@@ -355,10 +355,10 @@ class CorrelationMixin:
             where_expr = sql_ast
 
         # Correlate EXISTS subqueries with the outer patient context (using alias 'p')
-        where_expr = self._correlate_exists_ast(where_expr, outer_alias="p")
+        where_expr = self._correlate_exists_ast(where_expr, outer_alias="_pt")
 
         # Replace patient_resource references (AST version)
-        where_expr = self._replace_patient_resource_ast(where_expr, outer_alias="p")
+        where_expr = self._replace_patient_resource_ast(where_expr, outer_alias="_pt")
 
         # Check if we need CROSS JOIN LATERAL for alias references
         # This handles cases where the expression references query aliases
@@ -367,10 +367,10 @@ class CorrelationMixin:
         joins = lateral_joins if lateral_joins else None
 
         return SQLSelect(
-            columns=[SQLQualifiedIdentifier(parts=["p", "patient_id"])],
+            columns=[SQLQualifiedIdentifier(parts=["_pt", "patient_id"])],
             from_clause=SQLAlias(
                 expr=SQLIdentifier(name="_patients", quoted=False),
-                alias="p",
+                alias="_pt",
             ),
             where=where_expr,
             joins=joins,
@@ -379,7 +379,7 @@ class CorrelationMixin:
     def _correlate_exists_ast(
         self,
         expr: "SQLExpression",
-        outer_alias: str = "p",
+        outer_alias: str = "_pt",
     ) -> "SQLExpression":
         """
         Correlate EXISTS subqueries in an AST expression with the outer patient context.
@@ -715,7 +715,7 @@ class CorrelationMixin:
     def _correlate_scalar_subquery(
         self,
         expr: "SQLExpression",
-        outer_alias: str = "p",
+        outer_alias: str = "_pt",
     ) -> "SQLExpression":
         """
         Add patient_id correlation to scalar subqueries without converting to EXISTS.
@@ -776,7 +776,7 @@ class CorrelationMixin:
     def _replace_patient_resource_ast(
         self,
         expr: "SQLExpression",
-        outer_alias: str = "p",
+        outer_alias: str = "_pt",
     ) -> "SQLExpression":
         """
         Replace getvariable('patient_resource') references in an AST expression.

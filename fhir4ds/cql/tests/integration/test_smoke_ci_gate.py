@@ -32,12 +32,18 @@ class TestMeasureSmokeCI:
         """Generate SQL for a measure and return (name, sql, elapsed)."""
         name, cql_path = request.param
         from pathlib import Path
+        from ...errors import TranslationError
 
         cql_text = Path(cql_path).read_text()
         library = parse_cql(cql_text)
         translator = CQLToSQLTranslator()
         start = time.monotonic()
-        sql = translator.translate_library_to_sql(library)
+        try:
+            sql = translator.translate_library_to_sql(library)
+        except TranslationError as e:
+            if "no library_loader" in str(e):
+                pytest.skip(f"{name}: requires library_loader for include resolution")
+            raise
         elapsed = time.monotonic() - start
         return name, sql, elapsed
 

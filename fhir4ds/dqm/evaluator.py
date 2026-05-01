@@ -135,13 +135,18 @@ class MeasureEvaluator:
         if not group_dfs:
             raise DQMError(f"Measure '{pop_map.measure_id}' produced no results")
 
+        # Prune evidence before concatenation to preserve group context
+        if effective_mode != AuditMode.NONE:
+            for i, gdf in enumerate(group_dfs):
+                group_dfs[i] = self._prune_population_evidence(gdf, pop_map)
+
         if len(group_dfs) == 1:
             result_df = group_dfs[0].drop(columns=["_group_id"])
         else:
             result_df = pd.concat(group_dfs, ignore_index=True)
 
         if generate_narratives and effective_mode != AuditMode.NONE:
-            result_df = self._add_narratives(result_df, pop_map)
+            result_df = self._add_narratives(result_df, pop_map, effective_mode)
 
         populations = {
             self._col_name(p.population_code): p.cql_expression
@@ -189,6 +194,12 @@ class MeasureEvaluator:
 
         denom_final = denom - denom_excl - denom_except
         numer_final = numer - numer_excl
+
+        # CQL §10: Numerator is a subset of Denominator — cap numer_final
+        # to denom_final so excluded-denominator patients are also removed
+        # from the numerator count.
+        if denom_final >= 0 and numer_final > denom_final:
+            numer_final = denom_final
 
         if denom_final < 0:
             raise DQMError(
@@ -388,19 +399,14 @@ class MeasureEvaluator:
 
         # Reuse cached registries to avoid ~1.5MB allocation per call
         if self._cached_fhir_schema is not None:
-            translator._fhir_schema = self._cached_fhir_schema
-            translator._context.fhir_schema = self._cached_fhir_schema
-            translator._context.column_mappings = self._cached_fhir_schema.column_mappings
-            translator._context.choice_type_prefixes = self._cached_fhir_schema.choice_type_prefixes
+            translator.fhir_schema = self._cached_fhir_schema
         else:
-            self._cached_fhir_schema = translator._fhir_schema
+            self._cached_fhir_schema = translator.fhir_schema
 
         if self._cached_profile_registry is not None:
-            translator._profile_registry = self._cached_profile_registry
-            translator._context.profile_registry = self._cached_profile_registry
-            translator._context.extension_paths = self._cached_profile_registry.extension_paths
+            translator.profile_registry = self._cached_profile_registry
         else:
-            self._cached_profile_registry = translator._profile_registry
+            self._cached_profile_registry = translator.profile_registry
 
         if audit_mode == AuditMode.FULL:
             translator.context.set_audit_mode(True)
@@ -462,8 +468,9 @@ class MeasureEvaluator:
                 SyntaxError, TypeError) as e:
             raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
         except Exception as e:
-            # Catch CQL ParseError, TranslationError, and other downstream errors
-            if type(e).__name__ in ('ParseError', 'TranslationError'):
+            # Import actual exception classes instead of string-matching type names
+            from fhir4ds.cql.errors import ParseError, TranslationError
+            if isinstance(e, (ParseError, TranslationError)):
                 raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
             raise
         finally:
@@ -473,6 +480,38 @@ class MeasureEvaluator:
                 clear_variables(self.conn)
             except ImportError:
                 pass
+
+    def _prune_population_evidence(
+        self, df: pd.DataFrame, pop_map: PopulationMap,
+    ) -> pd.DataFrame:
+        """Apply persona-based evidence pruning to population columns.
+
+        For exclusion populations, evidence is only relevant when the patient
+        IS excluded. For non-excluded patients the evidence is pruned to reduce
+        noise in downstream narratives and exports.
+        """
+        for group in pop_map.groups:
+            for pop in group.populations:
+                col_name = self._col_name(pop.population_code)
+                if col_name not in df.columns:
+                    continue
+
+                def _prune(cell, persona=pop.audit_persona, code=pop.population_code):
+                    if not isinstance(cell, dict):
+                        return cell
+                    try:
+                        pruned = self._audit_engine.prune_evidence(cell, code, persona)
+                        return {**cell, "evidence": pruned}
+                    except Exception:
+                        logger.warning(
+                            "Evidence pruning failed for population %s — "
+                            "returning original cell",
+                            code, exc_info=True,
+                        )
+                        return cell
+
+                df[col_name] = df[col_name].apply(_prune)
+        return df
 
     def _filter_to_initial_population(
         self, df: pd.DataFrame, audit_mode: AuditMode,
@@ -489,7 +528,8 @@ class MeasureEvaluator:
             mask = df[ip_col].astype(bool)
         return df[mask].reset_index(drop=True)
 
-    def _add_narratives(self, df: pd.DataFrame, pop_map: PopulationMap) -> pd.DataFrame:
+    def _add_narratives(self, df: pd.DataFrame, pop_map: PopulationMap,
+                        audit_mode: AuditMode = AuditMode.FULL) -> pd.DataFrame:
         """Enrich audit struct columns with a ``narrative`` field in-place.
 
         Instead of adding separate ``*_narrative`` columns, this method updates
@@ -506,21 +546,25 @@ class MeasureEvaluator:
                 def _enrich(val, pc=pop.population_code):
                     if not isinstance(val, dict):
                         return val
-                    narrative = self._generate_narrative(val, pc)
+                    narrative = self._generate_narrative(val, pc, audit_mode)
                     return {**val, "narrative": narrative}
 
                 df[col_name] = df[col_name].apply(_enrich)
 
         return df
 
-    def _generate_narrative(self, val: Any, population_code: str) -> list[str]:
+    def _generate_narrative(self, val: Any, population_code: str,
+                            audit_mode: AuditMode = AuditMode.FULL) -> list[str]:
         """Generate narrative for a single cell value."""
+        evidence_captured = audit_mode != AuditMode.POPULATION
         if isinstance(val, dict):
             evidence = val.get("evidence", [])
             is_satisfied = val.get("result", False)
             ev_dicts = [e if isinstance(e, dict) else {} for e in evidence]
-            return self._narrative.generate(population_code, ev_dicts, is_satisfied)
-        return self._narrative.generate(population_code, [], bool(val))
+            return self._narrative.generate(population_code, ev_dicts, is_satisfied,
+                                            evidence_captured=evidence_captured)
+        return self._narrative.generate(population_code, [], bool(val),
+                                        evidence_captured=evidence_captured)
 
     def _make_library_loader(self, include_paths: list[str], parse_cql: Any):
         """Create a library loader function for included CQL libraries.

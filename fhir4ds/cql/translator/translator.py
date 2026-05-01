@@ -31,6 +31,10 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TYPE_CHECKIN
 
 _logger = logging.getLogger(__name__)
 
+# Well-known CQL definition name used as the default final definition
+# when no explicit final_definition is provided to translate().
+_DEFAULT_FINAL_DEFINITION = "Initial Population"
+
 if TYPE_CHECKING:
     import duckdb
     from ..translator.queries import SQLQueryBuilder
@@ -182,6 +186,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         library_loader: Optional[Callable[[str], Optional[Library]]] = None,
         model_config: Optional["ModelConfig"] = None,
         _library_cache: Optional[dict] = None,
+        _resolving_stack: Optional[Set[tuple]] = None,
         audit_mode: bool = False,
         audit_expressions: bool = True,
     ) -> None:
@@ -194,6 +199,8 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             library_loader: Optional callable that takes a library alias/path and returns
                            the parsed Library AST, or None if not found.
             model_config: Optional ModelConfig for versioned schema resolution.
+            _resolving_stack: Internal — set of (path, version) tuples for libraries
+                currently being resolved, used for circular include detection.
             audit_mode: If True, emit audit structs wrapping boolean results.
             audit_expressions: If False with audit_mode=True, only add _audit_item
                 to retrieve CTEs without wrapping expressions (population-only audit).
@@ -215,6 +222,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # diamond dependencies (e.g. FHIRHelpers included by many libraries)
         # are translated only once instead of once per include path.
         self._library_cache: dict = _library_cache if _library_cache is not None else {}
+        self._resolving_stack: Set[tuple] = _resolving_stack if _resolving_stack is not None else set()
         self._included_definitions: Dict[str, SQLExpression] = {}
 
         # CTE name tracking for subquery deduplication (to avoid duplicate CTE names)
@@ -266,6 +274,31 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
     def context(self) -> SQLTranslationContext:
         """Get the current translation context."""
         return self._context
+
+    @property
+    def fhir_schema(self):
+        """Get the FHIR schema registry."""
+        return self._fhir_schema
+
+    @fhir_schema.setter
+    def fhir_schema(self, schema):
+        """Set the FHIR schema registry and sync to translation context."""
+        self._fhir_schema = schema
+        self._context.fhir_schema = schema
+        self._context.column_mappings = schema.column_mappings
+        self._context.choice_type_prefixes = schema.choice_type_prefixes
+
+    @property
+    def profile_registry(self):
+        """Get the profile registry."""
+        return self._profile_registry
+
+    @profile_registry.setter
+    def profile_registry(self, registry):
+        """Set the profile registry and sync to translation context."""
+        self._profile_registry = registry
+        self._context.profile_registry = registry
+        self._context.extension_paths = registry.extension_paths
 
     def set_library_loader(
         self, loader: Optional[Callable[[str], Optional[Library]]]
@@ -348,7 +381,11 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # Set up context from library declarations
         self._setup_context(library)
 
-        # Process includes first
+        # Process parameters before includes so that parameter bindings are
+        # available even if include resolution fails.
+        self._process_parameters(library, self._context)
+
+        # Process includes
         self._process_includes(library, self._context)
 
         # Build dynamic component code registry (Tier 7: E2)
@@ -357,9 +394,6 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         
         # Store in context for ExpressionTranslator access
         self._context.component_code_to_column = self._component_code_to_column
-
-        # Process parameters
-        self._process_parameters(library, self._context)
 
         # First pass: collect function definitions
         for statement in library.statements:
@@ -460,13 +494,18 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         for name in ordered_names:
             expr = definitions[name]
             cte_name = self._unique_cte_name(name, seen_lower)
+            # Wrap bare expressions in SELECT so they form valid CTE bodies
+            if not isinstance(expr, (SQLSelect, SQLSubquery)):
+                expr = SQLSelect(columns=[expr])
+            elif isinstance(expr, SQLSubquery):
+                expr = expr.query
             cte_defs.append(CTEDefinition(name=f'"{cte_name}"', query=expr))
 
         # Determine the final definition to select from
         if final_definition:
             final_name = final_definition
-        elif "Initial Population" in definitions:
-            final_name = "Initial Population"
+        elif _DEFAULT_FINAL_DEFINITION in definitions:
+            final_name = _DEFAULT_FINAL_DEFINITION
         else:
             # Use the last definition in order
             final_name = ordered_names[-1] if ordered_names else None
@@ -547,6 +586,16 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         self._process_includes(library, self._context)
 
+        # Validate that all declared parameters have bindings
+        for param in library.parameters:
+            binding = self._context._parameter_bindings.get(param.name)
+            if binding is None or (isinstance(binding, tuple) and all(v is None for v in binding)):
+                if not param.default:
+                    raise TranslationError(
+                        f"Required CQL parameter '{param.name}' has no supplied value and no default. "
+                        f"Supply the parameter via evaluate_measure(parameters={{...}})."
+                    )
+
         # Build dynamic component code registry (Tier 7: E2)
         self._build_component_code_registry(library)
         self._context.component_code_to_column = self._component_code_to_column
@@ -575,9 +624,22 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # Phase 1: Translate definitions with placeholders, scan for properties
         # Phase 2: Build retrieve CTEs with precomputed columns
         # Phase 3: Resolve placeholders in definition ASTs
-        resolved_asts, phase1_result, phase2_result, opt_stats = run_optimization_phases(
-            library, self._context, self
-        )
+        try:
+            resolved_asts, phase1_result, phase2_result, opt_stats = run_optimization_phases(
+                library, self._context, self
+            )
+        except RecursionError:
+            resolving = list(self._context._resolving_definitions)
+            if resolving:
+                raise TranslationError(
+                    f"Circular definition reference detected (stack overflow). "
+                    f"Definitions being resolved: {' → '.join(resolving)}"
+                )
+            else:
+                raise TranslationError(
+                    "CQL expression exceeds maximum nesting depth (stack overflow). "
+                    "Simplify deeply nested expressions or break them into named definitions."
+                )
 
         # Copy column registry from phase2_result to context for property access optimization.
         # Only overwrite if the new entry has at least as many columns — included-library
@@ -859,7 +921,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         """
         from ..translator.context import RowShape
 
-        columns = [SQLQualifiedIdentifier(parts=["p", "patient_id"])]
+        columns = [SQLQualifiedIdentifier(parts=["_pt", "patient_id"])]
         if meta is not None and meta.shape == RowShape.RESOURCE_ROWS:
             columns.append(SQLAlias(
                 expr=SQLCast(expression=SQLNull(), target_type="JSON"),
@@ -869,7 +931,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             columns.append(SQLAlias(expr=SQLNull(), alias="value"))
         return SQLSelect(
             columns=columns,
-            from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="p"),
+            from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="_pt"),
             where=SQLLiteral(value=False),
         )
 
@@ -951,7 +1013,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         # Build SELECT columns
         columns: List[SQLExpression] = [
-            SQLQualifiedIdentifier(parts=["p", "patient_id"])
+            SQLQualifiedIdentifier(parts=["_pt", "patient_id"])
         ]
 
         # Track which defines need LEFT JOINs
@@ -1043,7 +1105,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     where=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=[quoted, "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                 )
                 expr = SQLSubquery(query=inner_select)
@@ -1058,7 +1120,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     left=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=[quoted, "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                     right=SQLBinaryOp(
                         operator="IS NOT",
@@ -1188,7 +1250,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     table=SQLIdentifier(name=def_name, quoted=True),
                     on_condition=SQLBinaryOp(
                         operator="=",
-                        left=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        left=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                         right=SQLQualifiedIdentifier(parts=[f'"{def_name}"', "patient_id"]),
                     ),
                 ))
@@ -1196,10 +1258,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         return SQLSelect(
             columns=columns,
             from_clause=SQLAlias(
-                expr=SQLIdentifier(name="_patients"), alias="p", implicit_alias=True
+                expr=SQLIdentifier(name="_patients"), alias="_pt", implicit_alias=True
             ),
             joins=joins,
-            order_by=[(SQLQualifiedIdentifier(parts=["p", "patient_id"]), "ASC")],
+            order_by=[(SQLQualifiedIdentifier(parts=["_pt", "patient_id"]), "ASC")],
         )
 
     def _collect_population_evidence(self, def_name: str) -> list:
@@ -1233,7 +1295,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 quoted = f'"{cte_name}"'
                 parts.append(
                     f"COALESCE((SELECT LIST({quoted}._audit_item) "
-                    f"FROM {quoted} WHERE {quoted}.patient_id = p.patient_id "
+                    f"FROM {quoted} WHERE {quoted}.patient_id = _pt.patient_id "
                     f"AND {quoted}._audit_item IS NOT NULL), [])"
                 )
             else:
@@ -1248,7 +1310,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                         f"attribute := CAST(NULL AS VARCHAR), value := CAST(NULL AS VARCHAR), "
                         f"operator := 'exists', threshold := '{cte_name}', "
                         f"trace := CAST([] AS VARCHAR[]))) "
-                        f"FROM {quoted} WHERE {quoted}.patient_id = p.patient_id "
+                        f"FROM {quoted} WHERE {quoted}.patient_id = _pt.patient_id "
                         f"AND {quoted}.resource IS NOT NULL), [])"
                     )
         return parts
@@ -1362,6 +1424,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # Only RESOURCE_ROWS shape produces CTEs with resource columns.
             # PATIENT_SCALAR produces CTEs with only patient_id (and optionally value).
             from ..translator.context import RowShape
+            if shape == RowShape.UNKNOWN:
+                _logger.warning(
+                    "Could not determine row shape for definition '%s' — "
+                    "defaulting to non-resource",
+                    definition.name,
+                )
             has_resource = shape == RowShape.RESOURCE_ROWS
 
             # For PATIENT_SCALAR definitions that store a FHIR resource
@@ -1376,7 +1444,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 "Interval", "Period",
             })
             value_column = "value"
-            if shape == RowShape.PATIENT_SCALAR and cql_type not in _CQL_PRIMITIVE_TYPES:
+            if shape in (RowShape.PATIENT_SCALAR, RowShape.UNKNOWN) and cql_type not in _CQL_PRIMITIVE_TYPES:
                 if not cql_type.startswith("List<") and not cql_type.startswith("Interval<"):
                     value_column = "resource"
                     has_resource = True
@@ -1531,7 +1599,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 # Try to extract default value
                 try:
                     default = self._extract_default_value(param.default)
-                except Exception as e:
+                except (AttributeError, TypeError, ValueError) as e:
                     _logger.warning("Failed to extract default value for parameter '%s': %s", param.name, e)
             context.add_parameter(param.name, param_type, default)
 

@@ -12,21 +12,25 @@ title: Quick Start
 pip install fhir4ds-v2
 ```
 
-## Unified Connection
+## Zero-ETL Connection
 
-The easiest way to get started is using the unified `create_connection` helper, which returns a DuckDB connection with all FHIRPath and CQL UDFs pre-registered.
+The fastest way to get started is to "attach" FHIR4DS to your existing data. Unlike traditional tools, you don't need to load data into a database first.
 
 ```python
 import fhir4ds
+from fhir4ds.sources import FileSystemSource
 
-# Create a connection with all UDFs registered
-con = fhir4ds.create_connection()
+# Create a connection and mount local NDJSON or Parquet files instantly
+con = fhir4ds.create_connection(
+    source=FileSystemSource("data/**/*.ndjson")
+)
 
-# Load FHIR data
-con.execute("CREATE TABLE resources AS SELECT * FROM 'data/*.parquet'")
+# Your data is now available as the 'resources' view
 ```
 
 ## FHIRPath Queries
+
+Run high-performance FHIRPath queries directly against your files:
 
 ```python
 # Query with native FHIRPath
@@ -40,6 +44,8 @@ result = con.execute("""
 ```
 
 ## CQL Measure Evaluation
+
+Evaluate clinical logic (like QI-Core quality measures) in a single step:
 
 ```python
 # Evaluate a Clinical Quality Measure using the high-level API
@@ -58,9 +64,9 @@ print(result.df())
 
 ## SQL-on-FHIR ViewDefinitions
 
-```python
-import json
+Flatten complex FHIR structures into standard tabular data:
 
+```python
 # Define a ViewDefinition
 view_definition = {
     "resource": "Patient",
@@ -70,9 +76,7 @@ view_definition = {
     ]}]
 }
 
-# Generate SQL from a ViewDefinition
-sql = fhir4ds.generate_view_sql(json.dumps(view_definition))
-
-# Execute against DuckDB
+# Generate and execute SQL
+sql = fhir4ds.generate_view_sql(view_definition)
 patients_flat = con.execute(sql).df()
 ```

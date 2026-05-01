@@ -257,9 +257,12 @@ static std::pair<bool, std::string> FastPathLookup(const char *json_data, idx_t 
 static fhirpath::FPCollection EvaluateFhirpath(FhirpathState &state, const char *json_data, idx_t json_len,
                                                 const std::string &expr_str,
                                                 fhirpath::ArenaAllocator *arena = nullptr) {
+	if (expr_str.empty()) {
+		throw std::runtime_error("FHIRPath expression cannot be empty");
+	}
 	auto ast = GetOrCompile(state, expr_str);
 	if (!ast) {
-		return {};
+		throw std::runtime_error("Invalid FHIRPath expression: " + expr_str);
 	}
 
 	yyjson_doc *doc = yyjson_read(json_data, json_len, 0);
@@ -274,6 +277,9 @@ static fhirpath::FPCollection EvaluateFhirpath(FhirpathState &state, const char 
 	fhirpath::FPCollection results;
 	try {
 		results = evaluator.evaluate(*ast, doc, yyjson_doc_get_root(doc));
+	} catch (const fhirpath::FHIRPathSpecError&) {
+		yyjson_doc_free(doc);
+		throw;
 	} catch (const std::bad_alloc&) {
 		yyjson_doc_free(doc);
 		throw;
@@ -531,12 +537,9 @@ static void FhirpathDateFunction(DataChunk &args, ExpressionState &state, Vector
 			result_mask.SetInvalid(i);
 		} else {
 			std::string date_str = str_helper.toString(fp_results[0]);
-			// Normalize date format: YYYY → YYYY-01-01, YYYY-MM → YYYY-MM-01
-			if (date_str.size() == 4) {
-				date_str += "-01-01";
-			} else if (date_str.size() == 7) {
-				date_str += "-01";
-			} else if (date_str.size() > 10) {
+			// Preserve partial date precision (YYYY, YYYY-MM, YYYY-MM-DD)
+			// Only strip time portion if present (>10 chars means datetime)
+			if (date_str.size() > 10) {
 				date_str = date_str.substr(0, 10);
 			}
 			result_data[i] = StringVector::AddString(result, date_str);
@@ -578,7 +581,11 @@ static void FhirpathBoolFunction(DataChunk &args, ExpressionState &state, Vector
 		if (fp_results.empty()) {
 			result_mask.SetInvalid(i);
 		} else {
-			result_data[i] = str_helper.toBoolean(fp_results[0]);
+			try {
+				result_data[i] = str_helper.toBoolean(fp_results[0]);
+			} catch (const std::exception&) {
+				result_mask.SetInvalid(i);
+			}
 		}
 	}
 }

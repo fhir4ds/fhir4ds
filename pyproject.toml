@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fhir4ds-v2"
-version = "0.0.2"
+version = "0.0.3"
 description = "FHIR for Data Science — unified package for FHIRPath, CQL, and SQL-on-FHIR analytics"
 readme = "README.md"
 license = {text = "AGPL-3.0-only"}
@@ -26,7 +26,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 dependencies = [
-    "duckdb>=0.9.0",
+    "duckdb~=1.5.2",
     "antlr4-python3-runtime>=4.10,<5.0",
     "python-dateutil>=2.8,<3.0",
     "pyarrow>=14.0.0",

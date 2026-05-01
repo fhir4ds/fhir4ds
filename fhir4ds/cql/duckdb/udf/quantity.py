@@ -642,10 +642,9 @@ def toConcept(code_json: str | None) -> str | None:
         code = orjson.loads(code_json)
         concept = {"codes": [code] if isinstance(code, dict) else code}
         return orjson.dumps(concept).decode("utf-8")
-    except Exception:
+    except Exception as e:
+        _logger.debug("Unexpected error in UDF toConcept: %s", e)
         return None
-
-
 # ========================================
 # Registration
 # ========================================

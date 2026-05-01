@@ -102,7 +102,7 @@ class DependencyResolver:
                     cql_text=content,
                     dependencies=dependencies,
                 )
-        except Exception as e:
+        except (UnicodeDecodeError, IOError, OSError) as e:
             _logger.warning("Failed to index CQL file %s: %s", file_path, e)
 
     def _index_json_file(self, file_path: Path) -> None:
@@ -121,7 +121,7 @@ class DependencyResolver:
                 self._index_measure(file_path, data)
             elif resource_type == "Bundle":
                 self._index_bundle(file_path, data)
-        except Exception as e:
+        except (json.JSONDecodeError, UnicodeDecodeError, IOError, OSError) as e:
             _logger.warning("Failed to index JSON file %s: %s", file_path, e)
 
     def _index_fhir_library(self, file_path: Path, data: Dict) -> None:
@@ -274,13 +274,13 @@ class DependencyResolver:
                 if raw_data:
                     try:
                         return base64.b64decode(raw_data).decode("utf-8")
-                    except Exception as e:
+                    except (base64.binascii.Error, UnicodeDecodeError) as e:
                         _logger.warning("Failed to decode base64 attachment data: %s", e)
                 # Also check for direct CQL in content
                 if "data" in content:
                     try:
                         return base64.b64decode(content["data"]).decode("utf-8")
-                    except Exception as e:
+                    except (base64.binascii.Error, UnicodeDecodeError) as e:
                         _logger.warning("Failed to decode base64 content data: %s", e)
         return None
 

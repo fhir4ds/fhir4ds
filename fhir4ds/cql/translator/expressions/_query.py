@@ -442,7 +442,9 @@ class QueryMixin:
 
             # If it's not already a URL, try common prefixes
             if valueset and not valueset.startswith('http') and not valueset.startswith('urn:'):
-                valueset = f"http://cts.nlm.nih.gov/fhir/ValueSet/{valueset}"
+                from ..patterns.retrieve import _VALUESET_PREFIX_CONFIG
+                default_prefix = _VALUESET_PREFIX_CONFIG.get("default_prefix", "http://cts.nlm.nih.gov/fhir/ValueSet/")
+                valueset = f"{default_prefix}{valueset}"
 
         # Return placeholder
         return RetrievePlaceholder(
@@ -962,7 +964,7 @@ class QueryMixin:
         )
 
         # Build patient_id correlation
-        _outer_alias = self.context.resource_alias or self.context.patient_alias or "p"
+        _outer_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
         _patient_corr = SQLBinaryOp(
             left=SQLQualifiedIdentifier(parts=[_bb_src, "patient_id"]),
             operator="=",
@@ -1266,11 +1268,23 @@ class QueryMixin:
             if expected_sql_types and bare_type not in ("String", "string", "Time", "time"):
                 # Build typeof-based check: when typeof(x) is a concrete non-VARCHAR type,
                 # check it matches. When VARCHAR, use not-JSON format check (FHIR fallback).
-                type_checks = [SQLBinaryOp(
-                    operator="=",
-                    left=SQLFunctionCall(name="typeof", args=[resource_expr]),
-                    right=SQLLiteral(value=t),
-                ) for t in expected_sql_types]
+                # DuckDB typeof() may return parameterized names (e.g., 'DECIMAL(2,1)'),
+                # so use starts_with for types that have precision/scale suffixes.
+                _PARAMETERIZED_TYPES = {"DECIMAL"}
+                typeof_call = SQLFunctionCall(name="typeof", args=[resource_expr])
+                type_checks = []
+                for t in expected_sql_types:
+                    if t in _PARAMETERIZED_TYPES:
+                        type_checks.append(SQLFunctionCall(
+                            name="starts_with",
+                            args=[typeof_call, SQLLiteral(value=t)],
+                        ))
+                    else:
+                        type_checks.append(SQLBinaryOp(
+                            operator="=",
+                            left=typeof_call,
+                            right=SQLLiteral(value=t),
+                        ))
                 type_match = type_checks[0]
                 for tc in type_checks[1:]:
                     type_match = SQLBinaryOp(operator="OR", left=type_match, right=tc)
@@ -1824,7 +1838,7 @@ class QueryMixin:
                         self.context.pop_scope()
 
                     # Build FROM clause: first secondary, then CROSS JOINs
-                    _outer_alias = alias or self.context.resource_alias or "p"
+                    _outer_alias = alias or self.context.resource_alias or "_pt"
                     _first_alias, _first_from, _, _ = _sec_infos[0]
                     _from_clause = SQLAlias(expr=_first_from, alias=_first_alias)
                     _joins: list = []
@@ -2436,7 +2450,7 @@ class QueryMixin:
                     self.context.add_alias(alias, table_alias=alias, cte_name=cte_name, ast_expr=_prev_ast)
 
         # Set resource_alias so scalar subquery correlations (e.g., patient_id)
-        # reference the correct outer alias instead of hardcoded "p".
+        # reference the correct outer alias instead of hardcoded "_pt".
         _saved_resource_alias = self.context.resource_alias
         if alias and not self.context.resource_alias:
             self.context.resource_alias = alias
@@ -2840,7 +2854,7 @@ class QueryMixin:
                 # expression from inlined fluent functions over sub-elements
                 # like Claim.item), wrap it in a SELECT that provides
                 # resource and patient_id columns so property access works.
-                outer_corr_alias = alias or self.context.resource_alias or "p"
+                outer_corr_alias = alias or self.context.resource_alias or "_pt"
                 if not isinstance(wc_source_sql, (SQLSelect, SQLSubquery, SQLUnion, SQLIntersect, SQLExcept, SQLIdentifier, SQLQualifiedIdentifier, SQLAlias, RetrievePlaceholder)):
                     wc_source_sql = SQLSubquery(query=SQLSelect(
                         columns=[
@@ -3072,11 +3086,14 @@ class QueryMixin:
                     sort_by = None
                     if _sort_ident_name and _sort_ident_name in _col_aliases:
                         sort_by = SQLIdentifier(name=_sort_ident_name)
+                    elif _sort_ident_name and _sort_ident_name in self.context.let_variables:
+                        # Let-binding identifier (e.g. CrLabTime from a let clause) —
+                        # use the already-translated SQL expression directly.
+                        sort_by = self.context.let_variables[_sort_ident_name]
                     elif not _sort_ident_name:
                         # Complex expression (e.g. effective.earliest()) — translate
                         sort_by = self.translate(sort_item.expression, usage=ExprUsage.SCALAR)
-                    # else: identifier doesn't match any output column — skip sort
-                    # to avoid referencing out-of-scope query aliases
+                    # else: simple identifier not in columns or let variables — skip sort
                     if sort_by is not None:
                         result = SQLSelect(
                             columns=result.columns,

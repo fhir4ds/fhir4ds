@@ -169,7 +169,10 @@ def abs(ctx, x):
         return FP_Quantity(Decimal(data.value).copy_abs(), data.unit)
 
     num = ensure_number_singleton(x)
-    return Decimal(num).copy_abs()
+    result = Decimal(num).copy_abs()
+    if isinstance(num, int):
+        return int(result)
+    return result
 
 
 def ceiling(ctx, x):
@@ -205,11 +208,15 @@ def ln(ctx, x):
 
 
 def log(ctx, x, base):
+    """FHIRPath §5.7.2 — log() returns empty for undefined inputs."""
     if is_empty(x) or is_empty(base):
         return []
 
     num = Decimal(ensure_number_singleton(x))
     num2 = Decimal(ensure_number_singleton(base))
+
+    if num <= 0 or num2 <= 0 or num2 == 1:
+        return []
 
     return (num.ln() / num2.ln()).quantize(Decimal("1.000000000000000"))
 

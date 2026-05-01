@@ -87,6 +87,11 @@ class FHIRPathEvaluator:
             pass
         # No fhirpath module available, will use built-in evaluator
         self._fhirpath_module = None
+        _logger.warning(
+            "No FHIRPath parser available (fhirpathpy or fhir4ds.fhirpath). "
+            "Falling back to limited built-in evaluator. Complex FHIRPath "
+            "expressions (functions, where-clauses) will not work correctly."
+        )
 
     def _requires_builtin_evaluator(self, expression: str) -> bool:
         """

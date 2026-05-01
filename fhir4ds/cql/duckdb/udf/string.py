@@ -15,8 +15,19 @@ if TYPE_CHECKING:
 
 
 import logging
+import re as _re
 
 _logger = logging.getLogger(__name__)
+
+# Maximum regex pattern length to accept (guard against excessively large patterns)
+_MAX_REGEX_LENGTH = 1000
+
+# Patterns indicative of catastrophic backtracking (ReDoS).
+# Detects nested quantifiers like (a+)+ and quantified alternations like (a|a)+.
+_REDOS_PATTERNS = _re.compile(
+    r'(\((?:[^()]*[+*])[^()]*\)[+*?]'  # nested quantifier
+    r'|\((?:[^()]*\|[^()]*)\)[+*])'     # quantified alternation
+)
 def stringLength(s: str | None) -> int | None:
     """CQL Length() - character count."""
     if s is None:
@@ -103,6 +114,12 @@ def stringContains(s: str | None, substring: str) -> bool | None:
 def stringMatches(s: str | None, pattern: str) -> bool | None:
     """CQL Matches(s, pattern) - regex match."""
     if s is None:
+        return None
+    if len(pattern) > _MAX_REGEX_LENGTH:
+        _logger.warning("UDF stringMatches: pattern exceeds max length (%d)", len(pattern))
+        return None
+    if _REDOS_PATTERNS.search(pattern):
+        _logger.warning("UDF stringMatches: pattern rejected (potential ReDoS)")
         return None
     import re
     try:

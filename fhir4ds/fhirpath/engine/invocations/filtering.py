@@ -104,15 +104,17 @@ def tail_fn(ctx, x):
 
 
 def take_fn(ctx, x, n):
-    if len(x) == 0:
+    n = int(n)
+    if len(x) == 0 or n <= 0:
         return []
-    return x[: int(n)]
+    return x[:n]
 
 
 def skip_fn(ctx, x, n):
-    if len(x) == 0:
-        return []
-    return x[int(n) :]
+    n = int(n)
+    if len(x) == 0 or n <= 0:
+        return list(x)
+    return x[n:]
 
 
 def of_type_fn(ctx, coll, tp):

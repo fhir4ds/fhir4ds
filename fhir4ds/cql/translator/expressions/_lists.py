@@ -777,7 +777,7 @@ class ListsMixin:
             col = "value"
             if meta:
                 col = "resource" if meta.has_resource else (meta.value_column or "value")
-            _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+            _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
             # Build: list_distinct((SELECT COALESCE(LIST(cte.col), []) FROM cte WHERE cte.patient_id = outer.patient_id))
             # Wrap the SELECT in SQLSubquery inside SQLFunctionCall so the CTE builder
             # does not unwrap it (it only unwraps top-level SQLSubquery → SQLSelect).
@@ -1071,7 +1071,7 @@ class ListsMixin:
             return source_sql
 
         # Add patient correlation: the subquery must be correlated to the outer
-        # _patients CTE (alias "p") so each patient gets their own First/Last value.
+        # _patients CTE (alias "_pt") so each patient gets their own First/Last value.
         # Determine source alias from the FROM clause for qualification.
         src_alias = None
         if isinstance(from_clause, SQLAlias):
@@ -1102,7 +1102,7 @@ class ListsMixin:
         patient_corr = SQLBinaryOp(
             left=SQLQualifiedIdentifier(parts=[src_alias, "patient_id"]) if src_alias else SQLIdentifier(name="patient_id"),
             operator="=",
-            right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+            right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
         )
         if where_sql is not None:
             where_sql = SQLBinaryOp(left=where_sql, operator="AND", right=patient_corr)
@@ -1981,9 +1981,9 @@ class ListsMixin:
             # Create a correlated EXISTS subquery for the CTE
             # Build correlation WHERE clause for patient context
             # Always correlate on patient_id. During translate_library(),
-            # patient_alias is None; fall back to "p" which gets fixed up
+            # patient_alias is None; fall back to "_pt" which gets fixed up
             # later by replace_qualified_alias in translator.py.
-            outer_alias = self.context.patient_alias or "p"
+            outer_alias = self.context.patient_alias or "_pt"
             if self.context.current_patient_id:
                 correlation_where = SQLBinaryOp(
                     operator="=",

@@ -258,7 +258,8 @@ class Constant:
         value_type = None
         value = None
 
-        # Check for various value types in order of specificity
+        # Check for various value types in order of specificity.
+        # Must stay in sync with parser.py:_parse_constant().
         value_fields = [
             ("valueCodeableConcept", "CodeableConcept"),
             ("valueCoding", "Coding"),
@@ -270,6 +271,15 @@ class Constant:
             ("valueDate", "date"),
             ("valueDateTime", "dateTime"),
             ("valueTime", "time"),
+            ("valueInstant", "instant"),
+            ("valueUri", "uri"),
+            ("valueUrl", "url"),
+            ("valueUuid", "uuid"),
+            ("valueOid", "oid"),
+            ("valueBase64Binary", "base64Binary"),
+            ("valueId", "id"),
+            ("valuePositiveInt", "positiveInt"),
+            ("valueUnsignedInt", "unsignedInt"),
         ]
 
         for field_name, vtype in value_fields:

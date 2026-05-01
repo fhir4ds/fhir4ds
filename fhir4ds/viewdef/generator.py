@@ -16,9 +16,11 @@ Type mapping (FHIRPath type -> DuckDB UDF):
     - CodeableConcept -> fhirpath_json()
 """
 
+import json
 import re
 import copy
 import logging
+from pathlib import Path
 from typing import List, Optional, Set, Tuple
 
 from .utils import pluralize_resource
@@ -44,6 +46,14 @@ from .errors import ValidationError
 
 from .unnest import generate_foreach_unnest, generate_foreachornull_unnest, generate_repeat_unnest
 from .constants import ConstantResolver
+
+
+def _load_fhir_array_elements() -> set:
+    """Load FHIR array element names from metadata config."""
+    config_path = Path(__file__).parent / "resources" / "fhir_array_elements.json"
+    with open(config_path) as f:
+        data = json.load(f)
+    return set(data.get("elements", []))
 
 
 class SQLGenerator:
@@ -291,7 +301,8 @@ class SQLGenerator:
 
     # Built-in variables recognised by the SQL-on-FHIR v2 spec that do NOT
     # need to appear in the ViewDefinition's ``constants`` section.
-    _BUILTIN_VARIABLES = {"rowIndex"}
+    # Imported from the canonical definition in constants.py.
+    from .constants import FHIRPATH_BUILTIN_VARIABLES as _BUILTIN_VARIABLES
 
     def _extract_constant_references(self, path: str) -> Set[str]:
         """Extract all constant references (%name) from a FHIRPath expression.
@@ -406,40 +417,10 @@ class SQLGenerator:
             )
 
     # Known FHIR R4 array element names (max cardinality = *).
-    # Derived from StructureDefinition snapshots in fhir4ds/cql/resources/fhir/r4/.
+    # Loaded from resources/fhir_array_elements.json at module init.
     # Excludes ambiguous names that are predominantly scalar (code, type, location,
     # class, performerType, statusReason) to avoid false positives in heuristic checks.
-    _FHIR_ARRAY_ELEMENTS = {
-        'about', 'account', 'address', 'appliesTo', 'appointment', 'assessment',
-        'authorizingPrescription', 'basedOn', 'batch', 'bodySite',
-        'category', 'classHistory', 'communication', 'complication',
-        'complicationDetail', 'component', 'conclusionCode', 'contact', 'contained',
-        'contract', 'costToBeneficiary',
-        'definition', 'derivedFrom', 'destination', 'detail', 'detectedIssue', 'device',
-        'diagnosis', 'dietPreference', 'dosageInstruction',
-        'education', 'entry', 'episodeOfCare', 'eventHistory', 'evidence', 'exception',
-        'extension',
-        'focalDevice', 'focus', 'followUp',
-        'generalPractitioner', 'given',
-        'hasMember',
-        'identifier', 'imagingStudy', 'ingredient', 'input', 'instantiates',
-        'instantiatesCanonical', 'instantiatesUri', 'insurance', 'interpretation',
-        'line', 'link',
-        'manifestation', 'media', 'medium', 'modifierExtension',
-        'name', 'note',
-        'orderDetail', 'output',
-        'parameter', 'partOf', 'participant', 'payload', 'payor', 'performer',
-        'photo', 'prefix', 'presentedForm', 'priorRequest',
-        'programEligibility', 'protocolApplied',
-        'reaction', 'reason', 'reasonCode', 'reasonReference', 'receiver', 'recipient',
-        'referenceRange', 'relationship', 'relevantHistory', 'replaces', 'report',
-        'responsibleParty', 'result', 'resultsInterpreter',
-        'sender', 'source', 'specialArrangement', 'specialCourtesy', 'specimen', 'stage',
-        'statusHistory', 'subpotentReason', 'suffix', 'supportingInfo',
-        'supportingInformation',
-        'targetDisease', 'telecom',
-        'usedCode', 'usedReference',
-    }
+    _FHIR_ARRAY_ELEMENTS = _load_fhir_array_elements()
 
     # Patterns that indicate singleton access (not returning multiple values)
     _SINGLETON_PATTERNS = [
@@ -557,47 +538,49 @@ class SQLGenerator:
         validate_select_columns(view_definition.select)
 
     def _validate_unique_column_names(self, view_definition: ViewDefinition) -> None:
-        """Validate that column names are unique within a single select scope.
+        """Validate that column names are unique across the entire select tree.
 
         Per SQL-on-FHIR v2 spec, column names in a ViewDefinition's output
-        must be unique within each select scope. Names within unionAll branches
-        are expected to match (they contribute to the same UNION ALL output).
-        Sibling selects with unionAll at the top level may share names across
-        their branches as they produce independent column groups.
-
-        This validates within each individual select's direct columns plus
-        nested selects (non-unionAll) for duplicates.
+        must be unique across all selects — including siblings and parent-child
+        relationships. Names within unionAll branches are expected to match
+        (they contribute to the same UNION ALL output) and are not checked
+        against siblings.
 
         Args:
             view_definition: The ViewDefinition to validate
 
         Raises:
-            ValidationError: If duplicate column names are found within a single select
+            ValidationError: If duplicate column names are found
         """
-        def validate_select(sel: Select, path: str = "select") -> None:
-            """Check for duplicates within a single select's own columns."""
-            names: List[str] = [col.name for col in sel.column]
-            seen: Set[str] = set()
-            duplicates: Set[str] = set()
-            for name in names:
-                if name in seen:
-                    duplicates.add(name)
-                seen.add(name)
-            if duplicates:
-                raise ValidationError(
-                    f"Duplicate column names in {path}: {sorted(duplicates)}. "
-                    f"Column names must be unique per the SQL-on-FHIR v2 specification.",
-                    details={"duplicate_names": sorted(duplicates), "path": path}
-                )
-            # Recurse into nested selects
+        def collect_names(sel: Select, path: str) -> List[Tuple[str, str]]:
+            """Collect (name, path) pairs from a select and its descendants."""
+            pairs = [(col.name, f"{path}.column[{i}]") for i, col in enumerate(sel.column)]
             for i, nested in enumerate(sel.select):
-                validate_select(nested, f"{path}.select[{i}]")
-            # Recurse into unionAll branches
-            for i, branch in enumerate(sel.unionAll):
-                validate_select(branch, f"{path}.unionAll[{i}]")
+                pairs.extend(collect_names(nested, f"{path}.select[{i}]"))
+            # unionAll branches share columns with their parent — skip sibling checks
+            return pairs
 
+        all_names: List[Tuple[str, str]] = []
         for i, sel in enumerate(view_definition.select):
-            validate_select(sel, f"select[{i}]")
+            all_names.extend(collect_names(sel, f"select[{i}]"))
+
+        seen: dict[str, str] = {}
+        duplicates: dict[str, List[str]] = {}
+        for name, path in all_names:
+            if name in seen:
+                if name not in duplicates:
+                    duplicates[name] = [seen[name]]
+                duplicates[name].append(path)
+            else:
+                seen[name] = path
+
+        if duplicates:
+            dup_names = sorted(duplicates.keys())
+            raise ValidationError(
+                f"Duplicate column names across select tree: {dup_names}. "
+                f"Column names must be unique per the SQL-on-FHIR v2 specification.",
+                details={"duplicate_names": dup_names, "locations": duplicates}
+            )
 
     def _validate_foreach_mutual_exclusion(self, selects: List[Select]) -> None:
         """Validate that no select uses both forEach and forEachOrNull.
@@ -753,6 +736,7 @@ class SQLGenerator:
 
         for select in selects:
             current_var = resource_var
+            in_foreach_or_null = False
 
             # Establish a repeat context (CROSS JOIN LATERAL with recursive UDF)
             if select.repeat:
@@ -778,20 +762,24 @@ class SQLGenerator:
                     generate_foreachornull_unnest(resolved_foreach, current_var, alias)
                 )
                 current_var = alias
+                in_foreach_or_null = True
 
             # Generate column expressions using the current (possibly forEach) context
             for col in select.column:
                 column_exprs.append(self.generate_column_expr(col, current_var))
 
-            # WHERE conditions use the current context variable
+            # WHERE conditions use the current context variable.
+            # For forEachOrNull contexts, NULL rows (absent path) must be
+            # preserved — wrap the condition so NULLs pass through.
             for w in select.where:
                 path = w.get("path", "") if isinstance(w, dict) else ""
                 if path:
                     resolved = self._resolve_path(path)
                     escaped = resolved.replace("'", "''")
-                    where_conditions.append(
-                        f"fhirpath_bool({current_var}, '{escaped}') = true"
-                    )
+                    cond = f"fhirpath_bool({current_var}, '{escaped}') = true"
+                    if in_foreach_or_null:
+                        cond = f"({current_var} IS NULL OR {cond})"
+                    where_conditions.append(cond)
 
             # Recurse into nested selects passing the current forEach context down
             if select.select:

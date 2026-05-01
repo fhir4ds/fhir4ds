@@ -21,16 +21,17 @@ def register_fhirpath(con: "duckdb.DuckDBPyConnection") -> bool:
     Register FHIRPath UDFs on the given DuckDB connection.
 
     Tries the bundled C++ extension first; falls back to Python UDFs.
-    Returns True if the C++ extension was loaded.
+    Returns True if the C++ extension was loaded, False if Python fallback is used.
     """
+    import duckdb as _duckdb_mod
+    if not isinstance(con, _duckdb_mod.DuckDBPyConnection):
+        raise TypeError(
+            f"Expected a DuckDB connection for 'con', got {type(con).__name__}"
+        )
     from fhir4ds.fhirpath.duckdb.extension import register_fhirpath as _register
-    # _register internally tries the bundled C++ extension first, then Python UDFs
-    _register(con)
-    # Detect whether C++ was used by checking if the extension file exists and loaded
     from fhir4ds.fhirpath.duckdb.extension import _try_load_bundled_cpp_extension as _check
-    from pathlib import Path
-    ext = Path(_check.__code__.co_filename).parent / "extensions" / "fhirpath.duckdb_extension"
-    return ext.exists()  # best-effort; actual load success is logged by _register
+    _register(con)
+    return _check(con)
 
 
 def register_cql(
@@ -48,7 +49,13 @@ def register_cql(
     Returns True if the CQL C++ extension was loaded.
     """
     import logging
+    import duckdb as _duckdb_mod
     _logger = logging.getLogger("fhir4ds.core")
+
+    if not isinstance(con, _duckdb_mod.DuckDBPyConnection):
+        raise TypeError(
+            f"Expected a DuckDB connection for 'con', got {type(con).__name__}"
+        )
 
     from fhir4ds.fhirpath.duckdb.extension import register_fhirpath as _fhirpath_register
 
@@ -87,19 +94,21 @@ def register_cql(
     from fhir4ds.cql.duckdb.udf.logical import registerLogicalUdfs
 
     class _SafeConnection:
-        """Proxy that wraps create_function to skip C++ conflicts."""
+        """Proxy that wraps create_function to skip conflicts and duplicates."""
         def __init__(self, real_con, logger):
             object.__setattr__(self, '_real', real_con)
             object.__setattr__(self, '_logger', logger)
         def create_function(self, name, *args, **kwargs):
             try:
                 return self._real.create_function(name, *args, **kwargs)
-            except Exception as e:
-                self._logger.debug("Skipping Python UDF %s (C++ conflict): %s", name, e)
+            except (_duckdb_mod.CatalogException, _duckdb_mod.InvalidInputException,
+                    _duckdb_mod.NotImplementedException) as e:
+                self._logger.debug("Skipping UDF %s (already registered or conflict): %s", name, e)
         def __getattr__(self, name):
             return getattr(self._real, name)
 
-    reg_con = _SafeConnection(con, _logger) if cql_cpp else con
+    # Always use _SafeConnection for idempotent registration
+    reg_con = _SafeConnection(con, _logger)
 
     for fn, label in [
         (registerAgeUdfs, "age"), (registerAggregateUdfs, "aggregate"),
@@ -112,7 +121,8 @@ def register_cql(
     ]:
         try:
             fn(reg_con)
-        except Exception as e:
+        except (_duckdb_mod.CatalogException, _duckdb_mod.InvalidInputException,
+                _duckdb_mod.NotImplementedException) as e:
             _logger.debug("UDF group %s registration: %s", label, e)
 
     # Step 2b: Always register SQL macros — they supplement both C++ and Python UDFs
@@ -120,8 +130,9 @@ def register_cql(
     from fhir4ds.cql.duckdb.macros import register_all_macros
     try:
         register_all_macros(con)
-    except Exception:
-        pass  # some macros may conflict with C++ functions; that's OK
+    except (_duckdb_mod.CatalogException, _duckdb_mod.InvalidInputException,
+            _duckdb_mod.NotImplementedException):
+        pass  # macros may already exist; that's OK
 
     # Step 3: ValueSet expansion always uses Python
     if valueset_cache is not None:
@@ -143,6 +154,9 @@ def register(
     FHIRPath registration, so ``register_fhirpath`` is only needed when
     you want FHIRPath alone without the full CQL UDF set.
 
+    This function is idempotent — calling it multiple times on the same
+    connection is safe and will skip already-registered UDFs.
+
     Parameters
     ----------
     con : duckdb.DuckDBPyConnection
@@ -152,6 +166,20 @@ def register(
     Returns
     -------
     dict  ``{"fhirpath_cpp": bool, "cql_cpp": bool}``
+
+    Raises
+    ------
+    TypeError
+        If *con* is not a DuckDB connection.
     """
+    if con is None:
+        raise TypeError(
+            "Expected a DuckDB connection for 'con', got None"
+        )
+    import duckdb as _duckdb_mod
+    if not isinstance(con, _duckdb_mod.DuckDBPyConnection):
+        raise TypeError(
+            f"Expected a DuckDB connection for 'con', got {type(con).__name__}"
+        )
     cql_cpp = register_cql(con, valueset_cache=valueset_cache)
     return {"fhirpath_cpp": cql_cpp, "cql_cpp": cql_cpp}

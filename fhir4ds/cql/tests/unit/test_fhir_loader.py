@@ -455,3 +455,14 @@ def test_bundle_deduplication(loader, duckdb_con):
 
     assert loader.count("Patient") == 1
     assert loader.count("Observation") == 1
+
+
+# ---------------------------------------------------------------------------
+# QA-006: load_bundle(None) must raise TypeError, not AttributeError
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("bad_input", [None, 42, "not-a-dict", []])
+def test_load_bundle_rejects_non_dict(loader, bad_input):
+    """load_bundle must raise TypeError for non-dict inputs (QA-006)."""
+    with pytest.raises(TypeError, match="Expected dict for bundle"):
+        loader.load_bundle(bad_input)

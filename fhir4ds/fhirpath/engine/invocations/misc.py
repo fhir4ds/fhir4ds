@@ -1,9 +1,12 @@
+import logging
 import re
 from decimal import Decimal
 
 from ...engine import util as util
 from ...engine import nodes as nodes
 from ...engine.errors import FHIRPathError
+
+_logger = logging.getLogger(__name__)
 
 # This file holds code to hande the FHIRPath Existence functions (5.1 in the
 # specification).
@@ -95,11 +98,23 @@ def to_quantity(ctx, coll, to_unit=None):
                 unit = quantity_regex_res.group(quantity_regex_map["unit"])
                 time = quantity_regex_res.group(quantity_regex_map["time"])
 
-                if not time or nodes.FP_Quantity.timeUnitsToUCUM.get(time):
-                    result = nodes.FP_Quantity(Decimal(value), unit or time or "'1'")
+                if not time:
+                    result = nodes.FP_Quantity(Decimal(value), unit or "'1'")
+                elif nodes.FP_Quantity.timeUnitsToUCUM.get(time) or nodes.FP_Quantity.timeUnitsToUCUM.get(time.lower()):
+                    result = nodes.FP_Quantity(Decimal(value), time.lower() if not nodes.FP_Quantity.timeUnitsToUCUM.get(time) else time)
+                # else: unquoted non-time-keyword units (e.g. 'wk', 'mg')
+                # are not valid per FHIRPath §2.6.4; only UCUM-quoted units
+                # (within single quotes in the string) or FHIRPath time
+                # keywords are accepted.
 
         if result and to_unit and result.unit != to_unit:
-            result = nodes.FP_Quantity.conv_unit_to(result.unit, result.value, to_unit)
+            converted = nodes.FP_Quantity.conv_unit_to(result.unit, result.value, to_unit)
+            if not converted:
+                _logger.debug(
+                    "Unit conversion from %s to %s failed — returning empty",
+                    result.unit, to_unit,
+                )
+            result = converted
 
     return result if result else []
 

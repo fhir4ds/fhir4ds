@@ -56,6 +56,8 @@ class ProfileRegistry:
         self._extension_paths: Optional[dict] = None
         self._raw_component_profile_keywords: Optional[list] = None
         self._component_profile_keywords: Optional[list] = None
+        self._raw_component_resource_types: Optional[list] = None
+        self._component_resource_types_set: Optional[set] = None
         self._fallback_prefixes: tuple = self._FALLBACK_PREFIXES
 
     @classmethod
@@ -77,6 +79,9 @@ class ProfileRegistry:
         )
         registry._raw_component_profile_keywords = (
             data.get("component_profile_keywords", {}).get("keywords", [])
+        )
+        registry._raw_component_resource_types = (
+            data.get("component_resource_types", {}).get("types", [])
         )
         raw_prefixes = data.get("profile_name_prefixes")
         if raw_prefixes:
@@ -128,6 +133,13 @@ class ProfileRegistry:
         if self._component_profile_keywords is None:
             self._component_profile_keywords = self._raw_component_profile_keywords or []
         return self._component_profile_keywords
+
+    @property
+    def component_resource_types(self) -> set:
+        """Resource types that support component elements for composite observations."""
+        if self._component_resource_types_set is None:
+            self._component_resource_types_set = set(self._raw_component_resource_types or [])
+        return self._component_resource_types_set
 
     # --- Lookups replacing QICORE_PROFILE_PATTERNS ---
 

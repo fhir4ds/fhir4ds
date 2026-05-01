@@ -1,6 +1,22 @@
-[submodule "benchmarking/ecqm-content-qicore-2025"]
+[submodule "tests/data/ecqm-content-qicore-2025"]
 	path = tests/data/ecqm-content-qicore-2025
 	url = https://github.com/cqframework/ecqm-content-qicore-2025
 [submodule "tests/data/dqm-content-qicore-2026"]
 	path = tests/data/dqm-content-qicore-2026
 	url = https://github.com/cqframework/dqm-content-qicore-2026
+[submodule "extensions/fhirpath/duckdb"]
+	path = extensions/fhirpath/duckdb
+	url = https://github.com/duckdb/duckdb
+	branch = v1.5.2
+[submodule "extensions/cql/duckdb"]
+	path = extensions/cql/duckdb
+	url = https://github.com/duckdb/duckdb
+	branch = v1.5.2
+[submodule "extensions/fhirpath/extension-ci-tools"]
+	path = extensions/fhirpath/extension-ci-tools
+	url = https://github.com/duckdb/extension-ci-tools
+	branch = main
+[submodule "extensions/cql/extension-ci-tools"]
+	path = extensions/cql/extension-ci-tools
+	url = https://github.com/duckdb/extension-ci-tools
+	branch = main

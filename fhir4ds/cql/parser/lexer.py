@@ -1149,6 +1149,10 @@ class Lexer:
 
         value = datetime_chars
 
+        # Validate date/time components
+        if value:
+            self._validate_datetime_literal(value, start_line, start_col)
+
         # Determine if it's a date, datetime, or time
         if "T" in value:
             self.tokens.append(Token(TokenType.DATETIME, value, start_line, start_col))
@@ -1157,6 +1161,52 @@ class Lexer:
             self.tokens.append(Token(TokenType.TIME, value, start_line, start_col))
         else:
             self.tokens.append(Token(TokenType.DATE, value, start_line, start_col))
+
+    def _validate_datetime_literal(self, value: str, line: int, col: int) -> None:
+        """Validate date/time literal components are within valid ranges."""
+        import re
+        # Extract date portion (before T)
+        date_part = value.split("T")[0] if "T" in value else value
+        # Only validate if it looks like a date (has dashes)
+        if "-" not in date_part:
+            return
+        parts = date_part.split("-")
+        if len(parts) >= 1:
+            year = parts[0]
+            if not year.isdigit() or len(year) != 4:
+                raise LexerError(f"Invalid year in date literal @{value} at line {line}, column {col}")
+        if len(parts) >= 2:
+            month = parts[1]
+            if month.isdigit():
+                m = int(month)
+                if m < 1 or m > 12:
+                    raise LexerError(f"Invalid month {m} in date literal @{value} at line {line}, column {col} (must be 1-12)")
+        if len(parts) >= 3:
+            day = parts[2]
+            if day.isdigit():
+                d = int(day)
+                if d < 1 or d > 31:
+                    raise LexerError(f"Invalid day {d} in date literal @{value} at line {line}, column {col} (must be 1-31)")
+        # Validate time portion if present
+        if "T" in value:
+            time_part = value.split("T")[1]
+            # Strip timezone
+            time_only = re.split(r"[Z+-]", time_part)[0]
+            time_parts = time_only.split(":")
+            if len(time_parts) >= 1 and time_parts[0].isdigit():
+                h = int(time_parts[0])
+                if h > 23:
+                    raise LexerError(f"Invalid hour {h} in datetime literal @{value} at line {line}, column {col} (must be 0-23)")
+            if len(time_parts) >= 2 and time_parts[1].isdigit():
+                mi = int(time_parts[1])
+                if mi > 59:
+                    raise LexerError(f"Invalid minute {mi} in datetime literal @{value} at line {line}, column {col} (must be 0-59)")
+            if len(time_parts) >= 3:
+                sec_str = time_parts[2].split(".")[0]
+                if sec_str.isdigit():
+                    s = int(sec_str)
+                    if s > 59:
+                        raise LexerError(f"Invalid second {s} in datetime literal @{value} at line {line}, column {col} (must be 0-59)")
 
     def _read_number(self) -> None:
         """Read an integer or decimal number."""

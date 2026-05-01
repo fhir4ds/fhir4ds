@@ -17,6 +17,7 @@ def evaluate_measure(
     *,
     output_columns: dict[str, str] | None = None,
     parameters: dict[str, Any] | None = None,
+    audit_mode: str = "none",
     **kwargs: Any,
 ) -> Any:
     """
@@ -33,6 +34,10 @@ def evaluate_measure(
         Pass ``None`` (the default) to return all CQL definitions.
     parameters : dict, optional
         CQL parameter overrides (e.g. ``{"Measurement Period": (start, end)}``).
+    audit_mode : str, optional
+        Controls audit granularity: ``"none"`` (default), ``"population"``
+        (lightweight evidence from retrieve CTEs), or ``"full"`` (expression-
+        level wrapping for maximum evidence detail).
     **kwargs
         Additional keyword arguments passed through to the underlying evaluator
         (e.g. ``verbose``, ``patient_ids``, ``include_paths``).
@@ -43,10 +48,16 @@ def evaluate_measure(
     """
     from fhir4ds.cql import evaluate_measure as _evaluate
 
+    if conn is None:
+        raise TypeError(
+            "Expected a DuckDB connection for 'conn', got None"
+        )
+
     call_kwargs: dict[str, Any] = {
         "library_path": library_path,
         "conn": conn,
         "parameters": parameters or {},
+        "audit_mode": audit_mode,
     }
     # Preserve None semantics: None means "all definitions"
     if output_columns is not None:

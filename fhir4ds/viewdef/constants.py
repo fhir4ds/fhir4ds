@@ -28,6 +28,11 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .types import Constant
 
+# Canonical set of SQL-on-FHIR v2 built-in variables that are resolved at
+# evaluation time (not user-defined constants).  Used by both the constant
+# resolver and the SQL generator for validation.
+FHIRPATH_BUILTIN_VARIABLES = {"rowIndex", "context", "resource", "rootResource", "ucum"}
+
 _logger = logging.getLogger(__name__)
 
 
@@ -248,10 +253,7 @@ def resolve_constants_in_path(path: str, constants: dict[str, Constant]) -> str:
         # Spec-compliant FHIRPath context variables (%context, %resource, etc.)
         # should pass through unchanged — they are resolved at evaluation time.
         # However, undefined user constants should raise an error.
-        _FHIRPATH_CONTEXT_VARS = {
-            "context", "resource", "rootResource", "ucum",
-        }
-        if const_name in _FHIRPATH_CONTEXT_VARS:
+        if const_name in FHIRPATH_BUILTIN_VARIABLES:
             return match.group(0)
         _logger.warning(
             "Undefined constant reference '%%%s' in FHIRPath expression. "

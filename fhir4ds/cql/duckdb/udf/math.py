@@ -160,7 +160,8 @@ def _step_value(x, direction: int) -> str | float | int | None:
                 v = q.get('value', 0)
                 q['value'] = float(Decimal(str(v)) + direction * Decimal("0.00000001"))
                 return _json.dumps(q)
-            except Exception:
+            except Exception as e:
+                _logger.debug("Unexpected error in UDF _step_value quantity parse: %s", e)
                 return None
         # Date/datetime string
         try:
@@ -176,7 +177,8 @@ def _step_value(x, direction: int) -> str | float | int | None:
         try:
             v = Decimal(x_stripped)
             return float(v + direction * Decimal("0.00000001"))
-        except Exception:
+        except Exception as e:
+            _logger.debug("Unexpected error in UDF _step_value numeric parse: %s", e)
             return None
     if isinstance(x, Decimal) or isinstance(x, float):
         step = Decimal("0.00000001")
@@ -429,7 +431,8 @@ def cqlPrecision(value) -> int | None:
         if exp >= 0:
             return 0
         return -exp  # number of decimal places
-    except Exception:
+    except Exception as e:
+        _logger.debug("Unexpected error in UDF cqlPrecision decimal parse: %s", e)
         return len(s)
 
 

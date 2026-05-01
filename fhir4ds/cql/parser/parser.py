@@ -815,6 +815,10 @@ class CQLParser:
                 elif self.match_and_advance(TokenType.IN):
                     right = self.parse_type_expression()
                     left = BinaryExpression(operator="properly in", left=left, right=right)
+                elif self.match_and_advance(TokenType.DURING):
+                    # CQL §9.17: "properly during" is a synonym for "properly included in"
+                    right = self.parse_type_expression()
+                    left = BinaryExpression(operator="properly included in", left=left, right=right)
                 else:
                     # Unknown properly combination
                     break
@@ -1779,7 +1783,13 @@ class CQLParser:
     def _parse_parenthesized_or_tuple(self) -> Expression:
         """Parse a parenthesized expression or tuple."""
         self.expect(TokenType.LPAREN, "Expected '('")
-        expr = self.parse_expression()
+        try:
+            expr = self.parse_expression()
+        except RecursionError:
+            raise ParseError(
+                message="Expression exceeds maximum nesting depth. "
+                "Simplify the expression or reduce parenthesization."
+            ) from None
 
         if self.match_and_advance(TokenType.COMMA):
             # This is a tuple
@@ -2061,11 +2071,13 @@ class CQLParser:
 
     def _parse_identifier_or_function(self) -> Expression:
         """Parse an identifier that may be a function call."""
+        prev_token = self.peek()
+        is_quoted = prev_token and prev_token.type == TokenType.QUOTED_IDENTIFIER
         name = self._parse_identifier_name()
 
         # Check for function call with parentheses
         if self.match(TokenType.LPAREN):
-            return self._parse_function_call(Identifier(name=name))
+            return self._parse_function_call(Identifier(name=name, quoted=is_quoted))
 
         # Check for function call with curly braces (e.g., collapse { ... }, expand { ... })
         # This is valid CQL syntax for aggregate functions that take a list
@@ -2082,7 +2094,7 @@ class CQLParser:
                 return FunctionRef(name=name, arguments=[interval_arg, per_value])
             return FunctionRef(name=name, arguments=[interval_arg])
 
-        return Identifier(name=name)
+        return Identifier(name=name, quoted=is_quoted)
 
     def _parse_function_call_with_braces(self, name: str) -> FunctionRef:
         """Parse a function call with curly brace syntax (e.g., collapse { ... })."""

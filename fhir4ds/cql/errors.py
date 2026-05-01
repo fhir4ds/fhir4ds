@@ -7,7 +7,7 @@ Provides a hierarchy of exceptions for different stages of CQL processing.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 
 @dataclass
@@ -101,6 +101,26 @@ class SemanticError(CQLError):
 
 
 @dataclass
+class CircularIncludeError(TranslationError):
+    """Raised when CQL libraries form a circular include dependency."""
+
+    library_path: Optional[str] = None
+    include_chain: Optional[list] = None
+
+    def _format_message(self) -> str:
+        parts = []
+        if self.position:
+            parts.append(f"Line {self.position[0]}, Column {self.position[1]}: ")
+        parts.append(self.message)
+        if self.include_chain:
+            chain_str = " -> ".join(self.include_chain)
+            parts.append(f"\n  Include chain: {chain_str}")
+        if self.suggestion:
+            parts.append(f"\n  Suggestion: {self.suggestion}")
+        return "".join(parts)
+
+
+@dataclass
 class UnsupportedFeatureError(CQLError):
     """Raised when a CQL feature is not yet supported."""
 
@@ -176,6 +196,7 @@ def type_mismatch(
 
 __all__ = [
     "CQLError",
+    "CircularIncludeError",
     "LexerError",
     "ParseError",
     "TranslationError",

@@ -165,6 +165,7 @@ class ExpressionTranslator(
             "populationstddev": "STDDEV_POP",
             "stddevpop": "STDDEV_POP",
             "distinct": "list_distinct",
+            "flatten": "flatten",
         }
         for cql, sql in _RENAMES.items():
             registry.register_rename(cql, sql)
@@ -319,6 +320,10 @@ class ExpressionTranslator(
                       'properly includes', 'properly included in',
                       'meets', 'meets before', 'meets after',
                       'contains'):
+                return True
+            # Precision-qualified same operators: "same or before month of",
+            # "same month or before", "same day as", etc.
+            if op.startswith('same '):
                 return True
         # Identifier reference: follow the chain
         if isinstance(cql_ast, CQLIdentifier):

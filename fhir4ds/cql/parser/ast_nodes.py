@@ -350,9 +350,11 @@ class Identifier(Expression):
 
     Attributes:
         name: The identifier name.
+        quoted: True if the identifier was double-quoted in CQL source.
     """
 
     name: str
+    quoted: bool = False
 
 
 @dataclass

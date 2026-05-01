@@ -7,7 +7,7 @@ Native C++ DuckDB extension implementing a FHIRPath evaluation engine. Evaluates
 Requires: Visual Studio 2022 (or compatible C++ compiler), CMake 3.5+
 
 ```bash
-# 1. Ensure submodules are present (duckdb @ v1.5.0, extension-ci-tools)
+# 1. Ensure submodules are present (duckdb @ v1.5.2, extension-ci-tools)
 git submodule update --init --recursive
 
 # 2. Configure
@@ -28,7 +28,7 @@ On Windows with VS 2022, use the full cmake path:
 
 ## DuckDB Version Compatibility
 
-Pinned to **DuckDB v1.5.0**. Key constraints:
+Pinned to **DuckDB v1.5.2**. Key constraints:
 
 - **C++11 only** — DuckDB compiles with C++11. No `std::optional`, `std::variant`, `std::string_view`, structured bindings, or other C++17+ features.
 - **yyjson namespace** — yyjson types are wrapped in `namespace duckdb_yyjson`. Use `using namespace duckdb_yyjson;` in .cpp files. Forward declarations must be inside `namespace duckdb_yyjson {}`.

@@ -15,6 +15,7 @@ graph TD
     fhir4ds --> cql[cql]
     fhir4ds --> viewdef[viewdef]
     fhir4ds --> dqm[dqm]
+    fhir4ds --> sources[sources]
     
     classDef default fill:#1e293b,stroke:#38bdf8,color:#cbd5e1,stroke-width:1px
     classDef primary fill:#38bdf8,stroke:#0ea5e9,color:#0f172a,stroke-width:2px
@@ -30,7 +31,8 @@ The most common entry points are exposed directly at the package root:
 ```python
 from fhir4ds import (
     create_connection,    # Get a pre-configured connection
-    register,             # Register UDFs on an existing connection
+    attach,               # Register a Zero-ETL data source
+    detach,               # Unregister a data source
     evaluate_measure,     # End-to-end quality measure evaluation
     generate_view_sql,    # ViewDefinition → SQL
 )
@@ -41,7 +43,7 @@ from fhir4ds import (
 ## 2. Function Reference
 
 ### `create_connection`
-`create_connection(database=":memory:", *, allow_unsigned_extensions=True, register_udfs=True, **kwargs) -> duckdb.DuckDBPyConnection`
+`create_connection(database=":memory:", *, allow_unsigned_extensions=True, register_udfs=True, source=None, **kwargs) -> duckdb.DuckDBPyConnection`
 
 The recommended way to start. Returns a DuckDB connection with all FHIRPath and CQL extensions pre-registered.
 
@@ -50,8 +52,30 @@ The recommended way to start. Returns a DuckDB connection with all FHIRPath and 
 | `database` | `str` | `":memory:"` | Path to the DuckDB file. |
 | `allow_unsigned_extensions` | `bool` | `True` | Allow loading unsigned (dev-build) DuckDB extensions. |
 | `register_udfs` | `bool` | `True` | Automatically register all UDFs on the connection. |
+| `source` | `SourceAdapter` | `None` | A data source to attach during initialization. |
 | `valueset_cache` | `dict` | `None` | Pre-expanded terminology map for `in_valueset`. |
 | `**kwargs` | `Any` | - | Additional arguments passed to `duckdb.connect()`. |
+
+---
+
+### `attach`
+`attach(con, adapter: SourceAdapter) -> None`
+
+Registers a `SourceAdapter` against an active connection. This creates the virtual `resources` view required for clinical logic.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `con` | `duckdb.DuckDBPyConnection` | An active connection. |
+| `adapter` | `SourceAdapter` | The adapter instance (e.g. `FileSystemSource`). |
+
+---
+
+### `detach`
+`detach(con) -> None`
+
+Drops the `resources` view and releases any external resources held by the attached source.
+
+---
 
 ```python
 import fhir4ds

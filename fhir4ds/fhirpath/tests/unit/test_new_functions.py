@@ -6,16 +6,23 @@ Unit tests for new FHIRPath functions:
 - sort()
 - matchesFull()
 - comparable()
+- matches() (full-string matching regression)
+- is() (lowercase type names regression)
+- single() (error on multiple items regression)
 """
 
 from __future__ import annotations
 
 import pytest
 
+from ...engine.errors import FHIRPathError
 from ...engine.nodes import FP_DateTime, FP_Time, FP_Date
 from ...engine.invocations.datetime import lowBoundary, highBoundary, precision
 from ...engine.invocations.collections import sort_fn, comparable
-from ...engine.invocations.strings import matchesFull
+from ...engine.invocations.filtering import single_fn
+from ...engine.invocations.strings import matches, matchesFull
+from ...engine.invocations.types import is_fn
+from ...engine.nodes import TypeInfo
 
 
 class TestLowBoundary:
@@ -345,3 +352,112 @@ class TestIntegration:
         assert precision({}, [dt_month])[0] == 6  # 6 digits in YYYYMM
         assert lowBoundary({}, [dt_month])[0] == "2014-06-01"
         assert highBoundary({}, [dt_month])[0] == "2014-06-30"
+
+
+# ---------------------------------------------------------------------------
+# QA-003: matches() must do full-string matching (FHIRPath §5.7.2)
+# ---------------------------------------------------------------------------
+
+class TestMatchesFullString:
+    """Regression tests for QA-003: matches() must match the *entire* string."""
+
+    def test_partial_match_returns_false(self) -> None:
+        """'hello world'.matches('hello') must be false (partial match)."""
+        assert matches({}, ["hello world"], "hello") is False
+
+    def test_exact_match_returns_true(self) -> None:
+        assert matches({}, ["hello"], "hello") is True
+
+    def test_prefix_pattern_without_wildcard_returns_false(self) -> None:
+        assert matches({}, ["hello"], "hel") is False
+
+    def test_wildcard_matches_full_string(self) -> None:
+        assert matches({}, ["hello"], "hel.*") is True
+
+    def test_suffix_wildcard(self) -> None:
+        assert matches({}, ["hello"], ".*llo") is True
+
+    def test_digit_pattern_full_match(self) -> None:
+        assert matches({}, ["123-456"], r"\d{3}-\d{3}") is True
+
+    def test_digit_pattern_partial_returns_false(self) -> None:
+        assert matches({}, ["123-456-789"], r"\d{3}-\d{3}") is False
+
+    def test_empty_collection_returns_empty(self) -> None:
+        assert matches({}, [], "hello") == []
+
+    def test_empty_regex_returns_empty(self) -> None:
+        # Empty regex matches only empty string (FHIRPath matches uses fullmatch)
+        assert matches({}, ["hello"], "") is False
+        assert matches({}, [""], "") is True
+
+    def test_dotall_flag_matches_newlines(self) -> None:
+        """The dot should match newlines (DOTALL behaviour)."""
+        assert matches({}, ["hello\nworld"], ".*") is True
+
+
+# ---------------------------------------------------------------------------
+# QA-004: is() must accept lowercase primitive type names (FHIRPath §5.8.1)
+# ---------------------------------------------------------------------------
+
+class TestIsLowercaseTypes:
+    """Regression tests for QA-004: is() with lowercase FHIR primitive types."""
+
+    def _make_type_info(self, name: str) -> TypeInfo:
+        """Create a TypeInfo the same way type_specifier() does for bare names."""
+        namespace = None
+        if name in TypeInfo.SYSTEM_TO_FHIR_TYPE:
+            fhir_name = TypeInfo.SYSTEM_TO_FHIR_TYPE[name]
+            if fhir_name != name:
+                namespace = TypeInfo.System
+        return TypeInfo(name=name, namespace=namespace)
+
+    def test_integer_lowercase(self) -> None:
+        result = is_fn({}, [1], self._make_type_info("integer"))
+        assert result == [True]
+
+    def test_integer_capitalized(self) -> None:
+        result = is_fn({}, [1], self._make_type_info("Integer"))
+        assert result == [True]
+
+    def test_boolean_lowercase(self) -> None:
+        result = is_fn({}, [True], self._make_type_info("boolean"))
+        assert result == [True]
+
+    def test_boolean_capitalized(self) -> None:
+        result = is_fn({}, [True], self._make_type_info("Boolean"))
+        assert result == [True]
+
+    def test_string_lowercase(self) -> None:
+        result = is_fn({}, ["hello"], self._make_type_info("string"))
+        assert result == [True]
+
+    def test_decimal_lowercase(self) -> None:
+        result = is_fn({}, [1.5], self._make_type_info("decimal"))
+        assert result == [True]
+
+    def test_empty_collection_returns_empty(self) -> None:
+        result = is_fn({}, [], self._make_type_info("integer"))
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# QA-005: single() must error on multi-item collections (FHIRPath §5.6.5)
+# ---------------------------------------------------------------------------
+
+class TestSingleError:
+    """Regression tests for QA-005: single() raises on >1 item."""
+
+    def test_single_item_returns_item(self) -> None:
+        assert single_fn({}, [42]) == [42]
+
+    def test_empty_collection_returns_empty(self) -> None:
+        assert single_fn({}, []) == []
+
+    def test_multiple_items_raises_error(self) -> None:
+        with pytest.raises(FHIRPathError, match="Expected single item"):
+            single_fn({}, [1, 2])
+
+    def test_three_items_raises_error(self) -> None:
+        with pytest.raises(FHIRPathError):
+            single_fn({}, [1, 2, 3])

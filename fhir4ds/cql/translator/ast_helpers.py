@@ -152,7 +152,7 @@ class ASTHelpersMixin:
                     on_condition=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=[ref.alias, "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                 )
                 joins.append(join)
@@ -391,7 +391,7 @@ class ASTHelpersMixin:
         self,
         select: "SQLSelect",
         cte_refs: Dict[str, "CTEReference"],
-        patient_alias: str = "p",
+        patient_alias: str = "_pt",
     ) -> "SQLSelect":
         """
         Add LEFT JOINs for tracked CTE references.
@@ -457,7 +457,7 @@ class ASTHelpersMixin:
         self,
         select: "SQLSelect",
         cte_refs: Dict[str, "CTEReference"],
-        patient_alias: str = "p",
+        patient_alias: str = "_pt",
     ) -> "SQLSelect":
         """
         Convert scalar subqueries in a SQLSelect to LEFT JOINs.
@@ -468,7 +468,7 @@ class ASTHelpersMixin:
         Args:
             select: The SQLSelect AST to transform
             cte_refs: Dict of CTE name -> CTEReference (with alias)
-            patient_alias: The patient table alias (default "p")
+            patient_alias: The patient table alias (default "_pt")
 
         Returns:
             Modified SQLSelect with JOINs added and scalar subqueries replaced
@@ -1542,7 +1542,7 @@ class ASTHelpersMixin:
                     on_condition=SQLBinaryOp(
                         operator="=",
                         left=SQLQualifiedIdentifier(parts=[quoted, "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["p", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     ),
                 ))
                 continue

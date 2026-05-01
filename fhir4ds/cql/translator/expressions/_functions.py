@@ -115,6 +115,26 @@ class FunctionsMixin:
                     return True
         return False
 
+    def _unwrap_list_source(self, arg):
+        """Unwrap a potential list argument for aggregate handling.
+
+        Returns the underlying expression if *arg* is a ``ListExpression``,
+        a type-cast wrapping one (``{…} as List<T>``), a ``FunctionRef`` to
+        ``flatten``, or a ``BinaryExpression`` with ``union``/``except``/
+        ``intersect`` operator.  Returns ``None`` when *arg* is not a
+        recognisable list source.
+        """
+        from ...parser.ast_nodes import ListExpression, FunctionRef as ASTFunctionRef, BinaryExpression as ASTBinaryExpression
+        if isinstance(arg, ListExpression):
+            return arg
+        if self._is_list_typed_ast(arg):
+            return getattr(arg, 'left', None)
+        if isinstance(arg, ASTFunctionRef) and (arg.name or '').lower() in ('flatten', 'collapse', 'expand'):
+            return arg
+        if isinstance(arg, ASTBinaryExpression) and getattr(arg, 'operator', '') in ('union', 'except', 'intersect'):
+            return arg
+        return None
+
     def _wrap_list_aggregate(
         self, agg_func: str, source_sql: SQLExpression
     ) -> Optional[SQLExpression]:
@@ -141,7 +161,7 @@ class FunctionsMixin:
             # Inject patient correlation when the inner query sources from a
             # CTE (which contains all patients' rows) and we are inside a
             # patient-scoped context.
-            _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+            _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
             _src_alias = None
             _fc = inner_query.from_clause
             if isinstance(_fc, SQLAlias):
@@ -354,7 +374,7 @@ class FunctionsMixin:
         )
 
         # Inject patient correlation.
-        _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+        _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
         if _src_alias:
             _corr = SQLBinaryOp(
                 operator="=",
@@ -453,6 +473,21 @@ class FunctionsMixin:
                     ],
                 )
 
+        # Step 2c2: CQL Size — polymorphic over List and Interval
+        # Size(list)     → number of elements, null list → 0  (CQL §12.4)
+        # Size(interval) → interval width via interval_size UDF (CQL §19.18)
+        if name == "Size" and len(args) == 1:
+            raw_arg = func.arguments[0]
+            if isinstance(raw_arg, Interval):
+                return SQLFunctionCall(name="interval_size", args=args)
+            return SQLFunctionCall(
+                name="COALESCE",
+                args=[
+                    SQLFunctionCall(name="array_length", args=args),
+                    SQLLiteral(0),
+                ],
+            )
+
         # Step 3: Check registry for simple renames and parameterized translations
         strategy = self._function_registry.get(name, arity)
         if isinstance(strategy, SimpleRename):
@@ -514,7 +549,19 @@ class FunctionsMixin:
             return SQLFunctionCall(name="CombineSep", args=args)
 
         # Step 7: Fallback — pass through as function call
-        logger.debug("Unknown function '%s' — passing through to SQL", name)
+        _inlining_lib = getattr(self.context, '_current_inlining_library', None)
+        if _inlining_lib is None:
+            import warnings as _w
+            msg = (
+                f"Unknown CQL function '{name}' passed through to SQL verbatim. "
+                "This will likely cause a DuckDB error at execution time. "
+                "Check that the function name is spelled correctly and that all "
+                "required library includes are present."
+            )
+            logger.warning(msg)
+            _w.warn(msg, stacklevel=2)
+        else:
+            logger.debug("Function '%s' from inlined library '%s' passed through to SQL", name, _inlining_lib)
         return SQLFunctionCall(name=name, args=args)
 
     # ── Aggregate pre-translate strategy ──────────────────────────────────
@@ -571,7 +618,7 @@ class FunctionsMixin:
                 if agg_func == "COUNT"
                 else SQLFunctionCall(name=agg_func, args=[SQLQualifiedIdentifier(parts=["_agg_src", "resource"])])
             )
-            _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+            _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
             correlated = SQLSubquery(query=SQLSelect(
                 columns=[agg_col],
                 from_clause=SQLAlias(expr=placeholder, alias="_agg_src"),
@@ -625,6 +672,30 @@ class FunctionsMixin:
                 if _list_agg_fn:
                     return SQLFunctionCall(name=_list_agg_fn, args=[distinct_list])
 
+        # Aggregate on distinct(union/except/intersect) — Count(distinct (X union Y)).
+        from ...parser.ast_nodes import BinaryExpression as _ASTBinExpr
+        if isinstance(arg, DistinctExpression) and isinstance(arg.source, _ASTBinExpr):
+            if getattr(arg.source, 'operator', '') in ('union', 'except', 'intersect'):
+                source_sql = self.translate(arg.source, usage=ExprUsage.SCALAR)
+                if _is_list_returning_sql(source_sql):
+                    distinct_list = SQLFunctionCall(name="list_distinct", args=[source_sql])
+                    if name.lower() == "count":
+                        filtered = SQLFunctionCall(
+                            name="list_filter",
+                            args=[distinct_list, SQLLambda(param="_v", body=SQLUnaryOp(
+                                operator="IS NOT NULL",
+                                operand=SQLIdentifier(name="_v"),
+                                prefix=False,
+                            ))],
+                        )
+                        return SQLFunctionCall(name="len", args=[filtered])
+                    _list_agg_fn = {
+                        "sum": "list_sum", "min": "list_min", "max": "list_max",
+                        "avg": "list_avg",
+                    }.get(name.lower())
+                    if _list_agg_fn:
+                        return SQLFunctionCall(name=_list_agg_fn, args=[distinct_list])
+
         if isinstance(arg, CQLQuery):
             source_sql = self.translate(arg, usage=ExprUsage.LIST)
             result = self._wrap_list_aggregate(agg_func, source_sql)
@@ -663,17 +734,28 @@ class FunctionsMixin:
         if name.lower() in _BOOL_AGG_UDF:
             scalar = self.translate(arg, usage=ExprUsage.SCALAR)
             return SQLFunctionCall(name=_BOOL_AGG_UDF[name.lower()], args=[scalar])
-        # Min/Max on list literals
-        if name.lower() in ("min", "max") and isinstance(arg, ListExpression):
-            source_sql = self.translate(arg, usage=ExprUsage.SCALAR)
-            if isinstance(source_sql, SQLArray):
-                list_func = "list_min" if name.lower() == "min" else "list_max"
-                return SQLFunctionCall(name=list_func, args=[source_sql])
+        # Min/Max on list literals (including type-cast lists — CQL §20.11-20.12)
+        if name.lower() in ("min", "max"):
+            _list_src = self._unwrap_list_source(arg)
+            if _list_src is not None:
+                source_sql = self.translate(_list_src, usage=ExprUsage.SCALAR)
+                if isinstance(source_sql, SQLArray) or _is_list_returning_sql(source_sql):
+                    list_func = "list_min" if name.lower() == "min" else "list_max"
+                    return SQLFunctionCall(name=list_func, args=[source_sql])
 
-        # Count/Sum/Avg/StdDev/Variance/Product on list literals — use DuckDB list functions
-        if isinstance(arg, ListExpression):
-            source_sql = self.translate(arg, usage=ExprUsage.SCALAR)
-            if isinstance(source_sql, SQLArray):
+        # Count/Sum/Avg/StdDev/Variance/Product on list sources — use DuckDB list functions
+        _list_src = self._unwrap_list_source(arg)
+        if _list_src is not None:
+            source_sql = self.translate(_list_src, usage=ExprUsage.SCALAR)
+            # JSON-returning list functions (collapse_intervals, expand) need json_array_length
+            _JSON_LIST_FUNCS = {"collapse_intervals", "expand"}
+            _is_json_list = isinstance(source_sql, SQLFunctionCall) and source_sql.name in _JSON_LIST_FUNCS
+            if _is_json_list:
+                if name.lower() == "count":
+                    return SQLFunctionCall(name="json_array_length", args=[source_sql])
+                # Other aggregates on JSON interval lists are not meaningful
+                return None
+            if isinstance(source_sql, SQLArray) or _is_list_returning_sql(source_sql):
                 if name.lower() == "count":
                     # CQL §20.5: Count returns number of non-null elements
                     filtered = SQLFunctionCall(
@@ -1141,7 +1223,7 @@ class FunctionsMixin:
                     outer_pid = (
                         self.context.resource_alias
                         or self.context.patient_alias
-                        or "p"
+                        or "_pt"
                     )
                     arg = SQLSubquery(query=SQLSelect(
                         columns=[SQLFunctionCall(
@@ -1310,9 +1392,9 @@ class FunctionsMixin:
         """
         # Build the subquery: SELECT 1 FROM "CTE" sub WHERE sub.patient_id = outer.patient_id
         # Always correlate on patient_id. During translate_library(),
-        # patient_alias is None; fall back to "p" which gets fixed up
+        # patient_alias is None; fall back to "_pt" which gets fixed up
         # later by replace_qualified_alias in translator.py.
-        outer_alias = self.context.patient_alias or "p"
+        outer_alias = self.context.patient_alias or "_pt"
         if self.context.current_patient_id:
             correlation_where = SQLBinaryOp(
                 operator="=",
@@ -1582,7 +1664,7 @@ class FunctionsMixin:
         else:
             # Use demographics CTE for birthDate access (mirrors _translate_age_at_function)
             self.context._needs_demographics = True
-            _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+            _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
             birth_date = SQLSubquery(query=SQLSelect(
                 columns=[SQLQualifiedIdentifier(parts=["_pd", "birth_date"])],
                 from_clause=SQLAlias(
@@ -1637,7 +1719,7 @@ class FunctionsMixin:
             }
             unit = unit_map.get(name.lower(), "year")
 
-            _outer_pid = self.context.resource_alias or self.context.patient_alias or "p"
+            _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
             birth_date = SQLSubquery(query=SQLSelect(
                 columns=[SQLQualifiedIdentifier(parts=["_pd", "birth_date"])],
                 from_clause=SQLAlias(

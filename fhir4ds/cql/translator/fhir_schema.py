@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
 
 _logger = logging.getLogger(__name__)
@@ -24,6 +25,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 from ..paths import get_resource_path
+
+# Module-level cache: (base_path, fhir_version) → loaded resources dict
+_DEFAULT_RESOURCES_CACHE: Dict[Tuple[str, str], Dict[str, "FHIRResource"]] = {}
+_SCHEMA_CACHE_LOCK = threading.Lock()
 
 # Default resources loaded when load_default_resources() is called.
 # Extend this list if your CQL libraries reference additional resource types.
@@ -234,6 +239,9 @@ class FHIRSchemaRegistry:
         """
         Load commonly used FHIR resource types.
         
+        Uses a module-level cache to avoid re-parsing JSON files on repeated
+        instantiation (e.g., multiple evaluate_measure() calls).
+        
         Loads: Patient, Observation, Condition, Encounter, Procedure,
         MedicationRequest, and other clinical resources.
         
@@ -241,6 +249,14 @@ class FHIRSchemaRegistry:
             RuntimeError: If any default resource schema fails to load.
                 This indicates a broken installation or missing schema files.
         """
+        cache_key = (str(self._base_path), self.fhir_version)
+        # Fast path: check cache without holding lock
+        cached = _DEFAULT_RESOURCES_CACHE.get(cache_key)
+        if cached is not None:
+            self.resources.update(cached)
+            return
+
+        # Slow path: load under lock with double-checked locking
         default_resources = DEFAULT_RESOURCE_TYPES
         
         errors: list[str] = []
@@ -255,6 +271,11 @@ class FHIRSchemaRegistry:
                 f"Failed to load FHIR resource schemas (broken installation?): "
                 + "; ".join(errors)
             )
+
+        with _SCHEMA_CACHE_LOCK:
+            # Double-check: another thread may have populated while we loaded
+            if cache_key not in _DEFAULT_RESOURCES_CACHE:
+                _DEFAULT_RESOURCES_CACHE[cache_key] = dict(self.resources)
                 
     def get_choice_types(self, resource_type: str, element_name: str) -> List[str]:
         """

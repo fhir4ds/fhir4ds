@@ -355,6 +355,23 @@ class IntervalMixin:
         # CAST wrapping an interval expression (e.g., CAST(intervalFromBounds(...) AS DATE))
         if isinstance(expr, SQLCast):
             return self._is_fhir_interval_expression(expr.expression)
+        # SQLSubquery referencing a CTE whose definition is known to be an Interval type
+        if isinstance(expr, SQLSubquery):
+            query = expr.query
+            if isinstance(query, SQLSelect) and query.from_clause is not None:
+                from ...translator.types import SQLAlias
+                from_node = query.from_clause
+                cte_name = None
+                if isinstance(from_node, SQLAlias) and isinstance(from_node.expr, SQLIdentifier):
+                    cte_name = from_node.expr.name
+                elif isinstance(from_node, SQLIdentifier):
+                    cte_name = from_node.name
+                if cte_name and getattr(self.context, 'definition_meta', None) is not None:
+                    meta = self.context.definition_meta.get(cte_name)
+                    if meta and meta.cql_type and (
+                        meta.cql_type.startswith("Interval") or meta.cql_type == "Period"
+                    ):
+                        return True
         return False
 
     @staticmethod

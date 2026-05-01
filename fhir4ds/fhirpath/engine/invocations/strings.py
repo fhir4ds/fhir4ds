@@ -10,13 +10,27 @@ from ...engine.errors import FHIRPathError
 # Prevents excessive compilation time and mitigates ReDoS risk.
 _MAX_REGEX_LENGTH = 1000
 
+# Patterns that indicate potential catastrophic backtracking in Python's
+# NFA-based re engine.  These detect nested quantifiers and overlapping
+# alternations — the two main classes of ReDoS triggers.
+_REDOS_PATTERNS = re.compile(
+    r"(\((?:[^()]*[+*])[^()]*\)[+*])"   # nested quantifier: (a+)+
+    r"|(\([^()]*\|[^()]*\)[+*])"        # quantified alternation: (a|a)+
+)
+
 
 def _validate_regex(pattern: str) -> None:
-    """Raise FHIRPathError if a regex pattern exceeds safe limits."""
+    """Raise FHIRPathError if a regex pattern exceeds safe limits or
+    contains structures known to cause catastrophic backtracking."""
     if len(pattern) > _MAX_REGEX_LENGTH:
         raise FHIRPathError(
             f"Regex pattern too long ({len(pattern)} chars, max {_MAX_REGEX_LENGTH}). "
             "This limit exists to prevent ReDoS attacks."
+        )
+    if _REDOS_PATTERNS.search(pattern):
+        raise FHIRPathError(
+            "Regex pattern contains nested quantifiers or quantified alternations "
+            "that may cause catastrophic backtracking. Simplify the pattern."
         )
 
 
@@ -88,7 +102,7 @@ def substring(ctx, coll, start, length=None):
         # FHIRPath §5.6.3: "If start lies outside the length of the string,
         # the function returns an empty collection."
         return []
-    if start >= len(string):
+    if start > len(string):
         return []
 
     if length is None or length == []:
@@ -116,6 +130,8 @@ def ends_with(ctx, coll, postfix):
 
 
 def contains_fn(ctx, coll, substr):
+    if util.is_empty(substr):
+        return []
     string = ensure_string_singleton(coll)
     return substr in string
 
@@ -131,7 +147,11 @@ def lower(ctx, coll):
 
 
 def split(ctx, coll, delimiter):
+    if util.is_empty(delimiter):
+        return []
     string = ensure_string_singleton(coll)
+    if delimiter == '':
+        return list(string)
     return string.split(delimiter)
 
 
@@ -144,8 +164,8 @@ def encode(ctx, coll, format):
     if not coll:
         return []
 
-    str_to_encode = coll[0] if isinstance(coll, list) else coll
-    if not str_to_encode:
+    str_to_encode = util.get_data(coll[0]) if isinstance(coll, list) else coll
+    if not str_to_encode or not isinstance(str_to_encode, str):
         return []
 
     if format in ["urlbase64", "base64url"]:
@@ -165,16 +185,19 @@ def decode(ctx, coll, format):
     if not coll:
         return []
 
-    str_to_decode = coll[0] if isinstance(coll, list) else coll
-    if not str_to_decode:
+    str_to_decode = util.get_data(coll[0]) if isinstance(coll, list) else coll
+    if not str_to_decode or not isinstance(str_to_decode, str):
         return []
 
-    if format in ["urlbase64", "base64url"]:
-        decoded = str_to_decode.replace("-", "+").replace("_", "/")
-        return base64.b64decode(decoded).decode()
+    try:
+        if format in ["urlbase64", "base64url"]:
+            decoded = str_to_decode.replace("-", "+").replace("_", "/")
+            return base64.b64decode(decoded, validate=True).decode()
 
-    if format == "base64":
-        return base64.b64decode(str_to_decode).decode()
+        if format == "base64":
+            return base64.b64decode(str_to_decode, validate=True).decode()
+    except (ValueError, UnicodeDecodeError):
+        return []
 
     if format == "hex":
         if len(str_to_decode) % 2 != 0:
@@ -199,13 +222,16 @@ def join(ctx, coll, separator=""):
 
 
 def matches(ctx, coll, regex):
-    """FHIRPath matches() — partial regex match (R4 semantics)."""
-    if not regex or not coll:
+    """FHIRPath matches() — full-string regex match (FHIRPath §5.7.2).
+
+    Returns true only when the *entire* string matches the given regex.
+    """
+    if not coll or util.is_empty(regex) or regex is None:
         return []
 
     string = ensure_string_singleton(coll)
     valid = _compile_regex(regex, re.DOTALL)
-    return re.search(valid, string) is not None
+    return re.fullmatch(valid, string) is not None
 
 
 def replace(ctx, coll, regex, repl):
@@ -232,16 +258,21 @@ def replace_matches(ctx, coll, regex, repl):
     if regex == "":
         return string
 
-    # extract capture groups $1, $2, $3 etc as in python \1, \2, \3
-    repl = re.sub(r"\$(\d+)", r"\\\1", repl)
+    # Convert FHIRPath $N capture group references to Python \g<N> syntax.
+    # Using \g<N> avoids ambiguity: $0 → \g<0> (full match), $1 → \g<1>, etc.
+    repl = re.sub(r"\$(\d+)", r"\\g<\1>", repl)
 
     valid = _compile_regex(regex)
     return re.sub(valid, repl, string)
 
 
 def length(ctx, coll):
-    str = ensure_string_singleton(coll)
-    return len(str)
+    if not coll:
+        return []
+    data = util.get_data(coll[0])
+    if not isinstance(data, str):
+        return []
+    return len(data)
 
 
 def toChars(ctx, coll):

@@ -33,6 +33,16 @@ def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
 
     Returns True if loaded successfully, False otherwise.
     """
+    # Version pre-flight: bundled binary is built for DuckDB 1.5.x
+    _duckdb_version = duckdb.__version__
+    if not _duckdb_version.startswith("1.5."):
+        _logger.info(
+            "duckdb_cql_py: skipping C++ extension (built for DuckDB 1.5.x, running %s). "
+            "Falling back to Python UDFs.",
+            _duckdb_version,
+        )
+        return False
+
     ext_path = Path(__file__).parent / "extensions" / "cql.duckdb_extension"
     if not ext_path.exists():
         return False
@@ -82,7 +92,7 @@ def _register_python_supplements(
     from .macros import register_all_macros
     try:
         register_all_macros(con)
-    except Exception:
+    except (duckdb.CatalogException, duckdb.InvalidInputException):
         pass  # some macros may conflict with C++ functions; that's OK
 
     # When C++ is loaded, wrap the connection so create_function silently
@@ -94,7 +104,7 @@ def _register_python_supplements(
         def create_function(self, name, *args, **kwargs):
             try:
                 return self._real.create_function(name, *args, **kwargs)
-            except Exception:
+            except (duckdb.CatalogException, duckdb.InvalidInputException):
                 _logger.debug("Skipping Python UDF %s (C++ conflict)", name)
         def __getattr__(self, name):
             return getattr(self._real, name)
@@ -127,15 +137,20 @@ def _register_python_supplements(
         try:
             fn(reg_con)
         except Exception as e:
-            _logger.debug("UDF group %s registration: %s", label, e)
+            _logger.warning("UDF group '%s' registration failed: %s", label, e)
 
     if not cpp_loaded:
         # Register a placeholder in_valueset UDF that raises a clear error.
         def _in_valueset_placeholder(resource: str | None, path: str, valueset_url: str) -> bool:
             import duckdb as _duckdb
             raise _duckdb.InvalidInputException(
-                "in_valueset requires valueset data to be loaded first. "
-                "Call registerValuesetUdfs() with a populated valueset cache. See docs."
+                f"in_valueset('{path}', '{valueset_url}') cannot execute: "
+                "value set data has not been loaded into this connection. "
+                "When using the DQM evaluator (MeasureEvaluator), value sets are loaded "
+                "automatically. For standalone CQL queries, call "
+                "fhir4ds.cql.duckdb.valueset.register_valueset_udfs(conn, cache) "
+                "with a populated ValueSetCache before executing queries that use "
+                "value set membership tests."
             )
         con.create_function("in_valueset", _in_valueset_placeholder, null_handling="special")
 

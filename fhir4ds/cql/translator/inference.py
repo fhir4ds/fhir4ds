@@ -11,7 +11,10 @@ The ``InferenceMixin`` class is intended to be used as a mixin with
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+
+_logger = logging.getLogger(__name__)
 
 from ..errors import TranslationError
 from ..parser.ast_nodes import (
@@ -375,7 +378,7 @@ class InferenceMixin:
             Retrieve, ExistsExpression, FirstExpression, LastExpression,
             SingletonExpression, FunctionRef, Property, BinaryExpression,
             ConditionalExpression, UnaryExpression, Identifier, Query,
-            MethodInvocation, QualifiedIdentifier, Literal
+            MethodInvocation, QualifiedIdentifier, Literal, Interval
         )
 
         if ast_node is None:
@@ -386,6 +389,10 @@ class InferenceMixin:
 
         # Literal values (true, false, 42, 'hello') are patient-independent scalars
         if isinstance(ast_node, Literal):
+            return RowShape.PATIENT_SCALAR
+
+        # Interval expressions are scalar values (one interval per patient)
+        if isinstance(ast_node, Interval):
             return RowShape.PATIENT_SCALAR
 
         # Retrieve always produces RESOURCE_ROWS
@@ -462,6 +469,9 @@ class InferenceMixin:
                       'properly includes', 'properly included in',
                       'meets', 'meets before', 'meets after',
                       'contains', 'precision of'):
+                return RowShape.PATIENT_SCALAR
+            # Precision-qualified same operators: "same or before month of", etc.
+            if op.startswith('same '):
                 return RowShape.PATIENT_SCALAR
 
             # Set operations: shape depends on operand shapes
@@ -755,7 +765,7 @@ class InferenceMixin:
             Retrieve, ExistsExpression, FunctionRef, Literal,
             BinaryExpression, Property, UnaryExpression, Identifier,
             FirstExpression, LastExpression, ConditionalExpression,
-            DurationBetween, DifferenceBetween,
+            DurationBetween, DifferenceBetween, Interval,
         )
 
         if ast_node is None:
@@ -786,6 +796,20 @@ class InferenceMixin:
             elif isinstance(value, str):
                 return "String"
             return "Any"
+
+        # Interval expressions
+        if isinstance(ast_node, Interval):
+            point_type = "Any"
+            if ast_node.low is not None:
+                point_type = self._infer_cql_type(ast_node.low)
+            elif ast_node.high is not None:
+                point_type = self._infer_cql_type(ast_node.high)
+            if point_type == "Any":
+                _logger.warning(
+                    "Could not infer point type for Interval expression — "
+                    "defaulting to Interval<Any>. This may affect SQL generation."
+                )
+            return f"Interval<{point_type}>"
 
         # First/Last returns element type of source
         if isinstance(ast_node, (FirstExpression, LastExpression)):
@@ -838,6 +862,9 @@ class InferenceMixin:
                       'properly includes', 'properly included in',
                       'meets', 'meets before', 'meets after',
                       'contains'):
+                return "Boolean"
+            # Precision-qualified same operators: "same or before month of", etc.
+            if op.startswith('same '):
                 return "Boolean"
             # intersect/union/except preserve the element type
             if op in ('intersect', 'union', 'except'):

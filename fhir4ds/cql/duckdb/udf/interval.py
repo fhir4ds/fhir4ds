@@ -237,6 +237,17 @@ def _parse_interval(value: str) -> dict | None:
     if not isinstance(data, dict):
         _logger.warning("_parse_interval structure parse failed: expected object, got %s", type(data).__name__)
         return None
+
+    # Warn on common snake_case key mistakes and accept them
+    _SNAKE_TO_CAMEL = {"low_closed": "lowClosed", "high_closed": "highClosed"}
+    for snake, camel in _SNAKE_TO_CAMEL.items():
+        if snake in data and camel not in data:
+            _logger.warning(
+                "_parse_interval: found '%s' (snake_case); use '%s' (camelCase) instead. "
+                "Accepting the value.", snake, camel,
+            )
+            data[camel] = data[snake]
+
     # Support both CQL interval format (low/high) and FHIR Period (start/end)
     low_val = data.get("low") or data.get("start")
     high_val = data.get("high") or data.get("end")
@@ -249,35 +260,48 @@ def _parse_interval(value: str) -> dict | None:
     # Integer: successor/predecessor is ±1
     # Date: successor/predecessor is ±1 day
     # DateTime: successor/predecessor is ±1 millisecond
+    low_normalized = False
+    high_normalized = False
     if low is not None and not low_closed:
         if isinstance(low, int):
             low = low + 1
             low_closed = True
+            low_normalized = True
         elif isinstance(low, date) and not isinstance(low, datetime):
             low = low + timedelta(days=1)
             low_closed = True
+            low_normalized = True
         elif isinstance(low, datetime):
             low = low + timedelta(milliseconds=1)
             low_closed = True
+            low_normalized = True
     if high is not None and not high_closed:
         if isinstance(high, int):
             high = high - 1
             high_closed = True
+            high_normalized = True
         elif isinstance(high, date) and not isinstance(high, datetime):
             high = high - timedelta(days=1)
             high_closed = True
+            high_normalized = True
         elif isinstance(high, datetime):
             high = high - timedelta(milliseconds=1)
             high_closed = True
+            high_normalized = True
+
+    # Raw values for precision-aware comparison.  When a bound was
+    # normalized (open→closed), invalidate the stale raw value so
+    # callers fall back to the already-adjusted parsed value.
+    low_raw = None if low_normalized else (data.get("low") or data.get("start"))
+    high_raw = None if high_normalized else (data.get("high") or data.get("end"))
 
     return {
         "low": low,
         "high": high,
         "low_closed": low_closed,
         "high_closed": high_closed,
-        # Preserve raw string values for precision-aware comparison
-        "low_raw": data.get("low") or data.get("start"),
-        "high_raw": data.get("high") or data.get("end"),
+        "low_raw": low_raw,
+        "high_raw": high_raw,
     }
 
 
@@ -484,13 +508,46 @@ def intervalWidth(interval: str | None) -> str | None:
                 return _json.dumps({"value": width_val, "unit": unit, "code": unit})
     except ValueError:
         raise
-    except Exception:
-        pass
+    except Exception as e:
+        _logger.debug("Unexpected error in UDF intervalWidth quantity parse: %s", e)
 
     # Numeric intervals
     if isinstance(low, (int, float)) and isinstance(high, (int, float)):
         result = high - low
         return str(result)
+
+    return str(high - low)
+
+
+def interval_size(interval: str | None) -> str | None:
+    """Get the size of an interval (number of discrete values).
+
+    CQL §19.18: Size(I) = Width(I) + point-size, where point-size is the
+    smallest meaningful difference for the point type.
+    For integer intervals: Size = high - low + 1.
+    For decimal intervals: Size = high - low + minimum precision.
+    For date/time intervals: same limitation as Width (not defined).
+    """
+    if interval is None:
+        return None
+    iv = _parse_interval(interval)
+    if not iv or iv["low"] is None or iv["high"] is None:
+        return None
+
+    low = iv["low"]
+    high = iv["high"]
+
+    if isinstance(low, (datetime, date)) or isinstance(high, (datetime, date)):
+        raise ValueError(
+            "The Size operator is not defined for date/time intervals. "
+            "Use 'duration in' instead (CQL §19.18)."
+        )
+
+    if isinstance(low, int) and isinstance(high, int):
+        return str(high - low + 1)
+
+    if isinstance(low, (int, float)) and isinstance(high, (int, float)):
+        return str(high - low + 1e-8)
 
     return str(high - low)
 
@@ -1173,12 +1230,14 @@ def intervalOverlapsBefore(interval1: str | None, interval2: str | None) -> bool
     overlaps = intervalOverlaps(interval1, interval2)
     if not overlaps:
         return False
-    # Compare starts: None low means -infinity (always before)
-    if iv1["low"] is None:
+    # Compare effective starts (accounts for open bounds via successor)
+    s1 = _effective_start(iv1)
+    s2 = _effective_start(iv2)
+    if s1 is None:
         return True  # -infinity is before any start
-    if iv2["low"] is None:
+    if s2 is None:
         return False  # can't start before -infinity
-    l1, l2 = _normalize_for_compare(iv1["low"], iv2["low"])
+    l1, l2 = _normalize_for_compare(s1, s2)
     return l1 < l2
 
 
@@ -1195,12 +1254,14 @@ def intervalOverlapsAfter(interval1: str | None, interval2: str | None) -> bool 
     overlaps = intervalOverlaps(interval1, interval2)
     if not overlaps:
         return False
-    # Compare ends: None high means +infinity (always after)
-    if iv1["high"] is None:
+    # Compare effective ends (accounts for open bounds via predecessor)
+    e1 = _effective_end(iv1)
+    e2 = _effective_end(iv2)
+    if e1 is None:
         return True  # +infinity is after any end
-    if iv2["high"] is None:
+    if e2 is None:
         return False  # can't end after +infinity
-    h1, h2 = _normalize_for_compare(iv1["high"], iv2["high"])
+    h1, h2 = _normalize_for_compare(e1, e2)
     return h1 > h2
 
 
@@ -1241,7 +1302,8 @@ def intervalStartsSame(interval1: str | None, interval2: str | None) -> bool | N
         return None
     if iv1["low"] is None or iv2["low"] is None:
         return None
-    if iv1["low"] != iv2["low"]:
+    l1, l2 = _normalize_for_compare(iv1["low"], iv2["low"])
+    if l1 != l2:
         return False
     # CQL Starts also requires iv1.end <= iv2.end (containment at end)
     end1 = _effective_end(iv1)
@@ -1263,7 +1325,8 @@ def intervalEndsSame(interval1: str | None, interval2: str | None) -> bool | Non
         return None
     if iv1["high"] is None or iv2["high"] is None:
         return None
-    if iv1["high"] != iv2["high"]:
+    h1, h2 = _normalize_for_compare(iv1["high"], iv2["high"])
+    if h1 != h2:
         return False
     # CQL Ends also requires iv1.start >= iv2.start (containment at start)
     start1 = _effective_start(iv1)
@@ -1336,7 +1399,8 @@ def intervalIntersect(interval1: str | None, interval2: str | None) -> str | Non
     try:
         raw1 = orjson.loads(interval1) if interval1 else {}
         raw2 = orjson.loads(interval2) if interval2 else {}
-    except Exception:
+    except Exception as e:
+        _logger.debug("Unexpected error in UDF intervalIntersect JSON parse: %s", e)
         return None
     raw1_low = raw1.get("low") or raw1.get("start")
     raw1_high = raw1.get("high") or raw1.get("end")
@@ -1451,11 +1515,31 @@ def intervalUnion(interval1: str | None, interval2: str | None) -> str | None:
 
             # Check if iv1 is entirely before iv2
             if h1 < l2:
-                overlap = False
+                # Before concluding no overlap, check for adjacency (meets)
+                # via successor: if successor(iv1.high) == iv2.low, they meet
+                try:
+                    succ = _successor(high1)
+                    if succ is not None:
+                        s, l2n = _normalize_for_compare(succ, low2)
+                        if s == l2n:
+                            overlap = True
+                except Exception as e:
+                    _logger.debug("Unexpected error in UDF union successor check: %s", e)
+                if not overlap:
+                    # Also check reverse direction
+                    pass
             elif h1 > l2:
                 # iv1.high > iv2.low → must also check iv2.high >= iv1.low
                 if h2 < l1:
-                    overlap = False
+                    # Check successor for reverse adjacency
+                    try:
+                        succ = _successor(high2)
+                        if succ is not None:
+                            s, l1n = _normalize_for_compare(succ, low1)
+                            if s == l1n:
+                                overlap = True
+                    except Exception as e:
+                        _logger.debug("Unexpected error in UDF union reverse successor check: %s", e)
                 else:
                     overlap = True
             else:
@@ -1470,8 +1554,8 @@ def intervalUnion(interval1: str | None, interval2: str | None) -> str | None:
                         s, l2n = _normalize_for_compare(succ, low2)
                         if s == l2n:
                             overlap = True
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        _logger.debug("Unexpected error in UDF union adjacency check: %s", e)
 
             # Also check the reverse direction if not yet overlapping
             if not overlap and h2 == l1:
@@ -1483,9 +1567,10 @@ def intervalUnion(interval1: str | None, interval2: str | None) -> str | None:
                         s, l1n = _normalize_for_compare(succ, low1)
                         if s == l1n:
                             overlap = True
-                    except Exception:
-                        pass
-        except Exception:
+                    except Exception as e:
+                        _logger.debug("Unexpected error in UDF union reverse adjacency check: %s", e)
+        except Exception as e:
+            _logger.debug("Unexpected error in UDF intervalUnion overlap detection: %s", e)
             return None
 
     if not overlap:
@@ -1495,7 +1580,8 @@ def intervalUnion(interval1: str | None, interval2: str | None) -> str | None:
     try:
         raw1 = orjson.loads(interval1) if interval1 else {}
         raw2 = orjson.loads(interval2) if interval2 else {}
-    except Exception:
+    except Exception as e:
+        _logger.debug("Unexpected error in UDF intervalUnion JSON parse: %s", e)
         return None
     raw1_low = raw1.get("low") or raw1.get("start")
     raw1_high = raw1.get("high") or raw1.get("end")
@@ -1604,7 +1690,8 @@ def intervalExcept(interval1: str | None, interval2: str | None) -> str | None:
     try:
         raw1 = orjson.loads(interval1) if interval1 else {}
         raw2 = orjson.loads(interval2) if interval2 else {}
-    except Exception:
+    except Exception as e:
+        _logger.debug("Unexpected error in UDF intervalExcept JSON parse: %s", e)
         return None
     raw1_low = raw1.get("low") or raw1.get("start")
     raw1_high = raw1.get("high") or raw1.get("end")
@@ -1869,7 +1956,8 @@ def _expand_points_impl(interval_or_list, per) -> str | None:
         return raw
     try:
         intervals = orjson.loads(raw)
-    except Exception:
+    except Exception as e:
+        _logger.debug("Unexpected error in UDF expand JSON parse: %s", e)
         return raw
     if not isinstance(intervals, list):
         return raw
@@ -2338,6 +2426,7 @@ def registerIntervalUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("intervalStart", intervalStart, null_handling="special")
     con.create_function("intervalEnd", intervalEnd, null_handling="special")
     con.create_function("intervalWidth", intervalWidth, null_handling="special")
+    con.create_function("interval_size", interval_size, null_handling="special")
     con.create_function("intervalContains", intervalContains, null_handling="special")
     con.create_function("intervalProperlyContains", intervalProperlyContains, null_handling="special")
     con.create_function("intervalOverlaps", intervalOverlaps, null_handling="special")
@@ -2373,6 +2462,7 @@ __all__ = [
     "intervalStart",
     "intervalEnd",
     "intervalWidth",
+    "interval_size",
     "intervalContains",
     "intervalProperlyContains",
     "intervalOverlaps",

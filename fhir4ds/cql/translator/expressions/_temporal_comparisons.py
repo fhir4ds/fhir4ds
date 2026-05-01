@@ -51,12 +51,19 @@ class TemporalComparisonMixin:
         precisions = ["year", "month", "week", "day", "hour", "minute", "second", "millisecond"]
 
         # Check for "same <precision> or before/after" patterns first
+        # The CQL parser emits two forms depending on source syntax:
+        #   "same month or before"      (from: same month or before X)
+        #   "same or before month of"   (from: same or before month of X)
+        # Both must map to the same precision-aware UDF.
         for precision in precisions:
             pattern_before = f"same {precision} or before"
+            pattern_before_alt = f"same or before {precision} of"
             pattern_after = f"same {precision} or after"
+            pattern_after_alt = f"same or after {precision} of"
             pattern_as = f"same {precision} as"
+            pattern_as_alt = f"same as {precision} of"
 
-            if operator == pattern_before:
+            if operator == pattern_before or operator == pattern_before_alt:
                 # CQL §19.16: Compare at specified precision with timezone
                 # normalization. Returns null if either operand is coarser than
                 # the specified precision (uncertain per CQL §18.4).
@@ -69,7 +76,7 @@ class TemporalComparisonMixin:
                     ],
                 )
 
-            if operator == pattern_after:
+            if operator == pattern_after or operator == pattern_after_alt:
                 return SQLFunctionCall(
                     name="cqlSameOrAfterP",
                     args=[
@@ -79,7 +86,7 @@ class TemporalComparisonMixin:
                     ],
                 )
 
-            if operator == pattern_as:
+            if operator == pattern_as or operator == pattern_as_alt:
                 return SQLFunctionCall(
                     name="cqlSameAsP",
                     args=[

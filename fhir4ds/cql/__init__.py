@@ -252,6 +252,7 @@ def evaluate_measure(
     patient_ids: Optional[List[str]] = None,
     verbose: bool = False,
     include_paths: Optional[List[str]] = None,
+    audit_mode: str = "none",
 ) -> Any:
     """
     Evaluate a CQL measure against all patients in a single query.
@@ -275,6 +276,9 @@ def evaluate_measure(
         verbose: If True, print generated SQL.
         include_paths: Optional list of paths to directories containing included CQL libraries.
                       Used to resolve include statements in the main library.
+        audit_mode: Controls audit granularity: "none" (default), "population",
+                   or "full". Currently accepted for API compatibility; audit
+                   functionality is handled by the DQM layer.
 
     Returns:
         DuckDB relation with one row per patient and columns per output_columns.
@@ -319,6 +323,10 @@ def evaluate_measure(
     from .translator import CQLToSQLTranslator
 
     # Validate connection
+    if conn is None:
+        raise TypeError(
+            "Expected a DuckDB connection for 'conn', got None"
+        )
     try:
         conn.execute("SELECT 1").fetchone()
     except _duckdb_mod.ConnectionException:
