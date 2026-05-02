@@ -541,7 +541,12 @@ int high_cmp = high->compare(*other.low);
 if (high_cmp == -2) {
 return false;
 }
-return low_cmp < 0 && high_cmp >= 0;
+// At boundary equality (high == other.low), both bounds must be closed
+// for a shared point to exist. If either is open, no overlap occurs.
+if (high_cmp == 0) {
+return low_cmp < 0 && high_closed && other.low_closed;
+}
+return low_cmp < 0 && high_cmp > 0;
 }
 
 bool Interval::overlaps_after(const Interval &other) const {

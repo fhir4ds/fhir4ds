@@ -566,6 +566,11 @@ static void FhirpathNumberFunction(DataChunk &args, ExpressionState &state, Vect
 
 		if (fp_results.empty()) {
 			result_mask.SetInvalid(i);
+		} else if (fp_results.size() > 1) {
+			// FHIRPath Singleton Enforcement: when a singleton is expected
+			// (numeric context), multi-item collections must return NULL,
+			// not silently take the first element.
+			result_mask.SetInvalid(i);
 		} else {
 			// Type gate: only convert genuinely numeric types (Integer, Decimal,
 			// Quantity, or JSON int/real). Return NULL for strings, booleans,
@@ -656,6 +661,32 @@ static void FhirpathDateFunction(DataChunk &args, ExpressionState &state, Vector
 				             std::isdigit((unsigned char)date_str[9]);
 			}
 			if (valid_date) {
+				// Validate month and day ranges per ISO 8601 / FHIR spec
+				if (date_str.size() >= 7) {
+					int month = std::atoi(date_str.substr(5, 2).c_str());
+					if (month < 1 || month > 12) {
+						result_mask.SetInvalid(i);
+						continue;
+					}
+				}
+				if (date_str.size() >= 10) {
+					int year = std::atoi(date_str.substr(0, 4).c_str());
+					int month = std::atoi(date_str.substr(5, 2).c_str());
+					int day = std::atoi(date_str.substr(8, 2).c_str());
+					// Use days_in_month logic for proper validation
+					static const int dim[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+					int max_day = 31;
+					if (month >= 1 && month <= 12) {
+						max_day = dim[month];
+						if (month == 2 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))) {
+							max_day = 29;
+						}
+					}
+					if (day < 1 || day > max_day) {
+						result_mask.SetInvalid(i);
+						continue;
+					}
+				}
 				// Only strip time portion if present (>10 chars means datetime)
 				if (date_str.size() > 10) {
 					date_str = date_str.substr(0, 10);

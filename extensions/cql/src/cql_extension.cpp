@@ -314,11 +314,14 @@ DEFINE_TWO_STR_BIGINT_UDF(DifferenceInSecondsFunc, {
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(WeeksBetweenFunc, {
-	auto days_diff = cql::AgeCalculator::diff_days(*a_dt, *b_dt);
-	if (!days_diff) {
+	// CQL §16.14: WeeksBetween counts *complete* 7-day periods.
+	// Use epoch_millis for time-aware calculation instead of Julian-day integer division.
+	int64_t ms_diff = b_dt->to_epoch_millis() - a_dt->to_epoch_millis();
+	if (ms_diff < 0) {
 		result_mask.SetInvalid(i);
 	} else {
-		result_data[i] = *days_diff / 7;
+		int64_t complete_days = ms_diff / (24LL * 60 * 60 * 1000);
+		result_data[i] = complete_days / 7;
 	}
 })
 
@@ -332,7 +335,14 @@ DEFINE_TWO_STR_BIGINT_UDF(YearsBetweenFunc, {
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(MonthsBetweenFunc, {
-	result_data[i] = (b_dt->year - a_dt->year) * 12 + (b_dt->month - a_dt->month);
+	// CQL §16.14: MonthsBetween counts *complete* months, not calendar boundary crossings.
+	// Use age_in_months which accounts for day-of-month boundaries.
+	auto months = cql::AgeCalculator::age_in_months(*a_dt, *b_dt);
+	if (!months) {
+		result_mask.SetInvalid(i);
+	} else {
+		result_data[i] = *months;
+	}
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(DaysBetweenFunc, {
@@ -2307,7 +2317,7 @@ static void CQLPrecisionFunc(DataChunk &args, ExpressionState &state, Vector &re
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
 	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
@@ -2319,7 +2329,7 @@ static void CQLPrecisionFunc(DataChunk &args, ExpressionState &state, Vector &re
 		std::string val = a_vals[a_idx].GetString();
 		auto res = cql::cql_precision(val);
 		if (!res) { result_mask.SetInvalid(i); continue; }
-		result_data[i] = static_cast<int64_t>(*res);
+		result_data[i] = StringVector::AddString(result, *res);
 	}
 }
 
@@ -2811,7 +2821,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// overflow/underflow detection missing)
 	// Keep: CQLPrecision, cqlTimezoneOffset (working correctly)
 	RegisterSpecialScalar(loader, "CQLPrecision", {LogicalType::VARCHAR},
-	                      LogicalType::BIGINT, CQLPrecisionFunc);
+	                      LogicalType::VARCHAR, CQLPrecisionFunc);
 	RegisterSpecialScalar(loader, "cqlTimezoneOffset", {LogicalType::VARCHAR},
 	                      LogicalType::DOUBLE, CQLTimezoneOffsetFunc);
 
@@ -2844,7 +2854,10 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::VARCHAR, MathTruncateFunc);
 
 	// Phase 6: Quantity arithmetic UDFs
-	// quantityMultiply and quantityDivide deferred to Python (unit calculation bugs)
+	RegisterSpecialScalar(loader, "quantityMultiply", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, QuantityMultiplyFunc);
+	RegisterSpecialScalar(loader, "quantityDivide", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, QuantityDivideFunc);
 	RegisterSpecialScalar(loader, "quantityNegate", {LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, QuantityNegateFunc);
 	RegisterSpecialScalar(loader, "quantityAbs", {LogicalType::VARCHAR},

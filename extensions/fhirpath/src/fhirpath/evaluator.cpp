@@ -453,10 +453,12 @@ FPCollection Evaluator::evalWhere(const ASTNode &node, const FPCollection &input
 	}
 	FPCollection result;
 	int64_t idx = 0;
+	auto saved_chain_vars = chain_defined_vars_;
 	for (const auto &item : input) {
 		FPCollection single = {item};
 		int64_t old_index = index_context_;
 		index_context_ = idx;
+		chain_defined_vars_ = saved_chain_vars;
 		auto criteria_result = eval(*node.children[0], single, doc);
 		index_context_ = old_index;
 		if (isTruthy(criteria_result)) {
@@ -464,6 +466,7 @@ FPCollection Evaluator::evalWhere(const ASTNode &node, const FPCollection &input
 		}
 		++idx;
 	}
+	chain_defined_vars_ = saved_chain_vars;
 	return result;
 }
 
@@ -1688,17 +1691,23 @@ FPCollection Evaluator::fn_not(const FPCollection &input) {
 }
 
 FPCollection Evaluator::fn_all(const ASTNode &criteria, const FPCollection &input, yyjson_doc *doc) {
+	auto saved_chain_vars = chain_defined_vars_;
 	for (const auto &item : input) {
 		FPCollection single = {item};
+		chain_defined_vars_ = saved_chain_vars;
 		auto result = eval(criteria, single, doc);
 		if (!isTruthy(result)) {
+			chain_defined_vars_ = saved_chain_vars;
 			return {FPValue::FromBoolean(false)};
 		}
 	}
+	chain_defined_vars_ = saved_chain_vars;
 	return {FPValue::FromBoolean(true)};
 }
 
 FPCollection Evaluator::fn_allTrue(const FPCollection &input) {
+	// Per FHIRPath spec: empty input returns empty collection
+	if (input.empty()) return {};
 	for (const auto &item : input) {
 		bool is_true = false;
 		if (item.type == FPValue::Type::Boolean) is_true = item.bool_val;
@@ -1711,6 +1720,8 @@ FPCollection Evaluator::fn_allTrue(const FPCollection &input) {
 }
 
 FPCollection Evaluator::fn_anyTrue(const FPCollection &input) {
+	// Per FHIRPath spec: empty input returns empty collection
+	if (input.empty()) return {};
 	for (const auto &item : input) {
 		bool is_true = false;
 		if (item.type == FPValue::Type::Boolean) is_true = item.bool_val;
@@ -1722,6 +1733,8 @@ FPCollection Evaluator::fn_anyTrue(const FPCollection &input) {
 }
 
 FPCollection Evaluator::fn_allFalse(const FPCollection &input) {
+	// Per FHIRPath spec: empty input returns empty collection
+	if (input.empty()) return {};
 	for (const auto &item : input) {
 		bool is_false = false;
 		if (item.type == FPValue::Type::Boolean) is_false = !item.bool_val;
@@ -1734,6 +1747,8 @@ FPCollection Evaluator::fn_allFalse(const FPCollection &input) {
 }
 
 FPCollection Evaluator::fn_anyFalse(const FPCollection &input) {
+	// Per FHIRPath spec: empty input returns empty collection
+	if (input.empty()) return {};
 	for (const auto &item : input) {
 		bool is_false = false;
 		if (item.type == FPValue::Type::Boolean) is_false = !item.bool_val;
@@ -2266,14 +2281,20 @@ FPCollection Evaluator::fn_truncate(const FPCollection &input) {
 	if (input.empty()) {
 		return {};
 	}
-	return {FPValue::FromInteger(static_cast<int64_t>(toNumber(input[0])))};
+	double raw = toNumber(input[0]);
+	if (raw > static_cast<double>(INT64_MAX) || raw < static_cast<double>(INT64_MIN)) {
+		return {};
+	}
+	return {FPValue::FromInteger(static_cast<int64_t>(raw))};
 }
 
 FPCollection Evaluator::fn_iif(const ASTNode &criterion, const ASTNode &trueResult, const ASTNode *falseResult,
                                const FPCollection &input, yyjson_doc *doc) {
 	// FHIRPath spec: if input collection has more than one item, return empty
 	if (input.size() > 1) return {};
+	auto saved_vars = defined_variables_;
 	auto cond = eval(criterion, input, doc);
+	defined_variables_ = saved_vars; // Restore after criterion evaluation
 	// If criterion has more than one item, it's an error → return empty
 	if (cond.size() > 1) return {};
 	if (cond.size() == 1 && isTruthy(cond)) {
@@ -2463,6 +2484,8 @@ FPCollection Evaluator::fn_aggregate(const ASTNode &node, const FPCollection &in
 	}
 	FPCollection saved_total = total_context_;
 	int64_t saved_index = index_context_;
+	auto saved_vars = defined_variables_;
+	auto saved_chain_vars = chain_defined_vars_;
 
 	if (node.children.size() >= 2) {
 		total_context_ = eval(*node.children[1], input, doc);
@@ -2471,14 +2494,20 @@ FPCollection Evaluator::fn_aggregate(const ASTNode &node, const FPCollection &in
 	}
 
 	for (size_t i = 0; i < input.size(); i++) {
+		auto iter_vars = defined_variables_;
+		auto iter_chain = chain_defined_vars_;
 		index_context_ = static_cast<int64_t>(i);
 		FPCollection single = {input[i]};
 		total_context_ = eval(*node.children[0], single, doc);
+		defined_variables_ = iter_vars;
+		chain_defined_vars_ = iter_chain;
 	}
 
 	FPCollection result = total_context_;
 	total_context_ = saved_total;
 	index_context_ = saved_index;
+	defined_variables_ = saved_vars;
+	chain_defined_vars_ = saved_chain_vars;
 	return result;
 }
 
@@ -2561,7 +2590,11 @@ FPCollection Evaluator::fn_take(const FPCollection &input, const FPCollection &c
 	if (input.empty() || count.empty()) {
 		return {};
 	}
-	int64_t n = static_cast<int64_t>(toNumber(count[0]));
+	double raw = toNumber(count[0]);
+	if (raw > static_cast<double>(INT64_MAX) || raw < static_cast<double>(INT64_MIN)) {
+		return {}; // Out of range, return empty
+	}
+	int64_t n = static_cast<int64_t>(raw);
 	if (n <= 0) {
 		return {};
 	}
@@ -2573,7 +2606,11 @@ FPCollection Evaluator::fn_skip(const FPCollection &input, const FPCollection &c
 	if (input.empty() || count.empty()) {
 		return {};
 	}
-	int64_t n = static_cast<int64_t>(toNumber(count[0]));
+	double raw = toNumber(count[0]);
+	if (raw > static_cast<double>(INT64_MAX) || raw < static_cast<double>(INT64_MIN)) {
+		return {}; // Out of range, return empty
+	}
+	int64_t n = static_cast<int64_t>(raw);
 	if (n <= 0) {
 		return input;
 	}
@@ -4587,11 +4624,11 @@ FPCollection Evaluator::fn_supersetOf(const FPCollection &input, const FPCollect
 
 // --- Date arithmetic ---
 
-static bool isLeapYear(int y) {
+static bool isLeapYear(int64_t y) {
 	return (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
 }
 
-static int daysInMonth(int y, int m) {
+static int daysInMonth(int64_t y, int64_t m) {
 	static const int days[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 	if (m == 2 && isLeapYear(y)) return 29;
 	if (m >= 1 && m <= 12) return days[m];
@@ -4615,6 +4652,11 @@ FPCollection Evaluator::fn_dateArith(const FPValue &date_val, const FPValue &qty
 	else if (unit == "millisecond" || unit == "milliseconds" || unit == "'ms'" || unit == "ms") unit = "millisecond";
 	else return {};
 
+	// Prevent overflow in intermediate calculations
+	if (amount > 100000.0 || amount < -100000.0) {
+		return {};
+	}
+
 	auto orig_type = effectiveType(date_val);
 	bool is_time = (orig_type == FPValue::Type::Time);
 
@@ -4623,7 +4665,7 @@ FPCollection Evaluator::fn_dateArith(const FPValue &date_val, const FPValue &qty
 		// Strip leading 'T' if present
 		std::string time_str = dt;
 		if (!time_str.empty() && time_str[0] == 'T') time_str = time_str.substr(1);
-		int hour = 0, minute = 0, second = 0, millis = 0;
+		int64_t hour = 0, minute = 0, second = 0, millis = 0;
 		bool has_minute = false, has_second = false, has_millis = false;
 		if (time_str.size() >= 2) hour = std::stoi(time_str.substr(0, 2));
 		if (time_str.size() >= 5) { minute = std::stoi(time_str.substr(3, 2)); has_minute = true; }
@@ -4636,7 +4678,7 @@ FPCollection Evaluator::fn_dateArith(const FPValue &date_val, const FPValue &qty
 			has_millis = true;
 		}
 
-		int iamount = static_cast<int>(amount);
+		int64_t iamount = static_cast<int64_t>(amount);
 		if (unit == "hour") hour += iamount;
 		else if (unit == "minute") { minute += iamount; has_minute = true; }
 		else if (unit == "second") { second += iamount; has_second = true; has_minute = true; }
@@ -4657,20 +4699,20 @@ FPCollection Evaluator::fn_dateArith(const FPValue &date_val, const FPValue &qty
 		FPValue result;
 		result.type = FPValue::Type::Time;
 		if (!has_minute) {
-			std::snprintf(buf, sizeof(buf), "%02d", hour);
+			std::snprintf(buf, sizeof(buf), "%02d", static_cast<int>(hour));
 		} else if (!has_second) {
-			std::snprintf(buf, sizeof(buf), "%02d:%02d", hour, minute);
+			std::snprintf(buf, sizeof(buf), "%02d:%02d", static_cast<int>(hour), static_cast<int>(minute));
 		} else if (!has_millis) {
-			std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d", hour, minute, second);
+			std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d", static_cast<int>(hour), static_cast<int>(minute), static_cast<int>(second));
 		} else {
-			std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d.%03d", hour, minute, second, millis);
+			std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d.%03d", static_cast<int>(hour), static_cast<int>(minute), static_cast<int>(second), static_cast<int>(millis));
 		}
 		result.string_val = std::string("T") + buf;
 		return {result};
 	}
 
-	// Date/DateTime arithmetic
-	int year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0, millis = 0;
+	// Date/DateTime arithmetic (use int64_t to prevent overflow in day addition loops)
+	int64_t year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0, millis = 0;
 	std::string tz;
 	bool has_month = false, has_day = false, has_time = false;
 	bool has_hour = false, has_minute = false, has_second = false, has_millis = false;
@@ -4707,11 +4749,11 @@ FPCollection Evaluator::fn_dateArith(const FPValue &date_val, const FPValue &qty
 		}
 	}
 
-	int iamount = static_cast<int>(amount);
+	int64_t iamount = static_cast<int64_t>(amount);
 
 	// Handle fractional seconds by converting to milliseconds
 	if (unit == "second" && amount != static_cast<double>(iamount)) {
-		int ms_amount = static_cast<int>(std::round(amount * 1000));
+		int64_t ms_amount = static_cast<int64_t>(std::round(amount * 1000));
 		millis += ms_amount;
 		has_millis = true; has_second = true; has_minute = true;
 		while (millis >= 1000) { millis -= 1000; second++; }
@@ -4807,19 +4849,19 @@ FPCollection Evaluator::fn_dateArith(const FPValue &date_val, const FPValue &qty
 	else result.type = FPValue::Type::DateTime;
 
 	if (!has_month) {
-		std::snprintf(buf, sizeof(buf), "%04d", year);
+		std::snprintf(buf, sizeof(buf), "%04d", static_cast<int>(year));
 	} else if (!has_day) {
-		std::snprintf(buf, sizeof(buf), "%04d-%02d", year, month);
+		std::snprintf(buf, sizeof(buf), "%04d-%02d", static_cast<int>(year), static_cast<int>(month));
 	} else if (!has_time) {
-		std::snprintf(buf, sizeof(buf), "%04d-%02d-%02d", year, month, day);
+		std::snprintf(buf, sizeof(buf), "%04d-%02d-%02d", static_cast<int>(year), static_cast<int>(month), static_cast<int>(day));
 	} else if (!has_minute) {
-		std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d%s", year, month, day, hour, tz.c_str());
+		std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d%s", static_cast<int>(year), static_cast<int>(month), static_cast<int>(day), static_cast<int>(hour), tz.c_str());
 	} else if (!has_second) {
-		std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d%s", year, month, day, hour, minute, tz.c_str());
+		std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d%s", static_cast<int>(year), static_cast<int>(month), static_cast<int>(day), static_cast<int>(hour), static_cast<int>(minute), tz.c_str());
 	} else if (!has_millis) {
-		std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d%s", year, month, day, hour, minute, second, tz.c_str());
+		std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d%s", static_cast<int>(year), static_cast<int>(month), static_cast<int>(day), static_cast<int>(hour), static_cast<int>(minute), static_cast<int>(second), tz.c_str());
 	} else {
-		std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03d%s", year, month, day, hour, minute, second, millis, tz.c_str());
+		std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03d%s", static_cast<int>(year), static_cast<int>(month), static_cast<int>(day), static_cast<int>(hour), static_cast<int>(minute), static_cast<int>(second), static_cast<int>(millis), tz.c_str());
 	}
 	result.string_val = buf;
 	return {result};

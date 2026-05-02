@@ -232,3 +232,53 @@ query I
 SELECT fhirpath_text('{"resourceType":"Observation","valueString":"normal"}', 'value');
 ----
 normal
+
+# =====================================================================
+# v0.0.4 Regression: fhirpath_date rejects invalid month/day
+# =====================================================================
+
+# Invalid month (99) should return NULL
+query I
+SELECT fhirpath_date('{"resourceType":"Patient","birthDate":"2020-99-99"}', 'birthDate');
+----
+NULL
+
+# Invalid day (32) should return NULL
+query I
+SELECT fhirpath_date('{"resourceType":"Patient","birthDate":"2020-01-32"}', 'birthDate');
+----
+NULL
+
+# Invalid month (13) should return NULL
+query I
+SELECT fhirpath_date('{"resourceType":"Patient","birthDate":"2020-13-01"}', 'birthDate');
+----
+NULL
+
+# Feb 29 on leap year is valid
+query I
+SELECT fhirpath_date('{"resourceType":"Patient","birthDate":"2024-02-29"}', 'birthDate');
+----
+2024-02-29
+
+# Feb 29 on non-leap year should return NULL
+query I
+SELECT fhirpath_date('{"resourceType":"Patient","birthDate":"2023-02-29"}', 'birthDate');
+----
+NULL
+
+# =====================================================================
+# v0.0.4 Regression: fhirpath_number singleton enforcement
+# =====================================================================
+
+# Multi-item array should return NULL (not first element)
+query I
+SELECT fhirpath_number('{"resourceType":"Observation","a":[1,2]}', 'a');
+----
+NULL
+
+# Single item array is fine
+query I
+SELECT fhirpath_number('{"resourceType":"Observation","a":[42]}', 'a');
+----
+42.0

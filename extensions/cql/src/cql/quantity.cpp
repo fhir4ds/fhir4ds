@@ -187,16 +187,19 @@ Optional<bool> quantity_compare(const std::string &q1_json, const std::string &q
 
 	// Same unit: direct comparison
 	double v1, v2;
-	if (q1->code == q2->code || (q1->code.empty() && q2->code.empty())) {
+	// Normalize empty code to "1" (dimensionless) for comparison
+	std::string code1 = q1->code.empty() ? "1" : q1->code;
+	std::string code2 = q2->code.empty() ? "1" : q2->code;
+	if (code1 == code2) {
 		v1 = q1->value;
 		v2 = q2->value;
 	} else {
 		// Convert both to base units
-		if (!units_compatible(q1->code, q2->code)) {
+		if (!units_compatible(code1, code2)) {
 			return NullOpt<bool>();
 		}
-		auto b1 = to_base(q1->value, q1->code);
-		auto b2 = to_base(q2->value, q2->code);
+		auto b1 = to_base(q1->value, code1);
+		auto b2 = to_base(q2->value, code2);
 		if (!b1.has_value() || !b2.has_value()) {
 			return NullOpt<bool>();
 		}
@@ -220,22 +223,24 @@ Optional<std::string> quantity_add(const std::string &q1_json, const std::string
 		return NullOpt<std::string>();
 	}
 
-	// Same unit: simple add
-	if (q1->code == q2->code) {
-		return format_quantity_json({q1->value + q2->value, q1->code, q1->system});
+	// Same unit: simple add (normalize empty code to "1")
+	std::string code1 = q1->code.empty() ? "1" : q1->code;
+	std::string code2 = q2->code.empty() ? "1" : q2->code;
+	if (code1 == code2) {
+		return format_quantity_json({q1->value + q2->value, code1, q1->system});
 	}
 
 	// Convert q2 to q1's units
-	if (!units_compatible(q1->code, q2->code)) {
+	if (!units_compatible(code1, code2)) {
 		return NullOpt<std::string>();
 	}
-	auto b2 = to_base(q2->value, q2->code);
-	auto converted = b2.has_value() ? from_base(b2.value(), q1->code) : NullOpt<double>();
+	auto b2 = to_base(q2->value, code2);
+	auto converted = b2.has_value() ? from_base(b2.value(), code1) : NullOpt<double>();
 	if (!converted.has_value()) {
 		return NullOpt<std::string>();
 	}
 
-	return format_quantity_json({q1->value + converted.value(), q1->code, q1->system});
+	return format_quantity_json({q1->value + converted.value(), code1, q1->system});
 }
 
 Optional<std::string> quantity_subtract(const std::string &q1_json, const std::string &q2_json) {
@@ -245,17 +250,19 @@ Optional<std::string> quantity_subtract(const std::string &q1_json, const std::s
 		return NullOpt<std::string>();
 	}
 
-	// Same unit: simple subtract
-	if (q1->code == q2->code) {
-		return format_quantity_json({q1->value - q2->value, q1->code, q1->system});
+	// Same unit: simple subtract (normalize empty code to "1")
+	std::string code1 = q1->code.empty() ? "1" : q1->code;
+	std::string code2 = q2->code.empty() ? "1" : q2->code;
+	if (code1 == code2) {
+		return format_quantity_json({q1->value - q2->value, code1, q1->system});
 	}
 
 	// Convert q2 to q1's units
-	if (!units_compatible(q1->code, q2->code)) {
+	if (!units_compatible(code1, code2)) {
 		return NullOpt<std::string>();
 	}
-	auto b2 = to_base(q2->value, q2->code);
-	auto converted = b2.has_value() ? from_base(b2.value(), q1->code) : NullOpt<double>();
+	auto b2 = to_base(q2->value, code2);
+	auto converted = b2.has_value() ? from_base(b2.value(), code1) : NullOpt<double>();
 	if (!converted.has_value()) {
 		return NullOpt<std::string>();
 	}
@@ -299,15 +306,21 @@ Optional<std::string> quantity_multiply(const std::string &q1_json, const std::s
 	auto q1 = parse_quantity_json(q1_json);
 	auto q2 = parse_quantity_json(q2_json);
 	if (!q1 || !q2) return NullOpt<std::string>();
+
+	// Normalize empty code to "1" (dimensionless)
+	std::string code1 = q1->code.empty() ? "1" : q1->code;
+	std::string code2 = q2->code.empty() ? "1" : q2->code;
+
 	ParsedQuantity result;
 	result.value = q1->value * q2->value;
-	// Simple unit handling: if one is "1" (dimensionless), take the other
-	if (q1->code == "1" || q1->code.empty()) {
-		result.code = q2->code;
-	} else if (q2->code == "1" || q2->code.empty()) {
-		result.code = q1->code;
+	// Unit handling: if one is dimensionless ("1"), take the other's unit.
+	// For non-dimensionless × non-dimensionless, unit algebra is not supported → NULL.
+	if (code1 == "1") {
+		result.code = code2;
+	} else if (code2 == "1") {
+		result.code = code1;
 	} else {
-		result.code = q1->code;
+		return NullOpt<std::string>();
 	}
 	result.system = q1->system;
 	return format_quantity_json(result);
@@ -318,9 +331,20 @@ Optional<std::string> quantity_divide(const std::string &q1_json, const std::str
 	auto q2 = parse_quantity_json(q2_json);
 	if (!q1 || !q2) return NullOpt<std::string>();
 	if (q2->value == 0) return NullOpt<std::string>();
+
+	// Normalize empty code to "1" (dimensionless)
+	std::string code1 = q1->code.empty() ? "1" : q1->code;
+	std::string code2 = q2->code.empty() ? "1" : q2->code;
+
 	ParsedQuantity result;
 	result.value = q1->value / q2->value;
-	result.code = q1->code;
+	// Unit handling: divisor dimensionless → preserve dividend unit.
+	// For non-dimensionless divisor, unit algebra is not supported → NULL.
+	if (code2 == "1") {
+		result.code = code1;
+	} else {
+		return NullOpt<std::string>();
+	}
 	result.system = q1->system;
 	return format_quantity_json(result);
 }
