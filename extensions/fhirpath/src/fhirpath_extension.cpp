@@ -275,6 +275,9 @@ static std::pair<bool, std::string> FastPathLookup(const char *json_data, idx_t 
 					free(json);
 				}
 			}
+		} else if (yyjson_is_null(current)) {
+			// JSON null: return miss (empty collection) so callers emit NULL
+			// instead of serializing the literal string "null".
 		} else {
 			char *json = yyjson_val_write(current, 0, nullptr);
 			if (json) {
@@ -524,17 +527,24 @@ static void FhirpathNumberFunction(DataChunk &args, ExpressionState &state, Vect
 						}
 						current = yyjson_obj_get(current, seg.c_str());
 					}
+					// Extract value BEFORE freeing the document to avoid use-after-free.
+					// Copy the numeric value into a local while the yyjson doc is still alive.
+					bool is_int = found && current && yyjson_is_int(current);
+					bool is_real = found && current && yyjson_is_real(current);
+					double extracted = 0.0;
+					if (is_int) {
+						extracted = static_cast<double>(yyjson_get_sint(current));
+					} else if (is_real) {
+						extracted = yyjson_get_real(current);
+					}
 					yyjson_doc_free(doc);
+					if (is_int || is_real) {
+						result_data[i] = extracted;
+						continue;
+					}
 					if (found && current) {
-						if (yyjson_is_int(current)) {
-							result_data[i] = static_cast<double>(yyjson_get_sint(current));
-							continue;
-						} else if (yyjson_is_real(current)) {
-							result_data[i] = yyjson_get_real(current);
-							continue;
-						}
 						// Non-numeric type (e.g. string "42"): fall through to full
-						// evaluator which handles toString→toNumber conversions.
+						// evaluator which applies a type gate — returns NULL for non-numeric.
 					} else if (!found) {
 						// Path not found in this resource: NULL
 						result_mask.SetInvalid(i);
@@ -557,7 +567,25 @@ static void FhirpathNumberFunction(DataChunk &args, ExpressionState &state, Vect
 		if (fp_results.empty()) {
 			result_mask.SetInvalid(i);
 		} else {
-			result_data[i] = str_helper.toNumber(fp_results[0]);
+			// Type gate: only convert genuinely numeric types (Integer, Decimal,
+			// Quantity, or JSON int/real). Return NULL for strings, booleans,
+			// nulls, and other non-numeric types to match the Python fallback
+			// behavior and prevent silent data corruption.
+			auto &val = fp_results[0];
+			bool is_numeric = false;
+			if (val.type == fhirpath::FPValue::Type::Integer ||
+			    val.type == fhirpath::FPValue::Type::Decimal ||
+			    val.type == fhirpath::FPValue::Type::Quantity) {
+				is_numeric = true;
+			} else if (val.type == fhirpath::FPValue::Type::JsonVal && val.json_val) {
+				is_numeric = yyjson_is_int(val.json_val) || yyjson_is_real(val.json_val) ||
+				             yyjson_is_num(val.json_val);
+			}
+			if (is_numeric) {
+				result_data[i] = str_helper.toNumber(val);
+			} else {
+				result_mask.SetInvalid(i);
+			}
 		}
 	}
 }
@@ -597,12 +625,45 @@ static void FhirpathDateFunction(DataChunk &args, ExpressionState &state, Vector
 			result_mask.SetInvalid(i);
 		} else {
 			std::string date_str = str_helper.toString(fp_results[0]);
-			// Preserve partial date precision (YYYY, YYYY-MM, YYYY-MM-DD)
-			// Only strip time portion if present (>10 chars means datetime)
-			if (date_str.size() > 10) {
-				date_str = date_str.substr(0, 10);
+			// Validate date format: accept YYYY (4), YYYY-MM (7), YYYY-MM-DD (10),
+			// or datetime with T separator (>10, take date portion).
+			// Reject non-date strings to match Python fallback behavior.
+			bool valid_date = false;
+			if (date_str.size() == 4) {
+				// Year precision: all digits
+				valid_date = std::all_of(date_str.begin(), date_str.end(),
+				                         [](unsigned char c) { return std::isdigit(c); });
+			} else if (date_str.size() == 7) {
+				// Month precision: YYYY-MM
+				valid_date = std::isdigit((unsigned char)date_str[0]) &&
+				             std::isdigit((unsigned char)date_str[1]) &&
+				             std::isdigit((unsigned char)date_str[2]) &&
+				             std::isdigit((unsigned char)date_str[3]) &&
+				             date_str[4] == '-' &&
+				             std::isdigit((unsigned char)date_str[5]) &&
+				             std::isdigit((unsigned char)date_str[6]);
+			} else if (date_str.size() >= 10) {
+				// Full date or datetime: check YYYY-MM-DD prefix
+				valid_date = std::isdigit((unsigned char)date_str[0]) &&
+				             std::isdigit((unsigned char)date_str[1]) &&
+				             std::isdigit((unsigned char)date_str[2]) &&
+				             std::isdigit((unsigned char)date_str[3]) &&
+				             date_str[4] == '-' &&
+				             std::isdigit((unsigned char)date_str[5]) &&
+				             std::isdigit((unsigned char)date_str[6]) &&
+				             date_str[7] == '-' &&
+				             std::isdigit((unsigned char)date_str[8]) &&
+				             std::isdigit((unsigned char)date_str[9]);
 			}
-			result_data[i] = StringVector::AddString(result, date_str);
+			if (valid_date) {
+				// Only strip time portion if present (>10 chars means datetime)
+				if (date_str.size() > 10) {
+					date_str = date_str.substr(0, 10);
+				}
+				result_data[i] = StringVector::AddString(result, date_str);
+			} else {
+				result_mask.SetInvalid(i);
+			}
 		}
 	}
 }
@@ -641,9 +702,34 @@ static void FhirpathBoolFunction(DataChunk &args, ExpressionState &state, Vector
 		if (fp_results.empty()) {
 			result_mask.SetInvalid(i);
 		} else {
-			try {
-				result_data[i] = str_helper.toBoolean(fp_results[0]);
-			} catch (const std::exception&) {
+			// Validate string values: only "true"/"false" are valid boolean strings.
+			// Other strings (e.g., "yes", "1") are not booleans per FHIRPath spec.
+			auto &val = fp_results[0];
+			bool valid_bool = true;
+			if (val.type == fhirpath::FPValue::Type::String) {
+				std::string lower;
+				for (auto c : val.string_val) lower += std::tolower(static_cast<unsigned char>(c));
+				if (lower != "true" && lower != "false") {
+					valid_bool = false;
+				}
+			} else if (val.type == fhirpath::FPValue::Type::JsonVal && val.json_val) {
+				if (yyjson_is_str(val.json_val)) {
+					size_t str_len;
+					const char *s = yyjson_get_str(val.json_val);
+					std::string lower;
+					for (size_t k = 0; s[k]; k++) lower += std::tolower(static_cast<unsigned char>(s[k]));
+					if (lower != "true" && lower != "false") {
+						valid_bool = false;
+					}
+				}
+			}
+			if (valid_bool) {
+				try {
+					result_data[i] = str_helper.toBoolean(fp_results[0]);
+				} catch (const std::exception&) {
+					result_mask.SetInvalid(i);
+				}
+			} else {
 				result_mask.SetInvalid(i);
 			}
 		}
@@ -681,36 +767,94 @@ static void FhirpathJsonFunction(DataChunk &args, ExpressionState &state, Vector
 		    EvaluateFhirpath(func_state, resources[r_idx].GetData(), resources[r_idx].GetSize(),
 		                     expressions[e_idx].GetString());
 
-		// Return as JSON array
+		// Return NULL for empty results, consistent with other UDFs and Python fallback
+		if (fp_results.empty()) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
+		// Return as JSON array with native types preserved (numbers, booleans, objects)
 		std::string json_str = "[";
 		for (size_t j = 0; j < fp_results.size(); j++) {
 			if (j > 0) {
 				json_str += ",";
 			}
-			auto s = str_helper.toString(fp_results[j]);
-			// JSON escaping — handle all control characters (0x00-0x1F)
-			json_str += "\"";
-			for (unsigned char c : s) {
-				switch (c) {
-				case '"':  json_str += "\\\""; break;
-				case '\\': json_str += "\\\\"; break;
-				case '\b': json_str += "\\b"; break;
-				case '\f': json_str += "\\f"; break;
-				case '\n': json_str += "\\n"; break;
-				case '\r': json_str += "\\r"; break;
-				case '\t': json_str += "\\t"; break;
-				default:
-					if (c < 0x20) {
-						char buf[8];
-						snprintf(buf, sizeof(buf), "\\u%04x", c);
-						json_str += buf;
+			auto &val = fp_results[j];
+			if (val.type == fhirpath::FPValue::Type::Integer) {
+				char buf[32];
+				snprintf(buf, sizeof(buf), "%lld", (long long)val.int_val);
+				json_str += buf;
+			} else if (val.type == fhirpath::FPValue::Type::Decimal) {
+				char buf[64];
+				// Use source_text if available to preserve precision
+				if (!val.source_text.empty()) {
+					json_str += val.source_text;
+				} else {
+					snprintf(buf, sizeof(buf), "%.17g", val.decimal_val);
+					json_str += buf;
+				}
+			} else if (val.type == fhirpath::FPValue::Type::Boolean) {
+				json_str += val.bool_val ? "true" : "false";
+			} else if (val.type == fhirpath::FPValue::Type::Quantity) {
+				// Serialize as JSON object {"value": X, "unit": "Y"}
+				json_str += "{\"value\":";
+				char buf[64];
+				snprintf(buf, sizeof(buf), "%.17g", val.quantity_value);
+				json_str += buf;
+				json_str += ",\"unit\":\"";
+				for (unsigned char c : val.quantity_unit) {
+					if (c == '"') {
+						json_str += "\\\"";
+					} else if (c == '\\') {
+						json_str += "\\\\";
 					} else {
 						json_str += static_cast<char>(c);
 					}
-					break;
+				}
+				json_str += "\"}";
+			} else if (val.type == fhirpath::FPValue::Type::JsonVal && val.json_val) {
+				// Serialize yyjson value directly (preserves native JSON types)
+				auto *written = yyjson_val_write(val.json_val, 0, nullptr);
+				if (written) {
+					json_str += written;
+					free(written);
+				} else {
+					json_str += "null";
+				}
+			} else {
+				// String, Date, DateTime, Time
+				auto s = str_helper.toString(val);
+				// Detect already-serialized JSON objects/arrays from the evaluator
+				// and output them without quotes to produce proper nested JSON.
+				bool is_json_struct = (!s.empty() && (s[0] == '{' || s[0] == '['));
+				if (is_json_struct) {
+					json_str += s;
+				} else {
+					// Wrap in quotes with JSON escaping
+					json_str += "\"";
+					for (unsigned char c : s) {
+						switch (c) {
+						case '"':  json_str += "\\\""; break;
+						case '\\': json_str += "\\\\"; break;
+						case '\b': json_str += "\\b"; break;
+						case '\f': json_str += "\\f"; break;
+						case '\n': json_str += "\\n"; break;
+						case '\r': json_str += "\\r"; break;
+						case '\t': json_str += "\\t"; break;
+						default:
+							if (c < 0x20) {
+								char buf[8];
+								snprintf(buf, sizeof(buf), "\\u%04x", c);
+								json_str += buf;
+							} else {
+								json_str += static_cast<char>(c);
+							}
+							break;
+						}
+					}
+					json_str += "\"";
 				}
 			}
-			json_str += "\"";
 		}
 		json_str += "]";
 		result_data[i] = StringVector::AddString(result, json_str);
