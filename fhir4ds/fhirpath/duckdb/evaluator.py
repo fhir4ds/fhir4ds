@@ -165,6 +165,8 @@ class FHIRPathEvaluator:
         stripped = expression.strip()
         # Strip string literals before checking (they can contain anything)
         no_strings = re.sub(r"'[^']*'", '', stripped)
+        # Strip Date/Time literals before checking
+        no_strings = re.sub(r'@[T0-9:.\-+Z]+', '', no_strings)
         m = self._INVALID_TOKEN_RE.search(no_strings)
         if m:
             pos = m.start()
