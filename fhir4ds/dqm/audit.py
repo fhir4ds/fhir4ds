@@ -48,6 +48,8 @@ class AuditEngine:
         """Group flat evidence items by trace, attribute, operator, and threshold."""
         compacted = {}
         for item in flat_evidence:
+            if not isinstance(item, dict):
+                continue
             trace = tuple(item.get("trace", []))
             attr = item.get("attribute")
             op = item.get("operator")

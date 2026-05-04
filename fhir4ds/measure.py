@@ -52,6 +52,10 @@ def evaluate_measure(
         raise TypeError(
             "Expected a DuckDB connection for 'conn', got None"
         )
+    if not hasattr(conn, "execute"):
+        raise TypeError(
+            f"Expected a DuckDB connection for 'conn', got {type(conn).__name__}"
+        )
 
     call_kwargs: dict[str, Any] = {
         "library_path": library_path,

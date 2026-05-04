@@ -68,6 +68,7 @@ class ReactiveEvaluator:
         con: Any,
         measure: str,
         adapter: Any,
+        audit_mode: str = "none",
     ) -> None:
         # Check supports_incremental if the method exists; otherwise reject.
         if not (hasattr(adapter, "supports_incremental") and adapter.supports_incremental()):
@@ -78,6 +79,7 @@ class ReactiveEvaluator:
         self._con = con
         self._measure = measure
         self._adapter = adapter
+        self._audit_mode = audit_mode
         self._last_sync: Optional[datetime] = None
 
     def update(self, as_of: Optional[datetime] = None) -> Optional[dict]:
@@ -111,6 +113,7 @@ class ReactiveEvaluator:
 
         delta = dqm.MeasureEvaluator(self._con, self._measure).evaluate(
             patient_ids=dirty_ids,
+            audit_mode=self._audit_mode,
         )
 
         self._last_sync = as_of

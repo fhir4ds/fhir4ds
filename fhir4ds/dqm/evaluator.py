@@ -32,6 +32,10 @@ class MeasureEvaluator:
         audit_or_strategy: AuditOrStrategy = AuditOrStrategy.TRUE_BRANCH,
         narrative_generator: NarrativeGenerator | None = None,
     ):
+        if conn is not None and not hasattr(conn, "execute"):
+            raise TypeError(
+                f"Expected a DuckDB connection for 'conn', got {type(conn).__name__}"
+            )
         self.conn = conn
         self._parser = MeasureParser()
         self._audit_engine = AuditEngine()
@@ -377,7 +381,12 @@ class MeasureEvaluator:
         path = Path(measure_bundle)
         if not path.exists():
             raise FileNotFoundError(f"Measure file not found: {measure_bundle}")
-        return json.loads(path.read_text())
+        try:
+            return json.loads(path.read_text())
+        except json.JSONDecodeError as e:
+            raise MeasureParseError(
+                f"Invalid JSON in measure file '{measure_bundle}': {e}"
+            ) from e
 
     def _evaluate_group(
         self,

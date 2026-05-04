@@ -52,6 +52,10 @@ class FHIRDataLoader:
                 f"Expected a DuckDB connection for 'con', got {type(con).__name__}"
             )
         self.con = con
+        if not isinstance(table_name, str) or not table_name.isidentifier():
+            raise ValueError(
+                f"table_name must be a valid SQL identifier, got {table_name!r}"
+            )
         self.table_name = table_name
         # Share one mutable cache per DuckDB connection so repeated FHIRDataLoader
         # instances update the same _in_valueset_python closure in-place.
@@ -431,6 +435,10 @@ class FHIRDataLoader:
         valuesets: List[Any],
         table_name: str = "valueset_codes"
     ) -> int:
+        if not isinstance(table_name, str) or not table_name.isidentifier():
+            raise ValueError(
+                f"table_name must be a valid SQL identifier, got {table_name!r}"
+            )
         """
         Load ValueSet codes into a table for fhirpath_in_valueset UDF.
 
