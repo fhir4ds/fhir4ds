@@ -176,7 +176,7 @@ static std::string fpValueToString(const FPValue &val) {
 		return std::to_string(val.int_val);
 	case FPValue::Type::Decimal: {
 		std::ostringstream oss;
-		oss << val.decimal_val;
+		oss << std::setprecision(17) << val.decimal_val;
 		return oss.str();
 	}
 	case FPValue::Type::Boolean:
@@ -324,8 +324,14 @@ Evaluator::~Evaluator() {
 
 FPCollection Evaluator::eval(const ASTNode &node, const FPCollection &input, yyjson_doc *doc) {
 	switch (node.type) {
-	case NodeType::IntegerLiteral:
-		return {FPValue::FromInteger(node_value_get<int64_t>(node.value))};
+	case NodeType::IntegerLiteral: {
+		int64_t ival = node_value_get<int64_t>(node.value);
+		// FHIRPath Integer is 32-bit signed. Promote to Decimal if out of range.
+		if (ival > INT32_MAX || ival < INT32_MIN) {
+			return {FPValue::FromDecimal(static_cast<double>(ival))};
+		}
+		return {FPValue::FromInteger(ival)};
+	}
 	case NodeType::DecimalLiteral: {
 		auto v = FPValue::FromDecimal(node_value_get<double>(node.value));
 		v.source_text = node.value.string_val;
@@ -1319,14 +1325,22 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 	// exp() and ln() math functions
 	if (name == "exp") {
 		if (input.empty()) return {};
-		double n = toNumber(input[0]);
+		auto &val = input[0];
+		if (!isNumericType(val) && val.type != FPValue::Type::Quantity) {
+			return {};
+		}
+		double n = getNumericValue(val);
 		double result = std::exp(n);
 		if (std::isnan(result) || std::isinf(result)) return {};
 		return {FPValue::FromDecimal(result)};
 	}
 	if (name == "ln") {
 		if (input.empty()) return {};
-		double n = toNumber(input[0]);
+		auto &val = input[0];
+		if (!isNumericType(val) && val.type != FPValue::Type::Quantity) {
+			return {};
+		}
+		double n = getNumericValue(val);
 		if (n <= 0) return {};
 		return {FPValue::FromDecimal(std::log(n))};
 	}
@@ -1335,8 +1349,16 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 		if (node.children.empty()) return {};
 		auto arg = evalArgIsolated(*node.children[0], input, doc);
 		if (arg.empty()) return {};
-		double val = toNumber(input[0]);
-		double base = toNumber(arg[0]);
+		auto &logVal = input[0];
+		auto &baseVal = arg[0];
+		if (!isNumericType(logVal) && logVal.type != FPValue::Type::Quantity) {
+			return {};
+		}
+		if (!isNumericType(baseVal) && baseVal.type != FPValue::Type::Quantity) {
+			return {};
+		}
+		double val = getNumericValue(logVal);
+		double base = getNumericValue(baseVal);
 		if (val <= 0 || base <= 0 || base == 1.0) return {};
 		return {FPValue::FromDecimal(std::log(val) / std::log(base))};
 	}
@@ -1540,6 +1562,9 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 		if (name == "trace") {
 			return fn_trace(input);
 		}
+		if (name == "aggregate") {
+			return fn_aggregate(node, input, doc);
+		}
 		if (name == "sort") {
 			// Collect all sort criteria
 			std::vector<const ASTNode *> criteria;
@@ -1647,6 +1672,11 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 			if (input.empty() || arg.empty()) {
 				return {};
 			}
+			// FHIRPath spec: indexOf() requires a String input
+			auto t = effectiveType(input[0]);
+			if (t != FPValue::Type::String) {
+				return {};
+			}
 			std::string s = toString(input[0]);
 			std::string sub = toString(arg[0]);
 			auto pos = s.find(sub);
@@ -1724,9 +1754,6 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 				              node.children.size() >= 3 ? node.children[2].get() : nullptr, input, doc);
 			}
 			return {};
-		}
-		if (name == "aggregate") {
-			return fn_aggregate(node, input, doc);
 		}
 		if (name == "split") {
 			return fn_split(input, arg);
@@ -1950,10 +1977,10 @@ FPCollection Evaluator::fn_startsWith(const FPCollection &input, const FPCollect
 	if (input.size() > 1) {
 		throw FHIRPathSpecError("startsWith() requires a single item input");
 	}
+	// FHIRPath spec: startsWith() requires a String input
 	auto t = effectiveType(input[0]);
-	if (t != FPValue::Type::String && input[0].type == FPValue::Type::JsonVal && input[0].json_val &&
-	    yyjson_is_obj(input[0].json_val)) {
-		throw FHIRPathSpecError("startsWith() requires a string input, got complex type");
+	if (t != FPValue::Type::String) {
+		return {};
 	}
 	std::string s = toString(input[0]);
 	std::string prefix = toString(arg[0]);
@@ -1962,6 +1989,11 @@ FPCollection Evaluator::fn_startsWith(const FPCollection &input, const FPCollect
 
 FPCollection Evaluator::fn_endsWith(const FPCollection &input, const FPCollection &arg) {
 	if (input.empty() || arg.empty()) {
+		return {};
+	}
+	// FHIRPath spec: endsWith() requires a String input
+	auto t = effectiveType(input[0]);
+	if (t != FPValue::Type::String) {
 		return {};
 	}
 	std::string s = toString(input[0]);
@@ -2019,6 +2051,11 @@ FPCollection Evaluator::fn_replace(const FPCollection &input, const FPCollection
 	if (input.empty() || pattern.empty() || substitution.empty()) {
 		return {};
 	}
+	// FHIRPath spec: replace() requires a String input
+	auto t = effectiveType(input[0]);
+	if (t != FPValue::Type::String) {
+		return {};
+	}
 	std::string s = toString(input[0]);
 	std::string pat = toString(pattern[0]);
 	std::string sub = substitution.empty() ? "" : toString(substitution[0]);
@@ -2057,6 +2094,11 @@ FPCollection Evaluator::fn_replace(const FPCollection &input, const FPCollection
 FPCollection Evaluator::fn_substring(const FPCollection &input, const FPCollection &start,
                                      const FPCollection *length) {
 	if (input.empty() || start.empty()) {
+		return {};
+	}
+	// FHIRPath spec: substring() requires a String input
+	auto t = effectiveType(input[0]);
+	if (t != FPValue::Type::String) {
 		return {};
 	}
 	std::string s = toString(input[0]);
@@ -2104,6 +2146,11 @@ FPCollection Evaluator::fn_length(const FPCollection &input) {
 	if (input.empty() || input.size() > 1) {
 		return {};
 	}
+	// FHIRPath spec: length() requires a String input
+	auto t = effectiveType(input[0]);
+	if (t != FPValue::Type::String) {
+		return {};
+	}
 	std::string s = toString(input[0]);
 	// FHIRPath length counts Unicode code-points, not bytes
 	return {FPValue::FromInteger(static_cast<int64_t>(utf8Len(s)))};
@@ -2111,6 +2158,11 @@ FPCollection Evaluator::fn_length(const FPCollection &input) {
 
 FPCollection Evaluator::fn_upper(const FPCollection &input) {
 	if (input.empty() || input.size() > 1) {
+		return {};
+	}
+	// FHIRPath spec: upper() requires a String input
+	auto t = effectiveType(input[0]);
+	if (t != FPValue::Type::String) {
 		return {};
 	}
 	std::string s = toString(input[0]);
@@ -2173,6 +2225,11 @@ FPCollection Evaluator::fn_lower(const FPCollection &input) {
 	if (input.empty() || input.size() > 1) {
 		return {};
 	}
+	// FHIRPath spec: lower() requires a String input
+	auto t = effectiveType(input[0]);
+	if (t != FPValue::Type::String) {
+		return {};
+	}
 	std::string s = toString(input[0]);
 	// Unicode-aware lowercase: iterate code points, case-map, re-encode.
 	std::string result;
@@ -2232,6 +2289,11 @@ FPCollection Evaluator::fn_trim(const FPCollection &input) {
 	if (input.empty()) {
 		return {};
 	}
+	// FHIRPath spec: trim() requires a String input
+	auto t = effectiveType(input[0]);
+	if (t != FPValue::Type::String) {
+		return {};
+	}
 	std::string s = toString(input[0]);
 	size_t start = s.find_first_not_of(" \t\n\r");
 	size_t end = s.find_last_not_of(" \t\n\r");
@@ -2273,13 +2335,32 @@ FPCollection Evaluator::fn_toInteger(const FPCollection &input) {
 			return {};  // Non-integer decimal → not convertible
 		}
 		std::string s = toString(val);
-		// Validate: must be a pure integer (optional sign + digits only)
-		size_t idx = 0;
-		long long result = std::stoll(s, &idx);
-		if (idx != s.size()) return {};  // not all characters consumed
-		// FHIRPath spec: Integer must fit in 32-bit signed range
-		if (result < INT32_MIN_VAL || result > INT32_MAX_VAL) return {};
-		return {FPValue::FromInteger(static_cast<int64_t>(result))};
+		// First try: pure integer string (optional sign + digits only)
+		{
+			size_t idx = 0;
+			long long result = std::stoll(s, &idx);
+			if (idx == s.size()) {
+				// All characters consumed → pure integer string
+				if (result < INT32_MIN_VAL || result > INT32_MAX_VAL) return {};
+				return {FPValue::FromInteger(static_cast<int64_t>(result))};
+			}
+		}
+		// Second try: decimal string with integer value (e.g. "1.0", "-12.0")
+		// FHIRPath spec: toInteger converts strings that represent decimal values
+		// with no fractional component.
+		{
+			// Reject hex strings
+			if (s.size() >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) return {};
+			size_t idx = 0;
+			double dv = std::stod(s, &idx);
+			if (idx != s.size()) return {};  // not all consumed
+			if (std::isnan(dv) || std::isinf(dv)) return {};
+			if (std::isfinite(dv) && dv == std::floor(dv) &&
+			    dv >= static_cast<double>(INT32_MIN_VAL) && dv <= static_cast<double>(INT32_MAX_VAL)) {
+				return {FPValue::FromInteger(static_cast<int64_t>(dv))};
+			}
+			return {};
+		}
 	} catch (const std::exception &) {
 		return {};
 	}
@@ -2516,12 +2597,6 @@ FPCollection Evaluator::fn_abs(const FPCollection &input) {
 		return {};
 	}
 	auto &val = input[0];
-	if (val.type == FPValue::Type::Integer) {
-		return {FPValue::FromInteger(std::abs(val.int_val))};
-	}
-	if (val.type == FPValue::Type::Decimal) {
-		return {FPValue::FromDecimal(std::abs(val.decimal_val))};
-	}
 	if (val.type == FPValue::Type::Quantity) {
 		FPValue v;
 		v.type = FPValue::Type::Quantity;
@@ -2529,66 +2604,145 @@ FPCollection Evaluator::fn_abs(const FPCollection &input) {
 		v.quantity_unit = val.quantity_unit;
 		return {v};
 	}
-	double n = toNumber(val);
-	return {FPValue::FromDecimal(std::abs(n))};
+	if (isNumericType(val)) {
+		double n = getNumericValue(val);
+		auto et = effectiveType(val);
+		if (et == FPValue::Type::Integer) {
+			return {FPValue::FromInteger(static_cast<int64_t>(std::abs(n)))};
+		}
+		return {FPValue::FromDecimal(std::abs(n))};
+	}
+	// Non-numeric types: per FHIRPath spec, signal error (caught as empty)
+	return {};
 }
 
 FPCollection Evaluator::fn_ceiling(const FPCollection &input) {
 	if (input.empty()) {
 		return {};
 	}
-	return {FPValue::FromInteger(static_cast<int64_t>(std::ceil(toNumber(input[0]))))};
+	auto &val = input[0];
+	if (val.type == FPValue::Type::Quantity) {
+		FPValue v;
+		v.type = FPValue::Type::Quantity;
+		v.quantity_value = std::ceil(val.quantity_value);
+		v.quantity_unit = val.quantity_unit;
+		return {v};
+	}
+	if (isNumericType(val)) {
+		double n = getNumericValue(val);
+		return {FPValue::FromInteger(static_cast<int64_t>(std::ceil(n)))};
+	}
+	// Non-numeric types: per FHIRPath spec, return empty
+	return {};
 }
 
 FPCollection Evaluator::fn_floor(const FPCollection &input) {
 	if (input.empty()) {
 		return {};
 	}
-	return {FPValue::FromInteger(static_cast<int64_t>(std::floor(toNumber(input[0]))))};
+	auto &val = input[0];
+	if (val.type == FPValue::Type::Quantity) {
+		FPValue v;
+		v.type = FPValue::Type::Quantity;
+		v.quantity_value = std::floor(val.quantity_value);
+		v.quantity_unit = val.quantity_unit;
+		return {v};
+	}
+	if (isNumericType(val)) {
+		double n = getNumericValue(val);
+		return {FPValue::FromInteger(static_cast<int64_t>(std::floor(n)))};
+	}
+	// Non-numeric types: per FHIRPath spec, return empty
+	return {};
 }
 
 FPCollection Evaluator::fn_round(const FPCollection &input, const FPCollection *precision) {
 	if (input.empty()) {
 		return {};
 	}
-	double val = toNumber(input[0]);
-	int64_t prec = 0;
-	if (precision && !precision->empty()) {
-		prec = static_cast<int64_t>(toNumber((*precision)[0]));
+	auto &val = input[0];
+	if (val.type == FPValue::Type::Quantity) {
+		// Quantity uses its own path
+		double dval = val.quantity_value;
+		int64_t prec = 0;
+		if (precision && !precision->empty()) {
+			prec = static_cast<int64_t>(toNumber((*precision)[0]));
+		}
+		double factor = std::pow(10.0, static_cast<double>(prec));
+		FPValue v;
+		v.type = FPValue::Type::Quantity;
+		v.quantity_value = std::round(dval * factor) / factor;
+		v.quantity_unit = val.quantity_unit;
+		return {v};
 	}
-	double factor = std::pow(10.0, static_cast<double>(prec));
-	return {FPValue::FromDecimal(std::round(val * factor) / factor)};
+	if (isNumericType(val)) {
+		double dval = getNumericValue(val);
+		int64_t prec = 0;
+		if (precision && !precision->empty()) {
+			prec = static_cast<int64_t>(toNumber((*precision)[0]));
+		}
+		double factor = std::pow(10.0, static_cast<double>(prec));
+		double result = std::round(dval * factor) / factor;
+		return {FPValue::FromDecimal(result)};
+	}
+	// Non-numeric types: per FHIRPath spec, return empty
+	return {};
 }
 
 FPCollection Evaluator::fn_ln(const FPCollection &input) {
 	if (input.empty()) {
 		return {};
 	}
-	double val = toNumber(input[0]);
-	if (val <= 0) {
+	auto &val = input[0];
+	if (!isNumericType(val) && val.type != FPValue::Type::Quantity) {
+		// Non-numeric types: per FHIRPath spec, return empty
 		return {};
 	}
-	return {FPValue::FromDecimal(std::log(val))};
+	double dval = getNumericValue(val);
+	if (dval <= 0) {
+		return {};
+	}
+	return {FPValue::FromDecimal(std::log(dval))};
 }
 
 FPCollection Evaluator::fn_log(const FPCollection &input, const FPCollection &base) {
 	if (input.empty() || base.empty()) {
 		return {};
 	}
-	double val = toNumber(input[0]);
-	double b = toNumber(base[0]);
-	if (val <= 0 || b <= 0 || b == 1.0) {
+	auto &val = input[0];
+	auto &bval = base[0];
+	if (!isNumericType(val) && val.type != FPValue::Type::Quantity) {
+		// Non-numeric types: per FHIRPath spec, return empty
 		return {};
 	}
-	return {FPValue::FromDecimal(std::log(val) / std::log(b))};
+	if (!isNumericType(bval) && bval.type != FPValue::Type::Quantity) {
+		// Non-numeric types: per FHIRPath spec, return empty
+		return {};
+	}
+	double dval = getNumericValue(val);
+	double b = getNumericValue(bval);
+	if (dval <= 0 || b <= 0 || b == 1.0) {
+		return {};
+	}
+	return {FPValue::FromDecimal(std::log(dval) / std::log(b))};
 }
 
 FPCollection Evaluator::fn_power(const FPCollection &input, const FPCollection &exponent) {
 	if (input.empty() || exponent.empty()) {
 		return {};
 	}
-	double base = toNumber(input[0]);
-	double exp = toNumber(exponent[0]);
+	auto &baseVal = input[0];
+	auto &expVal = exponent[0];
+	if (!isNumericType(baseVal) && baseVal.type != FPValue::Type::Quantity) {
+		// Non-numeric types: per FHIRPath spec, return empty
+		return {};
+	}
+	if (!isNumericType(expVal) && expVal.type != FPValue::Type::Quantity) {
+		// Non-numeric types: per FHIRPath spec, return empty
+		return {};
+	}
+	double base = getNumericValue(baseVal);
+	double exp = getNumericValue(expVal);
 	// FHIRPath spec: 0^0 is undefined
 	if (base == 0.0 && exp == 0.0) {
 		return {};
@@ -2604,18 +2758,28 @@ FPCollection Evaluator::fn_sqrt(const FPCollection &input) {
 	if (input.empty()) {
 		return {};
 	}
-	double val = toNumber(input[0]);
-	if (val < 0) {
+	auto &val = input[0];
+	if (!isNumericType(val) && val.type != FPValue::Type::Quantity) {
+		// Non-numeric types: per FHIRPath spec, return empty
 		return {};
 	}
-	return {FPValue::FromDecimal(std::sqrt(val))};
+	double dval = getNumericValue(val);
+	if (dval < 0) {
+		return {};
+	}
+	return {FPValue::FromDecimal(std::sqrt(dval))};
 }
 
 FPCollection Evaluator::fn_truncate(const FPCollection &input) {
 	if (input.empty()) {
 		return {};
 	}
-	double raw = toNumber(input[0]);
+	auto &val = input[0];
+	if (!isNumericType(val) && val.type != FPValue::Type::Quantity) {
+		// Non-numeric types: per FHIRPath spec, return empty
+		return {};
+	}
+	double raw = getNumericValue(val);
 	if (raw > static_cast<double>(INT64_MAX) || raw < static_cast<double>(INT64_MIN)) {
 		return {};
 	}
@@ -2624,8 +2788,8 @@ FPCollection Evaluator::fn_truncate(const FPCollection &input) {
 
 FPCollection Evaluator::fn_iif(const ASTNode &criterion, const ASTNode &trueResult, const ASTNode *falseResult,
                                const FPCollection &input, yyjson_doc *doc) {
-	// FHIRPath spec: if input collection has more than one item, return empty
-	if (input.size() > 1) return {};
+	// Note: FHIRPath spec does NOT restrict iif() to singleton input.
+	// Removing the input.size() > 1 guard that was incorrectly returning empty.
 	auto saved_vars = defined_variables_;
 	auto cond = eval(criterion, input, doc);
 	defined_variables_ = saved_vars; // Restore after criterion evaluation
@@ -3036,9 +3200,9 @@ static DateTimeParts parseDateTimeParts(const std::string &s) {
 	if (std::sscanf(c + 11, "%d", &p.hour) != 1) return p;
 	p.precision = 4;
 	if (s.size() <= 13 || s[13] != ':') {
-		// ISO 8601: T08 implies T08:00 (minute-level precision with minute=0)
-		p.minute = 0;
-		p.precision = 5;
+		// FHIRPath: hour-only precision (e.g. @2018-01-01T10) is precision 4.
+		// Do NOT promote to minute-level -- precision mismatch with minute-level
+		// DateTime must return empty per spec §6.2.
 		return p;
 	}
 
@@ -3301,15 +3465,16 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		return {FPValue::FromString(l_str + r_str)};
 	}
 
-	// Membership operators
+	// Membership operators (use fpValuesEqual per FHIRPath = semantics)
+	// Spec §6.4.2: in returns true if the left element is equal to an item in the right
+	// Spec §6.4.3: contains returns true if an item in the left is equal to the right element
 	if (op == "in") {
 		if (left.empty()) return {};
 		if (left.size() > 1) return {};
 		// Single element in empty collection → false
 		if (right.empty()) return {FPValue::FromBoolean(false)};
-		std::string needle = toString(left[0]);
 		for (const auto &item : right) {
-			if (toString(item) == needle) {
+			if (fpValuesEqual(item, left[0])) {
 				return {FPValue::FromBoolean(true)};
 			}
 		}
@@ -3320,9 +3485,8 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		if (right.size() > 1) return {};
 		// Empty collection contains single element → false
 		if (left.empty()) return {FPValue::FromBoolean(false)};
-		std::string needle = toString(right[0]);
 		for (const auto &item : left) {
-			if (toString(item) == needle) {
+			if (fpValuesEqual(item, right[0])) {
 				return {FPValue::FromBoolean(true)};
 			}
 		}
@@ -3544,35 +3708,36 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			return {FPValue::FromBoolean(l_conv >= r_conv)};
 		}
 
-		// Numeric comparison (handle JSON values stored as strings)
-		double l_num, r_num;
-		bool l_numeric = false, r_numeric = false;
-		if (isNumericType(lv)) { l_num = getNumericValue(lv); l_numeric = true; }
-		else if (effectiveType(lv) == FPValue::Type::String) {
-			std::string s = toString(lv);
-			char *end = nullptr;
-			l_num = std::strtod(s.c_str(), &end);
-			if (end && end != s.c_str() && *end == '\0') l_numeric = true;
+		// Boolean comparison: true=1, false=0 (FHIRPath §6.2)
+		auto lt = effectiveType(lv);
+		auto rt = effectiveType(rv);
+		if (lt == FPValue::Type::Boolean && rt == FPValue::Type::Boolean) {
+			bool lb = false, rb = false;
+			if (lv.type == FPValue::Type::Boolean) lb = lv.bool_val;
+			else if (lv.type == FPValue::Type::JsonVal && lv.json_val) lb = yyjson_get_bool(lv.json_val);
+			if (rv.type == FPValue::Type::Boolean) rb = rv.bool_val;
+			else if (rv.type == FPValue::Type::JsonVal && rv.json_val) rb = yyjson_get_bool(rv.json_val);
+			int li = lb ? 1 : 0;
+			int ri = rb ? 1 : 0;
+			if (op == "<") return {FPValue::FromBoolean(li < ri)};
+			if (op == ">") return {FPValue::FromBoolean(li > ri)};
+			if (op == "<=") return {FPValue::FromBoolean(li <= ri)};
+			return {FPValue::FromBoolean(li >= ri)};
 		}
-		if (isNumericType(rv)) { r_num = getNumericValue(rv); r_numeric = true; }
-		else if (effectiveType(rv) == FPValue::Type::String) {
-			std::string s = toString(rv);
-			char *end = nullptr;
-			r_num = std::strtod(s.c_str(), &end);
-			if (end && end != s.c_str() && *end == '\0') r_numeric = true;
-		}
-		if (l_numeric && r_numeric) {
+
+		// Numeric comparison
+		if (isNumericType(lv) && isNumericType(rv)) {
+			double l_num = getNumericValue(lv);
+			double r_num = getNumericValue(rv);
 			if (op == "<") return {FPValue::FromBoolean(l_num < r_num)};
 			if (op == ">") return {FPValue::FromBoolean(l_num > r_num)};
 			if (op == "<=") return {FPValue::FromBoolean(l_num <= r_num)};
 			return {FPValue::FromBoolean(l_num >= r_num)};
 		}
 		// One numeric, one not → incompatible
-		if (l_numeric || r_numeric) return {};
+		if (isNumericType(lv) || isNumericType(rv)) return {};
 
-		// String comparison - only between same types
-		auto lt = effectiveType(lv);
-		auto rt = effectiveType(rv);
+		// String comparison - lexicographic, only between same types
 		if (lt == FPValue::Type::String && rt == FPValue::Type::String) {
 			std::string l_str = toString(lv);
 			std::string r_str = toString(rv);
@@ -3707,7 +3872,7 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			result = l_num / r_num;
 		} else if (op == "div") {
 			if (r_num == 0) return {};
-			result = std::floor(l_num / r_num);
+			result = std::trunc(l_num / r_num);
 		} else if (op == "mod") {
 			if (r_num == 0) return {};
 			result = std::fmod(l_num, r_num);
@@ -3717,6 +3882,12 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		bool l_int = (effectiveType(lv) == FPValue::Type::Integer);
 		bool r_int = (effectiveType(rv) == FPValue::Type::Integer);
 		if (l_int && r_int && op != "/") {
+			// FHIRPath Integer is 32-bit signed; promote to Decimal on overflow
+			constexpr double INT32_MIN_D = -2147483648.0;
+			constexpr double INT32_MAX_D = 2147483647.0;
+			if (result < INT32_MIN_D || result > INT32_MAX_D) {
+				return {FPValue::FromDecimal(result)};
+			}
 			return {FPValue::FromInteger(static_cast<int64_t>(result))};
 		}
 		return {FPValue::FromDecimal(result)};
@@ -3731,13 +3902,20 @@ FPCollection Evaluator::evalUnaryOp(const ASTNode &node, const FPCollection &inp
 		return {};
 	}
 	if (node.op == "-") {
-		if (operand[0].type == FPValue::Type::Integer) {
-			return {FPValue::FromInteger(-operand[0].int_val)};
+		auto et = effectiveType(operand[0]);
+		if (et == FPValue::Type::Integer) {
+			double result = -getNumericValue(operand[0]);
+			constexpr double INT32_MIN_D = -2147483648.0;
+			constexpr double INT32_MAX_D = 2147483647.0;
+			if (result < INT32_MIN_D || result > INT32_MAX_D) {
+				return {FPValue::FromDecimal(result)};
+			}
+			return {FPValue::FromInteger(static_cast<int64_t>(result))};
 		}
-		if (operand[0].type == FPValue::Type::Decimal) {
-			return {FPValue::FromDecimal(-operand[0].decimal_val)};
+		if (et == FPValue::Type::Decimal) {
+			return {FPValue::FromDecimal(-getNumericValue(operand[0]))};
 		}
-		if (operand[0].type == FPValue::Type::Quantity) {
+		if (et == FPValue::Type::Quantity) {
 			FPValue v;
 			v.type = FPValue::Type::Quantity;
 			v.quantity_value = -operand[0].quantity_value;
@@ -3747,8 +3925,9 @@ FPCollection Evaluator::evalUnaryOp(const ASTNode &node, const FPCollection &inp
 		throw FHIRPathSpecError("Unary - applied to non-numeric type");
 	}
 	if (node.op == "+") {
-		if (operand[0].type != FPValue::Type::Integer && operand[0].type != FPValue::Type::Decimal &&
-		    operand[0].type != FPValue::Type::Quantity) {
+		auto et = effectiveType(operand[0]);
+		if (et != FPValue::Type::Integer && et != FPValue::Type::Decimal &&
+		    et != FPValue::Type::Quantity) {
 			throw FHIRPathSpecError("Unary + applied to non-numeric type");
 		}
 		return operand;
@@ -3785,8 +3964,15 @@ std::string Evaluator::toString(const FPValue &val) const {
 	case FPValue::Type::Integer:
 		return std::to_string(val.int_val);
 	case FPValue::Type::Decimal: {
+		// Use source_text for literal decimals to preserve exact input precision.
+		// Otherwise use high-precision output (17 significant digits) to preserve
+		// double precision for computed results, per CQL spec requirement of
+		// at least 18 digits of precision for Decimal values.
+		if (!val.source_text.empty()) {
+			return val.source_text;
+		}
 		std::ostringstream oss;
-		oss << val.decimal_val;
+		oss << std::setprecision(17) << val.decimal_val;
 		std::string s = oss.str();
 		// Ensure decimal always has a decimal point
 		if (s.find('.') == std::string::npos && s.find('e') == std::string::npos && s.find('E') == std::string::npos) {
@@ -4187,7 +4373,11 @@ FPCollection Evaluator::fn_convertsToQuantity(const FPCollection &input) {
 
 FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &type_name, bool exact) {
 	if (input.empty()) return {};
+	if (input.size() > 1) return {};
 	auto &val = input[0];
+
+	auto t = effectiveType(val);
+	bool is_fhir = (val.type == FPValue::Type::JsonVal);
 
 	// Parse namespace from qualified type name (e.g., "FHIR.boolean", "System.Boolean")
 	std::string ns, target;
@@ -4203,6 +4393,7 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 		if (target.size() >= 2 && target.front() == '`' && target.back() == '`') {
 			target = target.substr(1, target.size() - 2);
 		}
+		// Determine namespace for unqualified type names
 		static const char* system_types[] = {
 			"Boolean", "Integer", "Decimal", "String", "Date", "DateTime", "Time", "Quantity", nullptr
 		};
@@ -4210,7 +4401,11 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 		for (int i = 0; system_types[i]; ++i) {
 			if (target == system_types[i]) { is_system = true; break; }
 		}
-		if (is_system) {
+		// For FHIR values, unqualified type names should check FHIR namespace
+		// even if they're also System types (e.g., Quantity is both System and FHIR)
+		if (is_fhir) {
+			ns = "FHIR";
+		} else if (is_system) {
 			ns = "System";
 		} else if (!target.empty() && std::islower(static_cast<unsigned char>(target[0]))) {
 			ns = "FHIR";
@@ -4219,12 +4414,9 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 		}
 	}
 
-	auto t = effectiveType(val);
-	bool is_fhir = (val.type == FPValue::Type::JsonVal);
-
 	// Check fhir_type from choice type resolution first
 	if (!val.fhir_type.empty()) {
-		if (ns == "FHIR" || ns == "System") {
+		if (ns == "FHIR") {
 			// Case-insensitive compare (fhir_type is capitalized suffix like "Integer", target may be "integer")
 			std::string ft_lower = val.fhir_type;
 			std::string tg_lower = target;
@@ -4247,7 +4439,9 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 	}
 
 	// System type checks — effectiveType resolves JSON primitives to their System type
+	// FHIR-typed values (from JSON fields) should NOT match System types
 	if (ns == "System") {
+		if (is_fhir) return {FPValue::FromBoolean(false)};
 		if (target == "Boolean") return {FPValue::FromBoolean(t == FPValue::Type::Boolean)};
 		if (target == "Integer") return {FPValue::FromBoolean(t == FPValue::Type::Integer)};
 		if (target == "Decimal") return {FPValue::FromBoolean(t == FPValue::Type::Decimal)};
@@ -4294,6 +4488,29 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 					yyjson_val *end = yyjson_obj_get(val.json_val, "end");
 					if (start || end) return {FPValue::FromBoolean(true)};
 				}
+				if (target == "CodeableConcept") {
+					yyjson_val *coding = yyjson_obj_get(val.json_val, "coding");
+					if (coding && yyjson_is_arr(coding)) return {FPValue::FromBoolean(true)};
+					yyjson_val *text = yyjson_obj_get(val.json_val, "text");
+					if (text && coding) return {FPValue::FromBoolean(true)};
+				}
+				if (target == "Address") {
+					yyjson_val *city = yyjson_obj_get(val.json_val, "city");
+					yyjson_val *state = yyjson_obj_get(val.json_val, "state");
+					yyjson_val *country = yyjson_obj_get(val.json_val, "country");
+					yyjson_val *line = yyjson_obj_get(val.json_val, "line");
+					yyjson_val *postalCode = yyjson_obj_get(val.json_val, "postalCode");
+					if (city || state || country || line || postalCode) return {FPValue::FromBoolean(true)};
+				}
+				if (target == "Identifier") {
+					yyjson_val *isystem = yyjson_obj_get(val.json_val, "system");
+					yyjson_val *ivalue = yyjson_obj_get(val.json_val, "value");
+					if (isystem || ivalue) return {FPValue::FromBoolean(true)};
+				}
+				if (target == "Reference") {
+					yyjson_val *ref = yyjson_obj_get(val.json_val, "reference");
+					if (ref) return {FPValue::FromBoolean(true)};
+				}
 			}
 		}
 		// FHIR primitive types from JSON values
@@ -4307,10 +4524,11 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 				const char *actual_type = fhirFieldType(val.field_name);
 				if (target == "string") {
 					if (exact) {
-						// Exact for ofType: string is the parent type for all
-						// string subtypes (id, code, uri, etc.) in FHIR type
-						// hierarchy — ofType(string) matches them all.
-						return {FPValue::FromBoolean(true)};
+						// Exact (as/ofType): only match if the actual field type IS string
+						// Subtypes like code, id, uri should NOT match
+						if (actual_type && std::string(actual_type) == "string") return {FPValue::FromBoolean(true)};
+						if (!actual_type) return {FPValue::FromBoolean(true)}; // No field info, assume string
+						return {FPValue::FromBoolean(false)};
 					}
 					// Non-exact (is()): string is the parent type - matches all string subtypes
 					return {FPValue::FromBoolean(true)};
@@ -5073,6 +5291,100 @@ FPCollection Evaluator::fn_dateArith(const FPValue &date_val, const FPValue &qty
 
 	auto orig_type = effectiveType(date_val);
 	bool is_time = (orig_type == FPValue::Type::Time);
+
+	// For partial date/time values, determine the highest precision present.
+	// If the quantity unit is more precise, convert it to the highest precision
+	// of the partial (removing any decimal value), per spec §6.7:
+	// "the operation is performed by converting the time-valued quantity to
+	//  the highest precision in the partial (removing any decimal value off)"
+	//
+	// Unit precision hierarchy: year=1, month=2, week=3, day=4, hour=5, minute=6, second=7, millisecond=8
+	if (!is_time) {
+		// Parse date precision from the string representation
+		// (done here before the main parsing block below)
+		bool p_has_month = (dt.size() >= 7);
+		bool p_has_day = (dt.size() >= 10);
+		auto p_tpos = dt.find('T');
+		bool p_has_time = (p_tpos != std::string::npos);
+
+		// Determine the precision level of the date/time
+		// 1=year, 2=month, 3=day, 5=hour, 6=minute, 7=second, 8=millisecond
+		int date_prec = 1; // year only
+		if (p_has_month) date_prec = 2;
+		if (p_has_day) date_prec = 3;
+		if (p_has_time) {
+			// Extract time part (before timezone) to determine time precision
+			std::string time_part = dt.substr(p_tpos + 1);
+			// Strip timezone
+			for (size_t i = 0; i < time_part.size(); ++i) {
+				if (time_part[i] == '+' || time_part[i] == 'Z' || (time_part[i] == '-' && i > 0)) {
+					time_part = time_part.substr(0, i);
+					break;
+				}
+			}
+			date_prec = 5; // at least hour
+			if (time_part.size() >= 5) date_prec = 6; // has minutes
+			if (time_part.size() >= 8) date_prec = 7; // has seconds
+			auto pdot = time_part.find('.');
+			if (pdot != std::string::npos) date_prec = 8; // has milliseconds
+		}
+
+		// Determine the precision level of the quantity unit
+		int unit_prec = 0;
+		if (unit == "year") unit_prec = 1;
+		else if (unit == "month") unit_prec = 2;
+		else if (unit == "week") unit_prec = 3;
+		else if (unit == "day") unit_prec = 4;
+		else if (unit == "hour") unit_prec = 5;
+		else if (unit == "minute") unit_prec = 6;
+		else if (unit == "second") unit_prec = 7;
+		else if (unit == "millisecond") unit_prec = 8;
+
+		// If the quantity is more precise than the date, convert down
+		if (unit_prec > date_prec) {
+			// Conversion to year
+			if (date_prec == 1) {
+				if (unit == "month") { amount = std::trunc(amount / 12.0); unit = "year"; }
+				else if (unit == "week") { amount = std::trunc(amount * 7.0 / 365.0); unit = "year"; }
+				else if (unit == "day") { amount = std::trunc(amount / 365.0); unit = "year"; }
+				else if (unit == "hour") { amount = std::trunc(amount / (365.0 * 24.0)); unit = "year"; }
+				else if (unit == "minute") { amount = std::trunc(amount / (365.0 * 24.0 * 60.0)); unit = "year"; }
+				else if (unit == "second") { amount = std::trunc(amount / (365.0 * 24.0 * 3600.0)); unit = "year"; }
+				else if (unit == "millisecond") { amount = std::trunc(amount / (365.0 * 24.0 * 3600000.0)); unit = "year"; }
+			}
+			// Conversion to month
+			else if (date_prec == 2) {
+				if (unit == "week") { amount = std::trunc(amount * 7.0 / 30.0); unit = "month"; }
+				else if (unit == "day") { amount = std::trunc(amount / 30.0); unit = "month"; }
+				else if (unit == "hour") { amount = std::trunc(amount / (30.0 * 24.0)); unit = "month"; }
+				else if (unit == "minute") { amount = std::trunc(amount / (30.0 * 24.0 * 60.0)); unit = "month"; }
+				else if (unit == "second") { amount = std::trunc(amount / (30.0 * 24.0 * 3600.0)); unit = "month"; }
+				else if (unit == "millisecond") { amount = std::trunc(amount / (30.0 * 24.0 * 3600000.0)); unit = "month"; }
+			}
+			// Conversion to day
+			else if (date_prec == 3) {
+				if (unit == "hour") { amount = std::trunc(amount / 24.0); unit = "day"; }
+				else if (unit == "minute") { amount = std::trunc(amount / (24.0 * 60.0)); unit = "day"; }
+				else if (unit == "second") { amount = std::trunc(amount / (24.0 * 3600.0)); unit = "day"; }
+				else if (unit == "millisecond") { amount = std::trunc(amount / (24.0 * 3600000.0)); unit = "day"; }
+			}
+			// Conversion to hour (date_prec == 5, has only hour)
+			else if (date_prec == 5) {
+				if (unit == "minute") { amount = std::trunc(amount / 60.0); unit = "hour"; }
+				else if (unit == "second") { amount = std::trunc(amount / 3600.0); unit = "hour"; }
+				else if (unit == "millisecond") { amount = std::trunc(amount / 3600000.0); unit = "hour"; }
+			}
+			// Conversion to minute (date_prec == 6, has minutes)
+			else if (date_prec == 6) {
+				if (unit == "second") { amount = std::trunc(amount / 60.0); unit = "minute"; }
+				else if (unit == "millisecond") { amount = std::trunc(amount / 60000.0); unit = "minute"; }
+			}
+			// Conversion to second (date_prec == 7, has seconds)
+			else if (date_prec == 7) {
+				if (unit == "millisecond") { amount = std::trunc(amount / 1000.0); unit = "second"; }
+			}
+		}
+	}
 
 	if (is_time) {
 		// Time arithmetic: parse HH:MM:SS.mmm
