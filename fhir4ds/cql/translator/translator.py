@@ -1233,11 +1233,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 expr = SQLQualifiedIdentifier(parts=[quoted, col_name])
 
             if self._context.audit_mode and cql_type == "Boolean":
-                # Wrap the audit result in the compact_audit() macro to group evidence.
-                expr = SQLFunctionCall(
-                    name="compact_audit",
-                    args=[expr]
-                )
+                # Removed compact_audit wrapper: the engine will now return the flat
+                # evidence array to Python, where the AuditEngine handles compaction,
+                # to avoid DuckDB UNNEST correlation limits.
+                pass
 
             columns.append(SQLAlias(expr=expr, alias=output_col))
 
@@ -1393,9 +1392,6 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
                 # Wrap in audit_breadcrumb to preserve definition name in the trace
                 if self._context.audit_mode:
-                    # Only wrap if it's already an audit struct (Boolean logic/comparison)
-                    # or if it's a scalar boolean (will be wrapped in audit_leaf later).
-                    # For now, if we have an audit struct, wrap it.
                     from ..translator.types import SQLAuditStruct
                     if isinstance(result, SQLAuditStruct):
                         escaped_name = definition.name.replace("'", "''")
