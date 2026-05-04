@@ -455,6 +455,6 @@ def timeOfDay(ctx, data):
     c = ctx["_constants"]
     if not c.timeOfDay:
         _now = c.systemtime.now()
-        isoStr = _now.time().isoformat()
+        isoStr = _now.time().replace(tzinfo=None).isoformat()
         c.timeOfDay = [FP_Time(isoStr)]
     return c.timeOfDay

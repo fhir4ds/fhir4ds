@@ -1227,7 +1227,7 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 		struct tm tm_buf;
 		gmtime_r(&t, &tm_buf);
 		char buf[32];
-		std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d.000+00:00", tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec);
+		std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d.000", tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec);
 		FPValue v; v.type = FPValue::Type::Time; v.string_val = buf;
 		return {v};
 	}
@@ -1903,16 +1903,24 @@ FPCollection Evaluator::fn_not(const FPCollection &input) {
 
 FPCollection Evaluator::fn_all(const ASTNode &criteria, const FPCollection &input, yyjson_doc *doc) {
 	auto saved_chain_vars = chain_defined_vars_;
+	auto saved_index_context = index_context_;
+	auto saved_defined_vars = defined_variables_;
 	for (const auto &item : input) {
 		FPCollection single = {item};
 		chain_defined_vars_ = saved_chain_vars;
+		index_context_ = saved_index_context;
+		defined_variables_ = saved_defined_vars;
 		auto result = eval(criteria, single, doc);
 		if (!isTruthy(result)) {
 			chain_defined_vars_ = saved_chain_vars;
+			index_context_ = saved_index_context;
+			defined_variables_ = saved_defined_vars;
 			return {FPValue::FromBoolean(false)};
 		}
 	}
 	chain_defined_vars_ = saved_chain_vars;
+	index_context_ = saved_index_context;
+	defined_variables_ = saved_defined_vars;
 	return {FPValue::FromBoolean(true)};
 }
 
@@ -2793,9 +2801,13 @@ FPCollection Evaluator::fn_iif(const ASTNode &criterion, const ASTNode &trueResu
 	auto saved_vars = defined_variables_;
 	auto cond = eval(criterion, input, doc);
 	defined_variables_ = saved_vars; // Restore after criterion evaluation
+	
 	// If criterion has more than one item, it's an error → return empty
 	if (cond.size() > 1) return {};
-	if (cond.size() == 1 && isTruthy(cond)) {
+	// If criterion is empty, result is empty per FHIRPath spec
+	if (cond.empty()) return {};
+
+	if (isTruthy(cond)) {
 		auto saved_vars = defined_variables_;
 		auto saved_chain = chain_defined_vars_;
 		chain_defined_vars_.clear();
@@ -2887,12 +2899,12 @@ FPCollection Evaluator::fn_select(const ASTNode &projection, const FPCollection 
 FPCollection Evaluator::fn_repeat(const ASTNode &projection, const FPCollection &input, yyjson_doc *doc) {
 	// repeat evaluates expression on each item, adds new results, deduplicates
 	FPCollection result;
-	std::vector<std::string> seen;
+	FPCollection seen;
 
 	// Mark initial input as seen but don't add to result yet
 	FPCollection work = input;
 	for (const auto &item : input) {
-		seen.push_back(toString(item));
+		seen.push_back(item);
 	}
 
 	// Track type tags of input and produced items for seed inclusion decision
@@ -2923,9 +2935,15 @@ FPCollection Evaluator::fn_repeat(const ASTNode &projection, const FPCollection 
 			chain_defined_vars_ = saved_chain;
 			index_context_ = old_index;
 			for (const auto &p : projected) {
-				std::string key = toString(p);
-				if (std::find(seen.begin(), seen.end(), key) == seen.end()) {
-					seen.push_back(key);
+				bool is_seen = false;
+				for (const auto &s : seen) {
+					if (fpValuesEqual(s, p)) {
+						is_seen = true;
+						break;
+					}
+				}
+				if (!is_seen) {
+					seen.push_back(p);
 					result.push_back(p);
 					next.push_back(p);
 					has_produced = true;
@@ -4463,55 +4481,9 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 				if (actual_type == target) return {FPValue::FromBoolean(true)};
 			}
 
-			// FHIR complex types - detect by structure (only if no fhir_type is set)
-			if (val.fhir_type.empty()) {
-				if (target == "Quantity" || target == "SimpleQuantity" || target == "MoneyQuantity" ||
-				    target == "Age" || target == "Duration") {
-					yyjson_val *qval = yyjson_obj_get(val.json_val, "value");
-					yyjson_val *qunit = yyjson_obj_get(val.json_val, "unit");
-					yyjson_val *qcode = yyjson_obj_get(val.json_val, "code");
-					if (qval || qunit || qcode) return {FPValue::FromBoolean(true)};
-				}
-				if (target == "HumanName") {
-					yyjson_val *family = yyjson_obj_get(val.json_val, "family");
-					yyjson_val *given = yyjson_obj_get(val.json_val, "given");
-					yyjson_val *use = yyjson_obj_get(val.json_val, "use");
-					if (family || given || use) return {FPValue::FromBoolean(true)};
-				}
-				if (target == "Coding") {
-					yyjson_val *sys = yyjson_obj_get(val.json_val, "system");
-					yyjson_val *code = yyjson_obj_get(val.json_val, "code");
-					if (sys || code) return {FPValue::FromBoolean(true)};
-				}
-				if (target == "Period") {
-					yyjson_val *start = yyjson_obj_get(val.json_val, "start");
-					yyjson_val *end = yyjson_obj_get(val.json_val, "end");
-					if (start || end) return {FPValue::FromBoolean(true)};
-				}
-				if (target == "CodeableConcept") {
-					yyjson_val *coding = yyjson_obj_get(val.json_val, "coding");
-					if (coding && yyjson_is_arr(coding)) return {FPValue::FromBoolean(true)};
-					yyjson_val *text = yyjson_obj_get(val.json_val, "text");
-					if (text && coding) return {FPValue::FromBoolean(true)};
-				}
-				if (target == "Address") {
-					yyjson_val *city = yyjson_obj_get(val.json_val, "city");
-					yyjson_val *state = yyjson_obj_get(val.json_val, "state");
-					yyjson_val *country = yyjson_obj_get(val.json_val, "country");
-					yyjson_val *line = yyjson_obj_get(val.json_val, "line");
-					yyjson_val *postalCode = yyjson_obj_get(val.json_val, "postalCode");
-					if (city || state || country || line || postalCode) return {FPValue::FromBoolean(true)};
-				}
-				if (target == "Identifier") {
-					yyjson_val *isystem = yyjson_obj_get(val.json_val, "system");
-					yyjson_val *ivalue = yyjson_obj_get(val.json_val, "value");
-					if (isystem || ivalue) return {FPValue::FromBoolean(true)};
-				}
-				if (target == "Reference") {
-					yyjson_val *ref = yyjson_obj_get(val.json_val, "reference");
-					if (ref) return {FPValue::FromBoolean(true)};
-				}
-			}
+			// FHIR complex types must rely on fhir_type metadata.
+			// Heuristic structural detection has been removed to prevent schema coupling
+			// and false positives on generic JSON objects.
 		}
 		// FHIR primitive types from JSON values
 		if (is_fhir) {
@@ -5018,12 +4990,14 @@ FPCollection Evaluator::fn_children(const FPCollection &input) {
 				if (!key_str || key_str[0] == '_') continue; // skip primitive extensions
 				if (std::string(key_str) == "resourceType") continue; // skip meta
 				yyjson_val *val = yyjson_obj_iter_get_val(key);
-				if (!val) continue;
+				if (!val || yyjson_is_null(val)) continue;
 				if (yyjson_is_arr(val)) {
 					size_t idx2, max2;
 					yyjson_val *elem;
 					yyjson_arr_foreach(val, idx2, max2, elem) {
-						result.push_back(FPValue::FromJson(elem));
+						if (!yyjson_is_null(elem)) {
+							result.push_back(FPValue::FromJson(elem));
+						}
 					}
 				} else {
 					result.push_back(FPValue::FromJson(val));
@@ -5033,7 +5007,9 @@ FPCollection Evaluator::fn_children(const FPCollection &input) {
 			size_t idx2, max2;
 			yyjson_val *elem;
 			yyjson_arr_foreach(obj, idx2, max2, elem) {
-				result.push_back(FPValue::FromJson(elem));
+				if (!yyjson_is_null(elem)) {
+					result.push_back(FPValue::FromJson(elem));
+				}
 			}
 		}
 	}

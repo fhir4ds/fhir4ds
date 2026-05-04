@@ -528,7 +528,7 @@ def dateTimeToday() -> str:
 def dateTimeTimeOfDay() -> str:
     """CQL TimeOfDay() - current time."""
     from datetime import datetime, timezone
-    return datetime.now(timezone.utc).time().isoformat()
+    return datetime.now(timezone.utc).time().replace(tzinfo=None).isoformat()
 
 
 # ========================================
