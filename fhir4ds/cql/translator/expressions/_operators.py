@@ -834,6 +834,8 @@ class OperatorsMixin:
                     # List includes element → list_contains
                     return SQLFunctionCall(name="list_contains", args=[left, right])
                 return SQLFunctionCall(name="list_has_all", args=[left, right])
+            left = self._ensure_resource_to_interval(left, expr.left)
+            right = self._ensure_resource_to_interval(right, expr.right)
             right_is_interval = self._is_fhir_interval_expression(right)
             if right_is_interval:
                 return SQLFunctionCall(name="intervalIncludes", args=[left, right])
@@ -846,6 +848,8 @@ class OperatorsMixin:
                     # Element included in list → list_contains
                     return SQLFunctionCall(name="list_contains", args=[right, left])
                 return SQLFunctionCall(name="list_has_all", args=[right, left])
+            left = self._ensure_resource_to_interval(left, expr.left)
+            right = self._ensure_resource_to_interval(right, expr.right)
             left_is_interval = self._is_fhir_interval_expression(left)
             right_is_interval = self._is_fhir_interval_expression(right)
             if left_is_interval:
@@ -899,6 +903,8 @@ class OperatorsMixin:
                         right=SQLFunctionCall(name="len", args=[right]),
                     ),
                 )
+            left = self._ensure_resource_to_interval(left, expr.left)
+            right = self._ensure_resource_to_interval(right, expr.right)
             right_is_interval = self._is_fhir_interval_expression(right)
             if right_is_interval:
                 return SQLFunctionCall(name="intervalProperlyIncludes", args=[left, right])
@@ -935,6 +941,8 @@ class OperatorsMixin:
                         right=SQLFunctionCall(name="len", args=[left]),
                     ),
                 )
+            left = self._ensure_resource_to_interval(left, expr.left)
+            right = self._ensure_resource_to_interval(right, expr.right)
             left_is_interval = self._is_fhir_interval_expression(left)
             right_is_interval = self._is_fhir_interval_expression(right)
             if left_is_interval:
@@ -1021,10 +1029,16 @@ class OperatorsMixin:
                 ],
             )
         if operator == "meets":
+            left = self._ensure_resource_to_interval(left, expr.left)
+            right = self._ensure_resource_to_interval(right, expr.right)
             return SQLFunctionCall(name="intervalMeets", args=[left, right])
         if operator == "meets before":
+            left = self._ensure_resource_to_interval(left, expr.left)
+            right = self._ensure_resource_to_interval(right, expr.right)
             return SQLFunctionCall(name="intervalMeetsBefore", args=[left, right])
         if operator == "meets after":
+            left = self._ensure_resource_to_interval(left, expr.left)
+            right = self._ensure_resource_to_interval(right, expr.right)
             return SQLFunctionCall(name="intervalMeetsAfter", args=[left, right])
         if operator == "starts":
             return self._translate_starts_op(operator, left, right, expr)
@@ -1710,6 +1724,9 @@ class OperatorsMixin:
 
     def _translate_overlaps_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
+        # Convert bare resource aliases to their primary date intervals
+        left = self._ensure_resource_to_interval(left, expr.left)
+        right = self._ensure_resource_to_interval(right, expr.right)
         # Check if right side is a 'precision of' expression
         if isinstance(expr.right, BinaryExpression) and expr.right.operator == "precision of":
             precision = getattr(expr.right.left, 'value', 'day')
@@ -1772,6 +1789,9 @@ class OperatorsMixin:
 
     def _translate_overlaps_after_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
+        # Convert bare resource aliases to their primary date intervals
+        left = self._ensure_resource_to_interval(left, expr.left)
+        right = self._ensure_resource_to_interval(right, expr.right)
         if isinstance(expr.right, BinaryExpression) and expr.right.operator == "precision of":
             precision = getattr(expr.right.left, 'value', 'day')
             if isinstance(precision, str):
@@ -1818,6 +1838,9 @@ class OperatorsMixin:
 
     def _translate_overlaps_before_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
+        # Convert bare resource aliases to their primary date intervals
+        left = self._ensure_resource_to_interval(left, expr.left)
+        right = self._ensure_resource_to_interval(right, expr.right)
         if isinstance(expr.right, BinaryExpression) and expr.right.operator == "precision of":
             precision = getattr(expr.right.left, 'value', 'day')
             if isinstance(precision, str):
@@ -1990,6 +2013,9 @@ class OperatorsMixin:
 
     def _translate_before_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
+        # Convert bare resource aliases to their primary date intervals
+        left = self._ensure_resource_to_interval(left, expr.left)
+        right = self._ensure_resource_to_interval(right, expr.right)
         left_is_interval = self._is_fhir_interval_expression(left)
         right_is_interval = self._is_fhir_interval_expression(right)
         if left_is_interval and right_is_interval:
@@ -2027,6 +2053,9 @@ class OperatorsMixin:
 
     def _translate_after_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
+        # Convert bare resource aliases to their primary date intervals
+        left = self._ensure_resource_to_interval(left, expr.left)
+        right = self._ensure_resource_to_interval(right, expr.right)
         left_is_interval = self._is_fhir_interval_expression(left)
         right_is_interval = self._is_fhir_interval_expression(right)
         if left_is_interval and right_is_interval:
@@ -2158,25 +2187,40 @@ class OperatorsMixin:
                     interval_expr = self.translate(expr.right.operand.right, usage=ExprUsage.SCALAR)
                     left_truncated = self._ensure_date_cast(
                         self._truncate_to_precision(interval_start, precision))
+                    # Try boundary-aware comparison via _extract_interval_bounds
+                    right_bounds = self._extract_interval_bounds(interval_expr, expr.right.operand.right)
+                    if right_bounds:
+                        r_start, r_end, low_closed, high_closed = right_bounds
+                        start_truncated = self._ensure_date_cast(
+                            self._truncate_to_precision(r_start, precision))
+                        end_truncated = self._ensure_date_cast(
+                            self._truncate_to_precision(r_end, precision))
+                        end_coalesced = SQLFunctionCall(
+                            name="COALESCE",
+                            args=[end_truncated, start_truncated],
+                        )
+                        start_op = ">=" if low_closed else ">"
+                        end_op = "<=" if high_closed else "<"
+                        return SQLBinaryOp(
+                            operator="AND",
+                            left=SQLBinaryOp(operator=start_op, left=left_truncated, right=start_truncated),
+                            right=SQLBinaryOp(operator=end_op, left=left_truncated, right=end_coalesced),
+                        )
+                    # Fallback: use intervalStart/intervalEnd (closed by semantics)
                     right_start = SQLFunctionCall(name="intervalStart", args=[interval_expr])
                     right_end = SQLFunctionCall(name="intervalEnd", args=[interval_expr])
                     start_truncated = self._ensure_date_cast(
                         self._truncate_to_precision(right_start, precision))
                     end_truncated = self._ensure_date_cast(
                         self._truncate_to_precision(right_end, precision))
-                    # Add COALESCE for NULL end date handling
-                    end_with_null_handling = SQLFunctionCall(
+                    end_coalesced = SQLFunctionCall(
                         name="COALESCE",
                         args=[end_truncated, start_truncated],
                     )
                     return SQLBinaryOp(
-                        operator="BETWEEN",
-                        left=left_truncated,
-                        right=SQLFunctionCall(
-                            name="__between_args__",
-                            args=[start_truncated, end_with_null_handling],
-                        ),
-                        precedence=PRECEDENCE["BETWEEN"],
+                        operator="AND",
+                        left=SQLBinaryOp(operator=">=", left=left_truncated, right=start_truncated),
+                        right=SQLBinaryOp(operator="<=", left=left_truncated, right=end_coalesced),
                     )
                 # Plain "starts during X" -> intervalContains(X, intervalStart(left))
                 interval_arg = self.translate(expr.right.operand, usage=ExprUsage.SCALAR)
@@ -2313,26 +2357,42 @@ class OperatorsMixin:
                     interval_expr = self.translate(actual_interval_ast, usage=ExprUsage.SCALAR)
                     left_truncated = self._ensure_date_cast(
                         self._truncate_to_precision(interval_end, precision))
-                    right_start = SQLFunctionCall(name="intervalStart", args=[interval_expr])
-                    right_end = SQLFunctionCall(name="intervalEnd", args=[interval_expr])
-                    start_truncated = self._ensure_date_cast(
-                        self._truncate_to_precision(right_start, precision))
-                    end_truncated = self._ensure_date_cast(
-                        self._truncate_to_precision(right_end, precision))
-                    # Add COALESCE for NULL end date handling
-                    end_with_null_handling = SQLFunctionCall(
-                        name="COALESCE",
-                        args=[end_truncated, start_truncated],
-                    )
-                    result = SQLBinaryOp(
-                        operator="BETWEEN",
-                        left=left_truncated,
-                        right=SQLFunctionCall(
-                            name="__between_args__",
-                            args=[start_truncated, end_with_null_handling],
-                        ),
-                        precedence=PRECEDENCE["BETWEEN"],
-                    )
+                    # Try boundary-aware comparison via _extract_interval_bounds
+                    right_bounds = self._extract_interval_bounds(interval_expr, actual_interval_ast)
+                    if right_bounds:
+                        r_start, r_end, low_closed, high_closed = right_bounds
+                        start_truncated = self._ensure_date_cast(
+                            self._truncate_to_precision(r_start, precision))
+                        end_truncated = self._ensure_date_cast(
+                            self._truncate_to_precision(r_end, precision))
+                        end_coalesced = SQLFunctionCall(
+                            name="COALESCE",
+                            args=[end_truncated, start_truncated],
+                        )
+                        start_op = ">=" if low_closed else ">"
+                        end_op = "<=" if high_closed else "<"
+                        result = SQLBinaryOp(
+                            operator="AND",
+                            left=SQLBinaryOp(operator=start_op, left=left_truncated, right=start_truncated),
+                            right=SQLBinaryOp(operator=end_op, left=left_truncated, right=end_coalesced),
+                        )
+                    else:
+                        # Fallback: use intervalStart/intervalEnd (closed by semantics)
+                        right_start = SQLFunctionCall(name="intervalStart", args=[interval_expr])
+                        right_end = SQLFunctionCall(name="intervalEnd", args=[interval_expr])
+                        start_truncated = self._ensure_date_cast(
+                            self._truncate_to_precision(right_start, precision))
+                        end_truncated = self._ensure_date_cast(
+                            self._truncate_to_precision(right_end, precision))
+                        end_coalesced = SQLFunctionCall(
+                            name="COALESCE",
+                            args=[end_truncated, start_truncated],
+                        )
+                        result = SQLBinaryOp(
+                            operator="AND",
+                            left=SQLBinaryOp(operator=">=", left=left_truncated, right=start_truncated),
+                            right=SQLBinaryOp(operator="<=", left=left_truncated, right=end_coalesced),
+                        )
                     if extra_condition_ast:
                         extra_sql = self.translate(extra_condition_ast, boolean_context=True)
                         return SQLBinaryOp(operator="AND", left=result, right=extra_sql)
