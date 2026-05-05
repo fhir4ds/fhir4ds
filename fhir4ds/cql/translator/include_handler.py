@@ -179,6 +179,8 @@ class IncludeHandlerMixin:
                 continue
 
             # --- Circular include detection (QA8-002) ---
+            # Track both the path AND the alias to prevent a library from including itself
+            # or creating a loop (A -> B -> A). We track the raw path here.
             lib_key = (inc.path, inc.version or "")
             if lib_key in self._resolving_stack:
                 chain = [f"{p} v{v}" if v else p for p, v in self._resolving_stack]

@@ -56,7 +56,6 @@ def get_suite_paths(suite: str = "2025") -> dict:
 # Measures that may fail and should be skipped
 SKIP_ON_FAILURE = {
     "CMS139",   # Not in submodule
-    "CMS1218",  # cql-py translator infinite loop (50+ min at 99% CPU)
 }
 
 # Known failures with documented root causes (all external test-data issues).

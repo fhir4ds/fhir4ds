@@ -211,6 +211,10 @@ class FunctionInliner:
         """
         key = self._make_function_key(func_name, library_name)
 
+        if len(self._inlining_stack) >= self.max_inline_depth:
+            path_str = " -> ".join(self._inlining_stack + [key])
+            raise TranslationError(f"Maximum inline depth ({self.max_inline_depth}) exceeded. Potential runaway recursion: {path_str}")
+
         # Check for recursive calls
         if key in self._inlining_stack:
             cycle_path = self._inlining_stack + [key]

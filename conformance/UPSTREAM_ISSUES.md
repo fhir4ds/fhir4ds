@@ -1,5 +1,9 @@
 # Upstream Test Data Issues — ecqm-content-qicore-2025
 
+**STATUS:** Active Fork
+We maintain a fork of this repository to apply the fixes documented below, ensuring our engine can achieve 100% compliance.
+**Fork URL:** `[To be updated once forked on GitHub]`
+
 Issues identified during automated CQL-to-SQL benchmark validation against
 [cqframework/ecqm-content-qicore-2025](https://github.com/cqframework/ecqm-content-qicore-2025)
 at commit `c0747b57`.
@@ -245,3 +249,24 @@ patient should be in the Numerator (count=1). However:
 - Review and correct MeasureObservation counts and measureScore for consistency
   with population counts
 - Consider using UUIDs for inner bundle IDs for consistency with FHIR best practices
+
+---
+
+## Issue 5: CMS1218 — Missing Test Data Dependencies
+
+**Measure:** CMS1218FHIRHHRF
+**Mismatches:** N/A (Fails to run)
+
+### Description
+
+The measure `CMS1218FHIRHHRF` fails to execute in the benchmarking suite because it is missing required library dependencies in the test data directory. 
+
+Specifically, the `SDE` (Supplemental Data Elements) library and the `CQMCommon` library are not present in the `tests/data/ecqm-content-qicore-2025/input/cql/` directory.
+
+### Impact
+
+Because the translator cannot find these files on disk to load them, it throws `TranslationError` exceptions (e.g., `Reference to included library 'SDE' cannot be resolved`), and the test runner skips the execution of this measure entirely. As a result, no accuracy score can be calculated for CMS1218.
+
+### Suggested fix
+
+Add the missing `SDE.cql` and `CQMCommon.cql` (and any other required includes) to the appropriate test data directory so the measure can be successfully translated and evaluated.
