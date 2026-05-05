@@ -34,7 +34,7 @@ _SAFE_IDENTIFIER_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 def _quote_identifier(name: str) -> str:
     """Quote a SQL identifier, rejecting names that could enable injection."""
     if not name or not _SAFE_IDENTIFIER_RE.match(name):
-        raise ValueError(
+        raise ValidationError(
             f"Invalid SQL identifier: {name!r}. "
             "Column names must start with a letter or underscore and contain "
             "only alphanumeric characters and underscores."
@@ -716,6 +716,7 @@ class SQLGenerator:
         self,
         selects: List[Select],
         resource_var: str,
+        null_preserve_var: Optional[str] = None,
     ) -> Tuple[List[str], List[str], List[str]]:
         """Recursively process a list of Select structures.
 
@@ -726,6 +727,9 @@ class SQLGenerator:
         Args:
             selects: List of Select structures to process
             resource_var: Current resource variable expression
+            null_preserve_var: If set, all WHERE conditions are wrapped with
+                ``({var} IS NULL OR ...)`` to preserve NULL rows from an
+                enclosing forEachOrNull context.
 
         Returns:
             Tuple of (column_exprs, join_clauses, where_conditions)
@@ -779,12 +783,22 @@ class SQLGenerator:
                     cond = f"fhirpath_bool({current_var}, '{escaped}') = true"
                     if in_foreach_or_null:
                         cond = f"({current_var} IS NULL OR {cond})"
+                    elif null_preserve_var:
+                        # Nested inside an enclosing forEachOrNull — preserve
+                        # NULL rows by guarding against the null variable.
+                        cond = f"({null_preserve_var} IS NULL OR {cond})"
                     where_conditions.append(cond)
 
             # Recurse into nested selects passing the current forEach context down
             if select.select:
+                # Propagate the null-preservation variable: if we're inside
+                # a forEachOrNull, nested WHERE conditions must also be
+                # wrapped to preserve NULL rows.
+                nested_null_var = null_preserve_var
+                if in_foreach_or_null:
+                    nested_null_var = current_var
                 sub_cols, sub_joins, sub_where = self._process_selects(
-                    select.select, current_var
+                    select.select, current_var, nested_null_var
                 )
                 column_exprs.extend(sub_cols)
                 join_clauses.extend(sub_joins)
@@ -826,7 +840,9 @@ class SQLGenerator:
         # When using a shared source_table, filter by resourceType
         if self._source_table is not None and hasattr(self, '_current_resource_type'):
             where_conditions.insert(
-                0, f"{self.table_alias}.\"resourceType\" = '{self._current_resource_type}'"
+                0,
+                f"json_extract_string({self.table_alias}.resource, '$.resourceType') = "
+                f"'{self._current_resource_type}'"
             )
 
         parts = [f"SELECT\n    {columns_sql}", from_sql]

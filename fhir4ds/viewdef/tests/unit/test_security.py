@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 from ...generator import SQLGenerator, _quote_identifier
+from ...errors import ValidationError
 from ...parser import Column
 
 
@@ -28,31 +29,31 @@ class TestQuoteIdentifier:
         assert _quote_identifier("col2") == '"col2"'
 
     def test_rejects_empty_string(self):
-        with pytest.raises(ValueError, match="Invalid SQL identifier"):
+        with pytest.raises(ValidationError, match="Invalid SQL identifier"):
             _quote_identifier("")
 
     def test_rejects_sql_injection_semicolon(self):
-        with pytest.raises(ValueError, match="Invalid SQL identifier"):
+        with pytest.raises(ValidationError, match="Invalid SQL identifier"):
             _quote_identifier("x; DROP TABLE patients--")
 
     def test_rejects_sql_injection_quotes(self):
-        with pytest.raises(ValueError, match="Invalid SQL identifier"):
+        with pytest.raises(ValidationError, match="Invalid SQL identifier"):
             _quote_identifier('x" OR 1=1--')
 
     def test_rejects_spaces(self):
-        with pytest.raises(ValueError, match="Invalid SQL identifier"):
+        with pytest.raises(ValidationError, match="Invalid SQL identifier"):
             _quote_identifier("has spaces")
 
     def test_rejects_starts_with_number(self):
-        with pytest.raises(ValueError, match="Invalid SQL identifier"):
+        with pytest.raises(ValidationError, match="Invalid SQL identifier"):
             _quote_identifier("1column")
 
     def test_rejects_special_chars(self):
-        with pytest.raises(ValueError, match="Invalid SQL identifier"):
+        with pytest.raises(ValidationError, match="Invalid SQL identifier"):
             _quote_identifier("col-name")
 
     def test_rejects_none(self):
-        with pytest.raises((ValueError, TypeError)):
+        with pytest.raises((ValidationError, TypeError)):
             _quote_identifier(None)
 
 
@@ -68,7 +69,7 @@ class TestColumnNameSanitization:
     def test_malicious_column_name_rejected(self):
         gen = SQLGenerator()
         col = Column(path="id", name="x; DROP TABLE patients--")
-        with pytest.raises(ValueError, match="Invalid SQL identifier"):
+        with pytest.raises(ValidationError, match="Invalid SQL identifier"):
             gen.generate_column_expr(col, "resource")
 
     def test_collection_column_name_is_quoted(self):
