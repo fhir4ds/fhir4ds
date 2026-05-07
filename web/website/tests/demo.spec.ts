@@ -15,7 +15,7 @@ test.describe("Landing page", () => {
     await expect(subtitle).toContainText("auditable", { ignoreCase: true });
 
     // Stats bar — mean per-patient timing
-    await expect(page.getByText("~34ms").first()).toBeVisible();
+    await expect(page.getByText("~13ms").first()).toBeVisible();
     await expect(page.getByText("SQL per patient").first()).toBeVisible();
     await expect(page.getByText("Zero").first()).toBeVisible();
     await expect(page.getByText("Audit Evidence").first()).toBeVisible();

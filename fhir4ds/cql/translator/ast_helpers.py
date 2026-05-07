@@ -1753,7 +1753,7 @@ class ASTHelpersMixin:
         if len(part_exprs) == 1:
             evidence_sql = part_exprs[0]
         else:
-            evidence_sql = "list_concat(" + ", ".join(part_exprs) + ")"
+            evidence_sql = "list_distinct(list_concat(" + ", ".join(part_exprs) + "))"
 
         # Append definition name to each evidence item's trace field for breadcrumb trail
         if definition_name:
@@ -1774,11 +1774,14 @@ class ASTHelpersMixin:
             return SQLAuditStruct(
                 result_expr=SQLStructFieldAccess(expr=expr, field_name="result"),
                 evidence_expr=SQLFunctionCall(
-                    name="list_concat",
-                    args=[
-                        SQLFunctionCall(name="COALESCE", args=[existing_evidence, SQLArray()]),
-                        SQLRaw(evidence_sql),
-                    ],
+                    name="list_distinct",
+                    args=[SQLFunctionCall(
+                        name="list_concat",
+                        args=[
+                            SQLFunctionCall(name="COALESCE", args=[existing_evidence, SQLArray()]),
+                            SQLRaw(evidence_sql),
+                        ],
+                    )],
                 ),
             )
 
@@ -1786,11 +1789,14 @@ class ASTHelpersMixin:
             return SQLAuditStruct(
                 result_expr=expr.result_expr,
                 evidence_expr=SQLFunctionCall(
-                    name="list_concat",
-                    args=[
-                        SQLFunctionCall(name="COALESCE", args=[expr.evidence_expr, SQLArray()]),
-                        SQLRaw(evidence_sql),
-                    ],
+                    name="list_distinct",
+                    args=[SQLFunctionCall(
+                        name="list_concat",
+                        args=[
+                            SQLFunctionCall(name="COALESCE", args=[expr.evidence_expr, SQLArray()]),
+                            SQLRaw(evidence_sql),
+                        ],
+                    )],
                 ),
             )
 
@@ -1815,7 +1821,7 @@ class ASTHelpersMixin:
                         depth -= 1
                 inner_ev = after[:close_idx]
                 return SQLRaw(
-                    f"{pre}{ev_marker} list_concat(COALESCE({inner_ev}, []), {evidence_sql}))"
+                    f"{pre}{ev_marker} list_distinct(list_concat(COALESCE({inner_ev}, []), {evidence_sql})))"
                 )
             # Handle SQLRaw containing an audit function call (e.g. after pre-compute
             # name substitution converted a SQLFunctionCall to SQLRaw).
@@ -1823,7 +1829,7 @@ class ASTHelpersMixin:
                 if raw.startswith(f'{fn}('):
                     return SQLRaw(
                         f"struct_pack(result := ({raw}).result, "
-                        f"evidence := list_concat(COALESCE(({raw}).evidence, []), {evidence_sql}))"
+                        f"evidence := list_distinct(list_concat(COALESCE(({raw}).evidence, []), {evidence_sql})))"
                     )
 
         return expr

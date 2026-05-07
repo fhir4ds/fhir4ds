@@ -89,7 +89,7 @@ The following clinical primitives are registered in DuckDB via `fhir4ds.register
 
 | Standard | Support |
 |----------|---------|
-| **CQL Grammar** | 100% Compliance (3,044 tests) |
+| **CQL Grammar** | 100% Compliance (1,706 tests) |
 | **QI-Core** | v4.1.1 and v6.0.0 (2025) |
 | **US Core** | v3.1.1 through v7.0.0 |
 | **FHIR Version** | R4 (4.0.1) |

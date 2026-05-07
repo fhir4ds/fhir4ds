@@ -42,6 +42,10 @@ class MeasureParser:
         """
         if measure is None:
             raise MeasureParseError("Cannot parse None as a Measure resource")
+        if not isinstance(measure, dict):
+            raise MeasureParseError(
+                f"Expected a dict, got {type(measure).__name__}"
+            )
         if measure.get("resourceType") == "Bundle":
             measure = self._extract_measure_from_bundle(measure)
 
@@ -99,7 +103,7 @@ class MeasureParser:
         populations = [
             entry
             for pop in group.get("population", [])
-            if (entry := self._parse_population(pop, group_id)) is not None
+            if isinstance(pop, dict) and (entry := self._parse_population(pop, group_id)) is not None
         ]
         return GroupMap(
             group_id=group_id, population_basis=pop_basis, populations=populations
@@ -140,6 +144,8 @@ class MeasureParser:
     def _extract_population_code(self, pop: dict) -> str | None:
         """Extract the population code from coding."""
         code_obj = pop.get("code", {})
+        if not isinstance(code_obj, dict):
+            return None
         for coding in code_obj.get("coding", []):
             code = coding.get("code")
             if code in self.POPULATION_CODES:

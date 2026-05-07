@@ -172,12 +172,23 @@ class IntervalMixin:
                 SQLLiteral(value="9999-12-31"),
             ]
         )
+        # Also COALESCE right_end — if the right interval is open-ended
+        # (e.g. active condition with no abatement), right_end is NULL and
+        # left_start < NULL evaluates to NULL (falsy), incorrectly returning
+        # no overlap.  Treat NULL as far-future so any left_start < far-future.
+        right_end_coalesced = SQLFunctionCall(
+            name="COALESCE",
+            args=[
+                (right_end if right_end and not isinstance(right_end, SQLNull) else SQLNull()),
+                SQLLiteral(value="9999-12-31"),
+            ]
+        )
 
         # For [a, b) overlaps [c, d):
         # a < d (since d is exclusive) AND b >= c
         # If bounds are closed, adjust operators
         left_op = "<=" if right_high_closed else "<"
-        right_op = ">=" if left_low_closed else ">"
+        right_op = ">=" if left_high_closed else ">"
 
         # Build the comparison: left_start < right_end
         # All bounds are VARCHAR — lexicographic comparison of ISO 8601 strings
@@ -185,7 +196,7 @@ class IntervalMixin:
         start_comparison = SQLBinaryOp(
             operator=left_op,
             left=left_start,
-            right=right_end,
+            right=right_end_coalesced,
         )
 
         # Build the comparison: left_end >= right_start
@@ -259,6 +270,25 @@ class IntervalMixin:
                         resource_type = rt
                         break
         if not resource_type:
+            # Fallback 2: Look up the definition's CQL AST to find the
+            # resource type.  For ``define Enc: [Encounter]``, the CQL AST
+            # is a Retrieve node with type='Encounter'.
+            cql_asts = getattr(self.context, "_definition_cql_asts", {})
+            def_cql = cql_asts.get(alias_name)
+            if def_cql is not None:
+                # Navigate to the Retrieve node (might be wrapped in other nodes)
+                _node = def_cql
+                from ...parser.ast_nodes import Retrieve
+                if isinstance(_node, Retrieve):
+                    resource_type = _node.type
+        if not resource_type:
+            # Fallback 3: Infer resource type from the SQL subquery.
+            # For ``define Enc: [Encounter]``, the SQL is
+            # ``(SELECT sub.resource FROM "Enc" AS sub ...)`` where CTE "Enc"
+            # references CTE "Encounter".  Walk the CTE chain to find the
+            # FHIR resource type.
+            resource_type = self._infer_resource_type_from_sql(sql_expr, alias_name)
+        if not resource_type:
             return sql_expr
         primary_path = self._RESOURCE_PRIMARY_DATE_PATHS.get(resource_type)
         if not primary_path:
@@ -315,6 +345,99 @@ class IntervalMixin:
             name="intervalFromBounds",
             args=[scalar_expr, scalar_expr, SQLLiteral(True), SQLLiteral(True)],
         )
+
+    def _infer_resource_type_from_sql(
+        self, sql_expr: SQLExpression, alias_name: str
+    ) -> Optional[str]:
+        """Infer FHIR resource type from a SQL subquery expression.
+
+        For ``define Enc: [Encounter]``, the generated SQL is
+        ``(SELECT sub.resource FROM "Enc" AS sub ...)`` where the FROM
+        CTE ``"Enc"`` ultimately references CTE ``"Encounter"`` (the
+        resource-type CTE).  This method walks the CTE chain to find the
+        FHIR resource type.
+
+        Returns:
+            Resource type string (e.g. ``"Encounter"``) or ``None``.
+        """
+        from ..types import SQLAlias, SQLQualifiedIdentifier
+
+        if not isinstance(sql_expr, SQLSubquery):
+            return None
+        inner = sql_expr.query
+        if not isinstance(inner, SQLSelect):
+            return None
+
+        # Check that the SELECT selects sub.resource (raw resource JSON)
+        if not inner.columns or len(inner.columns) != 1:
+            return None
+        col = inner.columns[0]
+        if isinstance(col, SQLAlias):
+            col = col.expr
+        is_resource_col = (
+            (isinstance(col, SQLQualifiedIdentifier) and col.parts[-1] == "resource")
+            or (isinstance(col, SQLIdentifier) and col.name == "resource")
+        )
+        if not is_resource_col:
+            return None
+
+        # Extract CTE name from FROM clause
+        # Pattern: SQLAlias(expr=SQLIdentifier(name='Enc'), alias='sub')
+        # The CTE name is in expr.name, not in alias (which is the table alias 'sub')
+        from_clause = inner.from_clause
+        cte_name = None
+        if isinstance(from_clause, SQLAlias):
+            inner_from = from_clause.expr
+            if isinstance(inner_from, SQLIdentifier):
+                cte_name = inner_from.name
+        elif isinstance(from_clause, SQLIdentifier):
+            cte_name = from_clause.name
+
+        if not cte_name:
+            return None
+
+        # Strip quotes
+        if cte_name.startswith('"') and cte_name.endswith('"'):
+            cte_name = cte_name[1:-1]
+
+        # Resolve CTE chain: "Enc" -> "Encounter" by looking up symbols
+        visited = set()
+        current_name = cte_name
+        while current_name and current_name not in visited:
+            visited.add(current_name)
+
+            # Direct resource type match?
+            if current_name in self._RESOURCE_PRIMARY_DATE_PATHS:
+                return current_name
+
+            # Check if this CTE references another CTE (via symbol or definition)
+            sym = self.context.lookup_symbol(current_name)
+            if sym:
+                # Check sql_expr for the symbol - it might be SQLIdentifier pointing to another CTE
+                sym_sql = getattr(sym, 'sql_expr', None)
+                if isinstance(sym_sql, SQLIdentifier):
+                    next_name = sym_sql.name
+                    if next_name.startswith('"') and next_name.endswith('"'):
+                        next_name = next_name[1:-1]
+                    current_name = next_name
+                    continue
+
+                # Check cte_name attribute
+                ref_cte = getattr(sym, 'cte_name', None)
+                if ref_cte:
+                    if ref_cte in self._RESOURCE_PRIMARY_DATE_PATHS:
+                        return ref_cte
+                    current_name = ref_cte
+                    continue
+
+            # Check definition ASTs for FROM references
+            def_ast = getattr(self.context, 'expression_definitions', {}).get(current_name)
+            if def_ast:
+                break
+
+            break
+
+        return None
 
     def _is_fhir_interval_expression(self, expr: SQLExpression) -> bool:
         """Check if a SQL expression extracts a FHIR Period/interval property.

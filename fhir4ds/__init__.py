@@ -21,7 +21,7 @@ Subpackages::
     fhir4ds.dqm            - Digital Quality Measures
 """
 
-__version__ = "0.0.3"
+__version__ = "0.0.4"
 
 # Core convenience functions
 from .core import register, register_fhirpath, register_cql
@@ -115,7 +115,15 @@ def detach(con, adapter: "SourceAdapter") -> None:
     Args:
         con: An active DuckDB connection.
         adapter: The adapter to unregister.
+
+    Raises:
+        TypeError: If *adapter* does not implement the SourceAdapter protocol.
     """
+    if not isinstance(adapter, SourceAdapter):
+        raise TypeError(
+            f"Expected a SourceAdapter, got {type(adapter).__name__}. "
+            f"Ensure your adapter implements register() and unregister()."
+        )
     adapter.unregister(con)
 
 __all__ = [

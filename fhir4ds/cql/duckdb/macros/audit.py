@@ -16,7 +16,7 @@ _EVIDENCE_STRUCT_TYPE = (
 )
 
 AUDIT_MACROS_SQL = [
-    # AND: merge evidence from both operands
+    # AND: merge evidence from both operands (preserves insertion order)
     """CREATE OR REPLACE MACRO audit_and(a, b) AS (
         struct_pack(
             result   := struct_extract(a, 'result') AND struct_extract(b, 'result'),
@@ -33,7 +33,7 @@ AUDIT_MACROS_SQL = [
             evidence := CASE
                 WHEN struct_extract(a, 'result') THEN COALESCE(struct_extract(a, 'evidence'), [])
                 WHEN struct_extract(b, 'result') THEN COALESCE(struct_extract(b, 'evidence'), [])
-                ELSE list_concat(COALESCE(struct_extract(a, 'evidence'), []), COALESCE(struct_extract(b, 'evidence'), []))
+                ELSE list_distinct(list_concat(COALESCE(struct_extract(a, 'evidence'), []), COALESCE(struct_extract(b, 'evidence'), [])))
             END
         )
     )""",
@@ -41,10 +41,10 @@ AUDIT_MACROS_SQL = [
     """CREATE OR REPLACE MACRO audit_or_all(a, b) AS (
         struct_pack(
             result   := struct_extract(a, 'result') OR struct_extract(b, 'result'),
-            evidence := list_concat(
+            evidence := list_distinct(list_concat(
                 COALESCE(struct_extract(a, 'evidence'), []),
                 COALESCE(struct_extract(b, 'evidence'), [])
-            )
+            ))
         )
     )""",
     # NOT: invert result, preserve evidence
@@ -76,36 +76,9 @@ AUDIT_MACROS_SQL = [
         )
     )""",
     # COMPACT: Group evidence by (trace, attribute, operator, threshold)
-    # This transforms a flat list of items into a list of logic groups with nested findings.
-    # Uses DuckDB list_transform/list_filter/list_distinct to avoid UNNEST correlation issues.
-    """CREATE OR REPLACE MACRO compact_audit(aud) AS (
-        struct_pack(
-            result := struct_extract(aud, 'result'),
-            evidence := list_transform(
-                list_distinct(list_transform(struct_extract(aud, 'evidence'), x -> {
-                    'trace': x.trace,
-                    'attribute': x.attribute,
-                    'operator': x.operator,
-                    'threshold': x.threshold
-                })),
-                g -> {
-                    'trace': g.trace,
-                    'attribute': g.attribute,
-                    'operator': g.operator,
-                    'threshold': g.threshold,
-                    'findings': list_transform(
-                        list_filter(struct_extract(aud, 'evidence'), x -> 
-                            x.trace = g.trace AND 
-                            x.attribute IS NOT DISTINCT FROM g.attribute AND 
-                            x.operator = g.operator AND 
-                            x.threshold IS NOT DISTINCT FROM g.threshold
-                        ),
-                        f -> {'target': f.target, 'value': f.value}
-                    )
-                }
-            )
-        )
-    )""",
+    # Replaced with Python-layer compaction to avoid UNNEST correlation issues.
+    # This macro now passes through the struct unmodified.
+    """CREATE OR REPLACE MACRO compact_audit(aud) AS aud""",
     # BREADCRUMB: Append a definition name to the trace of all evidence items.
     """CREATE OR REPLACE MACRO audit_breadcrumb(aud, def_name) AS (
         struct_pack(

@@ -9,7 +9,11 @@ and displays a unified summary of the results.
 import json
 import subprocess
 import sys
+import warnings
 from pathlib import Path
+
+# Suppress UserWarnings (like unresolved CQL definition fallbacks) to prevent I/O spam
+warnings.simplefilter("ignore", UserWarning)
 
 sys.path.insert(0, str(Path(__file__).parent))
 from conformance_log import log_run, _collect_stats

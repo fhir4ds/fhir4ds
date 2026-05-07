@@ -379,6 +379,68 @@ def resolveProfileUrl(profile_url: str | None) -> str | None:
     return _resolve_profile_slug(profile_slug)
 
 
+_NOT_DONE_VS_EXT = "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-notDoneValueSet"
+
+
+def _check_not_done_valueset(resource: str, path: str, valueset_url: str) -> bool | None:
+    """Check if a qicore-notDoneValueSet extension matches the target valueset URL.
+
+    QICore negation profiles (e.g. MedicationNotRequested with doNotPerform=true)
+    express the intended terminology via a ``qicore-notDoneValueSet`` extension on
+    the relevant element (typically ``medicationCodeableConcept``).  When the
+    element has no ``coding`` but carries this extension, the resource should be
+    considered a match if the extension's ``valueCanonical`` resolves to the
+    target valueset URL.
+
+    Args:
+        resource: JSON string of the FHIR resource.
+        path: The FHIRPath to the terminology element (e.g. 'medicationCodeableConcept').
+        valueset_url: The target valueset URL to match against.
+
+    Returns:
+        True if the extension matches, False otherwise.
+    """
+    try:
+        data = orjson.loads(resource)
+    except (orjson.JSONDecodeError, TypeError):
+        return None
+
+    # Navigate to the element at the given path
+    current = data
+    for part in path.split('.'):
+        if isinstance(current, dict):
+            value = current.get(part)
+            if value is None:
+                # Try choice type resolution
+                for suffix in ("CodeableConcept", "Coding"):
+                    value = current.get(part + suffix)
+                    if value is not None:
+                        break
+            current = value
+        elif isinstance(current, list) and current:
+            current = current[0].get(part) if isinstance(current[0], dict) else None
+        else:
+            return False
+
+        if current is None:
+            return False
+
+    if not isinstance(current, dict):
+        return False
+
+    # Check for the notDoneValueSet extension
+    for ext in current.get('extension', []):
+        if isinstance(ext, dict) and ext.get('url') == _NOT_DONE_VS_EXT:
+            ext_url = ext.get('valueCanonical', '')
+            if ext_url:
+                # Strip version suffix for comparison
+                canonical_ext = ext_url.split('|', 1)[0].rstrip('/')
+                canonical_target = valueset_url.split('|', 1)[0].rstrip('/')
+                if canonical_ext == canonical_target:
+                    return True
+    return False
+
+
 def createValuesetMembershipUdf(
     valueset_codes_cache: Dict[str, Set[str]]
 ) -> Callable[[str | None, str, str], bool]:
@@ -422,7 +484,8 @@ def createValuesetMembershipUdf(
                 return None
 
             # Use extractCodes which handles arrays (e.g. Encounter.type)
-            for system, code in extractCodes(resource, path):
+            codes = extractCodes(resource, path)
+            for system, code in codes:
                 # Normalize system (OID → URL, SNOMED module → base)
                 norm_system = _normalize_system(system)
                 if (norm_system, code) in vs_codes:
@@ -433,6 +496,16 @@ def createValuesetMembershipUdf(
                 # Also match on code alone when valueset entry has no system
                 if ("", code) in vs_codes or (None, code) in vs_codes:
                     return True
+
+            # Fallback: QICore negation profiles (e.g. MedicationNotRequested) may
+            # express the intended valueset via the qicore-notDoneValueSet extension
+            # instead of actual medication codes.  When the element at *path* has this
+            # extension and its valueCanonical matches the target valueset URL, the
+            # resource is considered a match.
+            if not codes:
+                if _check_not_done_valueset(resource, path, valueset_url):
+                    return True
+
             return False
         except (orjson.JSONDecodeError, ValueError, KeyError, TypeError, AttributeError) as e:
             _logger.warning("UDF fhirpath_in_valueset failed: %s", e)

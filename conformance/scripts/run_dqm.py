@@ -9,6 +9,7 @@ measures and verify their accuracy against official test cases.
 import json
 import os
 import sys
+import warnings
 import time
 from pathlib import Path
 
@@ -26,6 +27,9 @@ from fhir4ds.dqm.tests.conformance.loader import load_test_suite
 from fhir4ds.dqm.tests.conformance.runner import run_measure
 from fhir4ds.dqm.tests.conformance.config import SKIP_ON_FAILURE, KNOWN_FAILURES
 
+# Suppress UserWarnings (like unresolved CQL definition fallbacks) to prevent I/O spam
+warnings.simplefilter("ignore", UserWarning)
+
 OUTPUT_FILE = Path("conformance/reports/dqm_report.json")
 
 def main():
@@ -42,6 +46,10 @@ def main():
 
     print("Initializing database...")
     db = BenchmarkDatabase()
+    if db.is_cpp:
+        print(">>> C++ extension and Python fallback UDFs loaded successfully")
+    else:
+        print(">>> Python fallback UDFs loaded successfully (C++ extension NOT loaded)")
 
     print(f"Loading test data for {len(configs)} measures...")
     db.load_all_test_data(configs)

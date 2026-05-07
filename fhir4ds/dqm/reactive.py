@@ -54,7 +54,8 @@ class ReactiveEvaluator:
 
     Args:
         con: Active DuckDB connection with a registered SourceAdapter.
-        measure: Measure identifier or path.
+        measure_bundle: Path to Measure JSON file, or parsed Measure dict.
+        cql_library_path: Path to the CQL library file (.cql).
         adapter: The :class:`~fhir4ds.sources.base.SourceAdapter` powering
             the connection's ``resources`` view.  Must return ``True`` from
             :meth:`~fhir4ds.sources.base.SourceAdapter.supports_incremental`.
@@ -66,8 +67,10 @@ class ReactiveEvaluator:
     def __init__(
         self,
         con: Any,
-        measure: str,
+        measure_bundle: str | dict,
+        cql_library_path: str,
         adapter: Any,
+        audit_mode: str = "none",
     ) -> None:
         # Check supports_incremental if the method exists; otherwise reject.
         if not (hasattr(adapter, "supports_incremental") and adapter.supports_incremental()):
@@ -76,8 +79,10 @@ class ReactiveEvaluator:
                 f"Use fhir4ds.dqm.evaluate() for a full population evaluation instead."
             )
         self._con = con
-        self._measure = measure
+        self._measure_bundle = measure_bundle
+        self._cql_library_path = cql_library_path
         self._adapter = adapter
+        self._audit_mode = audit_mode
         self._last_sync: Optional[datetime] = None
 
     def update(self, as_of: Optional[datetime] = None) -> Optional[dict]:
@@ -109,8 +114,11 @@ class ReactiveEvaluator:
             self._last_sync = as_of
             return None
 
-        delta = dqm.MeasureEvaluator(self._con, self._measure).evaluate(
+        delta = dqm.MeasureEvaluator(self._con).evaluate(
+            self._measure_bundle,
+            self._cql_library_path,
             patient_ids=dirty_ids,
+            audit_mode=self._audit_mode,
         )
 
         self._last_sync = as_of

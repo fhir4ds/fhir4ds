@@ -69,8 +69,11 @@ class BenchmarkDatabase:
         # may legitimately return multiple rows in certain patterns
         self.conn.execute("SET scalar_subquery_error_on_multiple_rows=false")
 
-        # Paths to C++ extensions
-        workspace_root = Path(__file__).parent.parent.parent.absolute()
+        # Paths to C++ extensions — walk upward to find the project root
+        # (the directory containing extensions/ and fhir4ds/)
+        workspace_root = Path(__file__).resolve().parent
+        while not (workspace_root / "extensions").exists() and workspace_root != workspace_root.parent:
+            workspace_root = workspace_root.parent
         
         # Try both build directory and bundled package locations
         fhirpath_cpp_candidates = [
@@ -116,9 +119,12 @@ class BenchmarkDatabase:
                 # We need to make sure 'fhirpath' used by Python UDFs (like in_valueset)
                 # resolves to the one we want. When C++ is loaded, 'fhirpath' is native.
                 loaded_cpp = True
-                print("  Loaded C++ native extensions (fhirpath, cql)")
+                # print("  Loaded C++ native extensions (fhirpath, cql)")
             except Exception as e:
-                print(f"  Warning: Failed to load C++ extensions: {e}")
+                # print(f"  Warning: Failed to load C++ extensions: {e}")
+                pass
+
+        self.is_cpp = loaded_cpp
 
         # Always try to register unified fhir4ds UDFs (they handle fallback correctly)
         try:

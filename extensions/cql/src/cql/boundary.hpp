@@ -11,8 +11,10 @@ Optional<std::string> high_boundary(const std::string &value, int precision);
 // CQL §22.14: LowBoundary — lowest value within precision
 Optional<std::string> low_boundary(const std::string &value, int precision);
 
-// CQL §22.24: Precision — number of digits of precision
-Optional<int> cql_precision(const std::string &value);
+// CQL §18.15 / §22.24: Precision — precision level as string name
+// Returns "Year", "Month", "Day", "Hour", "Minute", "Second", or "Millisecond" for date/time values.
+// Returns decimal digit count as string for numeric values.
+Optional<std::string> cql_precision(const std::string &value);
 
 // CQL §18.12: TimezoneOffset — extract timezone offset in decimal hours
 Optional<double> cql_timezone_offset(const std::string &value);

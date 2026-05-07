@@ -744,22 +744,22 @@ NULL
 
 
 # CQLPrecision — date
-query I
+query T
 SELECT CQLPrecision('2024-01-15');
 ----
-8
+Day
 
 # CQLPrecision — datetime
-query I
+query T
 SELECT CQLPrecision('2024-01-15T10:30:45.100');
 ----
-17
+Millisecond
 
 # CQLPrecision — year only
-query I
+query T
 SELECT CQLPrecision('2024');
 ----
-4
+Year
 
 # cqlTimezoneOffset
 query R
@@ -1368,6 +1368,48 @@ SELECT weeksBetween('2024-01-01', '2024-01-15');
 ----
 2
 
+# weeksBetween: time-aware (not 7 full days from 23:00 to 01:00 next week)
+query I
+SELECT weeksBetween('2023-01-01T23:00:00', '2023-01-08T01:00:00');
+----
+0
+
+# MonthsBetween: boundary case — Jan 31 to Feb 1 is 0 complete months, not 1
+query I
+SELECT MonthsBetween('2023-01-31', '2023-02-01');
+----
+0
+
+# MonthsBetween: one day before 12-month anniversary is 11 complete months
+query I
+SELECT MonthsBetween('2023-06-16', '2024-06-15');
+----
+11
+
+# YearsBetween: one day before 44th anniversary is 43 complete years
+query I
+SELECT YearsBetween('1980-06-15', '2024-06-14');
+----
+43
+
+# CQLPrecision: month precision
+query T
+SELECT CQLPrecision('2024-01');
+----
+Month
+
+# CQLPrecision: hour precision
+query T
+SELECT CQLPrecision('2024-01-15T10');
+----
+Hour
+
+# CQLPrecision: minute precision
+query T
+SELECT CQLPrecision('2024-01-15T10:30');
+----
+Minute
+
 # HoursBetween: one day
 query I
 SELECT HoursBetween('2024-01-01T00:00:00', '2024-01-02T00:00:00');
@@ -1402,26 +1444,26 @@ SELECT millisecondsBetween('2024-01-01T10:00:00.000', '2024-01-01T10:00:01.000')
 # ----- Boundary Functions Extended -----
 
 
-# CQLPrecision: date (8 chars)
-query I
+# CQLPrecision: date → Day
+query T
 SELECT CQLPrecision('2024-01-15');
 ----
-8
+Day
 
-# CQLPrecision: datetime with seconds (14 chars)
-query I
+# CQLPrecision: datetime with seconds → Second
+query T
 SELECT CQLPrecision('2024-01-15T10:30:45');
 ----
-14
+Second
 
-# CQLPrecision: year only (4 chars)
-query I
+# CQLPrecision: year only → Year
+query T
 SELECT CQLPrecision('2024');
 ----
-4
+Year
 
 # CQLPrecision: NULL
-query I
+query T
 SELECT CQLPrecision(NULL);
 ----
 NULL
@@ -1941,4 +1983,46 @@ SELECT logicalCoalesce(NULL);
 NULL
 
 # ----- HighBoundary / LowBoundary Edge Cases -----
+
+# =====================================================================
+# v0.0.4 Regression: Iteration 2 fixes
+# =====================================================================
+
+# QA-009: overlaps_before fix verified through Python conformance tests (not a registered SQL UDF)
+
+# QA-010: quantityMultiply non-dimensionless should return NULL
+query I
+SELECT quantityMultiply('{"value":5,"code":"m","system":"http://unitsofmeasure.org"}', '{"value":3,"code":"s","system":"http://unitsofmeasure.org"}');
+----
+NULL
+
+# QA-010: quantityMultiply with dimensionless is fine
+query I
+SELECT quantityMultiply('{"value":5,"code":"1"}', '{"value":3,"code":"mg"}') LIKE '%15%';
+----
+true
+
+# QA-011: empty code treated as dimensionless "1"
+query I
+SELECT quantityCompare('{"value":5}', '{"value":5,"code":"1"}', '==');
+----
+true
+
+# QA-011: empty code + unit-bearing add
+query I
+SELECT quantityAdd('{"value":5}', '{"value":3,"code":"1"}') LIKE '%8%';
+----
+true
+
+# QA-012: quantityDivide non-dimensionless divisor should return NULL
+query I
+SELECT quantityDivide('{"value":10,"code":"m","system":"http://unitsofmeasure.org"}', '{"value":2,"code":"s","system":"http://unitsofmeasure.org"}');
+----
+NULL
+
+# QA-012: quantityDivide dimensionless divisor is fine
+query I
+SELECT quantityDivide('{"value":10,"code":"m"}', '{"value":2,"code":"1"}') LIKE '%5%';
+----
+true
 

@@ -433,7 +433,7 @@ def cqlPrecision(value) -> int | None:
         return -exp  # number of decimal places
     except Exception as e:
         _logger.debug("Unexpected error in UDF cqlPrecision decimal parse: %s", e)
-        return len(s)
+        return None
 
 
 def cqlMessage(source, condition, code, severity, message) -> str:

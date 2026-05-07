@@ -32,6 +32,15 @@ Optional<double> statistical_mode(const std::vector<double> &values) {
 	typedef std::map<double, size_t>::value_type count_pair;
 	auto max_it = std::max_element(counts.begin(), counts.end(),
 	                               [](const count_pair &a, const count_pair &b) { return a.second < b.second; });
+	size_t max_count = max_it->second;
+	// CQL spec: "If there are multiple values with the same highest frequency, the result is null."
+	size_t max_count_freq = 0;
+	for (const auto &pair : counts) {
+		if (pair.second == max_count) max_count_freq++;
+	}
+	if (max_count_freq > 1) {
+		return NullOpt<double>();
+	}
 	return max_it->first;
 }
 

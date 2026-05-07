@@ -847,15 +847,13 @@ class CoreMixin:
         # Default: treat as identifier
         _inlining_lib = getattr(self.context, '_current_inlining_library', None)
         if _inlining_lib is None:
-            import warnings as _w
             msg = (
                 f"Undefined CQL definition '{name}' passed through as SQL identifier. "
                 "This will likely cause a DuckDB error at execution time. "
                 "Check that the definition is spelled correctly and that all "
                 "required library includes are present."
             )
-            logger.warning(msg)
-            _w.warn(msg, stacklevel=2)
+            logger.debug(msg)
         else:
             logger.debug("Definition '%s' from inlined library '%s' passed through as SQL identifier", name, _inlining_lib)
         return SQLIdentifier(name=name)

@@ -301,7 +301,7 @@ class TestAuditEngine:
         row = {"denominator_exclusion": {"result": True, "evidence": [{"target": "x"}]}}
         result = engine.prune_evidence(row, "denominator-exclusion", AuditPersona.EXCLUSION)
         assert len(result) == 1
-        assert result[0]["target"] == "x"
+        assert result[0]["findings"][0]["target"] == "x"
 
     def test_inclusion_evidence_always_present(self):
         engine = AuditEngine()

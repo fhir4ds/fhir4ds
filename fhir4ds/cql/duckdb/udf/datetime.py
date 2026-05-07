@@ -528,7 +528,7 @@ def dateTimeToday() -> str:
 def dateTimeTimeOfDay() -> str:
     """CQL TimeOfDay() - current time."""
     from datetime import datetime, timezone
-    return datetime.now(timezone.utc).time().isoformat()
+    return datetime.now(timezone.utc).time().replace(tzinfo=None).isoformat()
 
 
 # ========================================
@@ -1501,6 +1501,29 @@ def cqlDateTimeEqual(a: str | None, b: str | None) -> bool | None:
     return True
 
 
+def _extract_datetime_from_interval(s: str) -> str:
+    """If *s* is an interval/period JSON string, return its start datetime.
+
+    Handles both CQL interval format (``low``/``high``) and FHIR Period
+    format (``start``/``end``).  If *s* is already a plain datetime string
+    it is returned unchanged.
+    """
+    stripped = s.strip()
+    if not stripped.startswith("{"):
+        return s
+    try:
+        import orjson
+        data = orjson.loads(stripped)
+    except Exception:
+        return s
+    if not isinstance(data, dict):
+        return s
+    start = data.get("low") or data.get("start")
+    if start is not None:
+        return str(start)
+    return s
+
+
 def _compare_at_specified_precision(a_str: str, b_str: str, precision: str) -> tuple:
     """Compare two datetime strings at a specific precision.
 
@@ -1512,6 +1535,10 @@ def _compare_at_specified_precision(a_str: str, b_str: str, precision: str) -> t
     - result: -1 (a < b), 0 (a == b), 1 (a > b)
     - is_certain: False if either operand is coarser than the target precision
     """
+    # Unwrap interval JSON to its start datetime if needed
+    a_str = _extract_datetime_from_interval(a_str)
+    b_str = _extract_datetime_from_interval(b_str)
+
     a_comps = _parse_components(a_str)
     b_comps = _parse_components(b_str)
 

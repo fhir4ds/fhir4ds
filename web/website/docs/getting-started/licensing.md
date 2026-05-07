@@ -25,5 +25,5 @@ For organizations that cannot meet the requirements of the AGPL-3.0, or for thos
 
 Whether you have questions about the dual-licensing model or need professional support for a production deployment, we are here to help.
 
-- **Email**: [fhir4ds@gmail.com](mailto:fhir4ds@gmail.com)
+- **Email**: [contact@fhir4ds.com](mailto:contact@fhir4ds.com)
 - **GitHub**: Report bugs or request features on our [Issue Tracker](https://github.com/fhir4ds/fhir4ds/issues).

@@ -270,45 +270,49 @@ Optional<std::string> low_boundary(const std::string &value, int precision) {
 // =====================================================================
 // cql_precision
 // =====================================================================
-Optional<int> cql_precision(const std::string &value) {
-	if (value.empty()) return NullOpt<int>();
+Optional<std::string> cql_precision(const std::string &value) {
+	if (value.empty()) return NullOpt<std::string>();
 
 	auto kind = detect_kind(value);
 
 	if (kind == ValueKind::Date || kind == ValueKind::DateTime) {
-		// Count digit characters, strip timezone suffix
-		std::string s = value;
-		// Strip timezone
-		for (size_t i = 10; i < s.size(); i++) {
-			if (s[i] == '+' || s[i] == 'Z') {
-				s = s.substr(0, i);
-				break;
-			}
+		// Parse to determine precision level, then return the name
+		auto dt = DateTimeValue::parse(value);
+		if (!dt) return NullOpt<std::string>();
+		switch (dt->precision) {
+		case DateTimeValue::Precision::Year:        return Optional<std::string>("Year");
+		case DateTimeValue::Precision::Month:       return Optional<std::string>("Month");
+		case DateTimeValue::Precision::Day:         return Optional<std::string>("Day");
+		case DateTimeValue::Precision::Hour:        return Optional<std::string>("Hour");
+		case DateTimeValue::Precision::Minute:      return Optional<std::string>("Minute");
+		case DateTimeValue::Precision::Second:      return Optional<std::string>("Second");
+		case DateTimeValue::Precision::Millisecond: return Optional<std::string>("Millisecond");
 		}
-		int count = 0;
-		for (size_t i = 0; i < s.size(); i++) {
-			if (s[i] >= '0' && s[i] <= '9') count++;
-		}
-		return Optional<int>(count);
+		return NullOpt<std::string>();
 	}
 
 	if (kind == ValueKind::Time) {
+		// Determine precision from the string format
 		std::string s = value;
 		if (!s.empty() && s[0] == 'T') s = s.substr(1);
-		int count = 0;
-		for (size_t i = 0; i < s.size(); i++) {
-			if (s[i] >= '0' && s[i] <= '9') count++;
+		size_t dot = s.find('.');
+		size_t colon1 = s.find(':');
+		if (dot != std::string::npos) return Optional<std::string>("Millisecond");
+		if (colon1 != std::string::npos) {
+			size_t colon2 = s.find(':', colon1 + 1);
+			if (colon2 != std::string::npos) return Optional<std::string>("Second");
+			return Optional<std::string>("Minute");
 		}
-		return Optional<int>(count);
+		return Optional<std::string>("Hour");
 	}
 
 	if (kind == ValueKind::Numeric) {
 		size_t dot = value.find('.');
-		if (dot == std::string::npos) return Optional<int>(0);
-		return Optional<int>(static_cast<int>(value.size() - dot - 1));
+		if (dot == std::string::npos) return Optional<std::string>("0");
+		return Optional<std::string>(std::to_string(static_cast<int>(value.size() - dot - 1)));
 	}
 
-	return Optional<int>(static_cast<int>(value.size()));
+	return NullOpt<std::string>();
 }
 
 // =====================================================================
@@ -398,6 +402,7 @@ Optional<std::string> predecessor_of(const std::string &value) {
 			}
 			dt->day = days_in_month(dt->year, dt->month);
 		}
+		if (dt->year < 1) return NullOpt<std::string>();
 		// Return in original format
 		if (dt->precision == DateTimeValue::Precision::Year) {
 			std::ostringstream oss;

@@ -143,3 +143,10 @@ See `docs/architecture/AUDIT_REPORT.md` §8 for full details.
 - Magic numbers extracted to named constants (MS_PER_HOUR, MS_PER_DAY, DAYS_PER_YEAR, etc.)
 - General StructureDefinition-based `resolveProfileUrl` resolver replacing the 10-entry hardcoded map
 - Build: ✅ | Tests: 318 SQL assertions pass
+
+### Known Fragile Areas (Found by QA - 2026-05-01)
+- **Duration Operations**: `MonthsBetween` and `WeeksBetween` miscalculate durations due to boundary vs absolute math. **FIXED v0.0.4**: MonthsBetween now uses age_in_months (complete months), WeeksBetween uses epoch_millis (time-aware complete weeks).
+- **Precision Retrieval**: `CQLPrecision` yields string lengths instead of CQL standard precision enums. **FIXED v0.0.4**: Changed return type from BIGINT to VARCHAR, now returns precision names ("Year", "Month", "Day", "Hour", "Minute", "Second", "Millisecond").
+
+### NOT A BUG Registry
+*Behaviors that look like bugs but are spec-compliant or intentional design decisions.*

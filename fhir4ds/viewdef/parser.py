@@ -322,9 +322,11 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
 
     # Parse select structures
     selects = []
-    select_data = data.get('select', [])
-    if not select_data:
+    if 'select' not in data:
         raise ParseError("ViewDefinition missing required 'select' field")
+    select_data = data['select']
+    if not select_data:
+        raise ParseError("ViewDefinition 'select' array must not be empty")
 
     for sel in select_data:
         selects.append(_parse_select(sel))

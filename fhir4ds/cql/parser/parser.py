@@ -2004,12 +2004,13 @@ class CQLParser:
         # And qualified names like System.ValueSet { ... }
         # NOTE: We must lookahead for '{' even for type-keyword tokens like QUANTITY,
         # because these tokens also serve as identifiers (e.g., parameter name 'quantity').
+        
+        saved_pos = self.pos
         if self.match(TokenType.QUANTITY, TokenType.RATIO, TokenType.CODE_TYPE,
                       TokenType.VALUESET_TYPE, TokenType.CONCEPT_TYPE,
                       TokenType.STRING_TYPE, TokenType.BOOLEAN, TokenType.INTEGER_TYPE,
                       TokenType.DECIMAL_TYPE, TokenType.DATE_TYPE, TokenType.DATETIME_TYPE,
                       TokenType.TIME_TYPE):
-            saved_pos = self.pos
             self.advance()  # consume the type keyword
             # Check for qualified form (e.g., System.Quantity { ... })
             while self.match_and_advance(TokenType.DOT):
@@ -2023,6 +2024,8 @@ class CQLParser:
             is_constructor = self.match(TokenType.LBRACE)
             self.pos = saved_pos  # restore position
             return is_constructor
+            
+        self.pos = saved_pos # Ensure position is reset before second check
         # Check for identifier followed by { (e.g., Code, ValueSet, or System.ValueSet)
         if self.match(TokenType.IDENTIFIER, TokenType.QUOTED_IDENTIFIER):
             # Skip known function names that use { } for list arguments
@@ -2030,7 +2033,6 @@ class CQLParser:
             if current_value in ("collapse", "expand", "union", "intersect", "except"):
                 return False
             # Look ahead to see if this is followed by . and more identifiers then {
-            saved_pos = self.pos
             self.advance()  # consume the identifier
             # Check for qualified identifier (e.g., System.ValueSet)
             while self.match_and_advance(TokenType.DOT):
@@ -2038,9 +2040,12 @@ class CQLParser:
                                   TokenType.CODE_TYPE, TokenType.VALUESET_TYPE,
                                   TokenType.CONCEPT_TYPE, TokenType.QUANTITY):
                     break
+                self.advance()
             is_constructor = self.match(TokenType.LBRACE)
             self.pos = saved_pos  # restore position
             return is_constructor
+            
+        self.pos = saved_pos
         return False
 
     def _parse_type_constructor(self) -> InstanceExpression:

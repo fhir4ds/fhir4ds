@@ -1,0 +1,16 @@
+{
+  "resourceType": "ValueSet",
+  "id": "2.16.840.1.113883.3.3157.4056",
+  "url": "http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.3157.4056",
+  "name": "Major Surgical Procedure",
+  "status": "active",
+  "expansion": {
+    "contains": [
+      {
+        "system": "http://www.cms.gov/Medicare/Coding/ICD10",
+        "code": "5A1955Z",
+        "display": "Respiratory Ventilation, Greater than 96 Consecutive Hours"
+      }
+    ]
+  }
+}

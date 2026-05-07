@@ -81,11 +81,14 @@ def _flatten_audit_tree(expr: "SQLExpression") -> "SQLExpression":
             )
             for t in terms[1:]:
                 evidence_ast = SQLFunctionCall(
-                    name="list_concat",
-                    args=[evidence_ast, SQLFunctionCall(
-                        name="COALESCE",
-                        args=[SQLStructFieldAccess(expr=t, field_name="evidence"), SQLArray()],
-                    )],
+                    name="list_distinct",
+                    args=[SQLFunctionCall(
+                        name="list_concat",
+                        args=[evidence_ast, SQLFunctionCall(
+                            name="COALESCE",
+                            args=[SQLStructFieldAccess(expr=t, field_name="evidence"), SQLArray()],
+                        )],
+                    )]
                 )
         else:
             # True-branch strategy: pick the first true branch's evidence
@@ -113,11 +116,14 @@ def _flatten_audit_tree(expr: "SQLExpression") -> "SQLExpression":
         )
         for t in terms[1:]:
             evidence_ast = SQLFunctionCall(
-                name="list_concat",
-                args=[evidence_ast, SQLFunctionCall(
-                    name="COALESCE",
-                    args=[SQLStructFieldAccess(expr=t, field_name="evidence"), SQLArray()],
-                )],
+                name="list_distinct",
+                args=[SQLFunctionCall(
+                    name="list_concat",
+                    args=[evidence_ast, SQLFunctionCall(
+                        name="COALESCE",
+                        args=[SQLStructFieldAccess(expr=t, field_name="evidence"), SQLArray()],
+                    )],
+                )]
             )
 
     return SQLAuditStruct(result_expr=result_ast, evidence_expr=evidence_ast)

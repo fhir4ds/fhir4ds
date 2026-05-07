@@ -501,7 +501,7 @@ class SQLTranslationContext:
         if self.profile_registry is None:
             import logging
             _logger = logging.getLogger(__name__)
-            _logger.warning(
+            _logger.debug(
                 "SQLTranslationContext created without profile_registry; "
                 "falling back to default. This should be fixed at the call site."
             )

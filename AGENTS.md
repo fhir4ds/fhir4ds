@@ -167,6 +167,44 @@ The Phase 7 fast path in `fhirpath_extension.cpp` must honor this rule. The help
 
 When adding a new `fhirpath_*` UDF function with a fast path, copy this pattern from `FhirpathNumberFunction`. Any new fast path that omits these three invariants will silently return NULL for all resource-type-prefixed expressions.
 
+### C++ Extension: Type Coercion Bugs in toNumber() and FastPathLookup
+
+**Discovered in QA Iteration 5 (ARCHAEOLOGIST).** Three bugs cause behavioral divergence between the C++ extension and the Python fallback:
+
+1. **`fhirpath_number` converts strings to numbers** (CRITICAL) — `toNumber()` in `evaluator.cpp:3439-3444` calls `std::stod()` on string values and returns `0.0` on failure instead of signaling that the conversion failed. The caller (`FhirpathNumberFunction`) should return NULL for non-numeric types. **Fix**: `toNumber()` should return a sentinel (e.g., NaN with a flag) or the caller should check the effective type before calling `toNumber()`.
+
+2. **`fhirpath_number` converts booleans to numbers** (CRITICAL) — `toNumber()` in `evaluator.cpp:3437-3438` converts `true` → `1.0` and `false` → `0.0`. FHIRPath booleans are not numbers. **Fix**: Remove the boolean case from `toNumber()` or add type-checking in `FhirpathNumberFunction`.
+
+3. **`fhirpath_text` fast path returns string "null" for JSON null** (HIGH) — `FastPathLookup` in `fhirpath_extension.cpp:278-284` serializes JSON null via `yyjson_val_write()` as the string `"null"` without checking `yyjson_is_null()`. **Fix**: Add `if (yyjson_is_null(current)) { yyjson_doc_free(doc); return {false, ""}; }` before the serialization fallback.
+
+**Pattern**: All three bugs share the same root cause — the C++ path doesn't validate type constraints before producing output, while the Python fallback uses `isinstance()` checks that naturally reject non-numeric types.
+
+### C++ Extension: fhirpath_date and fhirpath_json Null Handling
+
+**Discovered in QA Iteration 6 (SKEPTIC).** Two bugs cause behavioral divergence between the C++ extension and the Python fallback:
+
+4. **`fhirpath_date` passes non-date strings through** (MEDIUM) — `FhirpathDateFunction` in `fhirpath_extension.cpp` called `toString()` on the first result and returned it as-is without validating date format. `fhirpath_date({"v":"hello"}, 'v')` returned `"hello"` instead of NULL. **Fix**: Added date format validation checking YYYY (4 digits), YYYY-MM (7 chars), YYYY-MM-DD (10+ chars) patterns.
+
+5. **`fhirpath_json` returns "[]" for empty results** (MEDIUM) — `FhirpathJsonFunction` always built a JSON array string, even for empty collections. `fhirpath_json({"v":null}, 'v')` returned `"[]"` instead of SQL NULL. **Fix**: Added `fp_results.empty()` check returning NULL before array building.
+
+**Pattern**: Same root cause as bugs 1-3 — the C++ path doesn't validate output constraints that the Python fallback naturally enforces through `isinstance()` checks and list length validation.
+
+### C++ Extension: fhirpath_json Serialization and fhirpath_bool String Validation
+
+**Discovered in QA Iteration 7 (HISTORIAN).** Two bugs cause behavioral divergence between the C++ extension and the Python fallback:
+
+6. **`fhirpath_json` double-encodes non-string values as strings** (HIGH) — `FhirpathJsonFunction` called `toString()` on every result and wrapped it in quotes. Objects produced `["{\"given\":[\"John\"]}"]` instead of `[{"given":["John"]}]`. Booleans produced `["true"]` instead of `[true]`. **Fix**: Type-aware serialization — Integer/Decimal/Boolean output as native JSON types, JsonVal uses `yyjson_val_write()`, Quantity serializes as `{"value":X,"unit":"Y"}`, String values starting with `{`/`[` output as raw JSON.
+
+7. **`fhirpath_bool` accepts non-"true"/"false" strings** (MEDIUM) — The C++ evaluator's `toBoolean()` converted any non-empty string to true (e.g., `"yes"` → `true`). The Python fallback rejects non-"true"/"false" strings. **Fix**: Added string validation in `FhirpathBoolFunction` that checks String and JsonVal types for exactly "true" or "false" (case-insensitive) before calling `toBoolean()`.
+
+### C++ Extension: Use-After-Free in FhirpathNumberFunction Fast Path
+
+**Discovered in QA Iteration 10 (ARCHAEOLOGIST).** A genuine memory safety bug (not a behavioral divergence):
+
+8. **`fhirpath_number` fast path has Use-After-Free** (CRITICAL) — `FhirpathNumberFunction` in `fhirpath_extension.cpp:517-556` called `yyjson_doc_free(doc)` and then dereferenced `current` (a `yyjson_val*` pointing into the freed document) to check types and extract values. Undefined behavior that could silently corrupt data under memory pressure. **Fix**: Extract `yyjson_is_int()`, `yyjson_is_real()`, `yyjson_get_sint()`, `yyjson_get_real()` into local stack variables (`is_int`, `is_real`, `extracted`) **before** calling `yyjson_doc_free`. This matches the pattern used by `FastPathLookup` which materializes values into owned strings before freeing.
+
+**Pattern**: This is the first memory safety bug found in the QA loop. Unlike all previous bugs (behavioral divergences found by comparing C++ vs Python output), this class of bug requires manual code archaeology of pointer lifecycles. The code "worked" because the allocator typically hadn't reused the freed memory yet, but could produce garbage under memory pressure or with alternative allocators.
+
 ## Asset Relocation Reference
 
 - **C++ Source:** `extensions/fhirpath/` and `extensions/cql/`

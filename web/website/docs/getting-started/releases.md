@@ -7,6 +7,40 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.4
+*May 2026*
+
+Version 0.0.4 marks the **100% Compliance Milestone** — every test suite now passes at 100%, totaling 2,821 tests across CQL, FHIRPath, ViewDefinition, and DQM.
+
+### Highlights
+
+- **100% Spec Compliance**: All test suites now pass at 100% — CQL (1,706/1,706), FHIRPath (935/935), ViewDefinition (134/134), and DQM (46/46 measures).
+- **CQL Gap Closure**: Resolved remaining 2 CQL spec tests — `RolledOutIntervals` (DuckDB correlated UNNEST workaround) and `IntegerIntervalProperlyIncludedInNullBoundaries` (spec ambiguity resolved).
+- **DQM Full Pass Rate**: All 46 QI-Core 2025 CMS eCQMs now pass. 4 measures have documented upstream test data accuracy gaps (CMS135, CMS145, CMS157, CMS1017) that affect all conformant engines equally.
+- **ReactiveEvaluator API Update**: `ReactiveEvaluator` constructor now accepts `measure_bundle` and `cql_library_path` parameters, aligning with the `MeasureEvaluator` API.
+- **Interval JSON Handling**: Fixed precision comparisons to correctly handle interval JSON in CQL temporal operations.
+
+### Bug Fixes
+
+- **CQL**: Fixed interval JSON parsing in precision comparisons (affected CMS157 and related temporal tests).
+- **CQL**: Prevented parser loop and enforced inline recursion limit for deeply nested expressions.
+- **CQL**: Fixed `RolledOutIntervals` — implemented alternative approach avoiding DuckDB correlated UNNEST limitation.
+- **DQM**: Fixed CMS157 test data — corrected measurement period alignment with encounter dates.
+
+### API Changes
+
+- **`ReactiveEvaluator.__init__`**: Parameters changed from `(con, measure, adapter)` to `(con, measure_bundle, cql_library_path, adapter)`.
+- **Version Bump**: All `fhir4ds` packages bumped to version `0.0.4`.
+- **WASM Assets**: Updated translator wheel to `fhir4ds_v2-0.0.4-py3-none-any.whl`.
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.4
+```
+
+---
+
 ## Version 0.0.3
 *April 2026*
 

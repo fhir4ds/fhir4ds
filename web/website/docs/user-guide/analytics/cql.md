@@ -12,7 +12,7 @@ Clinical Quality Language (CQL) is an HL7 standard designed for expressing clini
 
 The `cql` module is the "brain" of the FHIR4DS toolkit. It handles the complexity of healthcare logic—such as time-interval math and terminology resolution—by translating it directly into optimized DuckDB SQL.
 
--   **Accuracy**: 100% compliance with the CQL grammar and parsing specification (3,044 tests).
+-   **Accuracy**: 100% compliance with the CQL grammar and parsing specification (1,706 tests).
 -   **Speed**: Leveraging columnar execution provides a **~73× speedup** over traditional sequential engines.
 -   **Transparency**: The resulting SQL is fully inspectable, allowing for auditability and debugging.
 
