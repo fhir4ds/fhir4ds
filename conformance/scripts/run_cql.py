@@ -10,10 +10,14 @@ import json
 import os
 import re
 import sys
+import warnings
 import xml.etree.ElementTree as ET
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, Union
+
+# Suppress UserWarnings to prevent I/O spam during large test runs
+warnings.simplefilter("ignore", UserWarning)
 
 import duckdb
 
@@ -371,7 +375,7 @@ def run_test(conn, test_elem) -> Tuple[bool, str]:
         library_text = f"library Conformance version '1.0'\ndefine \"TestResult\": {cql_expr}"
         
         # Translate to SQL expression
-        results = translate_cql(library_text, connection=conn)
+        print(f"Translating: {cql_expr}"); results = translate_cql(library_text, connection=conn)
         sql_expr = results["TestResult"].to_sql()
         
         # Execute in DuckDB
@@ -400,6 +404,10 @@ def main():
     # Initialize DuckDB
     conn = duckdb.connect(":memory:", config={'allow_unsigned_extensions': 'true'})
     is_cpp = register_udfs(conn)
+    if is_cpp:
+        print(">>> C++ extension and Python fallback UDFs loaded successfully")
+    else:
+        print(">>> Python fallback UDFs loaded successfully (C++ extension NOT loaded)")
     print(f">>> Using {'C++' if is_cpp else 'Python'} UDFs")
     
     # Ensure resources table exists

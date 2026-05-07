@@ -28,6 +28,9 @@ struct BoundValue {
 	// Returns -2 for type mismatch or incomparable.
 	int compare(const BoundValue &other) const;
 
+	// Compare at a specific precision (DateTime only).
+	int compare_at_prec(const BoundValue &other, DateTimeValue::Precision prec) const;
+
 	// Serialize to string for JSON output
 	std::string to_string() const;
 
@@ -67,6 +70,16 @@ struct Interval {
 	bool starts_same(const Interval &other) const;
 	bool ends_same(const Interval &other) const;
 
+	// Precision-aware variants (truncate bounds to precision before comparing)
+	bool overlaps(const Interval &other, DateTimeValue::Precision prec) const;
+	bool contains_point(const BoundValue &point, DateTimeValue::Precision prec) const;
+	bool contains_interval(const Interval &other, DateTimeValue::Precision prec) const;
+	bool includes(const Interval &other, DateTimeValue::Precision prec) const;
+	bool before(const Interval &other, DateTimeValue::Precision prec) const;
+	bool after(const Interval &other, DateTimeValue::Precision prec) const;
+	bool overlaps_before(const Interval &other, DateTimeValue::Precision prec) const;
+	bool overlaps_after(const Interval &other, DateTimeValue::Precision prec) const;
+
 	Optional<int64_t> width_days() const;
 	// Generic width: for numeric intervals returns high-low as string
 	Optional<std::string> width_string() const;
@@ -97,5 +110,8 @@ Optional<BoundValue> parse_point_value(const std::string &str);
 
 // Parse a JSON array of intervals
 std::vector<Interval> parse_interval_array(const std::string &json_array);
+
+// Parse precision string ("year","month","day","hour","minute","second","millisecond")
+Optional<DateTimeValue::Precision> precision_from_string(const std::string &s);
 
 } // namespace cql

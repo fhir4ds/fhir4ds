@@ -16,14 +16,14 @@ _EVIDENCE_STRUCT_TYPE = (
 )
 
 AUDIT_MACROS_SQL = [
-    # AND: merge evidence from both operands
+    # AND: merge evidence from both operands (preserves insertion order)
     """CREATE OR REPLACE MACRO audit_and(a, b) AS (
         struct_pack(
             result   := struct_extract(a, 'result') AND struct_extract(b, 'result'),
-            evidence := list_distinct(list_concat(
+            evidence := list_concat(
                 COALESCE(struct_extract(a, 'evidence'), []),
                 COALESCE(struct_extract(b, 'evidence'), [])
-            ))
+            )
         )
     )""",
     # OR (TRUE_BRANCH strategy — default): only true branch's evidence

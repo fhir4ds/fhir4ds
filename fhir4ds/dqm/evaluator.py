@@ -173,6 +173,9 @@ class MeasureEvaluator:
 
         Returns:
             Dict with population counts and performance rate.
+            For multi-group measures (DataFrame has ``_group_id`` column),
+            the dict additionally contains a ``"groups"`` key mapping each
+            group_id to its own summary dict.
         """
         if isinstance(result, MeasureResult):
             df = result.dataframe
@@ -181,73 +184,89 @@ class MeasureEvaluator:
         else:
             df = result
 
-        def _count_col(col_name: str) -> int:
-            if col_name not in df.columns:
-                return 0
-            col = df[col_name]
-            if len(col) > 0 and isinstance(col.iloc[0], dict):
-                return int(col.apply(lambda x: x.get("result", False) if isinstance(x, dict) else bool(x)).sum())
-            return int(col.astype(bool).sum())
+        def _summary_for_df(frame: pd.DataFrame) -> dict:
+            def _count_col(col_name: str) -> int:
+                if col_name not in frame.columns:
+                    return 0
+                col = frame[col_name]
+                if len(col) > 0 and isinstance(col.iloc[0], dict):
+                    return int(col.apply(lambda x: x.get("result", False) if isinstance(x, dict) else bool(x)).sum())
+                return int(col.astype(bool).sum())
 
-        ip = _count_col("initial_population")
-        denom = _count_col("denominator")
-        denom_excl = _count_col("denominator_exclusion")
-        denom_except = _count_col("denominator_exception")
-        numer = _count_col("numerator")
-        numer_excl = _count_col("numerator_exclusion")
+            ip = _count_col("initial_population")
+            denom = _count_col("denominator")
+            denom_excl = _count_col("denominator_exclusion")
+            denom_except = _count_col("denominator_exception")
+            numer = _count_col("numerator")
+            numer_excl = _count_col("numerator_exclusion")
 
-        denom_final = denom - denom_excl - denom_except
-        numer_final = numer - numer_excl
+            denom_final = denom - denom_excl - denom_except
+            numer_final = numer - numer_excl
 
-        # CQL §10: Numerator is a subset of Denominator — cap numer_final
-        # to denom_final so excluded-denominator patients are also removed
-        # from the numerator count.
-        if denom_final >= 0 and numer_final > denom_final:
-            numer_final = denom_final
+            # CQL §10: Numerator is a subset of Denominator — cap numer_final
+            # to denom_final so excluded-denominator patients are also removed
+            # from the numerator count.
+            if denom_final >= 0 and numer_final > denom_final:
+                numer_final = denom_final
 
-        if denom_final < 0:
-            raise DQMError(
-                f"Negative denominator_final ({denom_final}): denominator({denom}) < "
-                f"exclusions({denom_excl}) + exceptions({denom_except}). "
-                f"Check measure logic or data."
-            )
-        if numer_final < 0:
-            raise DQMError(
-                f"Negative numerator_final ({numer_final}): numerator({numer}) < "
-                f"numerator_exclusion({numer_excl}). Check measure logic or data."
-            )
-
-        if denom_final > 0:
-            performance_rate = numer_final / denom_final
-            if performance_rate < 0.0 or performance_rate > 1.0:
-                logger.warning(
-                    "Performance rate %.4f out of [0,1] range "
-                    "(numer_final=%d, denom_final=%d) - clamping",
-                    performance_rate, numer_final, denom_final,
+            if denom_final < 0:
+                raise DQMError(
+                    f"Negative denominator_final ({denom_final}): denominator({denom}) < "
+                    f"exclusions({denom_excl}) + exceptions({denom_except}). "
+                    f"Check measure logic or data."
                 )
-                performance_rate = max(0.0, min(1.0, performance_rate))
-        else:
-            performance_rate = 0.0
+            if numer_final < 0:
+                raise DQMError(
+                    f"Negative numerator_final ({numer_final}): numerator({numer}) < "
+                    f"numerator_exclusion({numer_excl}). Check measure logic or data."
+                )
 
-        # Use distinct patient count if patient_id column exists,
-        # guarding against any residual row duplication from audit JOINs.
-        if "patient_id" in df.columns:
-            total = df["patient_id"].nunique()
-        else:
-            total = len(df)
+            if denom_final > 0:
+                performance_rate = numer_final / denom_final
+                if performance_rate < 0.0 or performance_rate > 1.0:
+                    logger.warning(
+                        "Performance rate %.4f out of [0,1] range "
+                        "(numer_final=%d, denom_final=%d) - clamping",
+                        performance_rate, numer_final, denom_final,
+                    )
+                    performance_rate = max(0.0, min(1.0, performance_rate))
+            else:
+                performance_rate = 0.0
 
-        return {
-            "initial_population": ip,
-            "denominator": denom,
-            "denominator_exclusion": denom_excl,
-            "denominator_exception": denom_except,
-            "denominator_final": denom_final,
-            "numerator": numer,
-            "numerator_exclusion": numer_excl,
-            "numerator_final": numer_final,
-            "performance_rate": round(performance_rate, 4),
-            "total_patients": total,
-        }
+            # Use distinct patient count if patient_id column exists,
+            # guarding against any residual row duplication from audit JOINs.
+            if "patient_id" in frame.columns:
+                total = frame["patient_id"].nunique()
+            else:
+                total = len(frame)
+
+            return {
+                "initial_population": ip,
+                "denominator": denom,
+                "denominator_exclusion": denom_excl,
+                "denominator_exception": denom_except,
+                "denominator_final": denom_final,
+                "numerator": numer,
+                "numerator_exclusion": numer_excl,
+                "numerator_final": numer_final,
+                "performance_rate": round(performance_rate, 4),
+                "total_patients": total,
+            }
+
+        overall = _summary_for_df(df)
+
+        # Multi-group: add per-group breakdowns
+        if "_group_id" in df.columns:
+            group_summaries: dict[str, dict] = {}
+            for gid in df["_group_id"].unique():
+                gdf = df[df["_group_id"] == gid]
+                # Drop _group_id so it doesn't interfere with patient counts
+                group_summaries[str(gid)] = _summary_for_df(
+                    gdf.drop(columns=["_group_id"])
+                )
+            overall["groups"] = group_summaries
+
+        return overall
 
     # ── Export Methods ──────────────────────────────────────────────────
 
@@ -317,6 +336,7 @@ class MeasureEvaluator:
             raise DQMError("No evaluation has been run yet. Call evaluate() first.")
 
         summary = self.summary_report(df)
+        group_summaries = summary.get("groups", {})
 
         # Resolve period
         ps = _to_date_str(period_start) if period_start else None
@@ -332,13 +352,14 @@ class MeasureEvaluator:
                 "Pass period_start/period_end or set the 'Measurement Period' parameter."
             )
 
-        # Build group populations
+        # Build group populations — use per-group summary when available
         groups = []
         for group in pop_map.groups:
+            group_summary = group_summaries.get(group.group_id, summary)
             populations = []
             for pop in group.populations:
                 col_name = self._col_name(pop.population_code)
-                count = summary.get(col_name, 0)
+                count = group_summary.get(col_name, 0)
                 if col_name in ("denominator_final", "numerator_final"):
                     continue
                 if isinstance(count, float):

@@ -1380,6 +1380,18 @@ SELECT MonthsBetween('2023-01-31', '2023-02-01');
 ----
 0
 
+# MonthsBetween: one day before 12-month anniversary is 11 complete months
+query I
+SELECT MonthsBetween('2023-06-16', '2024-06-15');
+----
+11
+
+# YearsBetween: one day before 44th anniversary is 43 complete years
+query I
+SELECT YearsBetween('1980-06-15', '2024-06-14');
+----
+43
+
 # CQLPrecision: month precision
 query T
 SELECT CQLPrecision('2024-01');

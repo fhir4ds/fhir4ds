@@ -68,6 +68,22 @@ return (*qty_numeric < *other.qty_numeric) ? -1 : (*qty_numeric > *other.qty_num
 return -2;
 }
 
+int BoundValue::compare_at_prec(const BoundValue &other, DateTimeValue::Precision prec) const {
+if (type != other.type) {
+return -2;
+}
+switch (type) {
+case BoundType::DateTime:
+case BoundType::Time:
+if (!dt_val || !other.dt_val) {
+return -2;
+}
+return dt_val->compare_at_precision(*other.dt_val, prec);
+default:
+return compare(other);
+}
+}
+
 std::string BoundValue::to_string() const {
 	// For DateTime/Time, always use canonical DateTimeValue format
 	// (normalizes space-separated timestamps to ISO 8601 T-separated)
@@ -899,6 +915,92 @@ return Optional<Interval>(result);
 }
 
 return NullOpt<Interval>();
+}
+
+// =====================================================================
+// Precision-aware interval comparisons
+// =====================================================================
+
+Optional<DateTimeValue::Precision> precision_from_string(const std::string &s) {
+if (s == "year") return DateTimeValue::Precision::Year;
+if (s == "month") return DateTimeValue::Precision::Month;
+if (s == "day") return DateTimeValue::Precision::Day;
+if (s == "hour") return DateTimeValue::Precision::Hour;
+if (s == "minute") return DateTimeValue::Precision::Minute;
+if (s == "second") return DateTimeValue::Precision::Second;
+if (s == "millisecond") return DateTimeValue::Precision::Millisecond;
+return NullOpt<DateTimeValue::Precision>();
+}
+
+bool Interval::overlaps(const Interval &other, DateTimeValue::Precision prec) const {
+if (low && other.high) {
+int cmp = other.high->compare_at_prec(*low, prec);
+if (cmp == -2) return false;
+if (cmp < 0) return false;
+if (cmp == 0 && (!other.high_closed || !low_closed)) return false;
+}
+if (high && other.low) {
+int cmp = high->compare_at_prec(*other.low, prec);
+if (cmp == -2) return false;
+if (cmp < 0) return false;
+if (cmp == 0 && (!high_closed || !other.low_closed)) return false;
+}
+return true;
+}
+
+bool Interval::contains_point(const BoundValue &point, DateTimeValue::Precision prec) const {
+if (low) {
+int cmp = low->compare_at_prec(point, prec);
+if (cmp == -2) return false;
+if (cmp > 0) return false;
+if (cmp == 0 && !low_closed) return false;
+}
+if (high) {
+int cmp = high->compare_at_prec(point, prec);
+if (cmp == -2) return false;
+if (cmp < 0) return false;
+if (cmp == 0 && !high_closed) return false;
+}
+return true;
+}
+
+bool Interval::contains_interval(const Interval &other, DateTimeValue::Precision prec) const {
+if (!other.low && low) return false;
+if (other.low && !contains_point(*other.low, prec)) return false;
+if (!other.high && high) return false;
+if (other.high && !contains_point(*other.high, prec)) return false;
+return true;
+}
+
+bool Interval::includes(const Interval &other, DateTimeValue::Precision prec) const {
+return contains_interval(other, prec);
+}
+
+bool Interval::before(const Interval &other, DateTimeValue::Precision prec) const {
+if (!high || !other.low) return false;
+int cmp = high->compare_at_prec(*other.low, prec);
+if (cmp == -2) return false;
+if (high_closed && other.low_closed) return cmp < 0;
+return cmp <= 0;
+}
+
+bool Interval::after(const Interval &other, DateTimeValue::Precision prec) const {
+return other.before(*this, prec);
+}
+
+bool Interval::overlaps_before(const Interval &other, DateTimeValue::Precision prec) const {
+if (!low || !other.low) return false;
+int low_cmp = low->compare_at_prec(*other.low, prec);
+if (low_cmp == -2) return false;
+if (!high) return low_cmp < 0;
+int high_cmp = high->compare_at_prec(*other.low, prec);
+if (high_cmp == -2) return false;
+if (high_cmp == 0) return low_cmp < 0 && high_closed && other.low_closed;
+return low_cmp < 0 && high_cmp > 0;
+}
+
+bool Interval::overlaps_after(const Interval &other, DateTimeValue::Precision prec) const {
+return other.overlaps_before(*this, prec);
 }
 
 } // namespace cql

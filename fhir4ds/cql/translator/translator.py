@@ -1421,7 +1421,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # PATIENT_SCALAR produces CTEs with only patient_id (and optionally value).
             from ..translator.context import RowShape
             if shape == RowShape.UNKNOWN:
-                _logger.warning(
+                _logger.debug(
                     "Could not determine row shape for definition '%s' — "
                     "defaulting to non-resource",
                     definition.name,

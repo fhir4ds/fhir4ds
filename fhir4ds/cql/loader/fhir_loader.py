@@ -521,6 +521,10 @@ class FHIRDataLoader:
         Returns:
             Number of codes matching the filter
         """
+        if not isinstance(table_name, str) or not table_name.isidentifier():
+            raise ValueError(
+                f"table_name must be a valid SQL identifier, got {table_name!r}"
+            )
         if valueset_url:
             result = self.con.execute(
                 f"SELECT COUNT(*) FROM {table_name} WHERE valueset_url = ?",
@@ -539,6 +543,10 @@ class FHIRDataLoader:
         Args:
             table_name: Name of the valueset codes table
         """
+        if not isinstance(table_name, str) or not table_name.isidentifier():
+            raise ValueError(
+                f"table_name must be a valid SQL identifier, got {table_name!r}"
+            )
         self.con.execute(f"DELETE FROM {table_name}")
         self._refresh_in_valueset_udf(table_name)
 

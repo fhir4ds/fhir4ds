@@ -116,6 +116,14 @@ def _parse_interval_bound(value: Any) -> Any:
         return None
     if isinstance(value, str) and value == "__null__":
         return None
+    if isinstance(value, dict):
+        # Quantity or other structured JSON passed directly by DuckDB
+        if "value" in value:
+            try:
+                return float(value["value"])
+            except (ValueError, TypeError):
+                pass
+        return None
     if isinstance(value, (int, float)):
         return value
     if isinstance(value, datetime):
@@ -575,8 +583,11 @@ def intervalContains(interval: str | None, point: str | None) -> bool | None:
     if stripped.startswith("{"):
         try:
             obj = orjson.loads(stripped)
-            if isinstance(obj, dict) and ("low" in obj or "high" in obj or "lowClosed" in obj):
-                # Interval JSON → use "includes" semantics
+            if isinstance(obj, dict) and (
+                "low" in obj or "high" in obj or "lowClosed" in obj
+                or "start" in obj or "end" in obj
+            ):
+                # Interval JSON (low/high or FHIR Period start/end) → use "includes" semantics
                 return intervalIncludes(interval, point)
         except (JSONDecodeError, TypeError):
             pass
@@ -617,7 +628,10 @@ def intervalProperlyContains(interval: str | None, point: str | None) -> bool | 
     if stripped.startswith("{"):
         try:
             obj = orjson.loads(stripped)
-            if isinstance(obj, dict) and ("low" in obj or "high" in obj or "lowClosed" in obj):
+            if isinstance(obj, dict) and (
+                "low" in obj or "high" in obj or "lowClosed" in obj
+                or "start" in obj or "end" in obj
+            ):
                 return intervalProperlyIncludes(interval, point)
         except (JSONDecodeError, TypeError):
             pass

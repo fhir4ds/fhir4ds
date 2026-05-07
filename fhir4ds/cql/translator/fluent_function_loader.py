@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 class FluentFunctionLoader:
     """Load fluent functions from CQL libraries and register for inlining."""
+    
+    _global_ast_cache: Dict[str, Any] = {}
 
     def __init__(self):
         """Initialize the loader."""
@@ -118,12 +120,17 @@ class FluentFunctionLoader:
             return False
 
         try:
-            # Parse the library
-            with open(lib_path, "r") as f:
-                cql_source = f.read()
+            # Parse the library or fetch from global cache
+            if library_name in self.__class__._global_ast_cache:
+                library = self.__class__._global_ast_cache[library_name]
+                logger.debug(f"Loaded library {library_name} from AST cache")
+            else:
+                with open(lib_path, "r") as f:
+                    cql_source = f.read()
 
-            library = parse_cql(cql_source)
-            logger.info(f"Loaded library: {library_name} from {lib_path}")
+                library = parse_cql(cql_source)
+                self.__class__._global_ast_cache[library_name] = library
+                logger.info(f"Loaded and cached library: {library_name} from {lib_path}")
 
             # Extract and register fluent functions
             fluent_count = self._register_fluent_functions(library, inliner, library_name)
