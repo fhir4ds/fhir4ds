@@ -144,7 +144,7 @@ For near-real-time measure re-evaluation, use `ReactiveEvaluator`:
 ```python
 from fhir4ds.dqm.reactive import ReactiveEvaluator
 
-evaluator = ReactiveEvaluator(con, measure='CBP', adapter=source)
+evaluator = ReactiveEvaluator(con, measure_bundle='CBP', cql_library_path='/path/to/lib.cql', adapter=source)
 
 # On each data sync:
 delta = evaluator.update()

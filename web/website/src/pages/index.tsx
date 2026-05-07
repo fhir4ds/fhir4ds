@@ -160,9 +160,9 @@ const FEATURES: Feature[] = [
     title: 'Standards Compliant',
     description: (
       <ul style={{listStyleType: 'none', padding: 0, margin: '0.5rem 0 0', fontSize: '0.88rem'}}>
-        <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> CQL (3,044 tests)</li>
-        <li><strong style={{color: 'rgb(95, 237, 131)'}}>99.9%</strong> FHIRPath (935 tests)</li>
-        <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> SQL-on-FHIR (140 tests)</li>
+        <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> CQL (1,706 tests)</li>
+        <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> FHIRPath (935 tests)</li>
+        <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> SQL-on-FHIR v2 (134 tests)</li>
       </ul>
     ),
   },
@@ -316,7 +316,7 @@ function Hero() {
           <Heading as="h1" className="hero__title" style={{marginBottom: 0, background: 'none', WebkitTextFillColor: 'rgb(95, 237, 131)', color: 'rgb(95, 237, 131)'}}>
             FHIR4DS
           </Heading>
-          <span className={styles.versionBadge}>v0.0.3</span>
+          <span className={styles.versionBadge}>v0.0.4</span>
         </div>
         <p style={{fontSize: '1.35rem', fontWeight: 600, color: '#e2e8f0', margin: '0.4rem 0 0.6rem'}}>
           Production-Scale FHIR Analytics. In Your Browser.

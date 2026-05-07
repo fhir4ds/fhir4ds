@@ -207,12 +207,12 @@ class TestReactiveEvaluatorConstruction:
     def test_raises_value_error_for_non_incremental_adapter(self):
         adapter = self._make_non_incremental_adapter()
         with pytest.raises(ValueError, match="incremental"):
-            ReactiveEvaluator(_make_con(), "CBP", adapter)
+            ReactiveEvaluator(_make_con(), "CBP", "/dummy/lib.cql", adapter)
 
     def test_raises_value_error_includes_adapter_name(self):
         adapter = self._make_non_incremental_adapter()
         with pytest.raises(ValueError, match="NotIncrementalAdapter"):
-            ReactiveEvaluator(_make_con(), "CBP", adapter)
+            ReactiveEvaluator(_make_con(), "CBP", "/dummy/lib.cql", adapter)
 
     def test_raises_value_error_for_adapter_without_supports_incremental(self):
         class MinimalAdapter:
@@ -220,16 +220,16 @@ class TestReactiveEvaluatorConstruction:
             def unregister(self, con): pass
 
         with pytest.raises(ValueError):
-            ReactiveEvaluator(_make_con(), "CBP", MinimalAdapter())
+            ReactiveEvaluator(_make_con(), "CBP", "/dummy/lib.cql", MinimalAdapter())
 
     def test_accepts_incremental_adapter(self):
         adapter = self._make_incremental_adapter()
-        ev = ReactiveEvaluator(_make_con(), "CBP", adapter)
+        ev = ReactiveEvaluator(_make_con(), "CBP", "/dummy/lib.cql", adapter)
         assert ev is not None
 
     def test_last_sync_initially_none(self):
         adapter = self._make_incremental_adapter()
-        ev = ReactiveEvaluator(_make_con(), "CBP", adapter)
+        ev = ReactiveEvaluator(_make_con(), "CBP", "/dummy/lib.cql", adapter)
         assert ev.last_sync is None
 
 
@@ -245,13 +245,13 @@ class TestReactiveEvaluatorUpdate:
 
     def test_returns_none_when_no_patients_changed(self):
         adapter = self._make_incremental_adapter(changed=[])
-        ev = ReactiveEvaluator(_make_con(), "CBP", adapter)
+        ev = ReactiveEvaluator(_make_con(), "CBP", "/dummy/lib.cql", adapter)
         result = ev.update()
         assert result is None
 
     def test_updates_last_sync_even_when_no_changes(self):
         adapter = self._make_incremental_adapter(changed=[])
-        ev = ReactiveEvaluator(_make_con(), "CBP", adapter)
+        ev = ReactiveEvaluator(_make_con(), "CBP", "/dummy/lib.cql", adapter)
         before = datetime.utcnow()
         ev.update()
         assert ev.last_sync is not None
@@ -266,11 +266,15 @@ class TestReactiveEvaluatorUpdate:
 
         with patch("fhir4ds.dqm.MeasureEvaluator") as MockEvaluator:
             MockEvaluator.return_value = mock_evaluator_instance
-            ev = ReactiveEvaluator(_make_con(), "CBP", adapter)
+            ev = ReactiveEvaluator(_make_con(), "CBP", "/dummy/lib.cql", adapter)
             result = ev.update()
 
         MockEvaluator.assert_called_once()
-        mock_evaluator_instance.evaluate.assert_called_once_with(patient_ids=changed_ids)
+        mock_evaluator_instance.evaluate.assert_called_once_with(
+            "CBP", "/dummy/lib.cql",
+            patient_ids=changed_ids,
+            audit_mode="none",
+        )
         assert result == {"groups": []}
 
     def test_update_uses_last_sync_as_since_on_second_call(self):
@@ -285,7 +289,7 @@ class TestReactiveEvaluatorUpdate:
                 return []
 
         adapter = TrackingSinceAdapter()
-        ev = ReactiveEvaluator(_make_con(), "CBP", adapter)
+        ev = ReactiveEvaluator(_make_con(), "CBP", "/dummy/lib.cql", adapter)
 
         t1 = datetime(2026, 1, 1, 12, 0, 0)
         ev.update(as_of=t1)
@@ -297,7 +301,7 @@ class TestReactiveEvaluatorUpdate:
 
     def test_last_sync_updated_to_as_of_after_changes(self):
         adapter = self._make_incremental_adapter(changed=[])
-        ev = ReactiveEvaluator(_make_con(), "CBP", adapter)
+        ev = ReactiveEvaluator(_make_con(), "CBP", "/dummy/lib.cql", adapter)
         target_time = datetime(2026, 4, 24, 12, 0, 0)
         ev.update(as_of=target_time)
         assert ev.last_sync == target_time

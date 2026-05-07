@@ -113,7 +113,7 @@ const config: Config = {
           title: 'Licensing & Support',
           items: [
             {label: 'Dual Licensing', to: '/docs/getting-started/licensing'},
-            {label: 'Commercial Inquiries', href: 'mailto:fhir4ds@gmail.com'},
+            {label: 'Commercial Inquiries', href: 'mailto:contact@fhir4ds.com'},
           ],
         },
         {

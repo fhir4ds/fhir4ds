@@ -14,7 +14,8 @@
       {
         "name": "Full Logic Accuracy",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Accuracy: 97.6%"
         }
       }
     ]
