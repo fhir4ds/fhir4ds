@@ -1436,6 +1436,37 @@ class CTEManagerMixin:
     # CTE building helpers
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _resolve_let_cte_source(cte_body, prov_to_actual: dict):
+        """Fix the FROM clause CTE name in a let-variable CTE body.
+
+        During translation, let-variable CTEs use provisional names that embed
+        valueset URLs (e.g. "MedicationRequest: http://...").  The retrieve
+        optimizer later assigns display names (e.g. "MedicationRequest:
+        Antidepressant Medication").  This method swaps the provisional name
+        for the actual one so the generated SQL references a valid CTE.
+        """
+        from ..translator.types import SQLSelect, SQLAlias, SQLIdentifier
+        if not isinstance(cte_body, SQLSelect):
+            return cte_body
+        fc = cte_body.from_clause
+        if not isinstance(fc, SQLAlias) or not isinstance(fc.expr, SQLIdentifier):
+            return cte_body
+        provisional = fc.expr.name
+        actual = prov_to_actual.get(provisional, provisional)
+        if actual != provisional:
+            new_ident = SQLIdentifier(name=actual, quoted=True)
+            new_from = SQLAlias(expr=new_ident, alias=fc.alias)
+            return SQLSelect(
+                columns=cte_body.columns,
+                from_clause=new_from,
+                where=cte_body.where,
+                group_by=cte_body.group_by,
+                order_by=cte_body.order_by,
+                limit=cte_body.limit,
+            )
+        return cte_body
+
     def _build_definition_cte_with_patient_id(
         self,
         name: str,

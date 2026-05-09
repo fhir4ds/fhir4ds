@@ -725,6 +725,13 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                             cte_defs[i] = CTEDefinition(name=quoted, query=cte_ast)
                             break
 
+        # 3.7. Build mapping from provisional CTE names (valueset URLs) to actual
+        # CTE names (display names) for let-variable CTE resolution.
+        _prov_to_actual: dict[str, str] = {}
+        for (_rt, _vs, _prof), _actual in phase2_result.cte_name_map.items():
+            _prov = f"{_rt}: {_vs}" if _vs else _rt
+            _prov_to_actual[_prov] = _actual
+
         # 4. Build CTEs for included library definitions (prefixed names)
         # These must come before main definitions so they can be referenced
         # Topologically sort included definitions so dependencies come first
@@ -778,6 +785,15 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     seen_lower[precte_lower] = precte.name
                     cte_defs.append(precte)
             self._pending_precte.clear()
+            # Inject let-variable CTEs for this definition right before its CTE.
+            # This ensures they come after any earlier definition CTEs they reference.
+            if name in self._context._let_variable_ctes:
+                for let_cte_name, let_cte_body in self._context._let_variable_ctes[name].items():
+                    _fixed_body = self._resolve_let_cte_source(let_cte_body, _prov_to_actual)
+                    quoted = f'"{let_cte_name}"'
+                    if quoted.lower() not in seen_lower:
+                        seen_lower[quoted.lower()] = quoted
+                        cte_defs.append(CTEDefinition(name=quoted, query=_fixed_body))
             cte_name = self._unique_cte_name(name, seen_lower)
             quoted_name = f'"{cte_name}"'
             cte_defs.append(CTEDefinition(name=quoted_name, query=cte_ast))
@@ -1370,6 +1386,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 f"Circular definition reference detected: {cycle_path}"
             )
         self._context._resolving_definitions.add(def_name)
+        self._context._current_definition = def_name
 
         try:
             # Create a fresh query builder for this definition to track JOIN dependencies
@@ -1481,6 +1498,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         finally:
             # Clean up cycle detection state
             self._context._resolving_definitions.discard(def_name)
+            self._context._current_definition = None
             # Restore original context
             self._context.set_context_type(original_context)
 

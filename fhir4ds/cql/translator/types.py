@@ -1320,6 +1320,177 @@ class SQLFragment:
         with_clause = "WITH " + ",\n".join(cte_parts)
         return f"{with_clause}\n{self.main_query.to_sql()}"
 
+    def deduplicate_lateral_aliases(self, min_occurrences: int = 3) -> None:
+        """Deduplicate repeated expressions in CTE WHERE clauses using lateral column aliases.
+
+        DuckDB supports referencing a SELECT column alias in the WHERE clause of the
+        same SELECT.  This method walks each CTE's WHERE clause, finds repeated
+        subexpressions (correlated scalar subqueries, function calls, etc.), and
+        extracts them as lateral alias columns.  This reduces SQL size by computing
+        each expression once instead of N times.
+
+        Operates in-place on the CTE list.  Safe for set operations and CTE consumers
+        because extra columns in the CTE body are ignored by downstream SELECT lists
+        that reference specific named columns (patient_id, resource, value).
+        """
+        for cte_def in self.ctes:
+            self._dedup_cte(cte_def, min_occurrences)
+
+    def _dedup_cte(self, cte_def: 'CTEDefinition', min_occ: int) -> None:
+        """Apply lateral alias deduplication to a single CTE definition."""
+        query = cte_def.query
+
+        # Handle set operations: apply dedup to each operand individually
+        if isinstance(query, (SQLUnion, SQLIntersect, SQLExcept)):
+            for i, operand in enumerate(query.operands):
+                inner = operand
+                if isinstance(inner, SQLSubquery) and isinstance(inner.query, SQLSelect):
+                    self._dedup_select(inner.query, min_occ)
+                elif isinstance(inner, SQLSelect):
+                    self._dedup_select(inner, min_occ)
+            return
+
+        # Handle plain SELECT CTE
+        if isinstance(query, SQLSelect):
+            self._dedup_select(query, min_occ)
+
+    def _dedup_select(self, select: 'SQLSelect', min_occ: int) -> None:
+        """Deduplicate repeated expressions in a SELECT's WHERE clause."""
+        if select.where is None:
+            return
+
+        # 1) Collect candidate expressions and their serialized forms
+        candidates = {}  # sql_str -> (node, count)
+        self._collect_candidates(select.where, candidates, min_occ)
+
+        if not candidates:
+            return
+
+        # 2) For each repeated expression, create a lateral alias
+        lateral_cols = []
+        alias_map = {}  # sql_str -> alias_name
+        for sql_str, (node, count) in sorted(
+            candidates.items(), key=lambda x: -len(x[0]) * x[0][1]  # largest SQL * count first
+        ):
+            if count < min_occ:
+                continue
+            alias_name = f"_lat{len(lateral_cols)}"
+            alias_map[sql_str] = alias_name
+            lateral_cols.append(SQLAlias(expr=node, alias=alias_name))
+
+        if not lateral_cols:
+            return
+
+        # 3) Replace occurrences in WHERE with alias references
+        new_where = self._replace_aliases(select.where, alias_map)
+        select.where = new_where
+
+        # 4) Add lateral columns to the SELECT
+        select.columns = list(select.columns) + lateral_cols
+
+    def _collect_candidates(self, node: 'SQLExpression', candidates: dict, min_occ: int) -> None:
+        """Walk the AST and collect subexpressions that appear multiple times."""
+        # Only consider complex expressions (subqueries, function calls) that are
+        # worth deduplicating.  Skip simple identifiers, literals, and binary ops
+        # that just combine simple terms.
+        if isinstance(node, SQLSubquery):
+            sql_str = node.to_sql()
+            # Only consider correlated subqueries (they contain patient_id references)
+            if 'patient_id' in sql_str and len(sql_str) > 50:
+                count = candidates.get(sql_str, (None, 0))[1] + 1
+                candidates[sql_str] = (node, count)
+            # Don't recurse into subqueries — they have their own scope
+            return
+
+        if isinstance(node, SQLFunctionCall):
+            sql_str = node.to_sql()
+            # Only consider complex function calls worth deduplicating
+            if len(sql_str) > 100:
+                count = candidates.get(sql_str, (None, 0))[1] + 1
+                candidates[sql_str] = (node, count)
+            # Still recurse into function args for nested candidates
+            for arg in node.args:
+                self._collect_candidates(arg, candidates, min_occ)
+            return
+
+        # Recurse into compound expressions
+        if isinstance(node, SQLBinaryOp):
+            self._collect_candidates(node.left, candidates, min_occ)
+            self._collect_candidates(node.right, candidates, min_occ)
+        elif isinstance(node, SQLUnaryOp):
+            self._collect_candidates(node.operand, candidates, min_occ)
+        elif isinstance(node, SQLCase):
+            for cond, result in node.when_clauses:
+                self._collect_candidates(cond, candidates, min_occ)
+                self._collect_candidates(result, candidates, min_occ)
+            if node.else_clause:
+                self._collect_candidates(node.else_clause, candidates, min_occ)
+        elif isinstance(node, SQLExists):
+            # The subquery inside EXISTS has its own WHERE with correlated refs.
+            # Collect candidates from inside the EXISTS subquery's WHERE clause.
+            sq = node.subquery
+            if isinstance(sq, SQLSubquery) and isinstance(sq.query, SQLSelect):
+                if sq.query.where:
+                    self._collect_candidates(sq.query.where, candidates, min_occ)
+
+    def _replace_aliases(self, node: 'SQLExpression', alias_map: dict) -> 'SQLExpression':
+        """Replace subexpressions matching alias_map keys with SQLIdentifier aliases."""
+        # Check if this node itself should be replaced
+        if isinstance(node, SQLSubquery):
+            sql_str = node.to_sql()
+            if sql_str in alias_map:
+                return SQLIdentifier(name=alias_map[sql_str])
+            return node  # Don't recurse into subqueries
+
+        if isinstance(node, SQLFunctionCall):
+            sql_str = node.to_sql()
+            if sql_str in alias_map:
+                return SQLIdentifier(name=alias_map[sql_str])
+            # Recurse into args
+            new_args = [self._replace_aliases(arg, alias_map) for arg in node.args]
+            if new_args != node.args:
+                return SQLFunctionCall(name=node.name, args=new_args, distinct=node.distinct)
+            return node
+
+        if isinstance(node, SQLBinaryOp):
+            new_left = self._replace_aliases(node.left, alias_map)
+            new_right = self._replace_aliases(node.right, alias_map)
+            if new_left is not node.left or new_right is not node.right:
+                return SQLBinaryOp(left=new_left, operator=node.operator, right=new_right)
+            return node
+
+        if isinstance(node, SQLUnaryOp):
+            new_op = self._replace_aliases(node.operand, alias_map)
+            if new_op is not node.operand:
+                return SQLUnaryOp(operator=node.operator, operand=new_op)
+            return node
+
+        if isinstance(node, SQLCase):
+            new_whens = []
+            changed = False
+            for cond, result in node.when_clauses:
+                new_cond = self._replace_aliases(cond, alias_map)
+                new_result = self._replace_aliases(result, alias_map)
+                if new_cond is not cond or new_result is not result:
+                    changed = True
+                new_whens.append((new_cond, new_result))
+            new_else = node.else_clause
+            if new_else:
+                new_else = self._replace_aliases(new_else, alias_map)
+                if new_else is not node.else_clause:
+                    changed = True
+            if changed:
+                return SQLCase(operand=node.operand, when_clauses=new_whens, else_clause=new_else)
+            return node
+
+        if isinstance(node, SQLExists):
+            new_sq = self._replace_aliases(node.subquery, alias_map)
+            if new_sq is not node.subquery:
+                return SQLExists(subquery=new_sq)
+            return node
+
+        return node
+
 
 @dataclass
 class SQLParameterRef(SQLExpression):

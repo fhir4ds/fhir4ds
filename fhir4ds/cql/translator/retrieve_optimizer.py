@@ -679,6 +679,12 @@ def run_optimization_phases(
         phase1_result.placeholders.extend(placeholders)
         stats.num_retrieves += len(placeholders)
 
+        # Also scan let-variable CTE bodies produced by this definition
+        for let_cte_body in context._let_variable_ctes.get(statement.name, {}).values():
+            let_placeholders = find_all_placeholders(let_cte_body)
+            phase1_result.placeholders.extend(let_placeholders)
+            stats.num_retrieves += len(let_placeholders)
+
         # Scan for property accesses
         property_map = scan_definition_for_properties(sql_ast, placeholders)
 
@@ -789,7 +795,17 @@ def run_optimization_phases(
 
         resolved_asts[def_name] = optimized_ast
 
-        # Count resolved placeholders
+        # Also resolve placeholders in let-variable CTE bodies for this definition
+        let_ctes = context._let_variable_ctes.get(def_name, {})
+        for let_cte_name, let_cte_body in list(let_ctes.items()):
+            resolved_body = resolve_placeholders(let_cte_body, phase2_result.cte_name_map)
+            optimized_body = optimize_property_access(
+                resolved_body,
+                phase2_result.column_registry
+            )
+            context._let_variable_ctes[def_name][let_cte_name] = optimized_body
+
+        # Count resolved placeholders (definition + let-variable CTEs)
         placeholders_in_def = find_all_placeholders(ast)
         stats.num_placeholders_resolved += len(placeholders_in_def)
 

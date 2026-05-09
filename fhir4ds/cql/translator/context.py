@@ -428,6 +428,15 @@ class SQLTranslationContext:
     # Let variables (for query-scope bindings) - maps name to SQL AST expression
     let_variables: Dict[str, Any] = field(default_factory=dict)
 
+    # Let-variable CTEs: promoted from inline to CTE when referenced many times.
+    # Maps definition_name -> {let_cte_name: SQLSelect body}.
+    # Injected into the final SQLFragment right before each definition's CTE,
+    # so they can reference earlier definition CTEs.
+    _let_variable_ctes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+
+    # Tracks the definition currently being translated (for let-variable CTE grouping).
+    _current_definition: Optional[str] = None
+
     # Expression definitions (named expressions in CQL)
     expression_definitions: Dict[str, Any] = field(default_factory=dict)
 

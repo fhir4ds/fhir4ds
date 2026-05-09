@@ -13,7 +13,7 @@ from ...parser.ast_nodes import (
     QuerySource,
     Retrieve,
 )
-from ...translator.context import ExprUsage
+from ...translator.context import ExprUsage, RowShape
 from ...translator.function_inliner import ParameterPlaceholder
 from ...translator.placeholder import (
     RetrievePlaceholder,
@@ -458,6 +458,280 @@ class QueryMixin:
         """Handle: [Condition: "Diabetes"] D (the source with alias)"""
         return self.translate(node.expression, boolean_context)
 
+    # ------------------------------------------------------------------
+    # Let-clause processing with CTE promotion
+    # ------------------------------------------------------------------
+
+    # Minimum reference count to promote a let variable to a CTE.
+    # Below this threshold, the let expression is inlined at every reference.
+    _LET_CTE_THRESHOLD = 3
+
+    def _count_let_refs(self, ast_node, var_name: int) -> int:
+        """Count how many times *var_name* appears as an Identifier in an AST subtree."""
+        count = 0
+        # Use a stack to avoid recursion on deep ASTs
+        stack = [ast_node]
+        while stack:
+            n = stack.pop()
+            if n is None:
+                continue
+            if isinstance(n, Identifier) and id(n) != id(ast_node):
+                # Use object identity on the `name` field isn't reliable
+                # because Identifier may be subclassed; compare by name.
+                if getattr(n, 'name', None) == var_name:
+                    count += 1
+                continue
+            # Recurse into common AST node children
+            for child in self._ast_children(n):
+                stack.append(child)
+        return count
+
+    @staticmethod
+    def _ast_children(node) -> list:
+        """Yield direct children of an AST node for tree walking."""
+        children = []
+        if hasattr(node, '__dataclass_fields__'):
+            for f in node.__dataclass_fields__:
+                v = getattr(node, f, None)
+                if isinstance(v, list):
+                    children.extend(v)
+                elif hasattr(v, '__dataclass_fields__'):
+                    children.append(v)
+        # Handle tuple children (e.g., SQLCase when_clauses)
+        return children
+
+    def _rewrite_outer_aliases(self, ast_node, new_alias: str):
+        """Rewrite outer-scope references in a SQL AST subtree for CTE bodies.
+
+        When a let variable is promoted to a CTE, its expression may contain
+        references that are only valid in the outer query scope:
+
+        1. ``_pt`` qualified identifiers (the ``_patients`` table alias) are
+           rewritten to use *new_alias* (the resource alias available in the
+           CTE body's FROM clause).
+        2. ``_lt_X`` identifiers (lambda parameters for let variable ``X``)
+           are replaced with the stored let-variable expression, making the
+           CTE body self-contained.
+
+        Returns (rewritten_node, resolved_lets set).
+        Returns (None, set) if an unresolvable ``_lt_`` reference is found
+        (caller should fall back to inline).
+        """
+        if ast_node is None or not hasattr(ast_node, '__dataclass_fields__'):
+            return ast_node, set()
+        stack = [ast_node]
+        unresolved = False
+        resolved_lets = set()
+
+        def _try_replace_lt(ref_node):
+            """If ref_node is an _lt_ identifier, return replacement or set unresolved."""
+            nonlocal unresolved
+            if isinstance(ref_node, SQLIdentifier) and ref_node.name.startswith("_lt_"):
+                let_name = ref_node.name[4:]
+                if let_name in self.context.let_variables:
+                    replacement = self.context.let_variables[let_name]
+                    if isinstance(replacement, SQLSubquery):
+                        # Check if the referenced let CTE has a _row_key column
+                        _match_res = False
+                        _lt_cte_name = f"_let_{let_name}"
+                        for _def_ctes in self.context._let_variable_ctes.values():
+                            if _lt_cte_name in _def_ctes:
+                                _body = _def_ctes[_lt_cte_name]
+                                if hasattr(_body, 'columns'):
+                                    for _col in _body.columns:
+                                        if isinstance(_col, SQLAlias) and _col.alias == "_row_key":
+                                            _match_res = True
+                                break
+                        return self._make_let_cte_lookup(f"_let_{let_name}", new_alias, match_resource=_match_res)
+                    resolved_lets.add(let_name)
+                    return replacement
+                else:
+                    unresolved = True
+            return None  # not an _lt_ ref
+
+        while stack:
+            n = stack.pop()
+            if n is None or not hasattr(n, '__dataclass_fields__'):
+                continue
+            for f in n.__dataclass_fields__:
+                v = getattr(n, f, None)
+                if v is None:
+                    continue
+                # Case 1: _pt.col -> new_alias.col
+                if isinstance(v, SQLQualifiedIdentifier) and v.parts and v.parts[0] == "_pt":
+                    object.__setattr__(v, 'parts', [new_alias] + list(v.parts[1:]))
+                # Case 2: direct field is _lt_ identifier
+                elif isinstance(v, SQLIdentifier):
+                    repl = _try_replace_lt(v)
+                    if repl is not None:
+                        setattr(n, f, repl)
+                # Case 3: list — scan items for _lt_ identifiers AND recurse
+                elif isinstance(v, list):
+                    for i, item in enumerate(v):
+                        if isinstance(item, SQLIdentifier):
+                            repl = _try_replace_lt(item)
+                            if repl is not None:
+                                v[i] = repl
+                        elif isinstance(item, SQLQualifiedIdentifier) and item.parts and item.parts[0] == "_pt":
+                            object.__setattr__(item, 'parts', [new_alias] + list(item.parts[1:]))
+                        elif item is not None and hasattr(item, '__dataclass_fields__'):
+                            stack.append(item)
+                        elif isinstance(item, tuple):
+                            stack.extend(item)
+                # Case 4: nested dataclass
+                elif hasattr(v, '__dataclass_fields__'):
+                    stack.append(v)
+                elif isinstance(v, tuple):
+                    stack.extend(v)
+        if unresolved:
+            return None, resolved_lets
+        return ast_node, resolved_lets
+
+    def _make_let_cte_lookup(self, cte_name: str, source_alias: str,
+                              match_resource: bool = False) -> SQLExpression:
+        """Build (SELECT value FROM cte_name WHERE patient_id = alias.patient_id [AND _row_key = alias.resource])."""
+        where_cond = SQLBinaryOp(
+            left=SQLQualifiedIdentifier(parts=["_lv", "patient_id"]),
+            operator="=",
+            right=SQLQualifiedIdentifier(parts=[source_alias, "patient_id"]),
+        )
+        if match_resource:
+            where_cond = SQLBinaryOp(
+                left=where_cond,
+                operator="AND",
+                right=SQLBinaryOp(
+                    left=SQLQualifiedIdentifier(parts=["_lv", "_row_key"]),
+                    operator="=",
+                    right=SQLQualifiedIdentifier(parts=[source_alias, "resource"]),
+                ),
+            )
+        return SQLSubquery(query=SQLSelect(
+            columns=[SQLIdentifier(name="value")],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name=cte_name, quoted=True),
+                alias="_lv",
+            ),
+            where=where_cond,
+        ))
+
+    def _process_let_clauses(self, let_clauses: list, node=None) -> None:
+        """Translate let clauses and register them in context.let_variables.
+
+        For let variables referenced >= _LET_CTE_THRESHOLD times in the body
+        (WHERE + RETURN), promotes the variable to a CTE and registers a
+        lightweight lookup subquery instead of the full expression.
+
+        Each variable is registered immediately so that subsequent let clauses
+        in the same batch can reference earlier ones.
+        """
+        # Phase 1: count references for each let variable in the body.
+        ref_counts = {}
+        if node is not None:
+            for let_clause in let_clauses:
+                name = let_clause.alias
+                # Count in WHERE
+                if hasattr(node, 'where') and node.where:
+                    ref_counts[name] = ref_counts.get(name, 0) + self._count_let_refs(node.where, name)
+                # Count in RETURN
+                if hasattr(node, 'return_clause') and node.return_clause:
+                    ref_counts[name] = ref_counts.get(name, 0) + self._count_let_refs(node.return_clause, name)
+                # Count in other let clause expressions (inter-let references).
+                # A let variable like ObsVisit may only be referenced by
+                # VisitStart's expression, not directly in WHERE/RETURN.
+                for other_lc in let_clauses:
+                    if other_lc is not let_clause:
+                        ref_counts[name] = ref_counts.get(name, 0) + self._count_let_refs(other_lc.expression, name)
+
+        # Phase 2: translate each let clause and decide inline vs CTE.
+        for let_clause in let_clauses:
+            let_name = let_clause.alias
+            _is_coll = isinstance(let_clause.expression, (Query, Retrieve))
+            if _is_coll:
+                self.context._let_clause_collection = True
+            let_expr_sql = self.translate(let_clause.expression, usage=ExprUsage.SCALAR)
+            if _is_coll:
+                self.context._let_clause_collection = False
+                let_expr_sql = _wrap_as_json_array_agg(let_expr_sql)
+
+            # Decide: promote to CTE or inline?
+            if (
+                ref_counts.get(let_name, 0) >= self._LET_CTE_THRESHOLD
+                and self.context.resource_alias
+                and not _is_coll  # collection-typed lets can't be promoted
+            ):
+                self._promote_let_to_cte(let_name, let_expr_sql)
+            else:
+                self.context.let_variables[let_name] = let_expr_sql
+
+    def _promote_let_to_cte(self, let_name: str, let_expr_sql: SQLExpression) -> None:
+        """Promote a let variable to a CTE and register a lookup expression."""
+        alias = self.context.resource_alias
+        # Find the source CTE name from the symbol table
+        cte_name = None
+        sym = self.context.lookup_symbol(alias)
+        if sym and sym.cte_name:
+            cte_name = sym.cte_name
+
+        if not cte_name:
+            # Can't determine source — fall back to inline
+            self.context.let_variables[let_name] = let_expr_sql
+            return
+
+        # Fix outer-scope references in let_expr_sql.
+        # Inside the CTE body, only {alias} is available as a table alias.
+        # Expressions translated in the outer query scope may reference:
+        #  - _pt (the _patients table alias) -> rewrite to alias
+        #  - _lt_X (lambda parameters for other let vars) -> substitute expressions
+        # If any _lt_ reference can't be resolved, fall back to inline.
+        fixed_expr, _resolved = self._rewrite_outer_aliases(let_expr_sql, alias)
+        if fixed_expr is None:
+            self.context.let_variables[let_name] = let_expr_sql
+            return
+
+        # Check if source CTE has a resource column (multi-row per patient).
+        # Only promote when the source guarantees 1 row per patient.
+        # RESOURCE_ROWS sources can have multiple rows per patient, making
+        # the patient_id-only lookup ambiguous and the compound key approach
+        # doesn't reliably preserve per-row semantics across CTE boundaries.
+        meta = self.context.definition_meta.get(cte_name)
+        if meta and meta.shape == RowShape.RESOURCE_ROWS:
+            self.context.let_variables[let_name] = let_expr_sql
+            return
+        _has_resource = meta.has_resource if meta else False
+
+        let_cte_name = f"_let_{let_name}"
+        columns = [
+            SQLQualifiedIdentifier(parts=[alias, "patient_id"]),
+        ]
+        if _has_resource:
+            columns.append(SQLAlias(
+                expr=SQLQualifiedIdentifier(parts=[alias, "resource"]),
+                alias="_row_key",
+            ))
+        columns.append(SQLAlias(expr=fixed_expr, alias="value"))
+
+        let_cte_body = SQLSelect(
+            columns=columns,
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name=cte_name, quoted=True),
+                alias=alias,
+            ),
+        )
+
+        # Register the CTE grouped by the current definition name.
+        # This allows injection right before the definition's CTE,
+        # so the let-variable CTE can reference earlier definition CTEs.
+        def_name = self.context._current_definition
+        if def_name is None:
+            def_name = "__unknown__"
+        if def_name not in self.context._let_variable_ctes:
+            self.context._let_variable_ctes[def_name] = {}
+        self.context._let_variable_ctes[def_name][let_cte_name] = let_cte_body
+
+        # Register a lightweight lookup expression
+        lookup = self._make_let_cte_lookup(let_cte_name, alias, match_resource=_has_resource)
+        self.context.let_variables[let_name] = lookup
+
     def _try_set_op_source(self, src_expr, alias, node, usage):
         """Handle Query sources that are set operations (intersect/union/except).
 
@@ -484,8 +758,6 @@ class QueryMixin:
         op_lower = op.lower()
         if op_lower not in ('intersect', 'union', 'except'):
             return None
-
-        from ...translator.context import RowShape
 
         def _build_operand(expr_node):
             """Build a SELECT patient_id, resource FROM "CTE" subquery for a set operand."""
@@ -630,18 +902,7 @@ class QueryMixin:
 
         # Process let clauses from the expanded body
         if hasattr(expanded, 'let_clauses') and expanded.let_clauses:
-            for let_clause in expanded.let_clauses:
-                let_name = let_clause.alias
-                _is_coll = isinstance(let_clause.expression, (Query, Retrieve))
-                if _is_coll:
-                    self.context._let_clause_collection = True
-                let_expr_sql = self.translate(
-                    let_clause.expression, usage=ExprUsage.SCALAR,
-                )
-                if _is_coll:
-                    self.context._let_clause_collection = False
-                    let_expr_sql = _wrap_as_json_array_agg(let_expr_sql)
-                self.context.let_variables[let_name] = let_expr_sql
+            self._process_let_clauses(expanded.let_clauses, node=expanded)
 
         # Check that the property source resolves to a let variable
         if prop_source_name not in self.context.let_variables:
@@ -676,18 +937,7 @@ class QueryMixin:
 
         # Process inner let clauses (from the return sub-query) if any
         if hasattr(return_expr, 'let_clauses') and return_expr.let_clauses:
-            for let_clause in return_expr.let_clauses:
-                let_name = let_clause.alias
-                _is_coll = isinstance(let_clause.expression, (Query, Retrieve))
-                if _is_coll:
-                    self.context._let_clause_collection = True
-                let_expr_sql = self.translate(
-                    let_clause.expression, usage=ExprUsage.SCALAR,
-                )
-                if _is_coll:
-                    self.context._let_clause_collection = False
-                    let_expr_sql = _wrap_as_json_array_agg(let_expr_sql)
-                self.context.let_variables[let_name] = let_expr_sql
+            self._process_let_clauses(return_expr.let_clauses, node=return_expr)
 
         # Translate inner WHERE (from return sub-query, e.g. D.sequence in ...)
         _inner_where = None
@@ -869,16 +1119,7 @@ class QueryMixin:
 
         # Process LET clauses
         if hasattr(node, 'let_clauses') and node.let_clauses:
-            for let_clause in node.let_clauses:
-                let_name = let_clause.alias
-                _is_coll = isinstance(let_clause.expression, (Query, Retrieve))
-                if _is_coll:
-                    self.context._let_clause_collection = True
-                let_expr_sql = self.translate(let_clause.expression, usage=ExprUsage.SCALAR)
-                if _is_coll:
-                    self.context._let_clause_collection = False
-                    let_expr_sql = _wrap_as_json_array_agg(let_expr_sql)
-                self.context.let_variables[let_name] = let_expr_sql
+            self._process_let_clauses(node.let_clauses, node=node)
         _ba_where = None
         if node.where:
             _ba_where = _demote_audit_struct_to_bool(self.translate(node.where, usage=ExprUsage.BOOLEAN))
@@ -1094,18 +1335,7 @@ class QueryMixin:
 
         # Process let clauses
         if hasattr(node, 'let_clauses') and node.let_clauses:
-            for let_clause in node.let_clauses:
-                let_name = let_clause.alias
-                _is_coll = isinstance(let_clause.expression, (Query, Retrieve))
-                if _is_coll:
-                    self.context._let_clause_collection = True
-                let_expr_sql = self.translate(
-                    let_clause.expression, usage=ExprUsage.SCALAR,
-                )
-                if _is_coll:
-                    self.context._let_clause_collection = False
-                    let_expr_sql = _wrap_as_json_array_agg(let_expr_sql)
-                self.context.let_variables[let_name] = let_expr_sql
+            self._process_let_clauses(node.let_clauses, node=node)
 
         # Process return clause and/or WHERE.
         # When both WHERE and RETURN exist (e.g., inlined fluent function
@@ -2561,16 +2791,7 @@ class QueryMixin:
 
                 # Process LET clauses in the UNNEST scope
                 if hasattr(node, 'let_clauses') and node.let_clauses:
-                    for let_clause in node.let_clauses:
-                        let_name = let_clause.alias
-                        _is_coll = isinstance(let_clause.expression, (Query, Retrieve))
-                        if _is_coll:
-                            self.context._let_clause_collection = True
-                        let_expr_sql = self.translate(let_clause.expression, usage=ExprUsage.SCALAR)
-                        if _is_coll:
-                            self.context._let_clause_collection = False
-                            let_expr_sql = _wrap_as_json_array_agg(let_expr_sql)
-                        self.context.let_variables[let_name] = let_expr_sql
+                    self._process_let_clauses(node.let_clauses, node=node)
 
                 _ba_where = None
                 if node.where:
@@ -2642,16 +2863,7 @@ class QueryMixin:
         # variables (e.g., DischDisp) are available during WHERE translation.
         # Skip when multi-source handler already processed them.
         if not _multi_source_done and hasattr(node, 'let_clauses') and node.let_clauses:
-            for let_clause in node.let_clauses:
-                let_name = let_clause.alias
-                _is_coll = isinstance(let_clause.expression, (Query, Retrieve))
-                if _is_coll:
-                    self.context._let_clause_collection = True
-                let_expr_sql = self.translate(let_clause.expression, usage=ExprUsage.SCALAR)
-                if _is_coll:
-                    self.context._let_clause_collection = False
-                    let_expr_sql = _wrap_as_json_array_agg(let_expr_sql)
-                self.context.let_variables[let_name] = let_expr_sql
+            self._process_let_clauses(node.let_clauses, node=node)
 
         # Apply WHERE clause if present (skip when multi-source already handled it)
         if not _multi_source_done and node.where:
