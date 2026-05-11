@@ -459,6 +459,14 @@ class SQLTranslationContext:
     promoted_definitions: Set[str] = field(default_factory=set)
     definition_ref_counts: Dict[str, int] = field(default_factory=dict)
 
+    # Function Promotion: detect functions called N+ times with params from same source CTE.
+    # Key: (func_name, source_cte_name) -> call count
+    function_ref_counts: Dict[Tuple[str, str], int] = field(default_factory=dict)
+    function_transitive_counts: Dict[Tuple[str, str], int] = field(default_factory=dict)
+    promoted_functions: Dict[Tuple[str, str], int] = field(default_factory=dict)
+    # Function call graph: func_name -> set of func_names it calls
+    function_call_graph: Dict[str, Set[str]] = field(default_factory=dict)
+
 
     # Warnings
     warnings: TranslationWarnings = field(default_factory=TranslationWarnings)
@@ -971,6 +979,11 @@ class SQLTranslationContext:
         self.library_name = None
         self.library_version = None
         self.has_patient_demographics_cte = False
+        # Reset function promotion state
+        self.function_ref_counts.clear()
+        self.function_transitive_counts.clear()
+        self.promoted_functions.clear()
+        self.function_call_graph.clear()
         # Reset audit retrieve CTE names so stale names don't persist across calls
         if hasattr(self, '_audit_retrieve_cte_names'):
             self._audit_retrieve_cte_names = set()

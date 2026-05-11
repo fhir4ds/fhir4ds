@@ -47,10 +47,13 @@ from ..parser.ast_nodes import (
     Expression,
     FunctionDefinition,
     FunctionRef,
+    Identifier,
     IncludeDefinition,
     Library,
     MethodInvocation,
     ParameterDefinition,
+    Query,
+    QuerySource,
     ValueSetDefinition,
 )
 
@@ -410,6 +413,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         # Perform global definition promotion scan to identify shared definitions
         self._scan_for_promoted_definitions(library)
+
+        # Perform function-body CTE promotion pre-scan (Phase 1 + Phase 2)
+        self._scan_for_promoted_functions(library)
+        self._build_function_call_graph(library)
+        self._propagate_transitive_counts()
+        self._log_function_promotion_report()
 
         # Pre-register all definition ASTs for forward-reference shape inference.
         for stmt in library.statements:
@@ -1579,6 +1588,171 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                         self._collect_ref_counts(item, ref_counts)
                 else:
                     self._collect_ref_counts(val, ref_counts)
+
+    # -----------------------------------------------------------------
+    # Function-body CTE promotion pre-scan (Phase 1 + Phase 2)
+    # -----------------------------------------------------------------
+
+    def _walk_ast(self, node: Any, visitor: Callable[[Any], None]) -> None:
+        """Recursively walk the AST and call visitor on every node.
+
+        Unlike _collect_ref_counts which only counts Identifier references,
+        this is a general-purpose walker that visits every node in the tree
+        so the visitor can inspect any node type (MethodInvocation, FunctionRef, etc.).
+        """
+        if node is None:
+            return
+
+        visitor(node)
+
+        if hasattr(node, '__dataclass_fields__'):
+            for field_name in node.__dataclass_fields__:
+                val = getattr(node, field_name)
+                if isinstance(val, list):
+                    for item in val:
+                        self._walk_ast(item, visitor)
+                else:
+                    self._walk_ast(val, visitor)
+
+    def _scan_for_promoted_functions(self, library: Library) -> None:
+        """Scan for functions called N+ times with params from same source CTE.
+
+        Detects fluent-style method calls (source_alias.methodName(...)) and
+        positional function calls where an argument is the source alias.
+        Stores results in context.function_ref_counts.
+        """
+        func_calls: Dict[Tuple[str, str], int] = {}
+
+        for stmt in library.statements:
+            if not isinstance(stmt, Definition):
+                continue
+            expr = stmt.expression
+            if not isinstance(expr, Query):
+                continue
+            src = expr.source
+            if not isinstance(src, QuerySource):
+                continue
+            if not isinstance(src.expression, Identifier):
+                continue
+
+            source_alias = src.alias
+            source_def = src.expression.name
+
+            # Skip if source is not a known definition
+            if source_def not in self._context._definition_names:
+                continue
+
+            def _visitor(node: Any) -> None:
+                if isinstance(node, MethodInvocation):
+                    # Case 1: receiver is the source alias  (alias.method())
+                    if isinstance(node.source, Identifier) and node.source.name == source_alias:
+                        key = (node.method, source_def)
+                        func_calls[key] = func_calls.get(key, 0) + 1
+                    # Case 2: any argument is the source alias  (func(..., alias, ...))
+                    for arg in node.arguments:
+                        if isinstance(arg, Identifier) and arg.name == source_alias:
+                            key = (node.method, source_def)
+                            func_calls[key] = func_calls.get(key, 0) + 1
+                if isinstance(node, FunctionRef):
+                    # Non-fluent function call: FunctionName(alias, ...)
+                    for arg in node.arguments:
+                        if isinstance(arg, Identifier) and arg.name == source_alias:
+                            key = (node.name, source_def)
+                            func_calls[key] = func_calls.get(key, 0) + 1
+
+            self._walk_ast(expr, _visitor)
+
+        self._context.function_ref_counts = func_calls
+
+    def _build_function_call_graph(self, library: Library) -> None:
+        """Build an adjacency list of which functions each function/definition calls.
+
+        Walks FunctionDefinition bodies and Definition bodies to find
+        MethodInvocation and FunctionRef nodes, resolving them against the
+        function registry.
+        """
+        call_graph: Dict[str, Set[str]] = {}
+
+        # Collect all known function names for resolution
+        known_funcs: Set[str] = set()
+        for stmt in library.statements:
+            if isinstance(stmt, FunctionDefinition):
+                known_funcs.add(stmt.name)
+        # Also include functions from included libraries
+        for lib_info in self._context.includes.values():
+            known_funcs.update(lib_info.functions.keys())
+
+        def _extract_calls(node: Any, caller: str) -> None:
+            """Walk a node and record function calls made by caller."""
+            def _visitor(n: Any) -> None:
+                callee = None
+                if isinstance(n, MethodInvocation):
+                    callee = n.method
+                elif isinstance(n, FunctionRef):
+                    callee = n.name
+                if callee and callee in known_funcs:
+                    if caller not in call_graph:
+                        call_graph[caller] = set()
+                    call_graph[caller].add(callee)
+            self._walk_ast(node, _visitor)
+
+        # Walk FunctionDefinition bodies
+        for stmt in library.statements:
+            if isinstance(stmt, FunctionDefinition) and stmt.expression is not None:
+                _extract_calls(stmt.expression, stmt.name)
+
+        # Walk Definition bodies
+        for stmt in library.statements:
+            if isinstance(stmt, Definition) and not isinstance(stmt, FunctionDefinition):
+                if stmt.expression is not None:
+                    _extract_calls(stmt.expression, stmt.name)
+
+        self._context.function_call_graph = call_graph
+
+    def _propagate_transitive_counts(self) -> None:
+        """Propagate direct function call counts through the call graph.
+
+        For each (func_name, source_cte) -> count in function_ref_counts,
+        follow the call graph edges from func_name via BFS and add the count
+        to every transitively reachable function.
+        """
+        transitive: Dict[Tuple[str, str], int] = dict(self._context.function_ref_counts)
+
+        for (func_name, source_cte), count in self._context.function_ref_counts.items():
+            visited: Set[str] = set()
+            queue = [func_name]
+            while queue:
+                current = queue.pop(0)
+                if current in visited:
+                    continue
+                visited.add(current)
+                callees = self._context.function_call_graph.get(current, set())
+                for callee in callees:
+                    key = (callee, source_cte)
+                    transitive[key] = transitive.get(key, 0) + count
+                    queue.append(callee)
+
+        self._context.function_transitive_counts = transitive
+
+    def _log_function_promotion_report(self) -> None:
+        """Log a diagnostic report of direct and transitive function call counts."""
+        direct = self._context.function_ref_counts
+        transitive = self._context.function_transitive_counts
+
+        if not direct and not transitive:
+            return
+
+        # Gather all keys
+        all_keys = set(direct.keys()) | set(transitive.keys())
+        # Sort by transitive count descending
+        sorted_keys = sorted(all_keys, key=lambda k: transitive.get(k, 0), reverse=True)
+
+        _logger.info("Function promotion pre-scan report (%d unique calls):", len(sorted_keys))
+        for (func_name, source_cte) in sorted_keys:
+            d = direct.get((func_name, source_cte), 0)
+            t = transitive.get((func_name, source_cte), 0)
+            _logger.info("  %-55s  source=%-40s  direct=%d  transitive=%d",
+                         func_name, source_cte, d, t)
 
     def _setup_context(self, library: Library) -> None:
         """
