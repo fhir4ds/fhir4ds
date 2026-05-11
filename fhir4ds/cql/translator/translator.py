@@ -1554,8 +1554,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 self._context.promoted_definitions.add(name)
         
         if self._context.promoted_definitions:
-            print(f"DEBUG: Promoted {len(self._context.promoted_definitions)} definitions: {sorted(list(self._context.promoted_definitions))}")
-            _logger.info("Promoting %d definitions to global CTEs for deduplication", 
+            _logger.info("Promoting %d definitions to global CTEs for deduplication",
                          len(self._context.promoted_definitions))
 
     def _collect_ref_counts(self, node: Any, ref_counts: Dict[str, int]) -> None:

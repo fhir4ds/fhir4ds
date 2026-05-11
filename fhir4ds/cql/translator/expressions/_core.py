@@ -266,9 +266,11 @@ class CoreMixin:
         _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
 
         # 1. BOOLEAN/EXISTS context: return EXISTS (...)
-        if usage in (ExprUsage.BOOLEAN, ExprUsage.EXISTS):
-            # For boolean definitions (PATIENT_SCALAR, no resource, Boolean type), 
-            # this is already optimized.
+        # Only use EXISTS if the CTE actually drops rows when false/empty.
+        # Boolean definitions (no resource, Boolean type) and Collection definitions drop rows.
+        # Scalar definitions (e.g. First(), Last()) always return 1 row per patient with NULL resource.
+        is_scalar = meta is None or meta.is_scalar
+        if usage in (ExprUsage.BOOLEAN, ExprUsage.EXISTS) and not is_scalar:
             return self._build_correlated_exists(name)
 
         # 2. LIST/SCALAR context: return (SELECT col FROM "CTE" WHERE patient_id = ...)
@@ -293,11 +295,12 @@ class CoreMixin:
             )
         )
         
-        # If scalar context, add LIMIT 1
-        if usage == ExprUsage.SCALAR:
+        # If scalar context OR scalar definition, add LIMIT 1
+        if usage == ExprUsage.SCALAR or is_scalar:
             select.limit = 1
 
-        return SQLSubquery(query=select)
+        res = SQLSubquery(query=select)
+        return res
 
     def _translate_identifier(self, ident: Identifier, usage: ExprUsage = ExprUsage.LIST) -> SQLExpression:
         """Translate a CQL identifier to SQL.
@@ -320,7 +323,6 @@ class CoreMixin:
         # If so, we MUST return a subquery lookup instead of the full AST
         # to prevent combinatorial explosion.
         if name in self.context.promoted_definitions:
-            # print(f"DEBUG: Using promoted lookup for {name}")
             return self._build_promoted_definition_lookup(name, usage)
 
         # Check if this is a known alias with a stored SQL expression
