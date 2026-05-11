@@ -1440,7 +1440,24 @@ class SQLFragment:
             sql_str = node.to_sql()
             if sql_str in alias_map:
                 return SQLIdentifier(name=alias_map[sql_str])
-            return node  # Don't recurse into subqueries
+            # If not replaced whole, try replacing inside if it's a SELECT
+            if isinstance(node.query, SQLSelect) and node.query.where:
+                new_where = self._replace_aliases(node.query.where, alias_map)
+                if new_where is not node.query.where:
+                    new_select = SQLSelect(
+                        columns=node.query.columns,
+                        from_clause=node.query.from_clause,
+                        joins=node.query.joins,
+                        where=new_where,
+                        group_by=node.query.group_by,
+                        having=node.query.having,
+                        order_by=node.query.order_by,
+                        limit=node.query.limit,
+                        distinct=node.query.distinct,
+                        precedence=node.query.precedence,
+                    )
+                    return SQLSubquery(query=new_select)
+            return node  # Don't recurse further into subqueries
 
         if isinstance(node, SQLFunctionCall):
             sql_str = node.to_sql()

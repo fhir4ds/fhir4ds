@@ -408,6 +408,9 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             stmt.name for stmt in library.statements if isinstance(stmt, Definition)
         }
 
+        # Perform global definition promotion scan to identify shared definitions
+        self._scan_for_promoted_definitions(library)
+
         # Pre-register all definition ASTs for forward-reference shape inference.
         for stmt in library.statements:
             if isinstance(stmt, Definition) and not isinstance(stmt, FunctionDefinition):
@@ -1526,6 +1529,57 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         expr_translator = ExpressionTranslator(context)
         return expr_translator.translate(expr)
+
+    def _scan_for_promoted_definitions(self, library: Library) -> None:
+        """
+        Scan the library to identify definitions eligible for global CTE promotion.
+        
+        This builds a reference graph to find definitions used in multiple contexts.
+        """
+        # 1. Initialize reference counts
+        ref_counts = {name: 0 for name in self._context._definition_names}
+        
+        # 2. Walk the AST of every definition
+        for stmt in library.statements:
+            if isinstance(stmt, Definition) and not isinstance(stmt, FunctionDefinition):
+                # Count references to other definitions
+                self._collect_ref_counts(stmt.expression, ref_counts)
+        
+        # 3. Store in context
+        self._context.definition_ref_counts = ref_counts
+        
+        # 4. Identify promoted definitions
+        for name, count in ref_counts.items():
+            if count >= 1:
+                self._context.promoted_definitions.add(name)
+        
+        if self._context.promoted_definitions:
+            print(f"DEBUG: Promoted {len(self._context.promoted_definitions)} definitions: {sorted(list(self._context.promoted_definitions))}")
+            _logger.info("Promoting %d definitions to global CTEs for deduplication", 
+                         len(self._context.promoted_definitions))
+
+    def _collect_ref_counts(self, node: Any, ref_counts: Dict[str, int]) -> None:
+        """Recursively walk the AST and count definition references."""
+        from ..parser.ast_nodes import Identifier
+        
+        if node is None:
+            return
+            
+        if isinstance(node, Identifier):
+            # Only count if it's not a retrieve identifier (e.g. [Condition])
+            if not getattr(node, 'retrieve', None) and node.name in ref_counts:
+                ref_counts[node.name] += 1
+            return
+            
+        # Recursive traversal through dataclass fields
+        if hasattr(node, '__dataclass_fields__'):
+            for field_name in node.__dataclass_fields__:
+                val = getattr(node, field_name)
+                if isinstance(val, list):
+                    for item in val:
+                        self._collect_ref_counts(item, ref_counts)
+                else:
+                    self._collect_ref_counts(val, ref_counts)
 
     def _setup_context(self, library: Library) -> None:
         """

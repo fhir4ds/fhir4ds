@@ -308,6 +308,11 @@ class DefinitionMeta:
     # Transitive list of RESOURCE_ROWS CTE names this PATIENT_SCALAR non-boolean
     # definition depends on (e.g. "Lowest Systolic Reading" → Observation retrieve CTE).
     # Populated by CTEManager for non-boolean PATIENT_SCALAR definitions.
+    
+    # Global Definition Promotion metadata
+    eligible_for_promotion: bool = False
+    is_context_polluted: bool = False
+
     # Consumed by _collect_audit_evidence_exprs (Strategy 3) to propagate evidence
     # through scalar intermediaries into comparison-based boolean definitions.
     audit_target_expr: Optional[Any] = None
@@ -448,6 +453,12 @@ class SQLTranslationContext:
 
     # Definition metadata
     definition_meta: Dict[str, DefinitionMeta] = field(default_factory=dict)
+
+    # Global Definition Promotion: track which definitions should be emitted
+    # as global CTEs and referenced via subquery lookups to prevent explosion.
+    promoted_definitions: Set[str] = field(default_factory=set)
+    definition_ref_counts: Dict[str, int] = field(default_factory=dict)
+
 
     # Warnings
     warnings: TranslationWarnings = field(default_factory=TranslationWarnings)

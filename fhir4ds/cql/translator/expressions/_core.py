@@ -256,6 +256,49 @@ class CoreMixin:
         system_url = self.context.codesystems.get(cs.system, cs.system)
         return SQLLiteral(value=f"{system_url}|{cs.code}")
 
+    def _build_promoted_definition_lookup(self, name: str, usage: ExprUsage) -> SQLExpression:
+        """Build a correlated subquery lookup for a promoted global definition.
+        
+        Ensures that definitions are translated once as CTEs and referenced via 
+        lightweight lookups rather than inline expansion.
+        """
+        meta = self.context.definition_meta.get(name)
+        _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
+
+        # 1. BOOLEAN/EXISTS context: return EXISTS (...)
+        if usage in (ExprUsage.BOOLEAN, ExprUsage.EXISTS):
+            # For boolean definitions (PATIENT_SCALAR, no resource, Boolean type), 
+            # this is already optimized.
+            return self._build_correlated_exists(name)
+
+        # 2. LIST/SCALAR context: return (SELECT col FROM "CTE" WHERE patient_id = ...)
+        # Narrow to the appropriate column
+        if meta and meta.has_resource:
+            col = "resource"
+        elif meta and not meta.has_resource and meta.cql_type != "Boolean":
+            col = meta.value_column or "value"
+        else:
+            col = self._get_definition_value_column(name)
+
+        select = SQLSelect(
+            columns=[SQLQualifiedIdentifier(parts=["sub", col])],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name=name, quoted=True),
+                alias="sub",
+            ),
+            where=SQLBinaryOp(
+                operator="=",
+                left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=[_outer_pid_alias, "patient_id"]),
+            )
+        )
+        
+        # If scalar context, add LIMIT 1
+        if usage == ExprUsage.SCALAR:
+            select.limit = 1
+
+        return SQLSubquery(query=select)
+
     def _translate_identifier(self, ident: Identifier, usage: ExprUsage = ExprUsage.LIST) -> SQLExpression:
         """Translate a CQL identifier to SQL.
 
@@ -273,6 +316,12 @@ class CoreMixin:
 
         name = ident.name
 
+        # Check if this definition is promoted to a global CTE for deduplication.
+        # If so, we MUST return a subquery lookup instead of the full AST
+        # to prevent combinatorial explosion.
+        if name in self.context.promoted_definitions:
+            # print(f"DEBUG: Using promoted lookup for {name}")
+            return self._build_promoted_definition_lookup(name, usage)
 
         # Check if this is a known alias with a stored SQL expression
         if self.context.is_alias(name):
