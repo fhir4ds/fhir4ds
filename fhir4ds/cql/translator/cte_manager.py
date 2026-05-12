@@ -129,6 +129,25 @@ def _flatten_audit_tree(expr: "SQLExpression") -> "SQLExpression":
     return SQLAuditStruct(result_expr=result_ast, evidence_expr=evidence_ast)
 
 
+def generate_function_cte_name(func_name: str, cql_def_name: str) -> str:
+    """Generate a deterministic, collision-resistant CTE name for a promoted function.
+
+    Uses a short hash suffix to avoid collisions from long definition names
+    that would otherwise clash after truncation.
+
+    Args:
+        func_name: The CQL function name (without library prefix).
+        cql_def_name: The CQL definition name of the source.
+
+    Returns:
+        A deterministic CTE name like ``_fn_funcName_defName_abc123``.
+    """
+    import hashlib
+    safe_name = cql_def_name.replace(' ', '_').replace(':', '')
+    name_hash = hashlib.md5(safe_name.encode()).hexdigest()[:6]
+    return f"_fn_{func_name}_{safe_name[:32]}_{name_hash}"
+
+
 class CTEManagerMixin:
     """Mixin providing CTE management methods for CQLToSQLTranslator."""
 
@@ -1466,6 +1485,22 @@ class CTEManagerMixin:
                 limit=cte_body.limit,
             )
         return cte_body
+
+    @staticmethod
+    def _generate_function_cte_name(func_name: str, cql_def_name: str) -> str:
+        """Generate a deterministic, collision-resistant CTE name for a promoted function.
+
+        Uses a short hash suffix to avoid collisions from long definition names
+        that would otherwise clash after truncation.
+
+        Args:
+            func_name: The CQL function name (without library prefix).
+            cql_def_name: The CQL definition name of the source.
+
+        Returns:
+            A deterministic CTE name like ``_fn_funcName_defName_abc123``.
+        """
+        return generate_function_cte_name(func_name, cql_def_name)
 
     @staticmethod
     def _resolve_function_cte_source(cte_body, definition_ctes: dict):

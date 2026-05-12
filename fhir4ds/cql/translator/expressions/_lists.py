@@ -681,8 +681,7 @@ class ListsMixin:
         """Check if a function call should use a promoted CTE lookup.
 
         For fluent calls like alias.methodName(...), this checks if
-        (methodName, source_cql_definition) is in promoted_functions AND
-        the CTE was actually built (_promoted_cte_keys), then returns
+        (methodName, source_cql_definition) has a built CTE, then returns
         a correlated subquery lookup.
 
         Returns None if the function is not promoted (caller should inline).
@@ -706,15 +705,13 @@ class ListsMixin:
         if not cql_def_name:
             return None
 
-        # Check if (func_name, cql_def_name) is promoted AND CTE was built
+        # Check if (func_name, cql_def_name) has a built CTE
         key = (func_name, cql_def_name)
-        if key not in self.context.promoted_functions:
-            return None
         if key not in self.context._promoted_cte_keys:
             return None
 
-        # Generate deterministic CTE name (must match _build_function_promotion_cte)
-        fn_cte_name = f"_fn_{func_name}_{cql_def_name.replace(' ', '_').replace(':', '')[:40]}"
+        from ...translator.cte_manager import generate_function_cte_name
+        fn_cte_name = generate_function_cte_name(func_name, cql_def_name)
         source_alias = self.context.resource_alias or alias_name
         return self._make_function_cte_lookup(fn_cte_name, source_alias)
 

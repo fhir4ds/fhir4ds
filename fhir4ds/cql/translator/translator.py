@@ -680,6 +680,13 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             if len(columns) >= len(existing):
                 self._context.column_registry.register_cte(cte_name, columns)
 
+        # Post-Phase-3 validation: after placeholders are resolved, check if
+        # any function promotion CTEs now reference definition CTEs they
+        # shouldn't. Remove those CTEs from _promoted_cte_keys so call sites
+        # fall back to inline expansion instead of referencing missing CTEs.
+        if self._context._function_promotion_ctes:
+            self._validate_function_promotion_ctes()
+
         # Always build patient demographics CTE if it wasn't built during Phase 2 optimization.
         # This ensures _patient_demographics is available for any definition that might
         # reference it via AgeInYearsAt() or other demographics-aware functions.
@@ -1839,6 +1846,21 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         substituted = inliner._substitute_parameters_cql(func_def.body, param_map)
         expanded = inliner._inline_nested_calls_cql(substituted, func_def.library_name)
 
+        # 3.5 Check CQL AST for definition references BEFORE translating.
+        # This catches references to other CQL definitions (like
+        # "Qualifying Creatinine Lab Result by Time") that would produce
+        # SQLFragment nodes invisible to the SQL-level AST scan.
+        # Also skip if the body has retrieve placeholders AND cross-definition
+        # CQL refs — the resolved placeholders may create ordering issues.
+        _all_def_names = self._context._definition_names or set()
+        _cql_refs = self._find_cql_definition_refs(expanded, _all_def_names, {param_name, synthetic_alias})
+        _other_defs = _cql_refs - {source_cte_name}
+        if _other_defs:
+            fn_cte_name = self._generate_function_cte_name(func_name, source_cte_name)
+            _logger.info("Skipping function promotion CTE %s: CQL body references other definitions: %s",
+                          fn_cte_name, _other_defs)
+            return
+
         # 4. Set up isolated translation scope
         saved_scope_stack = list(self._context.scopes)
         saved_scope_level = self._context.current_scope_level
@@ -1885,7 +1907,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         # 7. Build CTE SELECT body
         # Use fhirpath_text(resource, 'id') as _row_key to avoid comparing large JSON blobs
-        fn_cte_name = f"_fn_{func_name}_{source_cte_name.replace(' ', '_').replace(':', '')[:40]}"
+        fn_cte_name = self._generate_function_cte_name(func_name, source_cte_name)
         cte_body = SQLSelect(
             columns=[
                 SQLQualifiedIdentifier(parts=[synthetic_alias, "patient_id"]),
@@ -1907,9 +1929,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             ),
         )
 
-        # 7.4 Skip if body contains retrieve placeholders — after Phase 3
-        # resolution these may reference definition CTEs that haven't been
-        # emitted yet, creating impossible CTE ordering constraints.
+        # 7.4 Skip if body contains retrieve placeholders. Retrieve placeholders
+        # resolve during Phase 3, but the resulting SQL can differ semantically
+        # from inline expansion for some functions (e.g., CMS996's
+        # GetLocation/currentemergencyDepartmentArrivalTime). Until this is
+        # resolved, only promote functions whose bodies are fully resolved
+        # at translation time.
         from ..translator.placeholder import contains_placeholder
         if contains_placeholder(result_sql):
             _logger.info("Skipping function promotion CTE %s: body contains retrieve placeholders",
@@ -1920,6 +1945,13 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # other than the source. If it does, we can't promote because the
         # _fn_ CTE would need to be emitted after those definitions but before
         # the definitions that use it — creating an impossible ordering.
+        # Cross-definition references that only appear after Phase 3 resolution
+        # are caught by _validate_function_promotion_ctes().
+        #
+        # TODO: Instead of skipping, topologically order function promotion CTEs
+        # alongside definition CTEs so that functions referencing other definitions
+        # can still be promoted. This would unlock promotion for complex functions
+        # like hospitalizationWithObservation that perform retrieves.
         _all_def_names = self._context._definition_names or set()
         _referenced_defs = self._find_definition_references(cte_body, _all_def_names)
         _other_defs = _referenced_defs - {source_cte_name}
@@ -1937,6 +1969,47 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         _logger.info("Built function promotion CTE: %s for (%s, %s)",
                       fn_cte_name, func_name, source_cte_name)
 
+    def _validate_function_promotion_ctes(self) -> None:
+        """Post-Phase-3 validation of function promotion CTEs.
+
+        After placeholders are resolved, the CTE bodies may now reference
+        definition CTEs that weren't visible before resolution. Check each
+        CTE and remove it from _promoted_cte_keys if it has cross-definition
+        references, so call sites fall back to inline expansion.
+
+        Uses to_sql() to detect references in all AST node types, including
+        SQLFragment nodes that embed definition names as raw SQL strings.
+        """
+        import re
+        _all_def_names = self._context._definition_names or set()
+        keys_to_remove = []
+        for (func_name, source_cte_name), cte_dict in self._context._function_promotion_ctes.items():
+            for fn_cte_name, cte_body in cte_dict.items():
+                # Use to_sql() to get the full rendered SQL, then scan for
+                # FROM "definition_name" patterns. This catches references
+                # in all AST node types including SQLFragment.
+                try:
+                    sql_str = cte_body.to_sql()
+                except Exception:
+                    # If to_sql() fails (e.g., unresolved placeholders),
+                    # fall back to AST-level scan
+                    sql_str = None
+                    referenced = self._find_definition_references(cte_body, _all_def_names)
+                if sql_str is not None:
+                    from_refs = set(re.findall(r'FROM\s+"([^"]+)"', sql_str, re.IGNORECASE))
+                    referenced = from_refs & _all_def_names
+                other_defs = referenced - {source_cte_name}
+                if other_defs:
+                    _logger.info(
+                        "Post-Phase-3: removing function promotion CTE %s: "
+                        "body references other definitions: %s",
+                        fn_cte_name, other_defs)
+                    keys_to_remove.append((func_name, source_cte_name))
+                    break  # one bad CTE invalidates the whole key
+        for key in keys_to_remove:
+            self._context._promoted_cte_keys.discard(key)
+            self._context._function_promotion_ctes.pop(key, None)
+
     def _find_definition_references(self, ast_node, definition_names: set) -> set:
         """Find all definition CTE names referenced in a SQL AST subtree.
 
@@ -1945,6 +2018,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         """
         if ast_node is None or not hasattr(ast_node, '__dataclass_fields__'):
             return set()
+        from ..translator.types import SQLFragment
         refs = set()
         stack = [ast_node]
         while stack:
@@ -1957,10 +2031,67 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     continue
                 if isinstance(v, SQLIdentifier) and v.name in definition_names:
                     refs.add(v.name)
+                elif isinstance(v, SQLFragment):
+                    # SQLFragment wraps raw SQL — definition references may be
+                    # embedded as FROM "definition_name" patterns.  Scan the
+                    # sql attribute (a dataclass field, not arbitrary text).
+                    for dn in definition_names:
+                        if f'FROM "{dn}"' in v.sql:
+                            refs.add(dn)
                 elif isinstance(v, list):
                     for item in v:
                         if isinstance(item, SQLIdentifier) and item.name in definition_names:
                             refs.add(item.name)
+                        elif isinstance(item, SQLFragment):
+                            for dn in definition_names:
+                                if f'FROM "{dn}"' in item.sql:
+                                    refs.add(dn)
+                        elif item is not None and hasattr(item, '__dataclass_fields__'):
+                            stack.append(item)
+                elif hasattr(v, '__dataclass_fields__'):
+                    stack.append(v)
+        return refs
+
+    def _find_cql_definition_refs(self, cql_node, definition_names: set,
+                                    exclude_names: set = None) -> set:
+        """Find CQL definition names referenced in a CQL AST subtree.
+
+        Scans for Identifier and FunctionRef nodes whose name matches
+        a definition name, excluding parameter names and the synthetic alias.
+        """
+        if exclude_names is None:
+            exclude_names = set()
+        if cql_node is None:
+            return set()
+        refs = set()
+        stack = [cql_node]
+        while stack:
+            n = stack.pop()
+            if n is None or not hasattr(n, '__dataclass_fields__'):
+                continue
+            for f in n.__dataclass_fields__:
+                v = getattr(n, f, None)
+                if v is None:
+                    continue
+                if f in ('library_name',):
+                    continue
+                if isinstance(v, Identifier):
+                    if v.name in definition_names and v.name not in exclude_names:
+                        refs.add(v.name)
+                elif isinstance(v, FunctionRef):
+                    # FunctionRef.name may be qualified: "Library.func"
+                    bare = v.name.rsplit(".", 1)[-1] if "." in v.name else v.name
+                    if bare in definition_names and bare not in exclude_names:
+                        refs.add(bare)
+                elif isinstance(v, list):
+                    for item in v:
+                        if isinstance(item, Identifier):
+                            if item.name in definition_names and item.name not in exclude_names:
+                                refs.add(item.name)
+                        elif isinstance(item, FunctionRef):
+                            bare = item.name.rsplit(".", 1)[-1] if "." in item.name else item.name
+                            if bare in definition_names and bare not in exclude_names:
+                                refs.add(bare)
                         elif item is not None and hasattr(item, '__dataclass_fields__'):
                             stack.append(item)
                 elif hasattr(v, '__dataclass_fields__'):

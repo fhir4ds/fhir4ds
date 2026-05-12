@@ -1027,9 +1027,8 @@ class FunctionInliner:
             sym = self.context.lookup_symbol(first_param_expr.name)
             if sym and sym.cte_name:
                 key = (actual_name, sym.cte_name)
-                if key in self.context.promoted_functions:
-                    if key in self.context._promoted_cte_keys:
-                        return True
+                if key in self.context._promoted_cte_keys:
+                    return True
 
         # Strategy 2: Check current resource_alias (for calls from within
         # expanded function bodies where args are ParameterPlaceholder)
@@ -1038,9 +1037,8 @@ class FunctionInliner:
             sym = self.context.lookup_symbol(resource_alias)
             if sym and sym.cte_name:
                 key = (actual_name, sym.cte_name)
-                if key in self.context.promoted_functions:
-                    if key in self.context._promoted_cte_keys:
-                        return True
+                if key in self.context._promoted_cte_keys:
+                    return True
 
         return False
 
@@ -1065,9 +1063,7 @@ class FunctionInliner:
 
         Returns True if:
         1. The function has exactly 1 parameter (suitable for CTE promotion)
-        2. There is a promoted_functions entry matching (bare_name, <source_cte>)
-           for some source CTE that the first arg maps to
-        3. A CTE was actually built (present in _promoted_cte_keys)
+        2. There is a promoted CTE matching (bare_name, source_cte)
         """
         if not self.context or not self.context.promoted_functions:
             return False
@@ -1076,8 +1072,6 @@ class FunctionInliner:
         if not args:
             return False
 
-        # Check if any (bare_name, source_cte) pair is in promoted_functions
-        # AND a CTE was actually built (in _promoted_cte_keys)
         first_arg = args[0]
 
         # For Identifier args, look up the symbol to find the CQL definition name
@@ -1087,12 +1081,6 @@ class FunctionInliner:
                 key = (bare_name, sym.cte_name)
                 if key in self.context._promoted_cte_keys:
                     return True
-
-        # Also try ParameterPlaceholder (from outer inlining)
-        if isinstance(first_arg, ParameterPlaceholder):
-            # The ParameterPlaceholder carries the original param name.
-            # We can't determine the source CTE from this.
-            pass
 
         return False
 

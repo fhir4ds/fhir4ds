@@ -1046,8 +1046,16 @@ class CoreMixin:
             source_sql = self.translate(source_expr, boolean_context=False) if source_expr else SQLNull()
             return SQLFunctionCall(name=bare_name, args=[source_sql])
 
+        # Check for exact match in _promoted_cte_keys
+        key = (bare_name, cql_def_name)
+        if key not in self.context._promoted_cte_keys:
+            # No matching CTE — fall back to function call
+            source_sql = self.translate(source_expr, boolean_context=False) if source_expr else SQLNull()
+            return SQLFunctionCall(name=bare_name, args=[source_sql])
+
         # Generate deterministic CTE name (must match _build_function_promotion_cte)
-        fn_cte_name = f"_fn_{bare_name}_{cql_def_name.replace(' ', '_').replace(':', '')[:40]}"
+        from ...translator.cte_manager import generate_function_cte_name
+        fn_cte_name = generate_function_cte_name(bare_name, cql_def_name)
         source_alias = self.context.resource_alias or "E"
 
         return self._make_function_cte_lookup(fn_cte_name, source_alias)
