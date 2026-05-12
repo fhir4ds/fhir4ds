@@ -1011,3 +1011,43 @@ class CoreMixin:
 
         # Default: qualified identifier
         return SQLQualifiedIdentifier(parts=parts)
+
+    def _translate_promoted_function_ref(self, expr, boolean_context: bool = False) -> SQLExpression:
+        """Translate a PromotedFunctionRef to a CTE lookup.
+
+        The inliner has decided this function call should use a pre-computed
+        CTE instead of inline expansion. Generate a correlated subquery lookup.
+        """
+        from ...translator.function_inliner import PromotedFunctionRef
+
+        func_name = expr.func_name
+        source_expr = expr.source_expr
+
+        # Strip library prefix for CTE name matching
+        bare_name = func_name.rsplit(".", 1)[-1] if "." in func_name else func_name
+
+        # Determine the source CTE name from the source_expr or current context
+        cql_def_name = None
+        if isinstance(source_expr, Identifier):
+            sym = self.context.lookup_symbol(source_expr.name)
+            if sym and sym.cte_name:
+                cql_def_name = sym.cte_name
+
+        # Fallback: use current resource_alias
+        if not cql_def_name:
+            resource_alias = self.context.resource_alias
+            if resource_alias:
+                sym = self.context.lookup_symbol(resource_alias)
+                if sym and sym.cte_name:
+                    cql_def_name = sym.cte_name
+
+        if not cql_def_name:
+            # Can't determine source — fall back to function call
+            source_sql = self.translate(source_expr, boolean_context=False) if source_expr else SQLNull()
+            return SQLFunctionCall(name=bare_name, args=[source_sql])
+
+        # Generate deterministic CTE name (must match _build_function_promotion_cte)
+        fn_cte_name = f"_fn_{bare_name}_{cql_def_name.replace(' ', '_').replace(':', '')[:40]}"
+        source_alias = self.context.resource_alias or "E"
+
+        return self._make_function_cte_lookup(fn_cte_name, source_alias)

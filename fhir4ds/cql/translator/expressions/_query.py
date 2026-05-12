@@ -614,6 +614,36 @@ class QueryMixin:
             where=where_cond,
         ))
 
+    def _make_function_cte_lookup(self, cte_name: str, source_alias: str) -> SQLExpression:
+        """Build (SELECT value FROM fn_cte WHERE patient_id AND _row_key = fhirpath_text(resource, 'id'))."""
+        where_cond = SQLBinaryOp(
+            left=SQLBinaryOp(
+                left=SQLQualifiedIdentifier(parts=["_fv", "patient_id"]),
+                operator="=",
+                right=SQLQualifiedIdentifier(parts=[source_alias, "patient_id"]),
+            ),
+            operator="AND",
+            right=SQLBinaryOp(
+                left=SQLQualifiedIdentifier(parts=["_fv", "_row_key"]),
+                operator="=",
+                right=SQLFunctionCall(
+                    name="fhirpath_text",
+                    args=[
+                        SQLQualifiedIdentifier(parts=[source_alias, "resource"]),
+                        SQLLiteral(value="id"),
+                    ],
+                ),
+            ),
+        )
+        return SQLSubquery(query=SQLSelect(
+            columns=[SQLIdentifier(name="value")],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name=cte_name, quoted=True),
+                alias="_fv",
+            ),
+            where=where_cond,
+        ))
+
     def _process_let_clauses(self, let_clauses: list, node=None) -> None:
         """Translate let clauses and register them in context.let_variables.
 

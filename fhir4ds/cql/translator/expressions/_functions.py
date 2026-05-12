@@ -516,6 +516,14 @@ class FunctionsMixin:
                 except NotImplementedError:
                     pass
 
+        # Step 4.5: Check if this is a promoted function call (non-fluent style)
+        # For non-fluent calls like FunctionName(alias, ...) where alias maps to a
+        # promoted source CTE, use the function promotion CTE lookup instead of inlining.
+        if func.arguments and isinstance(func.arguments[0], Identifier):
+            _promoted = self._try_promoted_function_lookup(name, func.arguments[0])
+            if _promoted is not None:
+                return _promoted
+
         # Step 5: Try function inliner for library-defined functions
         inliner = self.context.function_inliner
         if inliner:

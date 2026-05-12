@@ -685,6 +685,12 @@ def run_optimization_phases(
             phase1_result.placeholders.extend(let_placeholders)
             stats.num_retrieves += len(let_placeholders)
 
+        # Also scan let-variable CTE bodies produced by this definition
+        for let_cte_body in context._let_variable_ctes.get(statement.name, {}).values():
+            let_placeholders = find_all_placeholders(let_cte_body)
+            phase1_result.placeholders.extend(let_placeholders)
+            stats.num_retrieves += len(let_placeholders)
+
         # Scan for property accesses
         property_map = scan_definition_for_properties(sql_ast, placeholders)
 
@@ -697,6 +703,13 @@ def run_optimization_phases(
         # Scan for AgeInYearsAt/AgeInMonthsAt/AgeInDaysAt usage
         if _contains_age_at_function(sql_ast):
             phase1_result.needs_patient_demographics = True
+
+    # Scan function promotion CTE bodies for placeholders (done once, not per-definition)
+    for fn_ctes in context._function_promotion_ctes.values():
+        for fn_cte_body in fn_ctes.values():
+            fn_placeholders = find_all_placeholders(fn_cte_body)
+            phase1_result.placeholders.extend(fn_placeholders)
+            stats.num_retrieves += len(fn_placeholders)
 
     # ========================================================================
     # PHASE 2: Build CTEs
@@ -814,6 +827,16 @@ def run_optimization_phases(
         stats.num_fhirpath_calls_optimized += _count_optimized_fhirpath_calls(
             resolved_ast, optimized_ast
         )
+
+    # Resolve placeholders in function promotion CTE bodies
+    for fn_key, fn_ctes in context._function_promotion_ctes.items():
+        for fn_cte_name, fn_cte_body in list(fn_ctes.items()):
+            resolved_body = resolve_placeholders(fn_cte_body, phase2_result.cte_name_map)
+            optimized_body = optimize_property_access(
+                resolved_body,
+                phase2_result.column_registry
+            )
+            context._function_promotion_ctes[fn_key][fn_cte_name] = optimized_body
 
     return resolved_asts, phase1_result, phase2_result, stats
 

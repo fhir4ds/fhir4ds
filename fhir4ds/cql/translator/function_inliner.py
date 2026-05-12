@@ -681,6 +681,9 @@ class FunctionInliner:
         if isinstance(expr, (Literal, Quantity, DateTimeLiteral, TimeLiteral)):
             return expr
 
+        if isinstance(expr, PromotedFunctionRef):
+            return expr
+
         if isinstance(expr, DifferenceBetween):
             new_left = self._substitute_parameters(expr.operand_left, param_map)
             new_right = self._substitute_parameters(expr.operand_right, param_map)
@@ -997,6 +1000,50 @@ class FunctionInliner:
 
         return cycles
 
+    def _should_use_promoted_cte_expand(self, bare_name: str, func_def: "FunctionDef",
+                                          receiver_expr: Optional[Expression],
+                                          args: List[Expression]) -> bool:
+        """Check if expand_function should skip expansion and use a CTE lookup.
+
+        Called from expand_function before parameter substitution.
+        Returns True if the function is promoted and the current scope's
+        resource_alias maps to a source CTE that has this function promoted.
+        """
+        if not self.context or not self.context.promoted_functions:
+            return False
+        if len(func_def.parameters) != 1:
+            return False
+
+        # Strip library prefix from function name for lookup
+        actual_name = bare_name.rsplit(".", 1)[-1] if "." in bare_name else bare_name
+
+        # Strategy 1: Check the first argument directly (if it's an Identifier)
+        if func_def.fluent:
+            first_param_expr = receiver_expr
+        else:
+            first_param_expr = args[0] if args else None
+
+        if isinstance(first_param_expr, Identifier):
+            sym = self.context.lookup_symbol(first_param_expr.name)
+            if sym and sym.cte_name:
+                key = (actual_name, sym.cte_name)
+                if key in self.context.promoted_functions:
+                    if key in self.context._promoted_cte_keys:
+                        return True
+
+        # Strategy 2: Check current resource_alias (for calls from within
+        # expanded function bodies where args are ParameterPlaceholder)
+        resource_alias = self.context.resource_alias
+        if resource_alias:
+            sym = self.context.lookup_symbol(resource_alias)
+            if sym and sym.cte_name:
+                key = (actual_name, sym.cte_name)
+                if key in self.context.promoted_functions:
+                    if key in self.context._promoted_cte_keys:
+                        return True
+
+        return False
+
     def check_for_cycles(self) -> None:
         """
         Check for cycles in the function call graph.
@@ -1011,6 +1058,43 @@ class FunctionInliner:
                 cycle_str = " -> ".join(cycle)
                 cycle_strs.append(cycle_str)
             raise TranslationError(f"Cycle detected in function calls: {cycle_strs[0]}")
+
+    def _should_use_promoted_cte(self, bare_name: str, func_def: "FunctionDef",
+                                   args: list) -> bool:
+        """Check if a function call should use a promoted CTE lookup.
+
+        Returns True if:
+        1. The function has exactly 1 parameter (suitable for CTE promotion)
+        2. There is a promoted_functions entry matching (bare_name, <source_cte>)
+           for some source CTE that the first arg maps to
+        3. A CTE was actually built (present in _promoted_cte_keys)
+        """
+        if not self.context or not self.context.promoted_functions:
+            return False
+        if len(func_def.parameters) != 1:
+            return False
+        if not args:
+            return False
+
+        # Check if any (bare_name, source_cte) pair is in promoted_functions
+        # AND a CTE was actually built (in _promoted_cte_keys)
+        first_arg = args[0]
+
+        # For Identifier args, look up the symbol to find the CQL definition name
+        if isinstance(first_arg, Identifier):
+            sym = self.context.lookup_symbol(first_arg.name)
+            if sym and sym.cte_name:
+                key = (bare_name, sym.cte_name)
+                if key in self.context._promoted_cte_keys:
+                    return True
+
+        # Also try ParameterPlaceholder (from outer inlining)
+        if isinstance(first_arg, ParameterPlaceholder):
+            # The ParameterPlaceholder carries the original param name.
+            # We can't determine the source CTE from this.
+            pass
+
+        return False
 
     # ------------------------------------------------------------------
     # Expand-then-Translate: Pure CQL AST expansion (no SQL translation)
@@ -1052,6 +1136,19 @@ class FunctionInliner:
 
         if func_def is None or func_def.body is None:
             return None
+
+        # Check if this function should use a promoted CTE instead of expanding
+        if self._should_use_promoted_cte_expand(func_name, func_def, receiver_expr, args):
+            # For fluent functions, the receiver is the first parameter
+            # For non-fluent, the first arg is the first parameter
+            if func_def.fluent:
+                source_param = receiver_expr
+            else:
+                source_param = args[0] if args else None
+            return PromotedFunctionRef(
+                func_name=func_name,
+                source_expr=source_param,
+            )
 
         # Depth limit check
         if len(self._inlining_stack) >= self.max_inline_depth:
@@ -1256,6 +1353,9 @@ class FunctionInliner:
         if isinstance(expr, (Literal, Quantity, DateTimeLiteral, TimeLiteral)):
             return expr
 
+        if isinstance(expr, PromotedFunctionRef):
+            return expr
+
         if isinstance(expr, DifferenceBetween):
             new_left = self._substitute_parameters_cql(expr.operand_left, param_map)
             new_right = self._substitute_parameters_cql(expr.operand_right, param_map)
@@ -1329,6 +1429,13 @@ class FunctionInliner:
                     self._inline_nested_calls_cql(arg, current_library)
                     for arg in expr.arguments
                 ]
+
+                # Check if this function should use a promoted CTE lookup
+                if self._should_use_promoted_cte(func_name, func_def, processed_args):
+                    return PromotedFunctionRef(
+                        func_name=func_name,
+                        source_expr=processed_args[0] if processed_args else None,
+                    )
 
                 param_map: Dict[str, Expression] = {}
                 for i, (param_name, _) in enumerate(func_def.parameters):
@@ -1486,9 +1593,27 @@ class ParameterPlaceholder(Expression):
     sql_expr: SQLExpression
 
 
+@dataclass
+class PromotedFunctionRef(Expression):
+    """AST node marking a function call that should use a pre-computed CTE lookup.
+
+    When the inliner encounters a function call for a promoted function
+    (one that has been pre-computed into a CTE), it skips expansion and
+    returns this node instead. The ExpressionTranslator then generates
+    a correlated subquery lookup against the pre-computed CTE.
+
+    Attributes:
+        func_name: The bare function name (e.g., "hospitalizationWithObservation").
+        source_expr: The CQL expression for the source parameter (first arg).
+    """
+    func_name: str
+    source_expr: Expression = None
+
+
 __all__ = [
     "FunctionInliner",
     "FunctionDef",
     "ParameterPlaceholder",
+    "PromotedFunctionRef",
     "TranslationError",
 ]

@@ -659,6 +659,12 @@ class ListsMixin:
             except NotImplementedError:
                 pass  # No AST builder — fall through to inliner
 
+        # Check if this function call should use a promoted CTE lookup
+        if self.context.promoted_functions:
+            _promoted = self._try_promoted_function_lookup(method, expr.source)
+            if _promoted is not None:
+                return _promoted
+
         # Expand-then-translate: try shared FunctionInliner (CQL AST -> CQL AST)
         inliner = self.context.function_inliner
         if inliner:
@@ -670,6 +676,47 @@ class ListsMixin:
 
         # Default: treat as fluent function call (fallback to function call)
         return SQLFunctionCall(name=method, args=[source] + args)
+
+    def _try_promoted_function_lookup(self, func_name: str, source_ast) -> Optional[SQLExpression]:
+        """Check if a function call should use a promoted CTE lookup.
+
+        For fluent calls like alias.methodName(...), this checks if
+        (methodName, source_cql_definition) is in promoted_functions AND
+        the CTE was actually built (_promoted_cte_keys), then returns
+        a correlated subquery lookup.
+
+        Returns None if the function is not promoted (caller should inline).
+        """
+        # Quick check: any promoted functions at all?
+        if not self.context.promoted_functions:
+            return None
+
+        # Source must be a simple identifier (the query alias)
+        if not isinstance(source_ast, Identifier):
+            return None
+        alias_name = source_ast.name
+
+        # Look up the alias in the symbol table
+        sym = self.context.lookup_symbol(alias_name)
+        if sym is None:
+            return None
+
+        # Get the CQL definition name from the symbol's cte_name or table_alias
+        cql_def_name = sym.cte_name or sym.table_alias
+        if not cql_def_name:
+            return None
+
+        # Check if (func_name, cql_def_name) is promoted AND CTE was built
+        key = (func_name, cql_def_name)
+        if key not in self.context.promoted_functions:
+            return None
+        if key not in self.context._promoted_cte_keys:
+            return None
+
+        # Generate deterministic CTE name (must match _build_function_promotion_cte)
+        fn_cte_name = f"_fn_{func_name}_{cql_def_name.replace(' ', '_').replace(':', '')[:40]}"
+        source_alias = self.context.resource_alias or alias_name
+        return self._make_function_cte_lookup(fn_cte_name, source_alias)
 
     def _translate_alias_ref(self, ref: AliasRef, boolean_context: bool = False) -> SQLExpression:
         """Translate an alias reference to SQL."""

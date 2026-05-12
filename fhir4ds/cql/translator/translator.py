@@ -630,6 +630,25 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             if isinstance(stmt, Definition) and not isinstance(stmt, FunctionDefinition):
                 self._context.expression_definitions[stmt.name] = getattr(stmt, 'expression', stmt)
 
+        # Function promotion pre-scan
+        self._scan_for_promoted_definitions(library)
+        self._scan_for_promoted_functions(library)
+        self._build_function_call_graph(library)
+        self._propagate_transitive_counts()
+        self._select_promoted_functions()
+        if self._context.promoted_functions:
+            _logger.info("Function CTE promotion enabled: %s", self._context.promoted_functions)
+            assert all(isinstance(k, tuple) and len(k) == 2 for k in self._context.promoted_functions), \
+                "promoted_functions keys must be (func_name, source_cte) tuples"
+        self._log_function_promotion_report()
+
+        # Build function promotion CTEs BEFORE optimization so
+        # _promoted_cte_keys is populated for Phase 1 translation.
+        # CTE bodies may contain retrieve placeholders that will be
+        # resolved together with other placeholders during Phase 3.
+        if self._context.promoted_functions:
+            self._build_all_function_promotion_ctes(library)
+
         # ====================================================================
         # Three-Phase Optimization Pipeline
         # ====================================================================
@@ -814,6 +833,18 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             meta = self._context.definition_meta.get(name)
             if meta is not None:
                 meta.has_resource = has_resource
+
+            # Inject function promotion CTEs whose source is this definition.
+            # These must come right after their source definition so that
+            # downstream definition CTEs can reference the _fn_ CTEs.
+            for (fn_name, fn_src), fn_ctes in self._context._function_promotion_ctes.items():
+                if fn_src == name:
+                    for fn_cte_name, fn_cte_body in fn_ctes.items():
+                        _fixed_body = self._resolve_function_cte_source(fn_cte_body, definition_ctes)
+                        quoted_fn = f'"{fn_cte_name}"'
+                        if quoted_fn.lower() not in seen_lower:
+                            seen_lower[quoted_fn.lower()] = quoted_fn
+                            cte_defs.append(CTEDefinition(name=quoted_fn, query=_fixed_body))
 
         # 6. Build final SELECT with LEFT JOINs
         final_select_ast = self._build_population_final_select(
@@ -1753,6 +1784,188 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             t = transitive.get((func_name, source_cte), 0)
             _logger.info("  %-55s  source=%-40s  direct=%d  transitive=%d",
                          func_name, source_cte, d, t)
+
+    _FUNCTION_CTE_PROMOTION_THRESHOLD = 3
+
+    def _select_promoted_functions(self) -> None:
+        """Select functions meeting the transitive count threshold for CTE promotion."""
+        for key, count in self._context.function_transitive_counts.items():
+            if count >= self._FUNCTION_CTE_PROMOTION_THRESHOLD:
+                self._context.promoted_functions[key] = count
+        _logger.info("Selected %d functions for CTE promotion (threshold=%d)",
+                     len(self._context.promoted_functions), self._FUNCTION_CTE_PROMOTION_THRESHOLD)
+
+    # -----------------------------------------------------------------
+    # Function-body CTE generation (Phase 3)
+    # -----------------------------------------------------------------
+
+    def _build_all_function_promotion_ctes(self, library: Library) -> None:
+        """Build a CTE for each promoted (func_name, source_cte) pair."""
+        for (func_name, source_cte_name) in list(self._context.promoted_functions.keys()):
+            self._build_function_promotion_cte(func_name, source_cte_name)
+
+    def _build_function_promotion_cte(self, func_name: str, source_cte_name: str) -> None:
+        """Build a pre-computed CTE for one function + source pair.
+
+        The CTE computes the function result for every row of the source CTE
+        at once, so call sites can use lightweight correlated subquery lookups.
+        """
+        from ..translator.expressions import ExpressionTranslator
+
+        inliner = self._context.function_inliner
+        if not inliner:
+            return
+
+        # 1. Find the FunctionDef in the inliner's registry
+        func_def = None
+        for k, fd in inliner._functions.items():
+            if k == func_name or k.endswith(f".{func_name}"):
+                func_def = fd
+                break
+        if func_def is None or func_def.body is None:
+            _logger.debug("Function %s not found in inliner registry, skipping", func_name)
+            return
+
+        # 2. Verify single-parameter (fluent) function
+        if len(func_def.parameters) != 1:
+            _logger.debug("Function %s has %d params, need 1 for promotion, skipping",
+                          func_name, len(func_def.parameters))
+            return
+
+        # 3. Substitute parameter with synthetic alias
+        param_name = func_def.parameters[0][0]
+        synthetic_alias = "_fns"
+        param_map = {param_name: Identifier(name=synthetic_alias)}
+        substituted = inliner._substitute_parameters_cql(func_def.body, param_map)
+        expanded = inliner._inline_nested_calls_cql(substituted, func_def.library_name)
+
+        # 4. Set up isolated translation scope
+        saved_scope_stack = list(self._context.scopes)
+        saved_scope_level = self._context.current_scope_level
+        saved_resource_alias = self._context.resource_alias
+        saved_resource_type = self._context.resource_type
+        saved_current_def = self._context._current_definition
+        saved_alias_resource_types = dict(self._context._alias_resource_types)
+
+        try:
+            # Push barrier scope — isolate from caller context
+            self._context.push_scope()
+            self._context.scopes[-1].barrier = True
+
+            # Register synthetic alias pointing to source CTE
+            self._context.add_alias(
+                synthetic_alias,
+                table_alias=synthetic_alias,
+                cte_name=source_cte_name,
+            )
+            self._context.resource_alias = synthetic_alias
+            self._context._alias_resource_types[synthetic_alias] = ""
+            self._context._current_definition = f"_fn_{func_name}"
+
+            # 5. Translate expanded body to SQL
+            expr_translator = ExpressionTranslator(self._context)
+            result_sql = expr_translator.translate(expanded)
+
+            # 5.5 Rewrite outer-scope references (_pt -> _fns)
+            from ..translator.expressions import ExpressionTranslator as _ET
+            _et_temp = _ET(self._context)
+            fixed_result, _resolved = _et_temp._rewrite_outer_aliases(result_sql, synthetic_alias)
+            if fixed_result is not None:
+                result_sql = fixed_result
+
+        finally:
+            # 6. Restore all state
+            self._context.scopes.clear()
+            self._context.scopes.extend(saved_scope_stack)
+            self._context.current_scope_level = saved_scope_level
+            self._context.resource_alias = saved_resource_alias
+            self._context.resource_type = saved_resource_type
+            self._context._current_definition = saved_current_def
+            self._context._alias_resource_types = saved_alias_resource_types
+
+        # 7. Build CTE SELECT body
+        # Use fhirpath_text(resource, 'id') as _row_key to avoid comparing large JSON blobs
+        fn_cte_name = f"_fn_{func_name}_{source_cte_name.replace(' ', '_').replace(':', '')[:40]}"
+        cte_body = SQLSelect(
+            columns=[
+                SQLQualifiedIdentifier(parts=[synthetic_alias, "patient_id"]),
+                SQLAlias(
+                    expr=SQLFunctionCall(
+                        name="fhirpath_text",
+                        args=[
+                            SQLQualifiedIdentifier(parts=[synthetic_alias, "resource"]),
+                            SQLLiteral(value="id"),
+                        ],
+                    ),
+                    alias="_row_key",
+                ),
+                SQLAlias(expr=result_sql, alias="value"),
+            ],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name=source_cte_name, quoted=True),
+                alias=synthetic_alias,
+            ),
+        )
+
+        # 7.4 Skip if body contains retrieve placeholders — after Phase 3
+        # resolution these may reference definition CTEs that haven't been
+        # emitted yet, creating impossible CTE ordering constraints.
+        from ..translator.placeholder import contains_placeholder
+        if contains_placeholder(result_sql):
+            _logger.info("Skipping function promotion CTE %s: body contains retrieve placeholders",
+                          fn_cte_name)
+            return
+
+        # 7.5 Validate: check the CTE body doesn't reference definition CTEs
+        # other than the source. If it does, we can't promote because the
+        # _fn_ CTE would need to be emitted after those definitions but before
+        # the definitions that use it — creating an impossible ordering.
+        _all_def_names = self._context._definition_names or set()
+        _referenced_defs = self._find_definition_references(cte_body, _all_def_names)
+        _other_defs = _referenced_defs - {source_cte_name}
+        if _other_defs:
+            _logger.info("Skipping function promotion CTE %s: body references other definitions: %s",
+                          fn_cte_name, _other_defs)
+            return
+
+        # 8. Store in context
+        key = (func_name, source_cte_name)
+        if key not in self._context._function_promotion_ctes:
+            self._context._function_promotion_ctes[key] = {}
+        self._context._function_promotion_ctes[key][fn_cte_name] = cte_body
+        self._context._promoted_cte_keys.add(key)
+        _logger.info("Built function promotion CTE: %s for (%s, %s)",
+                      fn_cte_name, func_name, source_cte_name)
+
+    def _find_definition_references(self, ast_node, definition_names: set) -> set:
+        """Find all definition CTE names referenced in a SQL AST subtree.
+
+        Scans for SQLIdentifier nodes whose name matches a definition name,
+        indicating a CTE reference in the generated SQL.
+        """
+        if ast_node is None or not hasattr(ast_node, '__dataclass_fields__'):
+            return set()
+        refs = set()
+        stack = [ast_node]
+        while stack:
+            n = stack.pop()
+            if n is None or not hasattr(n, '__dataclass_fields__'):
+                continue
+            for f in n.__dataclass_fields__:
+                v = getattr(n, f, None)
+                if v is None:
+                    continue
+                if isinstance(v, SQLIdentifier) and v.name in definition_names:
+                    refs.add(v.name)
+                elif isinstance(v, list):
+                    for item in v:
+                        if isinstance(item, SQLIdentifier) and item.name in definition_names:
+                            refs.add(item.name)
+                        elif item is not None and hasattr(item, '__dataclass_fields__'):
+                            stack.append(item)
+                elif hasattr(v, '__dataclass_fields__'):
+                    stack.append(v)
+        return refs
 
     def _setup_context(self, library: Library) -> None:
         """

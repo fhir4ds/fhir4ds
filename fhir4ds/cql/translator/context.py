@@ -467,6 +467,10 @@ class SQLTranslationContext:
     # Function call graph: func_name -> set of func_names it calls
     function_call_graph: Dict[str, Set[str]] = field(default_factory=dict)
 
+    # Function promotion CTEs: (func_name, source_cte_name) -> {cte_name: SQLSelect}
+    _function_promotion_ctes: Dict[Tuple[str, str], Dict[str, Any]] = field(default_factory=dict)
+    # Successfully promoted (func_name, source_cte) pairs (CTEs that were actually built)
+    _promoted_cte_keys: Set[Tuple[str, str]] = field(default_factory=set)
 
     # Warnings
     warnings: TranslationWarnings = field(default_factory=TranslationWarnings)
@@ -984,6 +988,8 @@ class SQLTranslationContext:
         self.function_transitive_counts.clear()
         self.promoted_functions.clear()
         self.function_call_graph.clear()
+        self._function_promotion_ctes.clear()
+        self._promoted_cte_keys.clear()
         # Reset audit retrieve CTE names so stale names don't persist across calls
         if hasattr(self, '_audit_retrieve_cte_names'):
             self._audit_retrieve_cte_names = set()

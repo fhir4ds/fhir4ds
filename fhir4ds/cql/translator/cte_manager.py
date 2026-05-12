@@ -1467,6 +1467,38 @@ class CTEManagerMixin:
             )
         return cte_body
 
+    @staticmethod
+    def _resolve_function_cte_source(cte_body, definition_ctes: dict):
+        """Fix the FROM clause CTE name in a function promotion CTE body.
+
+        During translation, function promotion CTEs use the CQL definition
+        name (e.g. "Elective Inpatient Encounter") as the FROM clause target.
+        The CTE emission loop later assigns the actual quoted CTE name.
+        This method swaps the provisional name for the actual one.
+        """
+        from ..translator.types import SQLSelect, SQLAlias, SQLIdentifier
+        if not isinstance(cte_body, SQLSelect):
+            return cte_body
+        fc = cte_body.from_clause
+        if not isinstance(fc, SQLAlias) or not isinstance(fc.expr, SQLIdentifier):
+            return cte_body
+        provisional = fc.expr.name
+        entry = definition_ctes.get(provisional)
+        if entry:
+            actual = entry[0].strip('"')  # (quoted_name, has_resource)
+            if actual != provisional:
+                new_ident = SQLIdentifier(name=actual, quoted=True)
+                new_from = SQLAlias(expr=new_ident, alias=fc.alias)
+                return SQLSelect(
+                    columns=cte_body.columns,
+                    from_clause=new_from,
+                    where=cte_body.where,
+                    group_by=cte_body.group_by,
+                    order_by=cte_body.order_by,
+                    limit=cte_body.limit,
+                )
+        return cte_body
+
     def _build_definition_cte_with_patient_id(
         self,
         name: str,
