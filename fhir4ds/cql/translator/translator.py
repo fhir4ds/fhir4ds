@@ -1809,9 +1809,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
     def _build_all_function_promotion_ctes(self, library: Library) -> None:
         """Build a CTE for each promoted (func_name, source_cte) pair."""
         for (func_name, source_cte_name) in list(self._context.promoted_functions.keys()):
-            self._build_function_promotion_cte(func_name, source_cte_name)
+            self._build_function_promotion_cte(func_name, source_cte_name, library)
 
-    def _build_function_promotion_cte(self, func_name: str, source_cte_name: str) -> None:
+    def _build_function_promotion_cte(self, func_name: str, source_cte_name: str,
+                                       library: Library) -> None:
         """Build a pre-computed CTE for one function + source pair.
 
         The CTE computes the function result for every row of the source CTE
@@ -1929,12 +1930,38 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             ),
         )
 
-        # 7.4 Skip if body contains retrieve placeholders. Retrieve placeholders
-        # resolve during Phase 3, but the resulting SQL can differ semantically
-        # from inline expansion for some functions (e.g., CMS996's
-        # GetLocation/currentemergencyDepartmentArrivalTime). Until this is
-        # resolved, only promote functions whose bodies are fully resolved
-        # at translation time.
+        # 7.4 Resource-type-aware retrieve safety check.
+        # When a function body contains Retrieve nodes for resources of a
+        # DIFFERENT type than the source CTE (e.g., the source is Encounter
+        # but the function retrieves Location), promoting to a pre-computed
+        # CTE breaks per-row correlation and produces incorrect results
+        # (cf. CMS996 GetLocation). Only allow promotion when all retrieves
+        # are for the SAME resource type as the source CTE.
+        from ..parser.ast_nodes import Retrieve as CQLRetrieve
+        _fn_retrieve_types = self._find_cql_retrieve_types(expanded, CQLRetrieve)
+        if _fn_retrieve_types:
+            _source_type = self._get_source_definition_resource_type(library, source_cte_name)
+            if _source_type:
+                _unsafe_types = _fn_retrieve_types - {_source_type}
+                if _unsafe_types:
+                    _logger.info(
+                        "Skipping function promotion CTE %s: body retrieves "
+                        "different resource types %s (source type: %s)",
+                        fn_cte_name, _unsafe_types, _source_type)
+                    return
+                _logger.debug("Function promotion CTE %s: all retrieves are same type as source (%s)",
+                              fn_cte_name, _source_type)
+
+        # 7.4.1 Skip if translated body contains retrieve placeholders.
+        # Although Phase 3 resolves placeholders in function promotion CTEs,
+        # the resolved SQL may reference definition CTEs that are emitted
+        # AFTER the function promotion CTE, creating an impossible ordering.
+        # The post-Phase-3 validation (_validate_function_promotion_ctes)
+        # would remove these CTEs, but by then call sites are already
+        # committed with _fv lookups that reference the removed CTE name.
+        # So we block promotion here to avoid the ordering problem entirely.
+        # TODO: Support functions with cross-definition references by
+        # ordering function promotion CTEs after all their dependencies.
         from ..translator.placeholder import contains_placeholder
         if contains_placeholder(result_sql):
             _logger.info("Skipping function promotion CTE %s: body contains retrieve placeholders",
@@ -2097,6 +2124,51 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 elif hasattr(v, '__dataclass_fields__'):
                     stack.append(v)
         return refs
+
+    def _find_cql_retrieve_types(self, cql_node, retrieve_cls) -> set:
+        """Find all resource types retrieved in a CQL AST subtree.
+
+        Walks the CQL AST looking for Retrieve nodes and returns a set of
+        their resource type strings (e.g., {"Encounter"}, {"Location"}).
+        """
+        if cql_node is None:
+            return set()
+        types = set()
+        stack = [cql_node]
+        while stack:
+            n = stack.pop()
+            if n is None or not hasattr(n, '__dataclass_fields__'):
+                continue
+            if isinstance(n, retrieve_cls):
+                types.add(n.type)
+            for f in n.__dataclass_fields__:
+                if f in ('library_name',):
+                    continue
+                v = getattr(n, f, None)
+                if v is None:
+                    continue
+                if isinstance(v, list):
+                    for item in v:
+                        if item is not None and hasattr(item, '__dataclass_fields__'):
+                            stack.append(item)
+                elif hasattr(v, '__dataclass_fields__'):
+                    stack.append(v)
+        return types
+
+    def _get_source_definition_resource_type(self, library: Library, def_name: str) -> Optional[str]:
+        """Get the primary FHIR resource type for a CQL definition.
+
+        Looks at the definition's expression to find the first Retrieve node
+        and returns its resource type. Returns None if not found.
+        """
+        from ..parser.ast_nodes import Definition as CQLDefinition
+        from ..parser.ast_nodes import Retrieve as CQLRetrieve
+        for stmt in library.statements:
+            if isinstance(stmt, CQLDefinition) and stmt.name == def_name:
+                types = self._find_cql_retrieve_types(stmt.expression, CQLRetrieve)
+                if types:
+                    return next(iter(types))
+        return None
 
     def _setup_context(self, library: Library) -> None:
         """
