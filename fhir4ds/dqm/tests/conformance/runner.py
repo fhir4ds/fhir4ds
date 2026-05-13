@@ -30,6 +30,15 @@ class ComparisonResult:
     accuracy_pct: float
 
 
+def _clear_runtime_state(conn) -> None:
+    """Clear connection-scoped runtime state before each measure execution."""
+    try:
+        from fhir4ds.cql.duckdb.udf.variable import clear_variables
+        clear_variables(conn)
+    except ImportError:
+        pass
+
+
 def run_measure(
     conn,
     measure_config: "MeasureConfig",
@@ -50,6 +59,7 @@ def run_measure(
         audit: If True, run with audit_mode=True to capture evidence structs.
                Falls back to non-audit mode if audit translation or execution fails.
     """
+    _clear_runtime_state(conn)
     timings = {}
 
     # Parse CQL (shared across audit and non-audit attempts)

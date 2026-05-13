@@ -44,11 +44,12 @@ def _fix_claim_encounter_refs(
     # bundle encounters so that claimDiagnosis() can match any of them
     # (the CQL join will filter to the correct encounter at query time).
     if encounter_ids:
+        sorted_encounter_ids = sorted(encounter_ids)
         modified = dict(claim)
         modified["item"] = [dict(it) for it in items]
         for idx in dangling_items:
             modified["item"][idx]["encounter"] = [
-                {"reference": f"Encounter/{eid}"} for eid in encounter_ids
+                {"reference": f"Encounter/{eid}"} for eid in sorted_encounter_ids
             ]
         return modified
 
