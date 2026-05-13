@@ -885,8 +885,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         from .retrieve_optimizer import (
             optimize_property_access,
             optimize_rendered_property_access,
+            propagate_resource_column_lineage,
         )
         if self._context.column_registry:
+            fragment.ctes = propagate_resource_column_lineage(
+                fragment.ctes, self._context.column_registry
+            )
             fragment.ctes = [
                 CTEDefinition(
                     name=cte.name,

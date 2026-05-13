@@ -25,6 +25,12 @@
         "effective": "fhirpath_text",
         "performed": "fhirpath_text"
     },
+    "default_precomputed_paths": [
+        "status",
+        "period",
+        "effective",
+        "performed"
+    ],
     "column_to_fhir_paths": {
         "onset_date":             ["onset[x]", "onsetDateTime"],
         "abatement_date":         ["abatement[x]", "abatementDateTime"],

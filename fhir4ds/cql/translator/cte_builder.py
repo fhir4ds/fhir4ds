@@ -217,6 +217,7 @@ def build_retrieve_cte(
             "SQLTranslationContext.fhir_schema is required for build_retrieve_cte. "
             "Ensure the translator wires fhir_schema into the context."
         )
+    properties = set(properties) | fhir_schema.default_precomputed_paths
     filtered_properties = set()
     for prop in properties:
         col_name = property_to_column_name(

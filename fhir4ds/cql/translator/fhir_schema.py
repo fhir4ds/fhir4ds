@@ -484,6 +484,11 @@ class FHIRSchemaRegistry:
             return overrides[element_path]
         return self.get_udf_for_element(resource_type, element_path)
 
+    @property
+    def default_precomputed_paths(self) -> Set[str]:
+        """FHIRPath properties to consider for every retrieve when valid."""
+        return set(self._type_config.get("default_precomputed_paths", []))
+
     def get_sql_type_for_element(self, resource_type: str, element_path: str) -> str:
         """
         Get the SQL column type for a resource element.

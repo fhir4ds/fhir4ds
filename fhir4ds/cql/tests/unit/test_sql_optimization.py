@@ -1469,6 +1469,125 @@ class TestRawSQLColumnOptimization:
         assert "o.status" in sql
         assert "fhirpath_text(o.resource, 'status')" not in sql
 
+    def test_raw_non_text_fhirpath_calls_use_registered_columns(self):
+        """Raw expressions should optimize all direct fhirpath resource calls."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import optimize_property_access
+        from ...translator.types import SQLAlias, SQLIdentifier, SQLRaw, SQLSelect
+
+        registry = ColumnRegistry()
+        registry.register_cte(
+            "Observation",
+            {
+                "effective_date": ColumnInfo(
+                    column_name="effective_date",
+                    fhirpath="effectiveDateTime",
+                    sql_type="VARCHAR",
+                )
+            },
+        )
+        query = SQLSelect(
+            columns=[SQLRaw("CAST(fhirpath_date(o.resource, 'effectiveDateTime') AS VARCHAR)")],
+            from_clause=SQLAlias(expr=SQLIdentifier("Observation"), alias="o"),
+        )
+
+        optimized = optimize_property_access(query, registry)
+        sql = optimized.to_sql()
+
+        assert "CAST(o.effective_date AS VARCHAR)" in sql
+        assert "fhirpath_date(o.resource, 'effectiveDateTime')" not in sql
+
+    def test_ast_wrapper_nodes_are_traversed_for_column_optimization(self):
+        """FHIRPath calls inside CAST/EXTRACT/EXISTS wrappers should optimize."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import optimize_property_access
+        from ...translator.types import (
+            SQLAlias,
+            SQLBinaryOp,
+            SQLCast,
+            SQLExists,
+            SQLExtract,
+            SQLFunctionCall,
+            SQLIdentifier,
+            SQLLiteral,
+            SQLQualifiedIdentifier,
+            SQLSelect,
+            SQLSubquery,
+        )
+
+        registry = ColumnRegistry()
+        registry.register_cte(
+            "Encounter",
+            {
+                "period": ColumnInfo(
+                    column_name="period",
+                    fhirpath="period",
+                    sql_type="VARCHAR",
+                )
+            },
+        )
+        query = SQLSelect(
+            columns=[SQLIdentifier("*")],
+            from_clause=SQLAlias(expr=SQLIdentifier("Encounter"), alias="e"),
+            where=SQLBinaryOp(
+                operator="AND",
+                left=SQLBinaryOp(
+                    operator="IS NOT",
+                    left=SQLCast(
+                        expression=SQLFunctionCall(
+                            name="intervalEnd",
+                            args=[
+                                SQLFunctionCall(
+                                    name="fhirpath_text",
+                                    args=[
+                                        SQLQualifiedIdentifier(parts=["e", "resource"]),
+                                        SQLLiteral("period"),
+                                    ],
+                                )
+                            ],
+                        ),
+                        target_type="VARCHAR",
+                    ),
+                    right=SQLLiteral(None),
+                ),
+                right=SQLExists(
+                    SQLSubquery(
+                        SQLSelect(
+                            columns=[SQLIdentifier("*")],
+                            from_clause=SQLAlias(expr=SQLIdentifier("Encounter"), alias="inner_e"),
+                            where=SQLBinaryOp(
+                                operator=">",
+                                left=SQLExtract(
+                                    extract_field="YEAR",
+                                    source=SQLFunctionCall(
+                                        name="intervalStart",
+                                        args=[
+                                            SQLFunctionCall(
+                                                name="fhirpath_text",
+                                                args=[
+                                                    SQLQualifiedIdentifier(parts=["inner_e", "resource"]),
+                                                    SQLLiteral("period"),
+                                                ],
+                                            )
+                                        ],
+                                    ),
+                                ),
+                                right=SQLLiteral(2020),
+                            ),
+                        )
+                    )
+                ),
+            ),
+        )
+
+        optimized = optimize_property_access(query, registry)
+        sql = optimized.to_sql()
+
+        assert "intervalEnd(e.period)" in sql
+        assert "intervalStart(inner_e.period)" in sql
+        assert "fhirpath_text(e.resource, 'period')" not in sql
+        assert "fhirpath_text(inner_e.resource, 'period')" not in sql
+
     def test_conflicting_raw_aliases_are_not_rewritten(self):
         """A raw alias used for multiple CTEs should not be guessed."""
         from ...translator.column_registry import ColumnInfo, ColumnRegistry
@@ -1530,3 +1649,296 @@ class TestRawSQLColumnOptimization:
 
         assert "fhirpath_text(r.resource, 'period')" in optimized
         assert "LastObs.period IS NOT NULL" in optimized
+
+
+class TestResourceColumnLineage:
+    """Tests for carrying precomputed columns through resource-shaped CTEs."""
+
+    def test_select_star_registers_derived_cte_columns(self):
+        """SELECT * from a registered CTE should inherit column metadata."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import propagate_resource_column_lineage
+        from ...translator.types import CTEDefinition, SQLAlias, SQLIdentifier, SQLSelect
+
+        registry = ColumnRegistry()
+        registry.register_cte(
+            "Base",
+            {
+                "period": ColumnInfo(
+                    column_name="period",
+                    fhirpath="period",
+                    sql_type="VARCHAR",
+                )
+            },
+        )
+        cte = CTEDefinition(
+            name='"Derived"',
+            query=SQLSelect(
+                columns=[SQLIdentifier("*")],
+                from_clause=SQLAlias(expr=SQLIdentifier("Base"), alias="b"),
+            ),
+        )
+
+        propagated = propagate_resource_column_lineage([cte], registry)
+
+        assert propagated[0].query.columns == cte.query.columns
+        assert registry.lookup("Derived", "period") == "period"
+
+    def test_explicit_resource_projection_adds_inherited_columns(self):
+        """Explicit patient/resource CTEs should materialize inherited columns."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import (
+            optimize_property_access,
+            propagate_resource_column_lineage,
+        )
+        from ...translator.types import (
+            CTEDefinition,
+            SQLAlias,
+            SQLFunctionCall,
+            SQLIdentifier,
+            SQLLiteral,
+            SQLQualifiedIdentifier,
+            SQLSelect,
+        )
+
+        registry = ColumnRegistry()
+        registry.register_cte(
+            "Base",
+            {
+                "period": ColumnInfo(
+                    column_name="period",
+                    fhirpath="period",
+                    sql_type="VARCHAR",
+                ),
+                "status": ColumnInfo(
+                    column_name="status",
+                    fhirpath="status",
+                    sql_type="VARCHAR",
+                ),
+            },
+        )
+        cte = CTEDefinition(
+            name='"Derived"',
+            query=SQLSelect(
+                columns=[
+                    SQLQualifiedIdentifier(["b", "patient_id"]),
+                    SQLQualifiedIdentifier(["b", "resource"]),
+                ],
+                from_clause=SQLAlias(expr=SQLIdentifier("Base"), alias="b"),
+            ),
+        )
+
+        propagated = propagate_resource_column_lineage([cte], registry)
+        sql = propagated[0].query.to_sql()
+
+        assert "b.period" in sql
+        assert "b.status" in sql
+        assert registry.lookup("Derived", "period") == "period"
+        assert registry.lookup("Derived", "status") == "status"
+
+        downstream = SQLSelect(
+            columns=[
+                SQLFunctionCall(
+                    "fhirpath_text",
+                    [
+                        SQLQualifiedIdentifier(["d", "resource"]),
+                        SQLLiteral("period"),
+                    ],
+                )
+            ],
+            from_clause=SQLAlias(expr=SQLIdentifier("Derived"), alias="d"),
+        )
+        optimized = optimize_property_access(downstream, registry)
+
+        assert "d.period" in optimized.to_sql()
+
+    def test_grouped_cte_does_not_inherit_columns(self):
+        """Grouped projections should not receive non-grouped inherited columns."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import propagate_resource_column_lineage
+        from ...translator.types import CTEDefinition, SQLAlias, SQLIdentifier, SQLSelect
+
+        registry = ColumnRegistry()
+        registry.register_cte(
+            "Base",
+            {
+                "period": ColumnInfo(
+                    column_name="period",
+                    fhirpath="period",
+                    sql_type="VARCHAR",
+                )
+            },
+        )
+        cte = CTEDefinition(
+            name='"Grouped"',
+            query=SQLSelect(
+                columns=[SQLIdentifier("patient_id"), SQLIdentifier("resource")],
+                from_clause=SQLAlias(expr=SQLIdentifier("Base"), alias="b"),
+                group_by=[SQLIdentifier("patient_id"), SQLIdentifier("resource")],
+            ),
+        )
+
+        propagate_resource_column_lineage([cte], registry)
+
+        assert registry.lookup("Grouped", "period") is None
+
+    def test_union_cte_inherits_common_branch_columns(self):
+        """UNION outputs should inherit only columns common to every branch."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import propagate_resource_column_lineage
+        from ...translator.types import (
+            CTEDefinition,
+            SQLAlias,
+            SQLIdentifier,
+            SQLSelect,
+            SQLSubquery,
+            SQLUnion,
+        )
+
+        registry = ColumnRegistry()
+        registry.register_cte(
+            "BranchA",
+            {
+                "performed": ColumnInfo(
+                    column_name="performed",
+                    fhirpath="performed",
+                    sql_type="VARCHAR",
+                ),
+                "status": ColumnInfo(
+                    column_name="status",
+                    fhirpath="status",
+                    sql_type="VARCHAR",
+                ),
+                "only_a": ColumnInfo(
+                    column_name="only_a",
+                    fhirpath="onlyA",
+                    sql_type="VARCHAR",
+                ),
+            },
+        )
+        registry.register_cte(
+            "BranchB",
+            {
+                "performed": ColumnInfo(
+                    column_name="performed",
+                    fhirpath="performed",
+                    sql_type="VARCHAR",
+                ),
+                "status": ColumnInfo(
+                    column_name="status",
+                    fhirpath="status",
+                    sql_type="VARCHAR",
+                ),
+                "only_b": ColumnInfo(
+                    column_name="only_b",
+                    fhirpath="onlyB",
+                    sql_type="VARCHAR",
+                ),
+            },
+        )
+        cte = CTEDefinition(
+            name='"Unioned"',
+            query=SQLUnion(
+                operands=[
+                    SQLSubquery(
+                        query=SQLSelect(
+                            columns=[
+                                SQLIdentifier("patient_id"),
+                                SQLIdentifier("resource"),
+                            ],
+                            from_clause=SQLAlias(
+                                expr=SQLIdentifier("BranchA"),
+                                alias="a",
+                            ),
+                        )
+                    ),
+                    SQLSubquery(
+                        query=SQLSelect(
+                            columns=[
+                                SQLIdentifier("patient_id"),
+                                SQLIdentifier("resource"),
+                            ],
+                            from_clause=SQLAlias(
+                                expr=SQLIdentifier("BranchB"),
+                                alias="b",
+                            ),
+                        )
+                    ),
+                ]
+            ),
+        )
+
+        propagated = propagate_resource_column_lineage([cte], registry)
+        sql = propagated[0].query.to_sql()
+
+        assert "a.performed" in sql
+        assert "b.performed" in sql
+        assert "a.status" in sql
+        assert "b.status" in sql
+        assert "only_a" not in sql
+        assert "only_b" not in sql
+        assert registry.lookup("Unioned", "performed") == "performed"
+        assert registry.lookup("Unioned", "status") == "status"
+        assert registry.lookup("Unioned", "onlyA") is None
+
+    def test_union_resource_only_operand_materializes_patient_id(self):
+        """UNION lineage should preserve patient_id normalization for resource-only arms."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import propagate_resource_column_lineage
+        from ...translator.types import (
+            CTEDefinition,
+            SQLAlias,
+            SQLIdentifier,
+            SQLSelect,
+            SQLSubquery,
+            SQLUnion,
+        )
+
+        registry = ColumnRegistry()
+        for cte_name in ("BranchA", "BranchB"):
+            registry.register_cte(
+                cte_name,
+                {
+                    "performed": ColumnInfo(
+                        column_name="performed",
+                        fhirpath="performed",
+                        sql_type="VARCHAR",
+                    )
+                },
+            )
+        cte = CTEDefinition(
+            name='"Unioned"',
+            query=SQLUnion(
+                operands=[
+                    SQLSubquery(
+                        query=SQLSelect(
+                            columns=[SQLIdentifier("resource")],
+                            from_clause=SQLAlias(
+                                expr=SQLIdentifier("BranchA"),
+                                alias="a",
+                            ),
+                        )
+                    ),
+                    SQLSubquery(
+                        query=SQLSelect(
+                            columns=[SQLIdentifier("resource")],
+                            from_clause=SQLAlias(
+                                expr=SQLIdentifier("BranchB"),
+                                alias="b",
+                            ),
+                        )
+                    ),
+                ]
+            ),
+        )
+
+        propagated = propagate_resource_column_lineage([cte], registry)
+        sql = propagated[0].query.to_sql()
+
+        assert "a.patient_id" in sql
+        assert "b.patient_id" in sql
+        assert "a.resource" in sql
+        assert "b.resource" in sql
+        assert "a.performed" in sql
+        assert "b.performed" in sql
+        assert registry.lookup("Unioned", "performed") == "performed"

@@ -74,6 +74,12 @@ class TestColumnGeneration:
 
         assert column_defs["period"].fhirpath_function == "fhirpath_text"
 
+    def test_default_precomputed_paths_come_from_schema_config(self, fhir_schema):
+        """Default retrieve properties should be schema-configured."""
+        assert {"status", "period", "effective", "performed"}.issubset(
+            fhir_schema.default_precomputed_paths
+        )
+
 
 class TestSQLRetrieveCTE:
     """Tests for precomputed columns exposed by SQLRetrieveCTE."""
