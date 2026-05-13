@@ -58,6 +58,22 @@ class TestColumnGeneration:
         assert column_defs["systolic_value"].fhirpath_function == "fhirpath_number"
         assert column_defs["diastolic_value"].fhirpath_function == "fhirpath_number"
 
+    def test_precomputed_udf_override_comes_from_schema_config(self, fhir_schema):
+        """Configured precomputed path overrides should preserve raw values."""
+        assert fhir_schema.get_udf_for_element("Encounter", "period") == "fhirpath_date"
+        assert (
+            fhir_schema.get_precomputed_udf_for_element("Encounter", "period")
+            == "fhirpath_text"
+        )
+
+        column_defs = build_column_definitions(
+            "Encounter",
+            {"period"},
+            fhir_schema=fhir_schema,
+        )
+
+        assert column_defs["period"].fhirpath_function == "fhirpath_text"
+
 
 class TestSQLRetrieveCTE:
     """Tests for precomputed columns exposed by SQLRetrieveCTE."""

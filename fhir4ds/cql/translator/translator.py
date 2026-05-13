@@ -878,13 +878,37 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         # Assemble the complete SQL using AST - call to_sql() only here at final assembly
         fragment = SQLFragment(main_query=final_select_ast, ctes=cte_defs)
-        # Experimental CMS1218 SQL-size reducer. Keep default-off until
-        # conformance and execution behavior are fully validated.
+        # A few high-level constructs synthesize FHIRPath calls after retrieve
+        # optimization has resolved placeholders. Run the property-column pass
+        # over the final AST as a last chance to reuse precomputed retrieve
+        # columns for late-generated property expressions.
+        from .retrieve_optimizer import (
+            optimize_property_access,
+            optimize_rendered_property_access,
+        )
+        if self._context.column_registry:
+            fragment.ctes = [
+                CTEDefinition(
+                    name=cte.name,
+                    query=optimize_property_access(
+                        cte.query, self._context.column_registry
+                    ),
+                    columns=cte.columns,
+                )
+                for cte in fragment.ctes
+            ]
+            fragment.main_query = optimize_property_access(
+                fragment.main_query, self._context.column_registry
+            )
         import os
         if os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP") == "1":
             min_occurrences = int(os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP_MIN", "3"))
             fragment.deduplicate_lateral_aliases(min_occurrences=min_occurrences)
         sql_text = fragment.to_sql()
+        if self._context.column_registry:
+            sql_text = optimize_rendered_property_access(
+                sql_text, self._context.column_registry
+            )
         # Text-level fix for CASE WHEN audit_xxx(...) patterns that survived
         # AST-level demotion (subexpressions serialised to SQLRaw early).
         if self.context.audit_mode:

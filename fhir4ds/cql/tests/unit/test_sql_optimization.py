@@ -1402,3 +1402,131 @@ class TestGetCTEReference:
 
         # Should return None
         assert cte_name is None
+
+
+class TestRawSQLColumnOptimization:
+    """Tests for precomputed-column optimization inside SQLRaw fragments."""
+
+    def test_uses_local_raw_cte_alias(self):
+        """Raw subqueries with quoted CTE aliases should use registered columns."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import optimize_property_access
+        from ...translator.types import SQLRaw, SQLSelect
+
+        registry = ColumnRegistry()
+        registry.register_cte(
+            "LastObs",
+            {
+                "period": ColumnInfo(
+                    column_name="period",
+                    fhirpath="period",
+                    sql_type="VARCHAR",
+                )
+            },
+        )
+        query = SQLSelect(
+            columns=[
+                SQLRaw(
+                    "CASE WHEN EXISTS ("
+                    "SELECT 1 FROM \"LastObs\" AS LastObs "
+                    "WHERE fhirpath_text(LastObs.resource, 'period') IS NOT NULL"
+                    ") THEN TRUE ELSE FALSE END"
+                )
+            ]
+        )
+
+        optimized = optimize_property_access(query, registry)
+        sql = optimized.to_sql()
+
+        assert "LastObs.period" in sql
+        assert "fhirpath_text(LastObs.resource, 'period')" not in sql
+
+    def test_uses_ast_alias_for_raw_expression(self):
+        """Raw expressions should inherit alias mappings from the surrounding AST."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import optimize_property_access
+        from ...translator.types import SQLAlias, SQLIdentifier, SQLRaw, SQLSelect
+
+        registry = ColumnRegistry()
+        registry.register_cte(
+            "Observation",
+            {
+                "status": ColumnInfo(
+                    column_name="status",
+                    fhirpath="status",
+                    sql_type="VARCHAR",
+                )
+            },
+        )
+        query = SQLSelect(
+            columns=[SQLRaw("fhirpath_text(o.resource, 'status')")],
+            from_clause=SQLAlias(expr=SQLIdentifier("Observation"), alias="o"),
+        )
+
+        optimized = optimize_property_access(query, registry)
+        sql = optimized.to_sql()
+
+        assert "o.status" in sql
+        assert "fhirpath_text(o.resource, 'status')" not in sql
+
+    def test_conflicting_raw_aliases_are_not_rewritten(self):
+        """A raw alias used for multiple CTEs should not be guessed."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import optimize_property_access
+        from ...translator.types import SQLRaw, SQLSelect
+
+        registry = ColumnRegistry()
+        for cte_name in ("First CTE", "Second CTE"):
+            registry.register_cte(
+                cte_name,
+                {
+                    "status": ColumnInfo(
+                        column_name="status",
+                        fhirpath="status",
+                        sql_type="VARCHAR",
+                    )
+                },
+            )
+        raw_sql = (
+            "EXISTS (SELECT 1 FROM \"First CTE\" AS x "
+            "WHERE fhirpath_text(x.resource, 'status') = 'a') "
+            "OR EXISTS (SELECT 1 FROM \"Second CTE\" AS x "
+            "WHERE fhirpath_text(x.resource, 'status') = 'b')"
+        )
+        query = SQLSelect(columns=[SQLRaw(raw_sql)])
+
+        optimized = optimize_property_access(query, registry)
+        sql = optimized.to_sql()
+
+        assert "x.status" not in sql
+        assert "fhirpath_text(x.resource, 'status')" in sql
+
+    def test_rendered_sql_pass_ignores_unregistered_table_alias(self):
+        """Rendered SQL optimization should not map base-table aliases to CTEs."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import optimize_rendered_property_access
+
+        registry = ColumnRegistry()
+        registry.register_cte(
+            "LastObs",
+            {
+                "period": ColumnInfo(
+                    column_name="period",
+                    fhirpath="period",
+                    sql_type="VARCHAR",
+                )
+            },
+        )
+        sql_text = (
+            "WITH \"LastObs\" AS ("
+            "SELECT fhirpath_text(r.resource, 'period') AS period "
+            "FROM resources r"
+            ") "
+            "SELECT * FROM \"LastObs\" AS LastObs "
+            "WHERE fhirpath_text(LastObs.resource, 'period') IS NOT NULL"
+        )
+
+        optimized = optimize_rendered_property_access(sql_text, registry)
+
+        assert "fhirpath_text(r.resource, 'period')" in optimized
+        assert "LastObs.period IS NOT NULL" in optimized

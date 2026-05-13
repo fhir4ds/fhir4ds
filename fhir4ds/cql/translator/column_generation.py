@@ -136,7 +136,7 @@ def infer_fhirpath_function(
     Falls back to `fhirpath_text`.
     """
     if fhir_schema and resource_type:
-        udf = fhir_schema.get_udf_for_element(resource_type, property_path)
+        udf = fhir_schema.get_precomputed_udf_for_element(resource_type, property_path)
         if udf:
             return udf
     return "fhirpath_text"
