@@ -4,6 +4,8 @@ These tests intentionally avoid DQM measure discovery and execution. They use
 tiny CQL libraries to exercise the SQL-size optimization path directly.
 """
 
+import re
+
 from fhir4ds.cql.parser import parse_cql
 from fhir4ds.cql.translator import CQLToSQLTranslator
 
@@ -122,3 +124,44 @@ define "A":
     assert "= 'Observation'" not in sql
     assert "effective" not in sql
     assert "performed" in sql
+
+
+def test_promoted_function_emits_transitive_let_ctes_with_resource_row_key() -> None:
+    """Let CTEs inside promoted function bodies must be emitted and row-correlated."""
+    sql, translator = _translate(
+        """library Test version '1.0.0'
+using FHIR version '4.0.1'
+
+context Patient
+
+define "Encounters":
+  [Encounter]
+
+define function Chain(e FHIR.Encounter):
+  e E
+    let PeriodValue: E.period,
+        PeriodStart: start of PeriodValue,
+        PeriodStartCopy: PeriodStart
+    return PeriodStartCopy = PeriodStart
+      or PeriodStartCopy = PeriodStart
+      or PeriodStartCopy = PeriodStart
+
+define "A":
+  "Encounters" E
+    where Chain(E) or Chain(E) or Chain(E)
+"""
+    )
+
+    assert ("Chain", "Encounters") in translator._context._promoted_cte_keys
+
+    let_defs = set(re.findall(r'"(_let_[^"]+)" AS \(', sql))
+    let_refs = set(re.findall(r'"(_let_[^"]+)"', sql))
+    assert let_refs
+    assert let_refs == let_defs
+
+    period_value = next(name for name in let_defs if "PeriodValue" in name)
+    function_cte = re.search(r'"(_fn_Chain_Encounters_[^"]+)" AS', sql)
+    assert function_cte is not None
+    assert sql.index(f'"{period_value}" AS') < function_cte.start()
+    assert "AS _row_key" in sql
+    assert "_lv._row_key = COALESCE(fhirpath_text(_fns.resource, 'id')" in sql

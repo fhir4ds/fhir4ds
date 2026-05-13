@@ -1912,6 +1912,11 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         param_map = {param_name: Identifier(name=synthetic_alias)}
         substituted = inliner._substitute_parameters_cql(func_def.body, param_map)
         expanded = inliner._inline_nested_calls_cql(substituted, func_def.library_name)
+        source_resource_type = self._get_source_definition_resource_type(
+            library,
+            source_cte_name,
+        )
+        fn_cte_name = self._generate_function_cte_name(func_name, source_cte_name)
 
         # 4. Set up isolated translation scope
         saved_scope_stack = list(self._context.scopes)
@@ -1933,8 +1938,8 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 cte_name=source_cte_name,
             )
             self._context.resource_alias = synthetic_alias
-            self._context._alias_resource_types[synthetic_alias] = ""
-            self._context._current_definition = f"_fn_{func_name}"
+            self._context._alias_resource_types[synthetic_alias] = source_resource_type or ""
+            self._context._current_definition = fn_cte_name
 
             # 5. Translate expanded body to SQL
             expr_translator = ExpressionTranslator(self._context)
@@ -1959,7 +1964,6 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         # 7. Build CTE SELECT body
         # Use fhirpath_text(resource, 'id') as _row_key to avoid comparing large JSON blobs
-        fn_cte_name = self._generate_function_cte_name(func_name, source_cte_name)
         cte_body = SQLSelect(
             columns=[
                 SQLQualifiedIdentifier(parts=[synthetic_alias, "patient_id"]),
@@ -1995,7 +1999,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # Only block promotion when retrieves are for a DIFFERENT type. Same-type
         # retrieves are safe — their placeholders resolve during Phase 3 and the
         # emission ordering fix ensures correct CTE placement.
-        _source_type = self._get_source_definition_resource_type(library, source_cte_name)
+        _source_type = source_resource_type
         _unsafe_types = set()
         if _source_type:
             # CQL-level check: explicit Retrieve nodes in expanded body
@@ -2011,12 +2015,16 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 "Skipping function promotion CTE %s: body retrieves "
                 "different resource types %s (source type: %s)",
                 fn_cte_name, _unsafe_types, _source_type)
+            self._context._let_variable_ctes.pop(fn_cte_name, None)
             return
 
         # 8. Store in context
         key = (func_name, source_cte_name)
         if key not in self._context._function_promotion_ctes:
             self._context._function_promotion_ctes[key] = {}
+        let_ctes = self._context._let_variable_ctes.pop(fn_cte_name, {})
+        for let_cte_name, let_cte_body in let_ctes.items():
+            self._context._function_promotion_ctes[key][let_cte_name] = let_cte_body
         self._context._function_promotion_ctes[key][fn_cte_name] = cte_body
         self._context._promoted_cte_keys.add(key)
         _logger.info("Built function promotion CTE: %s for (%s, %s)",

@@ -532,17 +532,13 @@ class QueryMixin:
                     replacement = self.context.let_variables[let_name]
                     if isinstance(replacement, SQLSubquery):
                         # Check if the referenced let CTE has a _row_key column
-                        _match_res = False
-                        _lt_cte_name = f"_let_{let_name}"
-                        for _def_ctes in self.context._let_variable_ctes.values():
-                            if _lt_cte_name in _def_ctes:
-                                _body = _def_ctes[_lt_cte_name]
-                                if hasattr(_body, 'columns'):
-                                    for _col in _body.columns:
-                                        if isinstance(_col, SQLAlias) and _col.alias == "_row_key":
-                                            _match_res = True
-                                break
-                        return self._make_let_cte_lookup(f"_let_{let_name}", new_alias, match_resource=_match_res)
+                        _lt_cte_name, _match_res = self._let_lookup_info(replacement)
+                        if _lt_cte_name:
+                            return self._make_let_cte_lookup(
+                                _lt_cte_name,
+                                new_alias,
+                                match_resource=_match_res,
+                            )
                     resolved_lets.add(let_name)
                     return replacement
                 else:
@@ -587,9 +583,92 @@ class QueryMixin:
             return None, resolved_lets
         return ast_node, resolved_lets
 
+    def _resource_row_key_expr(self, source_alias: str) -> SQLExpression:
+        """Build a stable per-resource key expression for row-correlated CTE lookups."""
+        resource_expr = SQLQualifiedIdentifier(parts=[source_alias, "resource"])
+        resource_id = SQLFunctionCall(
+            name="fhirpath_text",
+            args=[resource_expr, SQLLiteral(value="id")],
+        )
+        if self.context._alias_resource_types.get(source_alias):
+            return SQLFunctionCall(
+                name="COALESCE",
+                args=[
+                    resource_id,
+                    SQLCast(expression=resource_expr, target_type="VARCHAR"),
+                ],
+            )
+
+        typed_id = SQLBinaryOp(
+            left=SQLBinaryOp(
+                left=SQLFunctionCall(
+                    name="fhirpath_text",
+                    args=[resource_expr, SQLLiteral(value="resourceType")],
+                ),
+                operator="||",
+                right=SQLLiteral(value="/"),
+            ),
+            operator="||",
+            right=resource_id,
+        )
+        return SQLFunctionCall(
+            name="COALESCE",
+            args=[
+                typed_id,
+                SQLCast(expression=resource_expr, target_type="VARCHAR"),
+            ],
+        )
+
+    def _sql_references_column(self, node: SQLExpression | None, column_name: str) -> bool:
+        """Return True when a SQL AST subtree references *column_name*."""
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            if current is None:
+                continue
+            if isinstance(current, SQLIdentifier) and current.name == column_name:
+                return True
+            if isinstance(current, SQLQualifiedIdentifier) and current.parts:
+                if any(part == column_name for part in current.parts):
+                    return True
+            if isinstance(current, tuple):
+                stack.extend(current)
+                continue
+            if isinstance(current, list):
+                stack.extend(current)
+                continue
+            if not hasattr(current, "__dataclass_fields__"):
+                continue
+            for field_name in current.__dataclass_fields__:
+                stack.append(getattr(current, field_name, None))
+        return False
+
+    def _let_lookup_info(self, lookup: SQLExpression) -> tuple[str | None, bool]:
+        """Extract the CTE name and row-key usage from a let lookup subquery."""
+        if not isinstance(lookup, SQLSubquery) or not isinstance(lookup.query, SQLSelect):
+            return None, False
+        from_clause = lookup.query.from_clause
+        cte_name = None
+        if (
+            isinstance(from_clause, SQLAlias)
+            and isinstance(from_clause.expr, SQLIdentifier)
+        ):
+            cte_name = from_clause.expr.name
+        return cte_name, self._sql_references_column(lookup.query.where, "_row_key")
+
+    def _generate_let_cte_name(self, let_name: str) -> str:
+        """Generate a deterministic let CTE name unique to the current definition."""
+        import hashlib
+
+        scope_name = self.context._current_definition or "__unknown__"
+        safe_scope = _re.sub(r"[^A-Za-z0-9_]+", "_", scope_name).strip("_") or "scope"
+        safe_let = _re.sub(r"[^A-Za-z0-9_]+", "_", let_name).strip("_") or "let"
+        name_hash = hashlib.md5(f"{scope_name}:{let_name}".encode()).hexdigest()[:6]
+        return f"_let_{safe_scope[:32]}_{safe_let[:24]}_{name_hash}"
+
     def _make_let_cte_lookup(self, cte_name: str, source_alias: str,
                               match_resource: bool = False) -> SQLExpression:
-        """Build (SELECT value FROM cte_name WHERE patient_id = alias.patient_id [AND _row_key = alias.resource])."""
+        """Build a correlated lookup into a promoted let-variable CTE."""
         where_cond = SQLBinaryOp(
             left=SQLQualifiedIdentifier(parts=["_lv", "patient_id"]),
             operator="=",
@@ -602,7 +681,7 @@ class QueryMixin:
                 right=SQLBinaryOp(
                     left=SQLQualifiedIdentifier(parts=["_lv", "_row_key"]),
                     operator="=",
-                    right=SQLQualifiedIdentifier(parts=[source_alias, "resource"]),
+                    right=self._resource_row_key_expr(source_alias),
                 ),
             )
         return SQLSubquery(query=SQLSelect(
@@ -654,23 +733,44 @@ class QueryMixin:
         Each variable is registered immediately so that subsequent let clauses
         in the same batch can reference earlier ones.
         """
-        # Phase 1: count references for each let variable in the body.
+        # Phase 1: count effective references for each let variable.
+        # A let referenced only once directly may still be expanded many times
+        # through downstream lets.  Walk the let chain backwards so promotion
+        # decisions reflect the final inlined cost, not just direct mentions.
         ref_counts = {}
         if node is not None:
+            let_names = {let_clause.alias for let_clause in let_clauses}
+            body_ref_counts = {name: 0 for name in let_names}
+            let_deps = {name: {} for name in let_names}
+
             for let_clause in let_clauses:
                 name = let_clause.alias
                 # Count in WHERE
                 if hasattr(node, 'where') and node.where:
-                    ref_counts[name] = ref_counts.get(name, 0) + self._count_let_refs(node.where, name)
+                    body_ref_counts[name] += self._count_let_refs(node.where, name)
                 # Count in RETURN
                 if hasattr(node, 'return_clause') and node.return_clause:
-                    ref_counts[name] = ref_counts.get(name, 0) + self._count_let_refs(node.return_clause, name)
-                # Count in other let clause expressions (inter-let references).
-                # A let variable like ObsVisit may only be referenced by
-                # VisitStart's expression, not directly in WHERE/RETURN.
-                for other_lc in let_clauses:
-                    if other_lc is not let_clause:
-                        ref_counts[name] = ref_counts.get(name, 0) + self._count_let_refs(other_lc.expression, name)
+                    body_ref_counts[name] += self._count_let_refs(node.return_clause, name)
+
+            for let_clause in let_clauses:
+                deps = let_deps[let_clause.alias]
+                for dep_name in let_names:
+                    if dep_name == let_clause.alias:
+                        continue
+                    dep_count = self._count_let_refs(let_clause.expression, dep_name)
+                    if dep_count:
+                        deps[dep_name] = dep_count
+
+            ref_counts = dict(body_ref_counts)
+            for let_clause in reversed(let_clauses):
+                name = let_clause.alias
+                multiplier = ref_counts.get(name, 0)
+                if multiplier <= 0:
+                    continue
+                for dep_name, dep_count in let_deps.get(name, {}).items():
+                    ref_counts[dep_name] = ref_counts.get(dep_name, 0) + (
+                        multiplier * dep_count
+                    )
 
         # Phase 2: translate each let clause and decide inline vs CTE.
         for let_clause in let_clauses:
@@ -718,24 +818,22 @@ class QueryMixin:
             self.context.let_variables[let_name] = let_expr_sql
             return
 
-        # Check if source CTE has a resource column (multi-row per patient).
-        # Only promote when the source guarantees 1 row per patient.
-        # RESOURCE_ROWS sources can have multiple rows per patient, making
-        # the patient_id-only lookup ambiguous and the compound key approach
-        # doesn't reliably preserve per-row semantics across CTE boundaries.
+        # Check if source CTE has a resource column.  Patient-only lookups are
+        # ambiguous for multi-row resource sources, so resource-backed CTEs add
+        # a row key derived from resourceType/id with full-resource fallback.
         meta = self.context.definition_meta.get(cte_name)
-        if meta and meta.shape == RowShape.RESOURCE_ROWS:
-            self.context.let_variables[let_name] = let_expr_sql
-            return
-        _has_resource = meta.has_resource if meta else False
+        _has_resource = bool(
+            (meta.has_resource if meta else False)
+            or self.context._alias_resource_types.get(alias)
+        )
 
-        let_cte_name = f"_let_{let_name}"
+        let_cte_name = self._generate_let_cte_name(let_name)
         columns = [
             SQLQualifiedIdentifier(parts=[alias, "patient_id"]),
         ]
         if _has_resource:
             columns.append(SQLAlias(
-                expr=SQLQualifiedIdentifier(parts=[alias, "resource"]),
+                expr=self._resource_row_key_expr(alias),
                 alias="_row_key",
             ))
         columns.append(SQLAlias(expr=fixed_expr, alias="value"))
