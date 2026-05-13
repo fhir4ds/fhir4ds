@@ -8,7 +8,7 @@ types for tracking translation state.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any, Dict, List, Optional, Union
 
 from .column_generation import (
@@ -1321,17 +1321,12 @@ class SQLFragment:
         return f"{with_clause}\n{self.main_query.to_sql()}"
 
     def deduplicate_lateral_aliases(self, min_occurrences: int = 3) -> None:
-        """Deduplicate repeated expressions in CTE WHERE clauses using lateral column aliases.
+        """Deduplicate repeated scalar subqueries in CTE WHERE clauses.
 
-        DuckDB supports referencing a SELECT column alias in the WHERE clause of the
-        same SELECT.  This method walks each CTE's WHERE clause, finds repeated
-        subexpressions (correlated scalar subqueries, function calls, etc.), and
-        extracts them as lateral alias columns.  This reduces SQL size by computing
-        each expression once instead of N times.
-
-        Operates in-place on the CTE list.  Safe for set operations and CTE consumers
-        because extra columns in the CTE body are ignored by downstream SELECT lists
-        that reference specific named columns (patient_id, resource, value).
+        Repeated correlated scalar subqueries are pulled into CROSS JOIN LATERAL
+        derived tables and the WHERE clause is rewritten to reference the lateral
+        value. This keeps the CTE's projected columns unchanged while avoiding
+        repeated serialization of the same subquery.
         """
         for cte_def in self.ctes:
             self._dedup_cte(cte_def, min_occurrences)
@@ -1356,7 +1351,7 @@ class SQLFragment:
 
     def _dedup_select(self, select: 'SQLSelect', min_occ: int) -> None:
         """Deduplicate repeated expressions in a SELECT's WHERE clause."""
-        if select.where is None:
+        if select.where is None or select.from_clause is None:
             return
 
         # 1) Collect candidate expressions and their serialized forms
@@ -1366,147 +1361,136 @@ class SQLFragment:
         if not candidates:
             return
 
-        # 2) For each repeated expression, create a lateral alias
-        lateral_cols = []
-        alias_map = {}  # sql_str -> alias_name
+        # 2) For each repeated expression, create a lateral derived table.
+        lateral_joins = []
+        alias_map = {}  # sql_str -> SQLQualifiedIdentifier
         for sql_str, (node, count) in sorted(
-            candidates.items(), key=lambda x: -len(x[0]) * x[0][1]  # largest SQL * count first
+            candidates.items(),
+            key=lambda item: -(len(item[0]) * item[1][1]),
         ):
             if count < min_occ:
                 continue
-            alias_name = f"_lat{len(lateral_cols)}"
-            alias_map[sql_str] = alias_name
-            lateral_cols.append(SQLAlias(expr=node, alias=alias_name))
+            alias_name = f"_lat{len(lateral_joins)}"
+            value_name = "value"
+            alias_map[sql_str] = SQLQualifiedIdentifier(parts=[alias_name, value_name])
+            lateral_joins.append(
+                SQLJoin(
+                    join_type="CROSS JOIN LATERAL",
+                    table=SQLSelect(columns=[SQLAlias(expr=node, alias=value_name)]),
+                    alias=alias_name,
+                )
+            )
 
-        if not lateral_cols:
+        if not lateral_joins:
             return
 
-        # 3) Replace occurrences in WHERE with alias references
+        # 3) Replace occurrences in WHERE with lateral value references.
         new_where = self._replace_aliases(select.where, alias_map)
         select.where = new_where
 
-        # 4) Add lateral columns to the SELECT
-        select.columns = list(select.columns) + lateral_cols
+        # 4) Append lateral joins after existing FROM/JOIN sources so they can
+        # reference every alias visible to the WHERE clause.
+        select.joins = list(select.joins) + lateral_joins
 
     def _collect_candidates(self, node: 'SQLExpression', candidates: dict, min_occ: int) -> None:
-        """Walk the AST and collect subexpressions that appear multiple times."""
-        # Only consider complex expressions (subqueries, function calls) that are
-        # worth deduplicating.  Skip simple identifiers, literals, and binary ops
-        # that just combine simple terms.
+        """Walk the AST and collect scalar subqueries that appear multiple times."""
         if isinstance(node, SQLSubquery):
             sql_str = node.to_sql()
-            # Only consider correlated subqueries (they contain patient_id references)
-            if 'patient_id' in sql_str and len(sql_str) > 50:
+            # Only consider larger correlated subqueries. Small subqueries do not
+            # materially affect CMS1218 SQL size and are less worth the join churn.
+            if 'patient_id' in sql_str and len(sql_str) > 200:
                 count = candidates.get(sql_str, (None, 0))[1] + 1
                 candidates[sql_str] = (node, count)
-            # Don't recurse into subqueries — they have their own scope
             return
 
-        if isinstance(node, SQLFunctionCall):
-            sql_str = node.to_sql()
-            # Only consider complex function calls worth deduplicating
-            if len(sql_str) > 100:
-                count = candidates.get(sql_str, (None, 0))[1] + 1
-                candidates[sql_str] = (node, count)
-            # Still recurse into function args for nested candidates
-            for arg in node.args:
-                self._collect_candidates(arg, candidates, min_occ)
+        if isinstance(node, SQLExists):
+            # EXISTS owns a nested SELECT scope. Hoisting an expression found only
+            # inside that scope to the outer SELECT would be invalid.
             return
 
-        # Recurse into compound expressions
-        if isinstance(node, SQLBinaryOp):
-            self._collect_candidates(node.left, candidates, min_occ)
-            self._collect_candidates(node.right, candidates, min_occ)
-        elif isinstance(node, SQLUnaryOp):
-            self._collect_candidates(node.operand, candidates, min_occ)
-        elif isinstance(node, SQLCase):
-            for cond, result in node.when_clauses:
-                self._collect_candidates(cond, candidates, min_occ)
-                self._collect_candidates(result, candidates, min_occ)
-            if node.else_clause:
-                self._collect_candidates(node.else_clause, candidates, min_occ)
-        elif isinstance(node, SQLExists):
-            # The subquery inside EXISTS has its own WHERE with correlated refs.
-            # Collect candidates from inside the EXISTS subquery's WHERE clause.
-            sq = node.subquery
-            if isinstance(sq, SQLSubquery) and isinstance(sq.query, SQLSelect):
-                if sq.query.where:
-                    self._collect_candidates(sq.query.where, candidates, min_occ)
+        for child in self._iter_child_expressions(node):
+            self._collect_candidates(child, candidates, min_occ)
 
     def _replace_aliases(self, node: 'SQLExpression', alias_map: dict) -> 'SQLExpression':
-        """Replace subexpressions matching alias_map keys with SQLIdentifier aliases."""
+        """Replace subexpressions matching alias_map keys with qualified aliases."""
         # Check if this node itself should be replaced
         if isinstance(node, SQLSubquery):
             sql_str = node.to_sql()
             if sql_str in alias_map:
-                return SQLIdentifier(name=alias_map[sql_str])
-            # If not replaced whole, try replacing inside if it's a SELECT
-            if isinstance(node.query, SQLSelect) and node.query.where:
-                new_where = self._replace_aliases(node.query.where, alias_map)
-                if new_where is not node.query.where:
-                    new_select = SQLSelect(
-                        columns=node.query.columns,
-                        from_clause=node.query.from_clause,
-                        joins=node.query.joins,
-                        where=new_where,
-                        group_by=node.query.group_by,
-                        having=node.query.having,
-                        order_by=node.query.order_by,
-                        limit=node.query.limit,
-                        distinct=node.query.distinct,
-                        precedence=node.query.precedence,
-                    )
-                    return SQLSubquery(query=new_select)
-            return node  # Don't recurse further into subqueries
-
-        if isinstance(node, SQLFunctionCall):
-            sql_str = node.to_sql()
-            if sql_str in alias_map:
-                return SQLIdentifier(name=alias_map[sql_str])
-            # Recurse into args
-            new_args = [self._replace_aliases(arg, alias_map) for arg in node.args]
-            if new_args != node.args:
-                return SQLFunctionCall(name=node.name, args=new_args, distinct=node.distinct)
-            return node
-
-        if isinstance(node, SQLBinaryOp):
-            new_left = self._replace_aliases(node.left, alias_map)
-            new_right = self._replace_aliases(node.right, alias_map)
-            if new_left is not node.left or new_right is not node.right:
-                return SQLBinaryOp(left=new_left, operator=node.operator, right=new_right)
-            return node
-
-        if isinstance(node, SQLUnaryOp):
-            new_op = self._replace_aliases(node.operand, alias_map)
-            if new_op is not node.operand:
-                return SQLUnaryOp(operator=node.operator, operand=new_op)
-            return node
-
-        if isinstance(node, SQLCase):
-            new_whens = []
-            changed = False
-            for cond, result in node.when_clauses:
-                new_cond = self._replace_aliases(cond, alias_map)
-                new_result = self._replace_aliases(result, alias_map)
-                if new_cond is not cond or new_result is not result:
-                    changed = True
-                new_whens.append((new_cond, new_result))
-            new_else = node.else_clause
-            if new_else:
-                new_else = self._replace_aliases(new_else, alias_map)
-                if new_else is not node.else_clause:
-                    changed = True
-            if changed:
-                return SQLCase(operand=node.operand, when_clauses=new_whens, else_clause=new_else)
+                return alias_map[sql_str]
             return node
 
         if isinstance(node, SQLExists):
-            new_sq = self._replace_aliases(node.subquery, alias_map)
-            if new_sq is not node.subquery:
-                return SQLExists(subquery=new_sq)
             return node
 
+        if not is_dataclass(node):
+            return node
+
+        for field_info in fields(node):
+            value = getattr(node, field_info.name)
+            new_value = self._replace_alias_value(value, alias_map)
+            if new_value is not value:
+                setattr(node, field_info.name, new_value)
         return node
+
+    def _iter_child_expressions(self, value: Any) -> List['SQLExpression']:
+        """Return SQLExpression children without crossing SELECT/subquery scopes."""
+        children: List[SQLExpression] = []
+
+        def visit(item: Any) -> None:
+            if isinstance(item, SQLExpression):
+                children.append(item)
+                return
+            if isinstance(item, (list, tuple)):
+                for sub_item in item:
+                    visit(sub_item)
+                return
+            if isinstance(item, dict):
+                for sub_item in item.values():
+                    visit(sub_item)
+
+        if is_dataclass(value):
+            for field_info in fields(value):
+                field_value = getattr(value, field_info.name)
+                visit(field_value)
+        return children
+
+    def _replace_alias_value(self, value: Any, alias_map: dict) -> Any:
+        """Recursively rewrite SQLExpression values inside dataclass containers."""
+        if isinstance(value, SQLExpression):
+            return self._replace_aliases(value, alias_map)
+
+        if isinstance(value, list):
+            changed = False
+            new_items = []
+            for item in value:
+                new_item = self._replace_alias_value(item, alias_map)
+                if new_item is not item:
+                    changed = True
+                new_items.append(new_item)
+            return new_items if changed else value
+
+        if isinstance(value, tuple):
+            changed = False
+            new_items = []
+            for item in value:
+                new_item = self._replace_alias_value(item, alias_map)
+                if new_item is not item:
+                    changed = True
+                new_items.append(new_item)
+            return tuple(new_items) if changed else value
+
+        if isinstance(value, dict):
+            changed = False
+            new_items = {}
+            for key, item in value.items():
+                new_item = self._replace_alias_value(item, alias_map)
+                if new_item is not item:
+                    changed = True
+                new_items[key] = new_item
+            return new_items if changed else value
+
+        return value
 
 
 @dataclass

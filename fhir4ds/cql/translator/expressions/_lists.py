@@ -712,7 +712,7 @@ class ListsMixin:
 
         from ...translator.cte_manager import generate_function_cte_name
         fn_cte_name = generate_function_cte_name(func_name, cql_def_name)
-        source_alias = self.context.resource_alias or alias_name
+        source_alias = alias_name
         return self._make_function_cte_lookup(fn_cte_name, source_alias)
 
     def _translate_alias_ref(self, ref: AliasRef, boolean_context: bool = False) -> SQLExpression:
@@ -2201,5 +2201,4 @@ class ListsMixin:
         # Standard aggregate functions (fallback)
         func_name = node.operator.upper()
         return SQLFunctionCall(name=func_name, args=[source])
-
 

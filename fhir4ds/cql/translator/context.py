@@ -471,6 +471,9 @@ class SQLTranslationContext:
     _function_promotion_ctes: Dict[Tuple[str, str], Dict[str, Any]] = field(default_factory=dict)
     # Successfully promoted (func_name, source_cte) pairs (CTEs that were actually built)
     _promoted_cte_keys: Set[Tuple[str, str]] = field(default_factory=set)
+    # Post-Phase-3 dependencies: (func_name, source_cte) -> set of definition names
+    # referenced by the resolved CTE body (direct references only, not transitive)
+    _function_cte_deps: Dict[Tuple[str, str], Set[str]] = field(default_factory=dict)
 
     # Warnings
     warnings: TranslationWarnings = field(default_factory=TranslationWarnings)
@@ -990,6 +993,7 @@ class SQLTranslationContext:
         self.function_call_graph.clear()
         self._function_promotion_ctes.clear()
         self._promoted_cte_keys.clear()
+        self._function_cte_deps.clear()
         # Reset audit retrieve CTE names so stale names don't persist across calls
         if hasattr(self, '_audit_retrieve_cte_names'):
             self._audit_retrieve_cte_names = set()

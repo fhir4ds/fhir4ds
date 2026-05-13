@@ -1056,6 +1056,10 @@ class CoreMixin:
         # Generate deterministic CTE name (must match _build_function_promotion_cte)
         from ...translator.cte_manager import generate_function_cte_name
         fn_cte_name = generate_function_cte_name(bare_name, cql_def_name)
-        source_alias = self.context.resource_alias or "E"
+        source_alias = (
+            source_expr.name
+            if isinstance(source_expr, Identifier)
+            else self.context.resource_alias or "E"
+        )
 
         return self._make_function_cte_lookup(fn_cte_name, source_alias)

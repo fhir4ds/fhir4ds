@@ -680,12 +680,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             if len(columns) >= len(existing):
                 self._context.column_registry.register_cte(cte_name, columns)
 
-        # Post-Phase-3 validation: after placeholders are resolved, check if
-        # any function promotion CTEs now reference definition CTEs they
-        # shouldn't. Remove those CTEs from _promoted_cte_keys so call sites
-        # fall back to inline expansion instead of referencing missing CTEs.
+        # Post-Phase-3: compute direct dependencies for each function promotion
+        # CTE so the emission loop can place them after all their dependencies.
         if self._context._function_promotion_ctes:
-            self._validate_function_promotion_ctes()
+            self._compute_function_cte_dependencies()
 
         # Always build patient demographics CTE if it wasn't built during Phase 2 optimization.
         # This ensures _patient_demographics is available for any definition that might
@@ -841,17 +839,37 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             if meta is not None:
                 meta.has_resource = has_resource
 
-            # Inject function promotion CTEs whose source is this definition.
-            # These must come right after their source definition so that
-            # downstream definition CTEs can reference the _fn_ CTEs.
-            for (fn_name, fn_src), fn_ctes in self._context._function_promotion_ctes.items():
-                if fn_src == name:
-                    for fn_cte_name, fn_cte_body in fn_ctes.items():
-                        _fixed_body = self._resolve_function_cte_source(fn_cte_body, definition_ctes)
-                        quoted_fn = f'"{fn_cte_name}"'
-                        if quoted_fn.lower() not in seen_lower:
-                            seen_lower[quoted_fn.lower()] = quoted_fn
-                            cte_defs.append(CTEDefinition(name=quoted_fn, query=_fixed_body))
+            # Inject function promotion CTEs whose dependencies are all satisfied.
+            # A function CTE can be emitted once every definition it references
+            # (directly) has been emitted above. The source definition is always
+            # a dependency (it provides the FROM clause), so this naturally defers
+            # the CTE until at least after the source.
+            for (fn_name, fn_src), fn_ctes in list(self._context._function_promotion_ctes.items()):
+                deps = self._context._function_cte_deps.get((fn_name, fn_src), set())
+                # All dependencies must be in definition_ctes (i.e., already emitted)
+                if fn_src not in definition_ctes:
+                    continue  # source not yet emitted
+                if not deps.issubset(definition_ctes.keys()):
+                    continue  # some dependencies not yet emitted
+                for fn_cte_name, fn_cte_body in fn_ctes.items():
+                    _fixed_body = self._resolve_function_cte_source(fn_cte_body, definition_ctes)
+                    quoted_fn = f'"{fn_cte_name}"'
+                    if quoted_fn.lower() not in seen_lower:
+                        seen_lower[quoted_fn.lower()] = quoted_fn
+                        cte_defs.append(CTEDefinition(name=quoted_fn, query=_fixed_body))
+                # Remove so we don't try to emit again
+                self._context._function_promotion_ctes.pop((fn_name, fn_src), None)
+
+        # Safety: any remaining function promotion CTEs have unresolvable
+        # dependencies (shouldn't happen in practice). Remove them from
+        # _promoted_cte_keys so call sites fall back to inline expansion.
+        if self._context._function_promotion_ctes:
+            for key in list(self._context._function_promotion_ctes.keys()):
+                _logger.warning(
+                    "Function promotion CTE %s was never emitted (unresolvable "
+                    "dependencies); falling back to inline expansion", key)
+                self._context._promoted_cte_keys.discard(key)
+            self._context._function_promotion_ctes.clear()
 
         # 6. Build final SELECT with LEFT JOINs
         final_select_ast = self._build_population_final_select(
@@ -860,6 +878,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         # Assemble the complete SQL using AST - call to_sql() only here at final assembly
         fragment = SQLFragment(main_query=final_select_ast, ctes=cte_defs)
+        # Experimental CMS1218 SQL-size reducer. Keep default-off until
+        # conformance and execution behavior are fully validated.
+        import os
+        if os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP") == "1":
+            min_occurrences = int(os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP_MIN", "3"))
+            fragment.deduplicate_lateral_aliases(min_occurrences=min_occurrences)
         sql_text = fragment.to_sql()
         # Text-level fix for CASE WHEN audit_xxx(...) patterns that survived
         # AST-level demotion (subexpressions serialised to SQLRaw early).
@@ -1673,29 +1697,43 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             if not isinstance(src.expression, Identifier):
                 continue
 
+            alias_to_source_def: Dict[str, str] = {}
             source_alias = src.alias
             source_def = src.expression.name
 
-            # Skip if source is not a known definition
-            if source_def not in self._context._definition_names:
+            # Track the primary source alias when it is backed by a CQL definition.
+            if source_def in self._context._definition_names:
+                alias_to_source_def[source_alias] = source_def
+
+            # Track relationship aliases backed by CQL definitions. Repeated
+            # function calls in with/without such-that clauses are a major
+            # CMS1218 SQL growth source and were previously invisible here.
+            for with_clause in getattr(expr, "with_clauses", []) or []:
+                wc_expr = getattr(with_clause, "expression", None)
+                wc_alias = getattr(with_clause, "alias", None)
+                wc_def = getattr(wc_expr, "name", None)
+                if wc_alias and isinstance(wc_expr, Identifier) and wc_def in self._context._definition_names:
+                    alias_to_source_def[wc_alias] = wc_def
+
+            if not alias_to_source_def:
                 continue
 
             def _visitor(node: Any) -> None:
                 if isinstance(node, MethodInvocation):
-                    # Case 1: receiver is the source alias  (alias.method())
-                    if isinstance(node.source, Identifier) and node.source.name == source_alias:
-                        key = (node.method, source_def)
+                    # Case 1: receiver is a tracked source alias (alias.method())
+                    if isinstance(node.source, Identifier) and node.source.name in alias_to_source_def:
+                        key = (node.method, alias_to_source_def[node.source.name])
                         func_calls[key] = func_calls.get(key, 0) + 1
-                    # Case 2: any argument is the source alias  (func(..., alias, ...))
+                    # Case 2: any argument is a tracked source alias (func(..., alias, ...))
                     for arg in node.arguments:
-                        if isinstance(arg, Identifier) and arg.name == source_alias:
-                            key = (node.method, source_def)
+                        if isinstance(arg, Identifier) and arg.name in alias_to_source_def:
+                            key = (node.method, alias_to_source_def[arg.name])
                             func_calls[key] = func_calls.get(key, 0) + 1
                 if isinstance(node, FunctionRef):
                     # Non-fluent function call: FunctionName(alias, ...)
                     for arg in node.arguments:
-                        if isinstance(arg, Identifier) and arg.name == source_alias:
-                            key = (node.name, source_def)
+                        if isinstance(arg, Identifier) and arg.name in alias_to_source_def:
+                            key = (node.name, alias_to_source_def[arg.name])
                             func_calls[key] = func_calls.get(key, 0) + 1
 
             self._walk_ast(expr, _visitor)
@@ -1847,21 +1885,6 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         substituted = inliner._substitute_parameters_cql(func_def.body, param_map)
         expanded = inliner._inline_nested_calls_cql(substituted, func_def.library_name)
 
-        # 3.5 Check CQL AST for definition references BEFORE translating.
-        # This catches references to other CQL definitions (like
-        # "Qualifying Creatinine Lab Result by Time") that would produce
-        # SQLFragment nodes invisible to the SQL-level AST scan.
-        # Also skip if the body has retrieve placeholders AND cross-definition
-        # CQL refs — the resolved placeholders may create ordering issues.
-        _all_def_names = self._context._definition_names or set()
-        _cql_refs = self._find_cql_definition_refs(expanded, _all_def_names, {param_name, synthetic_alias})
-        _other_defs = _cql_refs - {source_cte_name}
-        if _other_defs:
-            fn_cte_name = self._generate_function_cte_name(func_name, source_cte_name)
-            _logger.info("Skipping function promotion CTE %s: CQL body references other definitions: %s",
-                          fn_cte_name, _other_defs)
-            return
-
         # 4. Set up isolated translation scope
         saved_scope_stack = list(self._context.scopes)
         saved_scope_level = self._context.current_scope_level
@@ -1931,60 +1954,35 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         )
 
         # 7.4 Resource-type-aware retrieve safety check.
-        # When a function body contains Retrieve nodes for resources of a
-        # DIFFERENT type than the source CTE (e.g., the source is Encounter
-        # but the function retrieves Location), promoting to a pre-computed
-        # CTE breaks per-row correlation and produces incorrect results
-        # (cf. CMS996 GetLocation). Only allow promotion when all retrieves
-        # are for the SAME resource type as the source CTE.
-        from ..parser.ast_nodes import Retrieve as CQLRetrieve
-        _fn_retrieve_types = self._find_cql_retrieve_types(expanded, CQLRetrieve)
-        if _fn_retrieve_types:
-            _source_type = self._get_source_definition_resource_type(library, source_cte_name)
-            if _source_type:
-                _unsafe_types = _fn_retrieve_types - {_source_type}
-                if _unsafe_types:
-                    _logger.info(
-                        "Skipping function promotion CTE %s: body retrieves "
-                        "different resource types %s (source type: %s)",
-                        fn_cte_name, _unsafe_types, _source_type)
-                    return
-                _logger.debug("Function promotion CTE %s: all retrieves are same type as source (%s)",
-                              fn_cte_name, _source_type)
-
-        # 7.4.1 Skip if translated body contains retrieve placeholders.
-        # Although Phase 3 resolves placeholders in function promotion CTEs,
-        # the resolved SQL may reference definition CTEs that are emitted
-        # AFTER the function promotion CTE, creating an impossible ordering.
-        # The post-Phase-3 validation (_validate_function_promotion_ctes)
-        # would remove these CTEs, but by then call sites are already
-        # committed with _fv lookups that reference the removed CTE name.
-        # So we block promotion here to avoid the ordering problem entirely.
-        # TODO: Support functions with cross-definition references by
-        # ordering function promotion CTEs after all their dependencies.
-        from ..translator.placeholder import contains_placeholder
-        if contains_placeholder(result_sql):
-            _logger.info("Skipping function promotion CTE %s: body contains retrieve placeholders",
-                          fn_cte_name)
-            return
-
-        # 7.5 Validate: check the CTE body doesn't reference definition CTEs
-        # other than the source. If it does, we can't promote because the
-        # _fn_ CTE would need to be emitted after those definitions but before
-        # the definitions that use it — creating an impossible ordering.
-        # Cross-definition references that only appear after Phase 3 resolution
-        # are caught by _validate_function_promotion_ctes().
+        # When a function body contains retrieves for resources of a DIFFERENT
+        # type than the source CTE (e.g., Encounter source but Location retrieve),
+        # promoting to a pre-computed CTE breaks per-row correlation and produces
+        # incorrect results (cf. CMS996/CMS1244 GetLocation).
         #
-        # TODO: Instead of skipping, topologically order function promotion CTEs
-        # alongside definition CTEs so that functions referencing other definitions
-        # can still be promoted. This would unlock promotion for complex functions
-        # like hospitalizationWithObservation that perform retrieves.
-        _all_def_names = self._context._definition_names or set()
-        _referenced_defs = self._find_definition_references(cte_body, _all_def_names)
-        _other_defs = _referenced_defs - {source_cte_name}
-        if _other_defs:
-            _logger.info("Skipping function promotion CTE %s: body references other definitions: %s",
-                          fn_cte_name, _other_defs)
+        # We check BOTH levels:
+        # a) CQL-level Retrieve nodes (from explicit retrieves in the function body)
+        # b) SQL-level RetrievePlaceholder nodes (from retrieves hidden in non-inlined
+        #    function calls like getLocation which are resolved during translation)
+        #
+        # Only block promotion when retrieves are for a DIFFERENT type. Same-type
+        # retrieves are safe — their placeholders resolve during Phase 3 and the
+        # emission ordering fix ensures correct CTE placement.
+        _source_type = self._get_source_definition_resource_type(library, source_cte_name)
+        _unsafe_types = set()
+        if _source_type:
+            # CQL-level check: explicit Retrieve nodes in expanded body
+            from ..parser.ast_nodes import Retrieve as CQLRetrieve
+            _cql_types = self._find_cql_retrieve_types(expanded, CQLRetrieve)
+            _unsafe_types |= _cql_types - {_source_type}
+            # SQL-level check: RetrievePlaceholder nodes (catches non-inlined calls)
+            from ..translator.placeholder import find_all_placeholders
+            _sql_ph_types = {p.resource_type for p in find_all_placeholders(result_sql)}
+            _unsafe_types |= _sql_ph_types - {_source_type}
+        if _unsafe_types:
+            _logger.info(
+                "Skipping function promotion CTE %s: body retrieves "
+                "different resource types %s (source type: %s)",
+                fn_cte_name, _unsafe_types, _source_type)
             return
 
         # 8. Store in context
@@ -1996,46 +1994,51 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         _logger.info("Built function promotion CTE: %s for (%s, %s)",
                       fn_cte_name, func_name, source_cte_name)
 
-    def _validate_function_promotion_ctes(self) -> None:
-        """Post-Phase-3 validation of function promotion CTEs.
+    def _compute_function_cte_dependencies(self) -> None:
+        """Compute direct definition dependencies for each function promotion CTE.
 
-        After placeholders are resolved, the CTE bodies may now reference
-        definition CTEs that weren't visible before resolution. Check each
-        CTE and remove it from _promoted_cte_keys if it has cross-definition
-        references, so call sites fall back to inline expansion.
+        After Phase 3 resolves placeholders, the CTE bodies may reference
+        definition CTEs. Instead of removing those CTEs, record their
+        dependencies so the emission loop can place them after all the
+        definitions they reference.
 
-        Uses to_sql() to detect references in all AST node types, including
-        SQLFragment nodes that embed definition names as raw SQL strings.
+        Dependencies are direct (shallow) references only — not transitive.
+        The topological ordering of the main emission loop handles transitivity.
         """
         import re
         _all_def_names = self._context._definition_names or set()
         keys_to_remove = []
         for (func_name, source_cte_name), cte_dict in self._context._function_promotion_ctes.items():
+            combined_refs = set()
             for fn_cte_name, cte_body in cte_dict.items():
-                # Use to_sql() to get the full rendered SQL, then scan for
-                # FROM "definition_name" patterns. This catches references
-                # in all AST node types including SQLFragment.
                 try:
                     sql_str = cte_body.to_sql()
                 except Exception:
-                    # If to_sql() fails (e.g., unresolved placeholders),
-                    # fall back to AST-level scan
                     sql_str = None
-                    referenced = self._find_definition_references(cte_body, _all_def_names)
+                    combined_refs |= self._find_definition_references(cte_body, _all_def_names)
                 if sql_str is not None:
                     from_refs = set(re.findall(r'FROM\s+"([^"]+)"', sql_str, re.IGNORECASE))
-                    referenced = from_refs & _all_def_names
-                other_defs = referenced - {source_cte_name}
-                if other_defs:
-                    _logger.info(
-                        "Post-Phase-3: removing function promotion CTE %s: "
-                        "body references other definitions: %s",
-                        fn_cte_name, other_defs)
-                    keys_to_remove.append((func_name, source_cte_name))
-                    break  # one bad CTE invalidates the whole key
+                    combined_refs |= (from_refs & _all_def_names)
+            other_defs = combined_refs - {source_cte_name}
+            if other_defs:
+                self._context._function_cte_deps[(func_name, source_cte_name)] = other_defs
+                _logger.info("Function CTE deps for (%s, %s): %s",
+                             func_name, source_cte_name, other_defs)
+        # Remove any CTEs whose dependencies include names not in _definition_names
+        # (unresolvable forward references). This shouldn't happen in practice but
+        # is a safe fallback — the CTE would reference a non-existent CTE.
+        _all_def_names_set = self._context._definition_names or set()
+        for key, deps in list(self._context._function_cte_deps.items()):
+            unresolvable = deps - _all_def_names_set
+            if unresolvable:
+                _logger.warning(
+                    "Removing function promotion CTE %s: unresolvable dependencies: %s",
+                    key, unresolvable)
+                keys_to_remove.append(key)
         for key in keys_to_remove:
             self._context._promoted_cte_keys.discard(key)
             self._context._function_promotion_ctes.pop(key, None)
+            self._context._function_cte_deps.pop(key, None)
 
     def _find_definition_references(self, ast_node, definition_names: set) -> set:
         """Find all definition CTE names referenced in a SQL AST subtree.
@@ -2158,17 +2161,86 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
     def _get_source_definition_resource_type(self, library: Library, def_name: str) -> Optional[str]:
         """Get the primary FHIR resource type for a CQL definition.
 
-        Looks at the definition's expression to find the first Retrieve node
-        and returns its resource type. Returns None if not found.
+        Infer the row resource type from the definition's result shape. This
+        intentionally follows query sources and return aliases instead of
+        scanning for any retrieve in the body; relationship retrieves in a
+        ``with`` clause do not determine the row type.
         """
-        from ..parser.ast_nodes import Definition as CQLDefinition
-        from ..parser.ast_nodes import Retrieve as CQLRetrieve
-        for stmt in library.statements:
-            if isinstance(stmt, CQLDefinition) and stmt.name == def_name:
-                types = self._find_cql_retrieve_types(stmt.expression, CQLRetrieve)
-                if types:
-                    return next(iter(types))
-        return None
+        from ..parser.ast_nodes import (
+            BinaryExpression,
+            Definition as CQLDefinition,
+            FirstExpression,
+            Identifier as CQLIdentifier,
+            LastExpression,
+            Query as CQLQuery,
+            QuerySource as CQLQuerySource,
+            Retrieve as CQLRetrieve,
+            ReturnClause,
+        )
+
+        definitions = {
+            stmt.name: stmt
+            for stmt in library.statements
+            if isinstance(stmt, CQLDefinition)
+        }
+
+        def infer_expr(expr, visited: Set[str]) -> Optional[str]:
+            if expr is None:
+                return None
+
+            if isinstance(expr, CQLRetrieve):
+                return expr.type
+
+            if isinstance(expr, CQLIdentifier):
+                name = expr.name
+                if name in visited:
+                    return None
+                if name in definitions:
+                    return infer_expr(definitions[name].expression, visited | {name})
+                if self._context.fhir_schema and name in self._context.fhir_schema.resources:
+                    return name
+                return None
+
+            if isinstance(expr, CQLQuerySource):
+                return infer_expr(expr.expression, visited)
+
+            if isinstance(expr, (FirstExpression, LastExpression)):
+                return infer_expr(expr.source, visited)
+
+            if isinstance(expr, CQLQuery):
+                sources = expr.source if isinstance(expr.source, list) else [expr.source]
+                alias_types: Dict[str, Optional[str]] = {}
+                for source in sources:
+                    if isinstance(source, CQLQuerySource):
+                        alias_types[source.alias] = infer_expr(source.expression, visited)
+
+                if isinstance(expr.return_clause, ReturnClause):
+                    ret = expr.return_clause.expression
+                    if isinstance(ret, CQLIdentifier) and ret.name in alias_types:
+                        return alias_types[ret.name]
+                    inferred_return = infer_expr(ret, visited)
+                    if inferred_return:
+                        return inferred_return
+
+                if sources:
+                    first_source = sources[0]
+                    if isinstance(first_source, CQLQuerySource):
+                        return alias_types.get(first_source.alias)
+                    return infer_expr(first_source, visited)
+                return None
+
+            if isinstance(expr, BinaryExpression) and expr.operator.lower() in {"union", "intersect", "except"}:
+                left_type = infer_expr(expr.left, visited)
+                right_type = infer_expr(expr.right, visited)
+                if left_type and right_type and left_type == right_type:
+                    return left_type
+                return None
+
+            return None
+
+        if def_name not in definitions:
+            return None
+        return infer_expr(definitions[def_name].expression, {def_name})
 
     def _setup_context(self, library: Library) -> None:
         """
