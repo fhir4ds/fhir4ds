@@ -1,7 +1,7 @@
 """Query translation mixin for CQL to SQL."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ...parser.ast_nodes import (
     BinaryExpression,
@@ -1405,6 +1405,71 @@ class QueryMixin:
         """Handle ReturnClause by translating its inner expression."""
         return self.translate(node.expression, boolean_context=False)
 
+    def _resource_type_kind_for_static_check(self, type_name: Optional[str]) -> tuple[Optional[str], bool, bool]:
+        """Return (base_type, is_base_resource, is_named_profile) for a CQL type."""
+        bare_type = self._bare_cql_type_name(type_name)
+        if not bare_type:
+            return None, False, False
+        if bare_type == "Resource":
+            return "Resource", True, False
+
+        registry = getattr(self.context, "profile_registry", None)
+        if registry is not None:
+            negation = registry.get_negation_info(bare_type)
+            if negation is not None:
+                return negation[0], False, True
+            resolved = registry.resolve_named_profile(bare_type)
+            if resolved is not None:
+                return resolved[0], False, True
+
+        schema = getattr(self.context, "fhir_schema", None)
+        if schema is not None and bare_type in getattr(schema, "resources", {}):
+            return bare_type, True, False
+        return None, False, False
+
+    def _static_resource_type_check_result(
+        self,
+        left_operand: Any,
+        target_type: str,
+    ) -> Optional[bool]:
+        """Resolve a resource/profile `is` check when the source type is known."""
+        source_type = self._infer_resource_type_from_cql_expr(left_operand)
+        source_bare = self._bare_cql_type_name(source_type)
+        target_bare = self._bare_cql_type_name(target_type)
+        if not source_bare or not target_bare:
+            return None
+
+        if target_bare == "Resource":
+            return True
+        if source_bare == target_bare:
+            return True
+
+        source_base, source_is_base_resource, _source_is_profile = (
+            self._resource_type_kind_for_static_check(source_bare)
+        )
+        target_base, target_is_base_resource, _target_is_profile = (
+            self._resource_type_kind_for_static_check(target_bare)
+        )
+
+        # A named profile is a subtype of its base resource type, so a
+        # LaboratoryResultObservation source is always an Observation.
+        if target_is_base_resource and source_base == target_bare:
+            return True
+
+        # Different base resources are mutually exclusive.  This safely prunes
+        # branches such as Procedure source vs. Observation-profile target.
+        if source_base and target_base and source_base != target_base:
+            return False
+
+        if (
+            source_is_base_resource
+            and target_is_base_resource
+            and source_bare != target_bare
+        ):
+            return False
+
+        return None
+
     def _translate_is_type_check(self, expr: BinaryExpression) -> SQLExpression:
         """Translate CQL `is` type-check operator to SQL.
 
@@ -1442,6 +1507,10 @@ class QueryMixin:
                 return SQLLiteral(value=True)
             if instance_type == bare_type:
                 return SQLLiteral(value=True)
+
+        static_resource_check = self._static_resource_type_check_result(expr.left, type_name)
+        if static_resource_check is not None:
+            return SQLLiteral(value=static_resource_check)
 
         left = self.translate(expr.left, usage=ExprUsage.SCALAR)
         resource_expr = left

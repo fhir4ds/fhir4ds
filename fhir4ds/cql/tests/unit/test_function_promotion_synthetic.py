@@ -93,3 +93,32 @@ define "Encounter With Procedure":
     translator = CQLToSQLTranslator()
 
     assert translator._get_source_definition_resource_type(library, "Encounter With Procedure") == "Encounter"
+
+
+def test_choice_case_prunes_dead_temporal_branch_for_concrete_source_type() -> None:
+    """Choice-type case expressions should skip incompatible resource branches."""
+    sql, _translator = _translate(
+        """library Test version '1.0.0'
+using FHIR version '4.0.1'
+
+context Patient
+
+define "Procedures":
+  [Procedure]
+
+define fluent function ChoiceDate(choice Choice<Procedure, Observation>):
+  case
+    when choice is Procedure then (choice as Procedure).performed
+    when choice is Observation then (choice as Observation).effective
+    else null
+  end
+
+define "A":
+  "Procedures" P
+    return P.ChoiceDate()
+"""
+    )
+
+    assert "= 'Observation'" not in sql
+    assert "effective" not in sql
+    assert "performed" in sql

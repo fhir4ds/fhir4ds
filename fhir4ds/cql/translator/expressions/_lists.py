@@ -37,6 +37,8 @@ from ...parser.ast_nodes import (
     Quantity,
     Query,
     QuerySource,
+    Retrieve,
+    ReturnClause,
     SingletonExpression,
     SkipExpression,
     TakeExpression,
@@ -349,16 +351,25 @@ class ListsMixin:
         from ...translator.expressions._query import _demote_audit_struct_to_bool
 
         when_clauses = []
+        is_searched_case = expr.comparand is None
 
         for item in expr.case_items:
             condition = self.translate(item.when, boolean_context=True)
             condition = _demote_audit_struct_to_bool(condition)
+            if is_searched_case and isinstance(condition, SQLLiteral):
+                if condition.value is False:
+                    continue
+                if condition.value is True:
+                    return self.translate(item.then, boolean_context=boolean_context)
             result = self.translate(item.then, boolean_context=boolean_context)
             when_clauses.append((condition, result))
 
         else_clause = None
         if expr.else_expr:
             else_clause = self.translate(expr.else_expr, boolean_context=boolean_context)
+
+        if is_searched_case and not when_clauses:
+            return else_clause if else_clause is not None else SQLNull()
 
         comparand = None
         if expr.comparand:
@@ -1270,84 +1281,273 @@ class ListsMixin:
 
         return expr
 
-    def _infer_resource_type(self, expr: Any) -> Optional[str]:
-        """Infer the FHIR resource type from an expression.
+    @staticmethod
+    def _bare_cql_type_name(type_name: Optional[str]) -> Optional[str]:
+        """Normalize a CQL/FHIR type name to its terminal identifier."""
+        if not type_name:
+            return None
+        name = str(type_name).strip()
+        if not name:
+            return None
+        return name.split(".")[-1]
 
-        This is used to determine appropriate default sort columns for
-        First()/Last() operations to ensure deterministic results,
-        and for fluent function overload resolution.
+    def _resource_type_from_cql_type(self, cql_type: Optional[str]) -> Optional[str]:
+        """Extract a concrete list element/resource type from a CQL type hint."""
+        if not cql_type:
+            return None
+        type_hint = str(cql_type).strip()
+        if not type_hint or type_hint in {"Any", "Resource", "FHIR.Resource"}:
+            return None
+        if type_hint.startswith("List<") and type_hint.endswith(">"):
+            type_hint = type_hint[5:-1].strip()
+        if type_hint.startswith("Choice<"):
+            return None
+        return self._bare_cql_type_name(type_hint)
 
-        Args:
-            expr: An AST expression node.
+    def _infer_resource_type_from_definition_name(
+        self,
+        name: Optional[str],
+        visited: Optional[set[str]] = None,
+    ) -> Optional[str]:
+        """Infer the row resource/profile type for a named definition.
 
-        Returns:
-            The FHIR resource type name (e.g., "Condition", "Observation") or None.
+        This mirrors the translator-level source-definition inference, but works
+        inside expression translation where forward definition metadata may not
+        exist yet.  It intentionally follows row sources and return aliases
+        rather than scanning arbitrary relationship retrieves.
         """
-        from ...parser.ast_nodes import Retrieve, Identifier, AliasRef
+        if not name:
+            return None
+        if visited is None:
+            visited = set()
+        key = f"def:{name}"
+        if key in visited:
+            return None
+        visited.add(key)
 
-        # Check if expression is a Retrieve (direct resource access)
-        if hasattr(expr, "__class__") and expr.__class__.__name__ == "Retrieve":
-            # Try different attribute names for resource type
+        meta = getattr(self.context, "definition_meta", {}).get(name)
+        if meta is not None:
+            inferred = self._resource_type_from_cql_type(getattr(meta, "cql_type", None))
+            if inferred:
+                return inferred
+
+        cql_ast = getattr(self.context, "_definition_cql_asts", {}).get(name)
+        if cql_ast is None:
+            expr_defs = getattr(self.context, "expression_definitions", {})
+            ast_def = expr_defs.get(name)
+            if ast_def is not None:
+                cql_ast = ast_def.expression if hasattr(ast_def, "expression") else ast_def
+
+        if cql_ast is not None:
+            inferred = self._infer_resource_type_from_cql_expr(cql_ast, visited=visited)
+            if inferred:
+                return inferred
+
+        schema = getattr(self.context, "fhir_schema", None)
+        bare_name = self._bare_cql_type_name(name)
+        if schema is not None and bare_name in getattr(schema, "resources", {}):
+            return bare_name
+        return None
+
+    def _infer_resource_type_from_alias(
+        self,
+        name: Optional[str],
+        visited: Optional[set[str]] = None,
+    ) -> Optional[str]:
+        """Infer the resource/profile type represented by a CQL/SQL alias."""
+        if not name:
+            return None
+        if visited is None:
+            visited = set()
+        key = f"alias:{name}"
+        if key in visited:
+            return None
+        visited.add(key)
+
+        alias_rts = getattr(self.context, "_alias_resource_types", {})
+        alias_rt = alias_rts.get(name)
+        if alias_rt:
+            return alias_rt
+
+        lookup_symbol = getattr(self.context, "lookup_symbol", None)
+        symbol = lookup_symbol(name) if lookup_symbol is not None else None
+        if symbol is not None:
+            ast_expr = getattr(symbol, "ast_expr", None)
+            if ast_expr is not None:
+                inferred = self._infer_resource_type_from_cql_expr(ast_expr, visited=visited)
+                if inferred:
+                    return inferred
+
+            cte_name = getattr(symbol, "cte_name", None)
+            if cte_name:
+                inferred = self._infer_resource_type_from_definition_name(cte_name, visited=visited)
+                if inferred:
+                    return inferred
+
+            source_alias = getattr(symbol, "source_alias", None)
+            if source_alias:
+                inferred = self._infer_resource_type_from_alias(source_alias, visited=visited)
+                if inferred:
+                    return inferred
+
+            inferred = self._resource_type_from_cql_type(getattr(symbol, "cql_type", None))
+            if inferred:
+                return inferred
+
+        return self._infer_resource_type_from_definition_name(name, visited=visited)
+
+    def _infer_resource_type_from_sql_expr(
+        self,
+        expr: Any,
+        visited: Optional[set[str]] = None,
+    ) -> Optional[str]:
+        """Infer resource/profile type from a SQL alias/reference expression."""
+        if isinstance(expr, ParameterPlaceholder):
+            return self._infer_resource_type_from_sql_expr(expr.sql_expr, visited=visited)
+        if isinstance(expr, SQLQualifiedIdentifier) and expr.parts:
+            # Only alias.resource is guaranteed to represent the FHIR resource row.
+            if len(expr.parts) >= 2 and expr.parts[1] != "resource":
+                return None
+            part = expr.parts[0]
+            alias = part if isinstance(part, str) else getattr(part, "name", None)
+            return self._infer_resource_type_from_alias(alias, visited=visited)
+        if isinstance(expr, SQLIdentifier):
+            return self._infer_resource_type_from_alias(expr.name, visited=visited)
+        return None
+
+    def _infer_resource_type_from_cql_expr(
+        self,
+        expr: Any,
+        visited: Optional[set[str]] = None,
+        alias_types: Optional[Dict[str, Optional[str]]] = None,
+    ) -> Optional[str]:
+        """Infer the concrete FHIR row resource/profile type for an AST expression."""
+        if expr is None:
+            return None
+        if visited is None:
+            visited = set()
+        key = f"expr:{id(expr)}"
+        if key in visited:
+            return None
+        visited.add(key)
+
+        if isinstance(expr, ParameterPlaceholder):
+            return self._infer_resource_type_from_sql_expr(expr.sql_expr, visited=visited)
+
+        if isinstance(expr, Retrieve):
             return getattr(expr, "type", None) or getattr(expr, "resource_type", None)
 
-        # Check alias resource type mapping (populated during query translation)
-        name = getattr(expr, "name", None)
-        if name:
-            alias_rts = getattr(self.context, '_alias_resource_types', {})
-            alias_rt = alias_rts.get(name)
-            if alias_rt:
-                return alias_rt
+        if isinstance(expr, QuerySource):
+            return self._infer_resource_type_from_cql_expr(
+                expr.expression,
+                visited=visited,
+                alias_types=alias_types,
+            )
 
-        # Check if expression is an Identifier (reference to a definition)
-        if isinstance(expr, Identifier) or (hasattr(expr, "name") and not hasattr(expr, "__class__")):
-            if name:
-                # Check definition metadata for type info
-                meta = self.context.definition_meta.get(name)
-                if meta and meta.cql_type and meta.cql_type.startswith("List<"):
-                    # Extract inner type from List<Type>
-                    return meta.cql_type[5:-1]
+        if isinstance(expr, (Identifier, AliasRef)):
+            name = expr.name
+            if alias_types and name in alias_types:
+                return alias_types[name]
+            return self._infer_resource_type_from_alias(name, visited=visited)
+
+        if isinstance(expr, QualifiedIdentifier) and expr.parts:
+            return self._infer_resource_type_from_definition_name(".".join(expr.parts), visited=visited)
+
+        if isinstance(expr, Property) and isinstance(expr.source, Identifier):
+            prefixed = f"{expr.source.name}.{expr.path}"
+            inferred = self._infer_resource_type_from_definition_name(prefixed, visited=visited)
+            if inferred:
+                return inferred
+
+        if isinstance(expr, (FirstExpression, LastExpression, SingletonExpression, DistinctExpression)):
+            return self._infer_resource_type_from_cql_expr(
+                expr.source,
+                visited=visited,
+                alias_types=alias_types,
+            )
+
+        if isinstance(expr, (SkipExpression, TakeExpression)):
+            return self._infer_resource_type_from_cql_expr(
+                expr.source,
+                visited=visited,
+                alias_types=alias_types,
+            )
+
+        if isinstance(expr, FunctionRef):
+            fn_name = getattr(expr, "name", "").split(".")[-1].lower()
+            args = getattr(expr, "arguments", []) or []
+            if fn_name in {"first", "last", "singletonfrom"} and args:
+                return self._infer_resource_type_from_cql_expr(
+                    args[0],
+                    visited=visited,
+                    alias_types=alias_types,
+                )
+
+        if isinstance(expr, BinaryExpression) and expr.operator.lower() in {"union", "intersect", "except"}:
+            left_type = self._infer_resource_type_from_cql_expr(
+                expr.left,
+                visited=visited,
+                alias_types=alias_types,
+            )
+            right_type = self._infer_resource_type_from_cql_expr(
+                expr.right,
+                visited=visited,
+                alias_types=alias_types,
+            )
+            if left_type and right_type and left_type == right_type:
+                return left_type
+            return None
+
+        if isinstance(expr, Query):
+            sources = expr.source if isinstance(expr.source, list) else [expr.source]
+            query_alias_types: Dict[str, Optional[str]] = {}
+            for source in sources:
+                if isinstance(source, QuerySource):
+                    query_alias_types[source.alias] = self._infer_resource_type_from_cql_expr(
+                        source.expression,
+                        visited=visited,
+                        alias_types=alias_types,
+                    )
+
+            if isinstance(expr.return_clause, ReturnClause):
+                ret = expr.return_clause.expression
+                ret_name = getattr(ret, "name", None)
+                if ret_name in query_alias_types:
+                    return query_alias_types[ret_name]
+                inferred_return = self._infer_resource_type_from_cql_expr(
+                    ret,
+                    visited=visited,
+                    alias_types={**(alias_types or {}), **query_alias_types},
+                )
+                if inferred_return:
+                    return inferred_return
+
+            if len(sources) == 1:
+                source = sources[0]
+                if isinstance(source, QuerySource):
+                    return query_alias_types.get(source.alias)
+                return self._infer_resource_type_from_cql_expr(
+                    source,
+                    visited=visited,
+                    alias_types=alias_types,
+                )
+            return None
 
         return None
 
-    @staticmethod
-    def _extract_query_source_resource_type(query_node: Any) -> Optional[str]:
+    def _infer_resource_type(self, expr: Any) -> Optional[str]:
+        """Infer the FHIR resource/profile type from an expression."""
+        return self._infer_resource_type_from_cql_expr(expr)
+
+    def _extract_query_source_resource_type(self, query_node: Any) -> Optional[str]:
         """Extract the FHIR resource type from a query's source.
 
         Walks through QuerySource wrappers, Union/BinaryExpression, and Retrieves
         to find the resource/profile type (e.g., 'ConditionProblemsHealthConcerns').
         """
-        def _get_retrieve_type(node: Any) -> Optional[str]:
-            if node is None:
-                return None
-            cls_name = getattr(node, '__class__', type(None)).__name__
-            if cls_name == 'Retrieve':
-                return getattr(node, 'type', None) or getattr(node, 'resource_type', None)
-            if cls_name == 'QuerySource':
-                return _get_retrieve_type(getattr(node, 'expression', None))
-            # BinaryExpression with operator='union'/'intersect'/'except'
-            if cls_name == 'BinaryExpression':
-                left = getattr(node, 'left', None)
-                rt = _get_retrieve_type(left)
-                if rt:
-                    return rt
-                return _get_retrieve_type(getattr(node, 'right', None))
-            # Union/Intersect/Except AST nodes (if used)
-            if cls_name in ('Union', 'Intersect', 'Except'):
-                for op in (getattr(node, 'operands', None) or getattr(node, 'operand', None) or []):
-                    if isinstance(op, list):
-                        for o in op:
-                            rt = _get_retrieve_type(o)
-                            if rt:
-                                return rt
-                    else:
-                        rt = _get_retrieve_type(op)
-                        if rt:
-                            return rt
-            return None
-
         sources = query_node.source if isinstance(query_node.source, list) else [query_node.source]
         for src in sources:
-            rt = _get_retrieve_type(src)
+            rt = self._infer_resource_type_from_cql_expr(src)
             if rt:
                 return rt
         return None
@@ -2201,4 +2401,3 @@ class ListsMixin:
         # Standard aggregate functions (fallback)
         func_name = node.operator.upper()
         return SQLFunctionCall(name=func_name, args=[source])
-
