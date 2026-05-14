@@ -1407,6 +1407,166 @@ class TestGetCTEReference:
 class TestRawSQLColumnOptimization:
     """Tests for precomputed-column optimization inside SQLRaw fragments."""
 
+    def test_interval_bound_calls_use_precomputed_bound_columns(self):
+        """intervalStart/End over precomputed Period columns use bound columns."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import optimize_property_access
+        from ...translator.types import (
+            SQLAlias,
+            SQLFunctionCall,
+            SQLIdentifier,
+            SQLLiteral,
+            SQLQualifiedIdentifier,
+            SQLSelect,
+        )
+
+        registry = ColumnRegistry()
+        registry.register_cte(
+            "Encounter",
+            {
+                "period": ColumnInfo("period", "period", "VARCHAR"),
+                "period_start": ColumnInfo("period_start", "period.start", "VARCHAR"),
+                "period_end": ColumnInfo("period_end", "period.end", "VARCHAR"),
+            },
+        )
+        query = SQLSelect(
+            columns=[
+                SQLFunctionCall(
+                    name="intervalStart",
+                    args=[SQLQualifiedIdentifier(parts=["e", "period"])],
+                ),
+                SQLFunctionCall(
+                    name="intervalEnd",
+                    args=[
+                        SQLFunctionCall(
+                            name="fhirpath_text",
+                            args=[
+                                SQLQualifiedIdentifier(parts=["e", "resource"]),
+                                SQLLiteral("period"),
+                            ],
+                        )
+                    ],
+                ),
+            ],
+            from_clause=SQLAlias(expr=SQLIdentifier("Encounter"), alias="e"),
+        )
+
+        optimized = optimize_property_access(query, registry)
+        sql = optimized.to_sql()
+
+        assert "e.period_start" in sql
+        assert "e.period_end" in sql
+        assert "intervalStart(e.period)" not in sql
+        assert "intervalEnd(fhirpath_text" not in sql
+
+    def test_scalar_subquery_fhirpath_uses_precomputed_column(self):
+        """FHIRPath over a scalar resource subquery should project the CTE column."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import optimize_property_access
+        from ...translator.types import (
+            SQLAlias,
+            SQLBinaryOp,
+            SQLFunctionCall,
+            SQLIdentifier,
+            SQLLiteral,
+            SQLQualifiedIdentifier,
+            SQLSelect,
+            SQLSubquery,
+        )
+
+        registry = ColumnRegistry()
+        registry.register_cte(
+            "Encounter",
+            {
+                "period": ColumnInfo("period", "period", "VARCHAR"),
+                "status": ColumnInfo("status", "status", "VARCHAR"),
+            },
+        )
+        subquery = SQLSubquery(
+            SQLSelect(
+                columns=[SQLQualifiedIdentifier(parts=["LastObs", "resource"])],
+                from_clause=SQLAlias(expr=SQLIdentifier("Encounter"), alias="LastObs"),
+                where=SQLBinaryOp(
+                    operator="=",
+                    left=SQLFunctionCall(
+                        name="fhirpath_text",
+                        args=[
+                            SQLQualifiedIdentifier(parts=["LastObs", "resource"]),
+                            SQLLiteral("status"),
+                        ],
+                    ),
+                    right=SQLLiteral("finished"),
+                ),
+                limit=1,
+            )
+        )
+        query = SQLSelect(
+            columns=[
+                SQLFunctionCall(
+                    name="fhirpath_text",
+                    args=[subquery, SQLLiteral("period")],
+                )
+            ]
+        )
+
+        optimized = optimize_property_access(query, registry)
+        sql = optimized.to_sql()
+
+        assert "SELECT LastObs.period FROM Encounter AS LastObs" in sql
+        assert "LastObs.status = 'finished'" in sql
+        assert "fhirpath_text((SELECT" not in sql
+        assert "fhirpath_text(LastObs.resource, 'status')" not in sql
+
+    def test_interval_bound_over_scalar_subquery_uses_bound_column(self):
+        """intervalStart over scalar Period subqueries should select the bound column."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import optimize_property_access
+        from ...translator.types import (
+            SQLAlias,
+            SQLFunctionCall,
+            SQLIdentifier,
+            SQLLiteral,
+            SQLQualifiedIdentifier,
+            SQLSelect,
+            SQLSubquery,
+        )
+
+        registry = ColumnRegistry()
+        registry.register_cte(
+            "Encounter",
+            {
+                "period": ColumnInfo("period", "period", "VARCHAR"),
+                "period_start": ColumnInfo("period_start", "period.start", "VARCHAR"),
+            },
+        )
+        subquery = SQLSubquery(
+            SQLSelect(
+                columns=[SQLQualifiedIdentifier(parts=["LastObs", "resource"])],
+                from_clause=SQLAlias(expr=SQLIdentifier("Encounter"), alias="LastObs"),
+                limit=1,
+            )
+        )
+        query = SQLSelect(
+            columns=[
+                SQLFunctionCall(
+                    name="intervalStart",
+                    args=[
+                        SQLFunctionCall(
+                            name="fhirpath_text",
+                            args=[subquery, SQLLiteral("period")],
+                        )
+                    ],
+                )
+            ]
+        )
+
+        optimized = optimize_property_access(query, registry)
+        sql = optimized.to_sql()
+
+        assert "SELECT LastObs.period_start FROM Encounter AS LastObs" in sql
+        assert "intervalStart" not in sql
+        assert "fhirpath_text" not in sql
+
     def test_uses_local_raw_cte_alias(self):
         """Raw subqueries with quoted CTE aliases should use registered columns."""
         from ...translator.column_registry import ColumnInfo, ColumnRegistry

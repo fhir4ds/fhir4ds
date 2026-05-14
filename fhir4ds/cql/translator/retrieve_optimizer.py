@@ -956,8 +956,9 @@ def _optimize_fhirpath_calls(
                 ] if ast.order_by else None,
             )
 
-        # For other function calls, recurse into args
-        return SQLFunctionCall(
+        # For other function calls, recurse into args, then fold temporal
+        # bound extraction to retrieve CTE sibling columns when available.
+        optimized_call = SQLFunctionCall(
             name=ast.name,
             args=[_optimize_fhirpath_calls(arg, registry, alias_to_cte) for arg in ast.args],
             distinct=ast.distinct,
@@ -966,6 +967,10 @@ def _optimize_fhirpath_calls(
                 for expr, direction in ast.order_by
             ] if ast.order_by else None,
         )
+        bound_optimized = _try_optimize_interval_bound_call(
+            optimized_call, registry, alias_to_cte
+        )
+        return bound_optimized if bound_optimized is not None else optimized_call
 
     # Recurse into other node types
     return _recurse_ast(ast, registry, alias_to_cte)
@@ -994,6 +999,23 @@ def _try_optimize_fhirpath_call(
     resource_arg = call.args[0]
     path_arg = call.args[1]
 
+    # Extract the FHIRPath string
+    path = None
+    if isinstance(path_arg, SQLLiteral) and isinstance(path_arg.value, str):
+        path = path_arg.value
+
+    if not path:
+        return None
+
+    subquery_optimized = _try_optimize_scalar_subquery_fhirpath_call(
+        resource_arg,
+        path,
+        registry,
+        alias_to_cte,
+    )
+    if subquery_optimized is not None:
+        return subquery_optimized
+
     # Extract the alias from the resource reference
     alias = None
     if isinstance(resource_arg, SQLQualifiedIdentifier) and len(resource_arg.parts) >= 2:
@@ -1012,20 +1034,137 @@ def _try_optimize_fhirpath_call(
         # Fall back: maybe the alias IS the CTE name
         cte_name = alias
 
-    # Extract the FHIRPath string
-    path = None
-    if isinstance(path_arg, SQLLiteral) and isinstance(path_arg.value, str):
-        path = path_arg.value
-
-    if not path:
-        return None
-
     # Look up the column in the registry
     column_name = registry.lookup(cte_name, path)
     if column_name:
         # Found a precomputed column - return a reference to it
         return SQLQualifiedIdentifier(parts=[alias, column_name])
 
+    return None
+
+
+def _single_selected_resource_alias(select: SQLSelect) -> Optional[str]:
+    """Return the source alias when a scalar subquery selects only resource."""
+    if len(select.columns) != 1:
+        return None
+
+    col = select.columns[0]
+    expr = col[0] if isinstance(col, tuple) else col.expr if isinstance(col, SQLAlias) else col
+    if (
+        isinstance(expr, SQLQualifiedIdentifier)
+        and len(expr.parts) == 2
+        and expr.parts[1] == "resource"
+    ):
+        return expr.parts[0]
+    if isinstance(expr, SQLIdentifier) and expr.name == "resource":
+        return ""
+    return None
+
+
+def _replace_select_columns(select: SQLSelect, columns: List[SQLExpression]) -> SQLSelect:
+    """Return a copy of select with a different projection."""
+    return SQLSelect(
+        columns=columns,
+        from_clause=select.from_clause,
+        joins=select.joins,
+        where=select.where,
+        group_by=select.group_by,
+        having=select.having,
+        order_by=select.order_by,
+        limit=select.limit,
+        distinct=select.distinct,
+    )
+
+
+def _try_optimize_scalar_subquery_fhirpath_call(
+    resource_arg: SQLExpression,
+    path: str,
+    registry: ColumnRegistry,
+    alias_to_cte: Dict[str, str],
+) -> Optional[SQLExpression]:
+    """Replace fhirpath_*((SELECT alias.resource FROM CTE alias ...), path)."""
+    if not isinstance(resource_arg, SQLSubquery) or not isinstance(resource_arg.query, SQLSelect):
+        return None
+
+    select = resource_arg.query
+    if not select.from_clause:
+        return None
+
+    source_cte, source_alias = _table_ref_cte_and_alias(select.from_clause)
+    if not source_cte or not source_alias:
+        return None
+
+    selected_alias = _single_selected_resource_alias(select)
+    if selected_alias is None:
+        return None
+    if selected_alias and selected_alias != source_alias:
+        return None
+
+    column_name = registry.lookup(source_cte, path)
+    if not column_name:
+        return None
+
+    projected = SQLSubquery(
+        query=_replace_select_columns(
+            select,
+            [SQLQualifiedIdentifier(parts=[source_alias, column_name])],
+        )
+    )
+    return _optimize_fhirpath_calls(projected, registry, alias_to_cte)
+
+
+def _single_selected_column(select: SQLSelect) -> Optional[Tuple[str, str, str]]:
+    """Return (source_cte, source_alias, column_name) for a simple scalar column subquery."""
+    if not select.from_clause:
+        return None
+    source_cte, source_alias = _table_ref_cte_and_alias(select.from_clause)
+    if not source_cte or not source_alias or len(select.columns) != 1:
+        return None
+
+    col = select.columns[0]
+    expr = col[0] if isinstance(col, tuple) else col.expr if isinstance(col, SQLAlias) else col
+    if isinstance(expr, SQLQualifiedIdentifier):
+        if len(expr.parts) == 2 and expr.parts[0] == source_alias:
+            return source_cte, source_alias, expr.parts[1]
+    elif isinstance(expr, SQLIdentifier):
+        return source_cte, source_alias, expr.name
+    return None
+
+
+def _try_optimize_interval_bound_call(
+    call: SQLFunctionCall,
+    registry: ColumnRegistry,
+    alias_to_cte: Dict[str, str],
+) -> Optional[SQLExpression]:
+    """Replace intervalStart/intervalEnd(alias.col) with precomputed bounds."""
+    if call.name not in ("intervalStart", "intervalEnd") or len(call.args) != 1:
+        return None
+    arg = call.args[0]
+    suffix = "start" if call.name == "intervalStart" else "end"
+
+    if isinstance(arg, SQLSubquery) and isinstance(arg.query, SQLSelect):
+        selected = _single_selected_column(arg.query)
+        if selected is None:
+            return None
+        cte_name, alias, column_name = selected
+        bound_col_name = f"{column_name}_{suffix}"
+        if registry.has_column(cte_name, bound_col_name):
+            return SQLSubquery(
+                query=_replace_select_columns(
+                    arg.query,
+                    [SQLQualifiedIdentifier(parts=[alias, bound_col_name])],
+                )
+            )
+        return None
+
+    if not isinstance(arg, SQLQualifiedIdentifier) or len(arg.parts) < 2:
+        return None
+    alias = arg.parts[-2]
+    column_name = arg.parts[-1]
+    cte_name = alias_to_cte.get(alias, alias)
+    bound_col_name = f"{column_name}_{suffix}"
+    if registry.has_column(cte_name, bound_col_name):
+        return SQLQualifiedIdentifier(parts=[alias, bound_col_name])
     return None
 
 

@@ -23,6 +23,7 @@ from ...translator.types import (
 )
 from ...translator.cte_builder import (
     build_retrieve_cte,
+    _can_extract_period_bound_from_json,
 )
 from ...translator.fhir_schema import FHIRSchemaRegistry
 from ...translator.model_config import DEFAULT_MODEL_CONFIG
@@ -329,6 +330,64 @@ class TestGap6ColumnContamination:
         assert "onset_date" not in col_info
         # status should be in column registry
         assert "status" in col_info
+
+    def test_period_columns_include_derived_bounds(self):
+        """Period precomputed columns also expose reusable start/end bounds."""
+        ctx = _make_context_with_schema()
+        _, cte_ast, col_info = build_retrieve_cte(
+            resource_type="Encounter",
+            valueset=None,
+            properties={"period", "status"},
+            context=ctx,
+        )
+        sql = cte_ast.to_sql()
+
+        assert "period" in col_info
+        assert "period_start" in col_info
+        assert "period_end" in col_info
+        assert "json_extract_string(r.resource, '$.period.start')" in sql
+        assert "json_extract_string(r.resource, '$.period.end')" in sql
+        assert "intervalStart" not in sql
+        assert "intervalEnd" not in sql
+
+    def test_non_period_choice_columns_do_not_get_bounds(self):
+        """Mixed choice elements like Observation.value[x] do not get bounds."""
+        ctx = _make_context_with_schema()
+        _, cte_ast, col_info = build_retrieve_cte(
+            resource_type="Observation",
+            valueset=None,
+            properties={"value", "effective"},
+            context=ctx,
+        )
+        sql = cte_ast.to_sql()
+
+        assert "value" in col_info
+        assert "value_start" not in col_info
+        assert "value_end" not in col_info
+        assert "effective_start" not in col_info
+        assert "effective_end" not in col_info
+        assert "value_start" not in sql
+
+    def test_period_json_bound_extraction_requires_scalar_path(self):
+        """Direct Period JSON extraction is only used for scalar schema paths."""
+        ctx = _make_context_with_schema()
+
+        assert _can_extract_period_bound_from_json("Encounter", "period", ctx.fhir_schema)
+        assert _can_extract_period_bound_from_json(
+            "MedicationRequest",
+            "dispenseRequest.validityPeriod",
+            ctx.fhir_schema,
+        )
+        assert _can_extract_period_bound_from_json(
+            "Procedure",
+            "performedPeriod",
+            ctx.fhir_schema,
+        )
+        assert not _can_extract_period_bound_from_json(
+            "MedicationRequest",
+            "dosageInstruction.timing.repeat.boundsPeriod",
+            ctx.fhir_schema,
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ from .types import (
     SQLIdentifier,
     SQLLiteral,
     SQLBinaryOp,
+    SQLCase,
     SQLUnaryOp,
     SQLCast,
     SQLFunctionCall,
@@ -42,8 +43,8 @@ if TYPE_CHECKING:
     from .context import SQLTranslationContext
 
 
-def _build_column_expression(col_def: ColumnDefinition) -> SQLAlias:
-    """Build SQL expression for a ColumnDefinition."""
+def _build_column_value_expression(col_def: ColumnDefinition):
+    """Build the SQL value expression for a ColumnDefinition."""
     path_exprs = [
         SQLFunctionCall(
             name=col_def.fhirpath_function,
@@ -55,10 +56,127 @@ def _build_column_expression(col_def: ColumnDefinition) -> SQLAlias:
         for path in col_def.paths
     ]
     if len(path_exprs) == 1:
-        expr = path_exprs[0]
-    else:
-        expr = SQLFunctionCall(name="COALESCE", args=path_exprs)
-    return SQLAlias(expr=expr, alias=col_def.column_name)
+        return path_exprs[0]
+    return SQLFunctionCall(name="COALESCE", args=path_exprs)
+
+
+def _build_column_expression(col_def: ColumnDefinition) -> SQLAlias:
+    """Build SQL expression for a ColumnDefinition."""
+    return SQLAlias(
+        expr=_build_column_value_expression(col_def),
+        alias=col_def.column_name,
+    )
+
+
+def _temporal_bound_expression(expr, boundary_func: str):
+    """Build a nullable temporal-bound expression from a scalar or interval value."""
+    value = SQLCast(expression=expr, target_type="VARCHAR")
+    return SQLCase(
+        when_clauses=[
+            (
+                SQLBinaryOp(operator="IS", left=expr, right=SQLNull()),
+                SQLNull(),
+            ),
+            (
+                SQLFunctionCall(
+                    name="starts_with",
+                    args=[
+                        SQLFunctionCall(name="LTRIM", args=[value]),
+                        SQLLiteral(value="{"),
+                    ],
+                ),
+                SQLFunctionCall(name=boundary_func, args=[expr]),
+            ),
+        ],
+        else_clause=value,
+    )
+
+
+def _is_simple_fhir_field_path(path: str) -> bool:
+    """Return true for plain dotted element paths that map directly to JSON fields."""
+    return bool(path) and all(part.isidentifier() for part in path.split("."))
+
+
+def _schema_element_for_path(fhir_schema, resource_type: str, element_path: str):
+    """Return the schema element for an exact or concrete choice element path."""
+    resource = fhir_schema.resources.get(resource_type)
+    if not resource:
+        return None
+
+    element = resource.elements.get(f"{resource_type}.{element_path}")
+    if element is not None:
+        return element
+
+    for choice_name in resource.choice_elements:
+        if element_path.startswith(choice_name) and len(element_path) > len(choice_name):
+            return resource.elements.get(f"{resource_type}.{choice_name}[x]")
+    return None
+
+
+def _can_extract_period_bound_from_json(
+    resource_type: str,
+    path: str,
+    fhir_schema,
+) -> bool:
+    """Return true when a Period path can be read by scalar JSON field traversal."""
+    if (
+        fhir_schema.get_element_type(resource_type, path) != "Period"
+        or not _is_simple_fhir_field_path(path)
+    ):
+        return False
+
+    parts = path.split(".")
+    for index in range(1, len(parts) + 1):
+        prefix = ".".join(parts[:index])
+        element = _schema_element_for_path(fhir_schema, resource_type, prefix)
+        if element is None:
+            return False
+        if element.cardinality and element.cardinality.endswith("*"):
+            return False
+    return True
+
+
+def _build_period_bound_expression(
+    resource_type: str,
+    col_def: ColumnDefinition,
+    fhir_schema,
+    suffix: str,
+    fallback_boundary_func: str,
+):
+    """Build a reusable Period start/end expression for a precomputed column."""
+    json_extracts = []
+    for path in col_def.paths:
+        if _can_extract_period_bound_from_json(resource_type, path, fhir_schema):
+            json_extracts.append(
+                SQLFunctionCall(
+                    name="json_extract_string",
+                    args=[
+                        SQLQualifiedIdentifier(parts=["r", "resource"]),
+                        SQLLiteral(value=f"$.{path}.{suffix}"),
+                    ],
+                )
+            )
+    if len(json_extracts) == 1:
+        return json_extracts[0]
+    if len(json_extracts) > 1:
+        return SQLFunctionCall(name="COALESCE", args=json_extracts)
+
+    return _temporal_bound_expression(
+        _build_column_value_expression(col_def),
+        fallback_boundary_func,
+    )
+
+
+def _is_temporal_bound_column(
+    resource_type: str,
+    col_def: ColumnDefinition,
+    fhir_schema,
+) -> bool:
+    """Return true when a precomputed property is a direct FHIR Period."""
+    for path in col_def.paths:
+        if fhir_schema.get_element_type(resource_type, path) == "Period":
+            return True
+    return False
 
 
 def _resolve_profile_registry(context) -> "ProfileRegistry":
@@ -236,7 +354,8 @@ def build_retrieve_cte(
     generated_paths: Set[str] = set()
     for col_name in sorted(column_defs):
         col_def = column_defs[col_name]
-        col_expr = _build_column_expression(col_def)
+        col_value_expr = _build_column_value_expression(col_def)
+        col_expr = SQLAlias(expr=col_value_expr, alias=col_def.column_name)
         columns.append(col_expr)
         column_info_map[col_name] = ColumnInfo(
             column_name=col_name,
@@ -244,6 +363,27 @@ def build_retrieve_cte(
             sql_type=col_def.sql_type,
             is_choice_type=col_def.is_choice_type,
         )
+        if _is_temporal_bound_column(resource_type, col_def, fhir_schema):
+            for suffix, boundary_func in (("start", "intervalStart"), ("end", "intervalEnd")):
+                bound_col_name = f"{col_name}_{suffix}"
+                if bound_col_name in column_info_map:
+                    continue
+                columns.append(SQLAlias(
+                    expr=_build_period_bound_expression(
+                        resource_type,
+                        col_def,
+                        fhir_schema,
+                        suffix,
+                        boundary_func,
+                    ),
+                    alias=bound_col_name,
+                ))
+                column_info_map[bound_col_name] = ColumnInfo(
+                    column_name=bound_col_name,
+                    fhirpath=f"{', '.join(col_def.paths)}.{suffix}",
+                    sql_type="VARCHAR",
+                    is_choice_type=False,
+                )
         generated_paths.update(col_def.paths)
 
     # Fallback: ensure every requested property has a column
