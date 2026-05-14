@@ -981,10 +981,10 @@ class OperatorsMixin:
                     # INTERVAL arithmetic requires TIMESTAMP — cast VARCHAR back
                     _right_ts = SQLCast(expression=_right_cast, target_type="TIMESTAMP")
                     if _direction in ("after", "on or after"):
-                        _offset_right = self._timestamp_arith_to_varchar(
+                        _offset_right = self._timestamp_arith_for_compare(
                             SQLBinaryOp(operator="+", left=_right_ts, right=_interval_lit))
                     else:
-                        _offset_right = self._timestamp_arith_to_varchar(
+                        _offset_right = self._timestamp_arith_for_compare(
                             SQLBinaryOp(operator="-", left=_right_ts, right=_interval_lit))
                     _boundary_expr = self._truncate_to_precision(
                         self._ensure_date_cast(_boundary_expr, _cast_type), _precision)
@@ -1997,7 +1997,7 @@ class OperatorsMixin:
     @staticmethod
     def _point_as_interval(point: SQLExpression) -> SQLExpression:
         """Wrap a point value as a degenerate interval [point, point].
-        
+
         Used for before/after/on-or-before/on-or-after when comparing
         non-temporal intervals (Quantity, Integer, Decimal) where SQL
         comparison operators can't handle the VARCHAR values from
@@ -2895,10 +2895,10 @@ class OperatorsMixin:
                             # Cast right to TIMESTAMP for INTERVAL arithmetic
                             right_ts = SQLCast(expression=right, target_type="TIMESTAMP")
                             if _direction == "after":
-                                offset_right = self._timestamp_arith_to_varchar(
+                                offset_right = self._timestamp_arith_for_compare(
                                     SQLBinaryOp(operator="+", left=right_ts, right=interval_lit))
                             else:
-                                offset_right = self._timestamp_arith_to_varchar(
+                                offset_right = self._timestamp_arith_for_compare(
                                     SQLBinaryOp(operator="-", left=right_ts, right=interval_lit))
                             # Apply precision truncation via VARCHAR LEFT()
                             if _precision:

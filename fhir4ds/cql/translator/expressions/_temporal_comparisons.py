@@ -381,7 +381,7 @@ class TemporalComparisonMixin:
         SQL Pattern:
             "starts 1 day or less on or after day of X" ->
                 intervalStarts(interval, X) AND intervalWidth(interval) <= INTERVAL '1 day'
-                
+
         NOTE (B7): Uses structured string parsing (no regex) to decompose temporal operator strings.
         """
         # Parse the operator string using structured decomposition (no regex)
@@ -442,9 +442,8 @@ class TemporalComparisonMixin:
         # For INTERVAL arithmetic (+/-), DuckDB requires TIMESTAMP, not VARCHAR.
         right_for_arithmetic = self._cast_for_interval_arithmetic(right_for_compare)
 
-        # When no precision qualifier, normalize FHIR temporal VARCHARs to
-        # 23-char ISO 8601 (strip timezone suffixes) so bare <= / >= works
-        # correctly against STRFTIME-formatted arithmetic results (CQL §18.13).
+        # When no precision qualifier, cast FHIR temporal VARCHARs through
+        # TIMESTAMP so comparisons are temporal instead of lexicographic.
         if not precision:
             right_for_compare = self._normalize_temporal_for_compare(right_for_compare)
             boundary_func = self._normalize_temporal_for_compare(boundary_func)
@@ -452,7 +451,7 @@ class TemporalComparisonMixin:
         if before_or_after in ("on or after", "after"):
             if less_or_more == "exact":
                 # Exact offset: boundary = right + quantity
-                target = self._timestamp_arith_to_varchar(
+                target = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     target = self._truncate_to_precision(target, precision)
@@ -460,7 +459,7 @@ class TemporalComparisonMixin:
             elif less_or_more == "or less":
                 # start >= right AND start <= right + quantity
                 lower_bound = right_for_compare
-                upper_bound = self._timestamp_arith_to_varchar(
+                upper_bound = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
 
                 if precision:
@@ -476,7 +475,7 @@ class TemporalComparisonMixin:
                 )
             else:  # or more
                 # start >= right + quantity
-                threshold = self._timestamp_arith_to_varchar(
+                threshold = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     threshold = self._truncate_to_precision(threshold, precision)
@@ -485,7 +484,7 @@ class TemporalComparisonMixin:
         else:  # on or before / before
             if less_or_more == "exact":
                 # Exact offset: boundary = right - quantity
-                target = self._timestamp_arith_to_varchar(
+                target = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     target = self._truncate_to_precision(target, precision)
@@ -493,7 +492,7 @@ class TemporalComparisonMixin:
             elif less_or_more == "or less":
                 # start <= right AND start >= right - quantity
                 upper_bound = right_for_compare
-                lower_bound = self._timestamp_arith_to_varchar(
+                lower_bound = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
 
                 if precision:
@@ -509,7 +508,7 @@ class TemporalComparisonMixin:
                 )
             else:  # or more
                 # start <= right - quantity
-                threshold = self._timestamp_arith_to_varchar(
+                threshold = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     threshold = self._truncate_to_precision(threshold, precision)
@@ -532,7 +531,7 @@ class TemporalComparisonMixin:
 
         Returns:
             SQL expression for the complex temporal comparison.
-            
+
         NOTE (B8): Uses structured string parsing (no regex) to decompose temporal operator strings.
         """
         from ...parser.ast_nodes import Quantity
@@ -603,23 +602,22 @@ class TemporalComparisonMixin:
         # For INTERVAL arithmetic (+/-), DuckDB requires TIMESTAMP, not VARCHAR.
         right_for_arithmetic = self._cast_for_interval_arithmetic(right_for_compare)
 
-        # When no precision qualifier, normalize FHIR temporal VARCHARs to
-        # 23-char ISO 8601 (strip timezone suffixes) so bare <= / >= works
-        # correctly against STRFTIME-formatted arithmetic results (CQL §18.13).
+        # When no precision qualifier, cast FHIR temporal VARCHARs through
+        # TIMESTAMP so comparisons are temporal instead of lexicographic.
         if not precision:
             right_for_compare = self._normalize_temporal_for_compare(right_for_compare)
             interval_point_for_compare = self._normalize_temporal_for_compare(interval_point_for_compare)
 
         if before_or_after in ("on or after", "after"):
             if less_or_more == "exact":
-                target = self._timestamp_arith_to_varchar(
+                target = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     target = self._truncate_to_precision(target, precision)
                 return SQLBinaryOp(operator="=", left=interval_point_for_compare, right=target)
             elif less_or_more == "or less":
                 lower_bound = right_for_compare
-                upper_bound = self._timestamp_arith_to_varchar(
+                upper_bound = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
 
                 if precision:
@@ -633,7 +631,7 @@ class TemporalComparisonMixin:
                     right=SQLBinaryOp(operator="<=", left=interval_point_for_compare, right=upper_bound),
                 )
             else:  # or more
-                threshold = self._timestamp_arith_to_varchar(
+                threshold = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     threshold = self._truncate_to_precision(threshold, precision)
@@ -641,14 +639,14 @@ class TemporalComparisonMixin:
 
         else:  # on or before / before
             if less_or_more == "exact":
-                target = self._timestamp_arith_to_varchar(
+                target = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     target = self._truncate_to_precision(target, precision)
                 return SQLBinaryOp(operator="=", left=interval_point_for_compare, right=target)
             elif less_or_more == "or less":
                 upper_bound = right_for_compare
-                lower_bound = self._timestamp_arith_to_varchar(
+                lower_bound = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
 
                 if precision:
@@ -662,7 +660,7 @@ class TemporalComparisonMixin:
                     right=SQLBinaryOp(operator=upper_op, left=interval_point_for_compare, right=upper_bound),
                 )
             else:  # or more
-                threshold = self._timestamp_arith_to_varchar(
+                threshold = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
                 if precision:
                     threshold = self._truncate_to_precision(threshold, precision)
@@ -709,9 +707,8 @@ class TemporalComparisonMixin:
         # For INTERVAL arithmetic, DuckDB requires TIMESTAMP, not VARCHAR.
         right_for_arithmetic = self._cast_for_interval_arithmetic(right_cmp)
 
-        # When no precision qualifier, normalize FHIR temporal VARCHARs to
-        # 23-char ISO 8601 (strip timezone suffixes) so bare <= / >= works
-        # correctly against STRFTIME-formatted arithmetic results (CQL §18.13).
+        # When no precision qualifier, cast FHIR temporal VARCHARs through
+        # TIMESTAMP so comparisons are temporal instead of lexicographic.
         if not precision:
             left_cmp = self._normalize_temporal_for_compare(left_cmp)
             right_cmp = self._normalize_temporal_for_compare(right_cmp)
@@ -727,7 +724,7 @@ class TemporalComparisonMixin:
 
         if is_before:
             if constraint == "or less":
-                lower = self._timestamp_arith_to_varchar(
+                lower = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
                 if trunc_precision:
                     lower = self._truncate_to_precision(lower, trunc_precision)
@@ -738,7 +735,7 @@ class TemporalComparisonMixin:
                     right=SQLBinaryOp(operator=upper_op, left=left_cmp, right=right_cmp),
                 )
             else:
-                threshold = self._timestamp_arith_to_varchar(
+                threshold = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
                 if trunc_precision:
                     threshold = self._truncate_to_precision(threshold, trunc_precision)
@@ -746,7 +743,7 @@ class TemporalComparisonMixin:
         else:
             # after / on or after
             if constraint == "or less":
-                upper = self._timestamp_arith_to_varchar(
+                upper = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
                 if trunc_precision:
                     upper = self._truncate_to_precision(upper, trunc_precision)
@@ -757,7 +754,7 @@ class TemporalComparisonMixin:
                     right=SQLBinaryOp(operator="<=", left=left_cmp, right=upper),
                 )
             else:
-                threshold = self._timestamp_arith_to_varchar(
+                threshold = self._timestamp_arith_for_compare(
                     SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
                 if trunc_precision:
                     threshold = self._truncate_to_precision(threshold, trunc_precision)
@@ -783,14 +780,13 @@ class TemporalComparisonMixin:
 
         right_for_arithmetic = self._cast_for_interval_arithmetic(right_cmp)
 
-        # Normalize FHIR temporal VARCHARs to 23-char ISO 8601 (strip timezone
-        # suffixes) so bare <= / >= works against STRFTIME-formatted arithmetic
-        # results (CQL §18.13).
+        # Cast FHIR temporal VARCHARs through TIMESTAMP so comparisons are
+        # temporal instead of lexicographic.
         left_cmp = self._normalize_temporal_for_compare(left_cmp)
 
-        lower = self._timestamp_arith_to_varchar(
+        lower = self._timestamp_arith_for_compare(
             SQLBinaryOp(operator="-", left=right_for_arithmetic, right=interval_literal))
-        upper = self._timestamp_arith_to_varchar(
+        upper = self._timestamp_arith_for_compare(
             SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
 
         return SQLBinaryOp(

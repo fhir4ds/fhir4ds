@@ -287,42 +287,31 @@ class TemporalUtilsMixin:
         return SQLCast(expression=expr, target_type=target_type)
 
     @staticmethod
-    def _timestamp_arith_to_varchar(expr: SQLExpression) -> SQLExpression:
-        """Convert TIMESTAMP arithmetic result to 23-char ISO 8601 VARCHAR.
+    def _timestamp_arith_for_compare(expr: SQLExpression) -> SQLExpression:
+        """Return a TIMESTAMP arithmetic result for temporal comparison.
 
-        Uses ``STRFTIME`` with millisecond precision to produce a
-        consistent 23-character output (``2014-01-01T00:00:00.000``)
-        regardless of whether the TIMESTAMP has sub-second components.
-        This avoids length mismatches in bare VARCHAR comparisons
-        against FHIR datetime strings that carry timezone suffixes.
+        Older translations formatted arithmetic results with ``STRFTIME`` and
+        compared the resulting ISO strings.  The comparison callers now cast
+        the peer operands to TIMESTAMP as well, so the formatter is unnecessary
+        work in temporal-heavy execution plans.  Precision-qualified callers
+        still pass this expression through ``_truncate_to_precision``.
         """
-        return SQLFunctionCall(
-            name="STRFTIME",
-            args=[
-                expr,
-                SQLLiteral("%Y-%m-%dT%H:%M:%S.%g"),
-            ],
-        )
+        return expr
 
     @staticmethod
     def _normalize_temporal_for_compare(expr: SQLExpression) -> SQLExpression:
-        """Normalize a temporal VARCHAR to 23-char ISO 8601 for bare comparison.
+        """Normalize a temporal expression to TIMESTAMP for bare comparison.
 
         FHIR datetime strings may carry timezone suffixes
         (``2027-05-01T02:00:00.000+00:00``, 29 chars) while TIMESTAMP
-        arithmetic results are 23 chars.  Bare ``<=`` / ``>=`` between
-        these produces wrong results at boundaries because VARCHAR
-        comparison is lexicographic.  This normalizes by casting through
-        TIMESTAMP (which strips the timezone) and formatting back to a
-        consistent 23-character string.
+        arithmetic expressions are typed TIMESTAMP.  Bare ``<=`` / ``>=``
+        between these produces wrong results at boundaries when VARCHAR
+        comparison is lexicographic.  Cast both sides to TIMESTAMP so DuckDB
+        compares temporal values directly and avoids per-row formatting.
         """
-        return SQLFunctionCall(
-            name="STRFTIME",
-            args=[
-                SQLCast(expression=expr, target_type="TIMESTAMP"),
-                SQLLiteral("%Y-%m-%dT%H:%M:%S.%g"),
-            ],
-        )
+        if isinstance(expr, SQLCast) and expr.target_type == "TIMESTAMP":
+            return expr
+        return SQLCast(expression=expr, target_type="TIMESTAMP")
 
     @staticmethod
     def _cast_for_interval_arithmetic(expr: SQLExpression) -> SQLExpression:
