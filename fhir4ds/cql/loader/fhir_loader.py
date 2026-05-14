@@ -470,13 +470,11 @@ class FHIRDataLoader:
             )
         """)
 
-        # Create index for fast lookups
-        self.con.execute(f"""
-            CREATE INDEX IF NOT EXISTS idx_{table_name}_lookup
-            ON {table_name} (valueset_url, system, code)
-        """)
-
         total_codes = 0
+        valueset_urls = []
+        systems = []
+        code_values = []
+        displays = []
         for vs in valuesets:
             # Handle both object with .url/.codes attributes and dict with 'url'/'codes' keys
             if hasattr(vs, 'url'):
@@ -497,11 +495,45 @@ class FHIRDataLoader:
                     code = code_entry.get("code")
                     display = code_entry.get("display")
 
-                self.con.execute(
-                    f"INSERT INTO {table_name} VALUES (?, ?, ?, ?)",
-                    [vs_url, system, code, display]
-                )
+                valueset_urls.append(vs_url)
+                systems.append(system)
+                code_values.append(code)
+                displays.append(display)
                 total_codes += 1
+
+        if valueset_urls:
+            try:
+                import pyarrow as pa
+
+                arrow_table = pa.table({
+                    "valueset_url": pa.array(valueset_urls, type=pa.string()),
+                    "system": pa.array(systems, type=pa.string()),
+                    "code": pa.array(code_values, type=pa.string()),
+                    "display": pa.array(displays, type=pa.string()),
+                })
+                temp_name = f"_{table_name}_bulk_valuesets"
+                self.con.register(temp_name, arrow_table)
+                try:
+                    self.con.execute(
+                        f"INSERT INTO {table_name} "
+                        f"SELECT valueset_url, system, code, display "
+                        f"FROM {temp_name}"
+                    )
+                finally:
+                    self.con.unregister(temp_name)
+            except ImportError:
+                rows = list(zip(valueset_urls, systems, code_values, displays))
+                self.con.executemany(
+                    f"INSERT INTO {table_name} VALUES (?, ?, ?, ?)",
+                    rows,
+                )
+
+        # Create index for fast lookups after bulk insert so fresh loads do
+        # not maintain the index one row at a time.
+        self.con.execute(f"""
+            CREATE INDEX IF NOT EXISTS idx_{table_name}_lookup
+            ON {table_name} (valueset_url, system, code)
+        """)
 
         self._refresh_in_valueset_udf(table_name)
         return total_codes

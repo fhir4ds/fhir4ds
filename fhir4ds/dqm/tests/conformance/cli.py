@@ -470,6 +470,25 @@ def _extract_population_definitions(test_dir: Path) -> list:
     ``"Denominator 1"``, ``"Denominator 2"``).  Single-group measures
     produce plain names (``"Denominator"``).
     """
+    for patient_dir in sorted(test_dir.iterdir()):
+        if not patient_dir.is_dir():
+            continue
+        for report_file in sorted(patient_dir.glob("MeasureReport-*.json")):
+            try:
+                with open(report_file) as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+            definitions = _extract_population_definitions_from_report(data)
+            if definitions:
+                return definitions
+    return []
+
+
+def _extract_population_definitions_from_report(data: dict) -> list:
+    """Extract population definitions from one representative MeasureReport."""
+    import re
+
     mapping = {
         "initial-population": "Initial Population",
         "denominator": "Denominator",
@@ -479,45 +498,21 @@ def _extract_population_definitions(test_dir: Path) -> list:
         "numerator-exclusion": "Numerator Exclusion",
     }
 
-    # First pass: determine max group count across all MeasureReports
-    max_groups = 1
-    for patient_dir in test_dir.iterdir():
-        if not patient_dir.is_dir():
-            continue
-        for report_file in patient_dir.glob("MeasureReport-*.json"):
-            try:
-                with open(report_file) as f:
-                    data = json.load(f)
-                num_groups = len(data.get("group", []))
-                if num_groups > max_groups:
-                    max_groups = num_groups
-            except Exception:
-                pass
-
-    # Second pass: collect definitions (numbered for multi-group)
+    groups = data.get("group", [])
+    max_groups = len(groups) or 1
     definitions = set()
-    for patient_dir in test_dir.iterdir():
-        if not patient_dir.is_dir():
-            continue
-        for report_file in patient_dir.glob("MeasureReport-*.json"):
-            try:
-                with open(report_file) as f:
-                    data = json.load(f)
-
-                for group_idx, group in enumerate(data.get("group", [])):
-                    for pop in group.get("population", []):
-                        coding = pop.get("code", {}).get("coding", [])
-                        if not coding:
-                            continue
-                        code = coding[0].get("code", "")
-                        base_name = mapping.get(code)
-                        if base_name:
-                            if max_groups > 1:
-                                definitions.add(f"{base_name} {group_idx + 1}")
-                            else:
-                                definitions.add(base_name)
-            except Exception:
-                pass
+    for group_idx, group in enumerate(groups):
+        for pop in group.get("population", []):
+            coding = pop.get("code", {}).get("coding", [])
+            if not coding:
+                continue
+            code = coding[0].get("code", "")
+            base_name = mapping.get(code)
+            if base_name:
+                if max_groups > 1:
+                    definitions.add(f"{base_name} {group_idx + 1}")
+                else:
+                    definitions.add(base_name)
 
     # Sort by canonical eCQM population gating order so cascaded gating
     # logic in compare_results always processes prerequisites first.
