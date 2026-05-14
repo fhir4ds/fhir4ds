@@ -62,6 +62,41 @@ SELECT fhirpath_bool('{"resourceType":"Patient","active":false}', 'active');
 ----
 false
 
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation","code":{"coding":[{"system":"http://loinc.org","code":"8480-6"}]}}', 'code.coding.where(system = ''http://loinc.org'' and code = ''8480-6'').exists()');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation","code":{"coding":[{"system":"http://loinc.org","code":"8480-6"}]}}', 'code.coding.where(system = ''http://loinc.org'' and code = ''8462-4'').exists()');
+----
+false
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation","valueCodeableConcept":{"coding":[{"system":"http://snomed.info/sct","code":"12345"}]}}', 'value.coding.where(system = ''http://snomed.info/sct'' and code = ''12345'').exists()');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Condition","clinicalStatus":{"coding":[{"code":"active"}]}}', 'clinicalStatus.coding.where(code = ''recurrence'' or code = ''active'').exists()');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation","category":[{"coding":[{"system":"http://terminology.hl7.org/CodeSystem/observation-category","code":"laboratory"}]},{"coding":[{"system":"http://example.org","code":"other"}]}]}', 'Observation.category.coding.where(system = ''http://terminology.hl7.org/CodeSystem/observation-category'' and code = ''laboratory'').exists()');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"MedicationRequest","extension":[{"url":"http://example.org/other","valueCodeableConcept":{"coding":[{"system":"http://snomed.info/sct","code":"999"}]}},{"url":"http://example.org/reason","valueCodeableConcept":{"coding":[{"system":"http://snomed.info/sct","code":"720834000"}]}}]}', 'extension.where(url = ''http://example.org/reason'').value.coding.where(system = ''http://snomed.info/sct'' and code = ''720834000'').exists()');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"MedicationRequest","extension":[{"url":"http://example.org/reason","valueCodeableConcept":{"coding":[{"system":"http://snomed.info/sct","code":"999"}]}}]}', 'extension.where(url = ''http://example.org/reason'').value.coding.where(system = ''http://snomed.info/sct'' and code = ''720834000'').exists()');
+----
+false
+
 # =====================================================================
 # fhirpath_is_valid — expression validation
 # =====================================================================
