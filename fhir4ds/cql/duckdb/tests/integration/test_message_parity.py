@@ -37,6 +37,7 @@ def test_cql_message_expressions_parse_and_translate() -> None:
     translated = translate_cql(_cql_message_library())
     assert translated["FalseCondition"].to_sql() == "'src'"
     assert translated["WarningCondition"].to_sql() == "'src'"
+    assert translated["IdentifierSeverity"].to_sql() == "'src'"
     assert "CQLMessage" in translated["ErrorCondition"].to_sql()
     assert translated["NullCondition"].to_sql() == "'src'"
     assert "CASE WHEN" in translated["ExpressionFalseCondition"].to_sql()
@@ -47,6 +48,7 @@ def test_cql_message_translated_sql_matches_cpp_registration() -> None:
     expected = {
         "FalseCondition": "src",
         "WarningCondition": "src",
+        "IdentifierSeverity": "src",
         "NullCondition": "src",
         "ExpressionFalseCondition": "src",
     }
@@ -96,6 +98,7 @@ using FHIR version '4.0.1'
 context Patient
 define FalseCondition: Message('src', false, 'code', 'Error', 'message')
 define WarningCondition: Message('src', true, 'code', 'Warning', 'message')
+define IdentifierSeverity: Message('src', true, 'code', ErrorLevel, 'message')
 define ErrorCondition: Message('src', true, 'code', 'Error', 'message')
 define NullCondition: Message('src', null, 'code', 'Error', 'message')
 define ExpressionFalseCondition: Message('src', 1 = 2, 'code', 'Error', 'message')

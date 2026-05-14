@@ -100,25 +100,29 @@ def mathSqrt(x: str | None) -> str | None:
 def mathExp(x: str | None) -> str | None:
     """CQL Exp(x) (§16.6).
 
-    If the result overflows (positive infinity), return null.
+    If the result overflows (positive infinity), raise an error.
     """
     value = _parse_math_number(x)
     if value is None:
         return None
     try:
         result = math.exp(value)
-    except OverflowError:
-        return None
+    except OverflowError as exc:
+        raise ValueError(f"Exp({x}) results in overflow (positive infinity)") from exc
     return _format_math_result(result)
 
 
 def mathLn(x: str | None) -> str | None:
     """CQL Ln(x) - natural logarithm (§16.12).
 
-    Undefined inputs return null to match the native DuckDB extension.
+    Ln(0) results in negative infinity. Negative inputs are undefined.
     """
     value = _parse_math_number(x)
-    if value is None or value <= 0:
+    if value is None:
+        return None
+    if value == 0:
+        raise ValueError("Ln(0) results in negative infinity")
+    if value < 0:
         return None
     return _format_math_result(math.log(value))
 

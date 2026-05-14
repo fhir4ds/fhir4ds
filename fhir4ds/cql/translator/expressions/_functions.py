@@ -1139,7 +1139,9 @@ class FunctionsMixin:
             return source
         if isinstance(condition, SQLNull):
             return source
-        if isinstance(severity, SQLLiteral) and str(severity.value).lower() != 'error':
+        if not isinstance(severity, SQLLiteral):
+            return source
+        if str(severity.value).lower() != 'error':
             return source
 
         message_call = SQLFunctionCall(name="CQLMessage", args=args[:5])

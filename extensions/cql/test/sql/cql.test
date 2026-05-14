@@ -876,11 +876,11 @@ SELECT mathLn('1');
 ----
 0
 
-# mathLn zero → NULL
-query I
+# mathLn zero → error
+statement error
 SELECT mathLn('0');
 ----
-NULL
+Invalid Error
 
 # mathLn negative → NULL
 query I
@@ -1531,11 +1531,11 @@ SELECT mathLn('-1');
 ----
 NULL
 
-# mathLn: zero → NULL (domain error)
-query I
+# mathLn: zero → error (negative infinity)
+statement error
 SELECT mathLn('0');
 ----
-NULL
+Invalid Error
 
 # mathSqrt: zero
 query I

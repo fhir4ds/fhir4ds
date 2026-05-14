@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import duckdb
+import pytest
 
 from fhir4ds.cql.duckdb import register
 from fhir4ds.cql.duckdb.extension import _register_python_supplements
@@ -81,7 +82,6 @@ def test_cql_arithmetic_duckdb_surface_matches_cpp_registration() -> None:
         "SELECT mathFloor('2.9')",
         "SELECT mathExp('0')",
         "SELECT mathLn('1')",
-        "SELECT mathLn('0')",
         "SELECT mathLn('-1')",
         "SELECT mathLog('100','10')",
         "SELECT mathLog('-1','10')",
@@ -108,6 +108,12 @@ def test_cql_arithmetic_duckdb_surface_matches_cpp_registration() -> None:
     try:
         for expression in expressions:
             assert cpp.execute(expression).fetchone() == py.execute(expression).fetchone()
+
+        for expression in ["SELECT mathExp('1000')", "SELECT mathLn('0')"]:
+            with pytest.raises(duckdb.Error):
+                py.execute(expression).fetchone()
+            with pytest.raises(duckdb.Error):
+                cpp.execute(expression).fetchone()
     finally:
         py.close()
         cpp.close()
