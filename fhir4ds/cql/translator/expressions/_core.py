@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import re as _re
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from ...parser.ast_nodes import (
@@ -93,16 +94,22 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+@lru_cache(maxsize=None)
+def _camel_to_snake_cached(name: str) -> str:
+    """Convert CamelCase to snake_case."""
+    result = []
+    for i, char in enumerate(name):
+        if char.isupper() and i > 0:
+            result.append("_")
+        result.append(char.lower())
+    return "".join(result)
+
+
 class CoreMixin:
     """Mixin providing literal, identifier, and basic conversion translations."""
     def _camel_to_snake(self, name: str) -> str:
         """Convert CamelCase to snake_case."""
-        result = []
-        for i, char in enumerate(name):
-            if char.isupper() and i > 0:
-                result.append("_")
-            result.append(char.lower())
-        return "".join(result)
+        return _camel_to_snake_cached(name)
 
     def _translate_literal(self, lit: Literal, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL literal to SQL."""

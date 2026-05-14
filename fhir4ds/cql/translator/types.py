@@ -1350,12 +1350,20 @@ class SQLFragment:
             self._dedup_select(query, min_occ)
 
     def _dedup_select(self, select: 'SQLSelect', min_occ: int) -> None:
-        """Deduplicate repeated expressions in a SELECT's WHERE clause."""
-        if select.where is None or select.from_clause is None:
+        """Deduplicate repeated expressions in a SELECT's projection and WHERE."""
+        self._dedup_nested_scopes(select.columns, min_occ)
+        self._dedup_nested_scopes(select.from_clause, min_occ)
+        self._dedup_nested_scopes(select.joins, min_occ)
+        self._dedup_nested_scopes(select.where, min_occ)
+
+        if select.from_clause is None:
             return
 
-        # 1) Collect candidate expressions and their serialized forms
+        # 1) Collect candidate expressions and their serialized forms.
+        # Lateral aliases appended to this SELECT are visible to the projection
+        # and WHERE clause, but not to earlier JOIN ON conditions.
         candidates = {}  # sql_str -> (node, count)
+        self._collect_candidates(select.columns, candidates, min_occ)
         self._collect_candidates(select.where, candidates, min_occ)
 
         if not candidates:
@@ -1384,16 +1392,77 @@ class SQLFragment:
         if not lateral_joins:
             return
 
-        # 3) Replace occurrences in WHERE with lateral value references.
-        new_where = self._replace_aliases(select.where, alias_map)
-        select.where = new_where
+        # 3) Replace occurrences in projection and WHERE with lateral references.
+        select.columns = self._replace_alias_value(select.columns, alias_map)
+        if select.where is not None:
+            select.where = self._replace_aliases(select.where, alias_map)
 
         # 4) Append lateral joins after existing FROM/JOIN sources so they can
         # reference every alias visible to the WHERE clause.
-        select.joins = list(select.joins) + lateral_joins
+        select.joins = list(select.joins or []) + lateral_joins
+
+    def _dedup_nested_scopes(self, value: Any, min_occ: int) -> None:
+        """Apply deduplication inside nested SELECT scopes without hoisting out."""
+        if value is None:
+            return
+
+        if isinstance(value, SQLSubquery):
+            if isinstance(value.query, SQLSelect):
+                self._dedup_select(value.query, min_occ)
+            elif isinstance(value.query, (SQLUnion, SQLIntersect, SQLExcept)):
+                for operand in value.query.operands:
+                    self._dedup_nested_scopes(operand, min_occ)
+            return
+
+        if isinstance(value, SQLExists):
+            self._dedup_nested_scopes(value.subquery, min_occ)
+            return
+
+        if isinstance(value, SQLSelect):
+            self._dedup_select(value, min_occ)
+            return
+
+        if isinstance(value, SQLJoin):
+            self._dedup_nested_scopes(value.table, min_occ)
+            self._dedup_nested_scopes(value.on_condition, min_occ)
+            return
+
+        if isinstance(value, (SQLUnion, SQLIntersect, SQLExcept)):
+            for operand in value.operands:
+                self._dedup_nested_scopes(operand, min_occ)
+            return
+
+        if isinstance(value, list):
+            for item in value:
+                self._dedup_nested_scopes(item, min_occ)
+            return
+
+        if isinstance(value, tuple):
+            for item in value:
+                self._dedup_nested_scopes(item, min_occ)
+            return
+
+        if not is_dataclass(value):
+            return
+
+        for field_info in fields(value):
+            self._dedup_nested_scopes(getattr(value, field_info.name), min_occ)
 
     def _collect_candidates(self, node: 'SQLExpression', candidates: dict, min_occ: int) -> None:
         """Walk the AST and collect scalar subqueries that appear multiple times."""
+        if node is None:
+            return
+
+        if isinstance(node, (list, tuple)):
+            for item in node:
+                self._collect_candidates(item, candidates, min_occ)
+            return
+
+        if isinstance(node, dict):
+            for item in node.values():
+                self._collect_candidates(item, candidates, min_occ)
+            return
+
         if isinstance(node, SQLSubquery):
             sql_str = node.to_sql()
             # Only consider larger correlated subqueries. Small subqueries do not

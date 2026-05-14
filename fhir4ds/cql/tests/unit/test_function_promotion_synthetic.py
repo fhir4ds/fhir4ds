@@ -78,6 +78,28 @@ define "A":
     assert "_fv._row_key = fhirpath_text(R.resource, 'id')" in sql
 
 
+def test_promotes_repeated_calls_on_retrieve_alias() -> None:
+    """Retrieve-backed aliases can be function promotion sources."""
+    sql, translator = _translate(
+        """library Test version '1.0.0'
+using FHIR version '4.0.1'
+
+define function Foo(e FHIR.Encounter):
+  e.status = 'finished'
+
+define "A":
+  [Encounter] E
+    where Foo(E) or Foo(E) or Foo(E)
+"""
+    )
+
+    assert ("Foo", "Encounter") in translator._context.promoted_functions
+    assert ("Foo", "Encounter") in translator._context._promoted_cte_keys
+    assert '"_fn_Foo_Encounter_d1e9f9" AS' in sql
+    assert "_fv.patient_id = E.patient_id" in sql
+    assert "_fv._row_key = fhirpath_text(E.resource, 'id')" in sql
+
+
 def test_source_resource_type_inference_uses_query_row_shape_not_relationship_retrieves() -> None:
     """A with-clause retrieve should not decide the source definition's row type."""
     library = parse_cql(

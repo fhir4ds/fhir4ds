@@ -1359,12 +1359,6 @@ def run_optimization_phases(
             phase1_result.placeholders.extend(let_placeholders)
             stats.num_retrieves += len(let_placeholders)
 
-        # Also scan let-variable CTE bodies produced by this definition
-        for let_cte_body in context._let_variable_ctes.get(statement.name, {}).values():
-            let_placeholders = find_all_placeholders(let_cte_body)
-            phase1_result.placeholders.extend(let_placeholders)
-            stats.num_retrieves += len(let_placeholders)
-
         # Scan for property accesses
         property_map = scan_definition_for_properties(sql_ast, placeholders)
 
