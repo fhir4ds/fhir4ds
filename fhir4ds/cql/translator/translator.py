@@ -54,6 +54,7 @@ from ..parser.ast_nodes import (
     ParameterDefinition,
     Query,
     QuerySource,
+    Retrieve,
     ValueSetDefinition,
 )
 
@@ -905,7 +906,8 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 fragment.main_query, self._context.column_registry
             )
         import os
-        if os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP") == "1":
+
+        if os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP", "1") != "0":
             min_occurrences = int(os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP_MIN", "3"))
             fragment.deduplicate_lateral_aliases(min_occurrences=min_occurrences)
         sql_text = fragment.to_sql()
@@ -1719,19 +1721,15 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             expr = stmt.expression
             if not isinstance(expr, Query):
                 continue
-            src = expr.source
-            if not isinstance(src, QuerySource):
-                continue
-            if not isinstance(src.expression, Identifier):
-                continue
-
             alias_to_source_def: Dict[str, str] = {}
-            source_alias = src.alias
-            source_def = src.expression.name
+            sources = expr.source if isinstance(expr.source, list) else [expr.source]
 
-            # Track the primary source alias when it is backed by a CQL definition.
-            if source_def in self._context._definition_names:
-                alias_to_source_def[source_alias] = source_def
+            for src in sources:
+                if not isinstance(src, QuerySource):
+                    continue
+                source_key = self._promotion_source_key(src.expression)
+                if source_key:
+                    alias_to_source_def[src.alias] = source_key
 
             # Track relationship aliases backed by CQL definitions. Repeated
             # function calls in with/without such-that clauses are a major
@@ -1739,9 +1737,9 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             for with_clause in getattr(expr, "with_clauses", []) or []:
                 wc_expr = getattr(with_clause, "expression", None)
                 wc_alias = getattr(with_clause, "alias", None)
-                wc_def = getattr(wc_expr, "name", None)
-                if wc_alias and isinstance(wc_expr, Identifier) and wc_def in self._context._definition_names:
-                    alias_to_source_def[wc_alias] = wc_def
+                source_key = self._promotion_source_key(wc_expr)
+                if wc_alias and source_key:
+                    alias_to_source_def[wc_alias] = source_key
 
             if not alias_to_source_def:
                 continue
@@ -1767,6 +1765,99 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             self._walk_ast(expr, _visitor)
 
         self._context.function_ref_counts = func_calls
+
+    def _promotion_source_key(self, expr: Any) -> Optional[str]:
+        """Return the CTE key for a query alias eligible for function promotion."""
+        if isinstance(expr, Identifier):
+            if expr.name in self._context._definition_names:
+                return expr.name
+            return None
+        if isinstance(expr, Retrieve):
+            result = self._retrieve_promotion_source(expr)
+            return result[0] if result else None
+        return None
+
+    def _retrieve_promotion_source(self, node: Retrieve) -> Optional[Tuple[str, str]]:
+        """Resolve a Retrieve AST node to its retrieve CTE name and resource type."""
+        from ..parser.ast_nodes import BinaryExpression, CodeSelector
+        from ..translator.cte_builder import build_retrieve_cte
+
+        resource_type = getattr(node, "type", None)
+        if not resource_type:
+            return None
+
+        profile_url = None
+        registry = self._context.profile_registry
+        resolved = registry.resolve_named_profile(resource_type)
+        if resolved is not None:
+            resource_type, profile_url = resolved
+
+        terminology = getattr(node, "terminology", None)
+        valueset = None
+        code_property = None
+        valueset_name = None
+
+        if terminology:
+            if isinstance(terminology, str):
+                valueset_name = terminology
+            elif isinstance(terminology, CodeSelector):
+                cs_url = self._context.codesystems.get(
+                    terminology.system, terminology.system
+                )
+                valueset = f"urn:cql:code:{cs_url}|{terminology.code}"
+            else:
+                if isinstance(terminology, Identifier):
+                    valueset_name = terminology.name
+                elif (
+                    isinstance(terminology, BinaryExpression)
+                    and terminology.operator in ("in", "~", "=")
+                ):
+                    left = terminology.left
+                    if isinstance(left, Identifier):
+                        code_property = left.name
+                    right = terminology.right
+                    if isinstance(right, Identifier):
+                        valueset_name = right.name
+                    else:
+                        valueset_name = str(right)
+                else:
+                    valueset_name = str(terminology)
+
+            if valueset is None and valueset_name is not None:
+                valueset = self._context.valuesets.get(valueset_name)
+
+            if valueset is None and valueset_name is not None:
+                code_info = self._context.codes.get(valueset_name)
+                if code_info:
+                    cs_name = code_info.get("codesystem", "")
+                    cs_url = self._context.codesystems.get(cs_name, cs_name)
+                    code_val = code_info.get("code", "")
+                    valueset = f"urn:cql:code:{cs_url}|{code_val}"
+                else:
+                    valueset = valueset_name
+
+            if (
+                valueset
+                and not valueset.startswith("http")
+                and not valueset.startswith("urn:")
+            ):
+                from ..translator.patterns.retrieve import _VALUESET_PREFIX_CONFIG
+
+                default_prefix = _VALUESET_PREFIX_CONFIG.get(
+                    "default_prefix",
+                    "http://cts.nlm.nih.gov/fhir/ValueSet/",
+                )
+                valueset = f"{default_prefix}{valueset}"
+
+        cte_name, _cte_ast, _columns = build_retrieve_cte(
+            resource_type=resource_type,
+            valueset=valueset,
+            properties=set(),
+            context=self._context,
+            profile_url=profile_url,
+            code_property=code_property,
+        )
+        return cte_name, resource_type
 
     def _build_function_call_graph(self, library: Library) -> None:
         """Build an adjacency list of which functions each function/definition calls.
@@ -2214,6 +2305,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             ReturnClause,
         )
 
+        retrieve_source = self._retrieve_source_type_from_cte_name(def_name)
+        if retrieve_source:
+            return retrieve_source
+
         definitions = {
             stmt.name: stmt
             for stmt in library.statements
@@ -2277,6 +2372,15 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         if def_name not in definitions:
             return None
         return infer_expr(definitions[def_name].expression, {def_name})
+
+    def _retrieve_source_type_from_cte_name(self, cte_name: str) -> Optional[str]:
+        """Infer resource type from retrieve CTE names such as ``Observation: X``."""
+        if not cte_name:
+            return None
+        resource_type = cte_name.split(":", 1)[0].split("(", 1)[0].strip()
+        if self._context.fhir_schema and resource_type in self._context.fhir_schema.resources:
+            return resource_type
+        return None
 
     def _setup_context(self, library: Library) -> None:
         """
