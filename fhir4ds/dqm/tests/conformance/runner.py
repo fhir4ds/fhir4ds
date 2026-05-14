@@ -39,6 +39,10 @@ def _clear_runtime_state(conn) -> None:
         pass
 
 
+def _elapsed_ms(start: float) -> float:
+    return (time.perf_counter() - start) * 1000
+
+
 def run_measure(
     conn,
     measure_config: "MeasureConfig",
@@ -67,7 +71,7 @@ def run_measure(
     from fhir4ds.cql.parser import parse_cql
     cql_text = measure_config.cql_path.read_text()
     library = parse_cql(cql_text)
-    timings["cql_parse_ms"] = (time.perf_counter() - start) * 1000
+    timings["cql_parse_ms"] = _elapsed_ms(start)
 
     # Normalize population definitions (shared)
     from fhir4ds.cql.parser.ast_nodes import Definition
@@ -113,10 +117,11 @@ def run_measure(
     audit_tier = None  # tracks which tier succeeded: "full", "population", or None
 
     # Always generate non-audit SQL first (cheapest, always needed)
-    noaudit_sql, noaudit_gen_ms = _translate_measure(
+    noaudit_sql, noaudit_gen_ms, noaudit_lib_ms = _translate_measure(
         conn, library, measure_config, output_columns, mp_params,
         measure_patient_ids, audit_mode=False,
     )
+    timings["library_translation_ms"] = noaudit_lib_ms
 
     if audit:
         from .config import KNOWN_FAILURES
@@ -129,32 +134,39 @@ def run_measure(
             # Tier 1: Try full audit (only if non-audit SQL is small enough)
             if len(noaudit_sql) < _NOAUDIT_FULL_THRESHOLD:
                 try:
-                    sql, gen_ms = _translate_measure(
+                    sql, gen_ms, lib_ms = _translate_measure(
                         conn, library, measure_config, output_columns, mp_params,
                         measure_patient_ids, audit_mode=True, audit_expressions=True,
                     )
+                    timings["library_translation_ms"] = lib_ms
                     timings["sql_generation_ms"] = gen_ms
                     # Always save the full audit SQL — even if execution fails below,
                     # this file is preserved so prepare_cms_data.py can use it for
                     # the WASM demo (which runs on a small patient subset without OOM).
+                    start = time.perf_counter()
                     _write_sql(sql, measure_config, verbose, suffix="_audit_full")
+                    timings["sql_write_ms"] = timings.get("sql_write_ms", 0) + _elapsed_ms(start)
 
                     # Raise expression depth limit to handle deeply nested audit expressions
                     conn.execute("SET max_expression_depth TO 10000")
                     start = time.perf_counter()
                     result_df = conn.execute(sql).df()
-                    timings["sql_execution_ms"] = (time.perf_counter() - start) * 1000
+                    timings["sql_execution_ms"] = _elapsed_ms(start)
 
                     # Accuracy guard
+                    start = time.perf_counter()
                     audit_results = result_df.to_dict("records")
                     import numpy as np
                     for row in audit_results:
                         for key, value in row.items():
                             if isinstance(value, np.ndarray):
                                 row[key] = value.tolist()
+                    timings["result_conversion_ms"] = _elapsed_ms(start)
+                    start = time.perf_counter()
                     audit_comparison = compare_results(
                         audit_results, test_suite, measure_config, pop_name_map,
                     )
+                    timings["comparison_ms"] = _elapsed_ms(start)
                     expected_mismatches = KNOWN_FAILURES.get(
                         measure_config.id, {},
                     ).get("mismatches", 0)
@@ -173,7 +185,9 @@ def run_measure(
                     # Write verified full audit SQL as the canonical _audit.sql.
                     # Do NOT write to the base file here — the base file always
                     # holds the non-audit SQL (written unconditionally below).
+                    start = time.perf_counter()
                     _write_sql(sql, measure_config, verbose, suffix="_audit")
+                    timings["sql_write_ms"] = timings.get("sql_write_ms", 0) + _elapsed_ms(start)
                 except Exception as full_err:
                     if verbose:
                         print(
@@ -191,30 +205,37 @@ def run_measure(
             # Tier 2: Try population-only audit (if full didn't succeed and size ok)
             if audit_tier is None and len(noaudit_sql) < _NOAUDIT_POP_THRESHOLD:
                 try:
-                    sql, gen_ms = _translate_measure(
+                    sql, gen_ms, lib_ms = _translate_measure(
                         conn, library, measure_config, output_columns, mp_params,
                         measure_patient_ids, audit_mode=True,
                         audit_expressions=False,
                     )
+                    timings["library_translation_ms"] = lib_ms
                     timings["sql_generation_ms"] = gen_ms
+                    start = time.perf_counter()
                     _write_sql(sql, measure_config, verbose, suffix="_audit")
+                    timings["sql_write_ms"] = timings.get("sql_write_ms", 0) + _elapsed_ms(start)
 
                     start = time.perf_counter()
                     result_df = conn.execute(sql).df()
                     timings["sql_execution_ms"] = (
-                        (time.perf_counter() - start) * 1000
+                        _elapsed_ms(start)
                     )
 
                     # Accuracy guard
+                    start = time.perf_counter()
                     pop_results = result_df.to_dict("records")
                     import numpy as np
                     for row in pop_results:
                         for key, value in row.items():
                             if isinstance(value, np.ndarray):
                                 row[key] = value.tolist()
+                    timings["result_conversion_ms"] = _elapsed_ms(start)
+                    start = time.perf_counter()
                     pop_comparison = compare_results(
                         pop_results, test_suite, measure_config, pop_name_map,
                     )
+                    timings["comparison_ms"] = _elapsed_ms(start)
                     expected_mismatches = KNOWN_FAILURES.get(
                         measure_config.id, {},
                     ).get("mismatches", 0)
@@ -228,7 +249,9 @@ def run_measure(
                             f"{pop_comparison.accuracy_pct:.1f}%"
                         )
                     audit_tier = "population"
+                    start = time.perf_counter()
                     _write_sql(sql, measure_config, verbose)
+                    timings["sql_write_ms"] = timings.get("sql_write_ms", 0) + _elapsed_ms(start)
                     if verbose:
                         print(
                             f"  Using population-only audit for "
@@ -260,7 +283,9 @@ def run_measure(
 
     # Always write non-audit SQL as the canonical base file so that prepare_cms_data.py
     # and other downstream tools can rely on {measure}.sql being audit-expression-free.
+    start = time.perf_counter()
     _write_sql(noaudit_sql, measure_config, verbose)
+    timings["sql_write_ms"] = timings.get("sql_write_ms", 0) + _elapsed_ms(start)
 
     if not audit or audit_fallback:
         # Non-audit path: execute and time pre-generated non-audit SQL
@@ -269,11 +294,10 @@ def run_measure(
 
         start = time.perf_counter()
         result_df = conn.execute(sql).df()
-        timings["sql_execution_ms"] = (time.perf_counter() - start) * 1000
-
-    timings["total_ms"] = sum(timings.values())
+        timings["sql_execution_ms"] = _elapsed_ms(start)
 
     # Convert to list of dicts
+    start = time.perf_counter()
     results = result_df.to_dict("records")
 
     # Post-process: convert numpy arrays to Python lists
@@ -282,9 +306,13 @@ def run_measure(
         for key, value in row.items():
             if isinstance(value, np.ndarray):
                 row[key] = value.tolist()
+    timings["result_conversion_ms"] = timings.get("result_conversion_ms", 0) + _elapsed_ms(start)
 
     # Compare with expected (pass name map for singular/plural normalization)
+    start = time.perf_counter()
     comparison = compare_results(results, test_suite, measure_config, pop_name_map)
+    timings["comparison_ms"] = timings.get("comparison_ms", 0) + _elapsed_ms(start)
+    timings["total_ms"] = sum(timings.values())
 
     if verbose:
         print(f"Measure: {measure_config.id}")
@@ -317,7 +345,7 @@ def _translate_measure(
 ) -> tuple:
     """Translate a CQL library to population SQL.
 
-    Returns (sql_string, generation_time_ms).
+    Returns (sql_string, population_sql_generation_ms, library_translation_ms).
     """
     from fhir4ds.cql.parser import parse_cql
     from fhir4ds.cql.translator import CQLToSQLTranslator
@@ -335,7 +363,9 @@ def _translate_measure(
         audit_mode=audit_mode,
         audit_expressions=audit_expressions,
     )
+    start = time.perf_counter()
     translator.translate_library(library)
+    library_translation_ms = _elapsed_ms(start)
 
     start = time.perf_counter()
     sql = translator.translate_library_to_population_sql(
@@ -344,8 +374,8 @@ def _translate_measure(
         parameters=mp_params,
         patient_ids=patient_ids if patient_ids else None,
     )
-    gen_ms = (time.perf_counter() - start) * 1000
-    return sql, gen_ms
+    gen_ms = _elapsed_ms(start)
+    return sql, gen_ms, library_translation_ms
 
 
 def _write_sql(sql: str, measure_config, verbose: bool, suffix: str = "") -> None:
@@ -357,7 +387,7 @@ def _write_sql(sql: str, measure_config, verbose: bool, suffix: str = "") -> Non
     sql_dir.mkdir(parents=True, exist_ok=True)
     sql_path = sql_dir / f"{measure_config.id}{suffix}.sql"
 
-    if len(sql) < 50000:
+    if verbose and len(sql) < 50000:
         try:
             import sqlparse
             formatted_sql = sqlparse.format(sql, reindent=True, keyword_case="upper", indent_width=2)
