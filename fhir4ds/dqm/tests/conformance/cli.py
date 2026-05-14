@@ -40,9 +40,9 @@ def main():
     )
     parser.add_argument(
         "--sql-format",
-        choices=["mozilla", "default"],
-        default="mozilla",
-        help="SQL formatting style",
+        choices=["raw", "mozilla", "default"],
+        default="raw",
+        help="SQL output format. Use 'mozilla' or 'default' to pretty-print small SQL files.",
     )
     parser.add_argument(
         "--measurement-period-start",

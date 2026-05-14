@@ -6,21 +6,21 @@ import json
 from pathlib import Path
 from typing import Dict, List, Any, TYPE_CHECKING
 
-import sqlparse
-
 if TYPE_CHECKING:
     from .runner import MeasureResult
+
+_MAX_FORMATTED_SQL_CHARS = 50_000
 
 def write_results(
     measure_result: "MeasureResult",
     output_dir: Path,
-    sql_format: str = "mozilla",
+    sql_format: str = "raw",
 ) -> Dict[str, Path]:
     """
     Write all outputs for a measure.
 
     Creates:
-    - output/sql/{measure_id}.sql - Formatted SQL
+    - output/sql/{measure_id}.sql - Generated SQL
     - output/results/{measure_id}.csv - Per-patient results
     - output/stats/{measure_id}.json - Performance stats
 
@@ -53,25 +53,30 @@ def write_results(
 
     return paths
 
-def write_sql(sql: str, path: Path, format: str = "mozilla") -> None:
+def write_sql(sql: str, path: Path, format: str = "raw") -> None:
     """
-    Write formatted SQL to file.
+    Write SQL to file.
 
     Formats:
+    - raw: no formatting
     - mozilla: 4-space indent, uppercase keywords, wrap after 80 chars
     - default: 2-space indent
     """
-    try:
-        formatted = sqlparse.format(
-            sql,
-            reindent=True,
-            keyword_case="upper",
-            wrap_mode=80 if format == "mozilla" else None,
-            indent_width=4 if format == "mozilla" else 2,
-        )
-    except Exception:
-        # Fall back to raw SQL if formatter fails (e.g., token limit exceeded)
-        formatted = sql
+    formatted = sql
+    if format != "raw" and len(sql) <= _MAX_FORMATTED_SQL_CHARS:
+        try:
+            import sqlparse
+
+            formatted = sqlparse.format(
+                sql,
+                reindent=True,
+                keyword_case="upper",
+                wrap_mode=80 if format == "mozilla" else None,
+                indent_width=4 if format == "mozilla" else 2,
+            )
+        except Exception:
+            # Fall back to raw SQL if formatter fails (e.g., token limit exceeded)
+            formatted = sql
 
     path.write_text(f"-- Generated SQL for measure\n\n{formatted}\n")
 
