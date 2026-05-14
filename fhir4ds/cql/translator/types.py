@@ -1472,6 +1472,12 @@ class SQLFragment:
                 candidates[sql_str] = (node, count)
             return
 
+        if self._is_lateral_scalar_candidate(node):
+            sql_str = node.to_sql()
+            count = candidates.get(sql_str, (None, 0))[1] + 1
+            candidates[sql_str] = (node, count)
+            return
+
         if isinstance(node, SQLExists):
             # EXISTS owns a nested SELECT scope. Hoisting an expression found only
             # inside that scope to the outer SELECT would be invalid.
@@ -1479,6 +1485,23 @@ class SQLFragment:
 
         for child in self._iter_child_expressions(node):
             self._collect_candidates(child, candidates, min_occ)
+
+    @staticmethod
+    def _is_lateral_scalar_candidate(node: Any) -> bool:
+        """Return true for repeated pure scalar extractions worth lateralizing."""
+        if not isinstance(node, SQLFunctionCall):
+            return False
+        if not node.name or node.name.lower() not in {"fhirpath", "fhirpath_text"}:
+            return False
+        if len(node.args) < 2:
+            return False
+        # Very small direct field reads are usually cheaper than an extra lateral
+        # join. Complex first args, such as scalar subqueries, remain eligible.
+        if len(node.to_sql()) <= 80 and isinstance(
+            node.args[0], (SQLIdentifier, SQLQualifiedIdentifier)
+        ):
+            return False
+        return True
 
     def _replace_aliases(self, node: 'SQLExpression', alias_map: dict) -> 'SQLExpression':
         """Replace subexpressions matching alias_map keys with qualified aliases."""
@@ -1488,6 +1511,11 @@ class SQLFragment:
             if sql_str in alias_map:
                 return alias_map[sql_str]
             return node
+
+        if self._is_lateral_scalar_candidate(node):
+            sql_str = node.to_sql()
+            if sql_str in alias_map:
+                return alias_map[sql_str]
 
         if isinstance(node, SQLExists):
             return node
