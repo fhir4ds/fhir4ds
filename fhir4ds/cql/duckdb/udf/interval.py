@@ -359,7 +359,7 @@ def _parse_date_or_datetime(value: str | date | datetime | None) -> date | datet
             return datetime.fromisoformat(val.replace(" ", "T").replace("Z", "+00:00"))
         return date.fromisoformat(val)
     except ValueError as e:
-        _logger.warning("_parse_date_or_datetime failed: %s", e)
+        _logger.debug("_parse_date_or_datetime failed: %s", e)
         return None
 
 

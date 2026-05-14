@@ -23,5 +23,8 @@ using ValuesetCache = std::unordered_map<std::string, std::unordered_set<std::st
 
 bool in_valueset(const std::string &code, const std::string &system, const std::string &valueset_url,
                  const ValuesetCache &cache);
+std::string normalize_system(const std::string &system);
+std::string canonicalize_url(const std::string &url);
+bool has_not_done_valueset(const std::string &resource_json, const std::string &path, const std::string &valueset_url);
 
 } // namespace cql

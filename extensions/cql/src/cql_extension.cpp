@@ -1374,17 +1374,35 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 		auto path_str = paths[p_idx].GetString();
 		auto url_str = urls[u_idx].GetString();
 
+		bool valueset_loaded = false;
+		{
+			std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
+			valueset_loaded = g_valueset_cache.find(url_str) != g_valueset_cache.end();
+		}
+		if (!valueset_loaded) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
 		auto codes = cql::extract_codes(resource_str, path_str);
 		if (codes.empty()) {
-			// No code found in resource → NULL (not false)
-			result_mask.SetInvalid(i);
+			if (cql::has_not_done_valueset(resource_str, path_str, url_str)) {
+				result_data[i] = true;
+			} else {
+				result_data[i] = false;
+			}
 			continue;
 		}
 		bool found = false;
 		{
 			std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
 			for (const auto &code : codes) {
-				if (cql::in_valueset(code.code, code.system, url_str, g_valueset_cache)) {
+				auto norm_system = cql::normalize_system(code.system);
+				if (cql::in_valueset(code.code, norm_system, url_str, g_valueset_cache)) {
+					found = true;
+					break;
+				}
+				if (norm_system != code.system && cql::in_valueset(code.code, code.system, url_str, g_valueset_cache)) {
 					found = true;
 					break;
 				}
@@ -1397,6 +1415,64 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 		}
 		result_data[i] = found;
 	}
+}
+
+static void ValuesetCacheClearFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
+	g_valueset_cache.clear();
+	result.SetVectorType(VectorType::CONSTANT_VECTOR);
+	ConstantVector::GetData<bool>(result)[0] = true;
+}
+
+static void ValuesetCacheAddFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat url_data, system_data, code_data;
+	args.data[0].ToUnifiedFormat(count, url_data);
+	args.data[1].ToUnifiedFormat(count, system_data);
+	args.data[2].ToUnifiedFormat(count, code_data);
+
+	auto urls = UnifiedVectorFormat::GetData<string_t>(url_data);
+	auto systems = UnifiedVectorFormat::GetData<string_t>(system_data);
+	auto codes = UnifiedVectorFormat::GetData<string_t>(code_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
+	for (idx_t i = 0; i < count; i++) {
+		auto u_idx = url_data.sel->get_index(i);
+		auto c_idx = code_data.sel->get_index(i);
+		if (!url_data.validity.RowIsValid(u_idx) || !code_data.validity.RowIsValid(c_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		std::string url = urls[u_idx].GetString();
+		std::string code = codes[c_idx].GetString();
+		std::string system;
+		auto s_idx = system_data.sel->get_index(i);
+		if (system_data.validity.RowIsValid(s_idx)) {
+			system = systems[s_idx].GetString();
+		}
+		auto normalized_system = cql::normalize_system(system);
+		g_valueset_cache[url].insert(normalized_system + "|" + code);
+		if (normalized_system != system) {
+			g_valueset_cache[url].insert(system + "|" + code);
+		}
+		result_data[i] = true;
+	}
+}
+
+static void ValuesetCacheSizeFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	int64_t total = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
+		for (const auto &entry : g_valueset_cache) {
+			total += static_cast<int64_t>(entry.second.size());
+		}
+	}
+	result.SetVectorType(VectorType::CONSTANT_VECTOR);
+	ConstantVector::GetData<int64_t>(result)[0] = total;
 }
 
 // =====================================================================
@@ -2923,6 +2999,11 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// in_valueset (stub — cache not yet populated)
 	RegisterSpecialScalar(loader, "in_valueset", {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, InValuesetFunc);
+	RegisterSpecialScalar(loader, "cql_valueset_cache_clear", {}, LogicalType::BOOLEAN, ValuesetCacheClearFunc);
+	RegisterSpecialScalar(loader, "cql_valueset_cache_add",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, ValuesetCacheAddFunc);
+	RegisterSpecialScalar(loader, "cql_valueset_cache_size", {}, LogicalType::BIGINT, ValuesetCacheSizeFunc);
 
 	// Ratio UDFs (5)
 	RegisterSpecialScalar(loader, "ratioNumeratorValue", {LogicalType::VARCHAR}, LogicalType::DOUBLE,

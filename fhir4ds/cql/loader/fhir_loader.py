@@ -608,6 +608,9 @@ class FHIRDataLoader:
         Uses a soft import of ``duckdb_cql_py`` so that ``cql-py`` does not gain a
         hard dependency on the higher-level package.
         """
+        if self._refresh_cpp_in_valueset_cache(table_name):
+            return
+
         try:
             from fhir4ds.cql.duckdb.udf.valueset import createValuesetMembershipUdf
         except ImportError:
@@ -655,3 +658,35 @@ class FHIRDataLoader:
         except Exception as e:
             _logger.error("Unexpected error refreshing valueset UDF macros: %s", e)
             raise
+
+    def _refresh_cpp_in_valueset_cache(self, table_name: str = "valueset_codes") -> bool:
+        """Populate the native CQL valueset cache when the C++ extension exposes it."""
+        import os
+        if os.environ.get("FHIR4DS_USE_CPP_VALUESET_CACHE", "").lower() not in ("1", "true", "yes"):
+            return False
+
+        try:
+            self.con.execute("SELECT cql_valueset_cache_clear()").fetchone()
+        except Exception:
+            return False
+
+        try:
+            self.con.execute(
+                f"SELECT cql_valueset_cache_add(valueset_url, system, code) "
+                f"FROM {table_name}"
+            ).fetchall()
+            # Remove stale Python macros from prior refreshes so SQL resolves to
+            # the native in_valueset function. Keep the fhirpath_* alias as a macro.
+            for macro_name in ("in_valueset", "fhirpath_in_valueset"):
+                try:
+                    self.con.execute(f"DROP MACRO IF EXISTS {macro_name}")
+                except Exception:
+                    pass
+            self.con.execute(
+                "CREATE OR REPLACE MACRO fhirpath_in_valueset(res, path, vs_url) AS "
+                "in_valueset(res, path, vs_url)"
+            )
+            return True
+        except Exception as e:
+            _logger.warning("Failed to populate C++ valueset cache; using Python UDF: %s", e)
+            return False
