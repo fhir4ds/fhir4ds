@@ -14,9 +14,9 @@ Version 0.0.4 marks the **100% Compliance Milestone** — every test suite now p
 
 ### Highlights
 
-- **100% Spec Compliance**: All test suites now pass at 100% — CQL (1,706/1,706), FHIRPath (935/935), ViewDefinition (134/134), and DQM (46/46 measures).
+- **100% Spec Compliance**: All test suites now pass at 100% — CQL (1,706/1,706), FHIRPath (935/935), ViewDefinition (134/134), and DQM (47/47 measures).
 - **CQL Gap Closure**: Resolved remaining 2 CQL spec tests — `RolledOutIntervals` (DuckDB correlated UNNEST workaround) and `IntegerIntervalProperlyIncludedInNullBoundaries` (spec ambiguity resolved).
-- **DQM Full Pass Rate**: All 46 QI-Core 2025 CMS eCQMs now pass. 4 measures have documented upstream test data accuracy gaps (CMS135, CMS145, CMS157, CMS1017) that affect all conformant engines equally.
+- **DQM Full Pass Rate**: All 47 QI-Core 2025 CMS eCQMs now pass. 4 measures have documented upstream test data accuracy gaps (CMS135, CMS145, CMS157, CMS1017) that affect all conformant engines equally.
 - **ReactiveEvaluator API Update**: `ReactiveEvaluator` constructor now accepts `measure_bundle` and `cql_library_path` parameters, aligning with the `MeasureEvaluator` API.
 - **Interval JSON Handling**: Fixed precision comparisons to correctly handle interval JSON in CQL temporal operations.
 
