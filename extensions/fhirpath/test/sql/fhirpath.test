@@ -97,6 +97,21 @@ SELECT fhirpath_bool('{"resourceType":"MedicationRequest","extension":[{"url":"h
 ----
 false
 
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","extension":[{"url":"http://example.org/sex","valueCode":"248153007"},{"url":"http://example.org/other","valueCode":"x"}]}', 'extension.where(url = ''http://example.org/sex'').valueCode');
+----
+248153007
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","extension":[{"url":"http://example.org/race","extension":[{"url":"ombCategory","valueCoding":{"code":"2106-3"}},{"url":"detailed","valueCoding":{"code":"1586-7"}}]}]}', 'extension.where(url = ''http://example.org/race'').extension.where(url = ''ombCategory'').valueCoding.code');
+----
+2106-3
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","extension":[{"url":"http://example.org/race","extension":[{"url":"detailed","valueCoding":{"code":"1586-7"}}]}]}', 'extension.where(url = ''http://example.org/race'').extension.where(url = ''ombCategory'').valueCoding.code');
+----
+NULL
+
 # =====================================================================
 # fhirpath_is_valid — expression validation
 # =====================================================================
@@ -145,6 +160,16 @@ query I
 SELECT fhirpath('{"resourceType":"Patient","name":[{"given":["John","James"]}]}', 'name.given');
 ----
 [John, James]
+
+query I
+SELECT fhirpath('{"resourceType":"Encounter","location":[{"period":{"start":"2026-01-01"}},{"period":{"start":"2026-01-02"}}]}', 'location.period.start');
+----
+[2026-01-01, 2026-01-02]
+
+query I
+SELECT fhirpath('{"resourceType":"Patient","extension":[{"url":"http://example.org/race","extension":[{"url":"ombCategory","valueCoding":{"code":"2106-3"}},{"url":"ombCategory","valueCoding":{"code":"1002-5"}}]}]}', 'extension.where(url = ''http://example.org/race'').extension.where(url = ''ombCategory'').valueCoding.code');
+----
+[2106-3, 1002-5]
 
 # =====================================================================
 # fhirpath_date — date normalization
