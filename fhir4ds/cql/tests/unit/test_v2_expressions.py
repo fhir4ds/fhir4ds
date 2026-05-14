@@ -432,6 +432,30 @@ class TestLogicalOperators:
         assert result.operator == "OR"
         assert result.to_sql() == "TRUE OR FALSE"
 
+    def test_logical_operands_translate_once(self):
+        """Logical operators should not pretranslate operands as scalars."""
+
+        class CountingTranslator(ExpressionTranslator):
+            def __init__(self, context):
+                super().__init__(context)
+                self.literal_translations = 0
+
+            def _translate_literal(self, node, boolean_context=False):
+                self.literal_translations += 1
+                return super()._translate_literal(node, boolean_context)
+
+        translator = CountingTranslator(SQLTranslationContext())
+        result = translator.translate(
+            BinaryExpression(
+                operator="or",
+                left=Literal(value=True),
+                right=Literal(value=False),
+            )
+        )
+
+        assert isinstance(result, SQLBinaryOp)
+        assert translator.literal_translations == 2
+
     def test_not(self, translator: ExpressionTranslator):
         """Test logical not: not true -> NOT TRUE."""
         result = translator.translate(
@@ -2194,4 +2218,3 @@ class TestDuringOperatorNullHandling:
         # Gap 11: Result should be AND for boundary awareness
         assert isinstance(result, SQLBinaryOp)
         assert result.operator == "AND"
-
