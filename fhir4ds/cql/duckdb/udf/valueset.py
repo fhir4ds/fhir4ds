@@ -352,6 +352,51 @@ def extractFirstCodeValue(resource: str | None, path: str) -> str | None:
     return None
 
 
+_CODE_SYSTEM_ALIASES = {
+    "QICoreCommon.SNOMEDCT": "http://snomed.info/sct",
+    "SNOMEDCT": "http://snomed.info/sct",
+    "LOINC": "http://loinc.org",
+}
+
+
+def _extract_codes_for_match(data, path: str) -> List[Tuple[str, str]]:
+    """Extract codes from a full resource or directly supplied code element."""
+    codes = _extractAllCodes(data, path)
+    if codes:
+        return codes
+
+    if path == "code":
+        if isinstance(data, dict):
+            return _extract_codes_from_element(data)
+        if isinstance(data, list):
+            extracted: List[Tuple[str, str]] = []
+            for item in data:
+                if isinstance(item, dict):
+                    extracted.extend(_extract_codes_from_element(item))
+            return extracted
+    return []
+
+
+def codingMatches(resource: str | None, path: str, system: str, code: str) -> bool | None:
+    """Return true when a Coding/CodeableConcept at path has system and code."""
+    if not resource or not path or not code:
+        return None
+
+    try:
+        data = orjson.loads(resource)
+    except (orjson.JSONDecodeError, TypeError, ValueError):
+        return None
+
+    expected_system = _normalize_system(_CODE_SYSTEM_ALIASES.get(system, system))
+    for actual_system, actual_code in _extract_codes_for_match(data, path):
+        if actual_code != code:
+            continue
+        normalized_actual = _normalize_system(actual_system)
+        if normalized_actual == expected_system or actual_system == system:
+            return True
+    return False
+
+
 def resolveProfileUrl(profile_url: str | None) -> str | None:
     """
     Resolve a profile URL to its FHIR base resource type.
@@ -542,6 +587,7 @@ def registerValuesetUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("extractFirstCode", extractFirstCode, null_handling="special")
     con.create_function("extractFirstCodeSystem", extractFirstCodeSystem, null_handling="special")
     con.create_function("extractFirstCodeValue", extractFirstCodeValue, null_handling="special")
+    con.create_function("coding_matches", codingMatches, null_handling="special")
     con.create_function("resolveProfileUrl", resolveProfileUrl, null_handling="special")
 
 
@@ -550,6 +596,7 @@ __all__ = [
     "extractFirstCode",
     "extractFirstCodeSystem",
     "extractFirstCodeValue",
+    "codingMatches",
     "resolveProfileUrl",
     "createValuesetMembershipUdf",
     "registerValuesetUdfs",

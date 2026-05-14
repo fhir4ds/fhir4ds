@@ -425,6 +425,41 @@ class TestGap6ColumnContamination:
         assert "THEN Obs.effective_start" in start_sql
         assert "THEN Obs.effective_end" in end_sql
 
+    def test_simple_coding_exists_bool_uses_coding_match_udf(self):
+        """Simple coding system/code exists checks avoid full FHIRPath bool UDF."""
+        expr = SQLFunctionCall(
+            name="fhirpath_bool",
+            args=[
+                SQLQualifiedIdentifier(parts=["Obs", "resource"]),
+                SQLLiteral(
+                    value="code.coding.where(system='http://loinc.org' and code='73831-0').exists()"
+                ),
+            ],
+        )
+
+        sql = expr.to_sql()
+
+        assert "fhirpath_bool" not in sql
+        assert "coding_matches" in sql
+        assert "'code'" in sql
+        assert "'http://loinc.org'" in sql
+        assert "'73831-0'" in sql
+
+    def test_coding_match_udf_handles_resource_and_direct_code_element(self):
+        """coding_matches supports full resources and direct CodeableConcept values."""
+        from ...duckdb.udf.valueset import codingMatches
+
+        full_resource = (
+            '{"code":{"coding":[{"system":"http://loinc.org","code":"73831-0"}]}}'
+        )
+        direct_concept = (
+            '{"coding":[{"system":"http://snomed.info/sct","code":"229797004"}]}'
+        )
+
+        assert codingMatches(full_resource, "code", "http://loinc.org", "73831-0") is True
+        assert codingMatches(direct_concept, "code", "QICoreCommon.SNOMEDCT", "229797004") is True
+        assert codingMatches(direct_concept, "code", "QICoreCommon.SNOMEDCT", "229799001") is False
+
     def test_period_json_bound_extraction_requires_scalar_path(self):
         """Direct Period JSON extraction is only used for scalar schema paths."""
         ctx = _make_context_with_schema()

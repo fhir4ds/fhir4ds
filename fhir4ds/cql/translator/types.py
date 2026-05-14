@@ -8,6 +8,7 @@ types for tracking translation state.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any, Dict, List, Optional, Union
 
@@ -34,6 +35,13 @@ _SQL_RESERVED_WORDS = {
     "CAST", "FILTER", "OVER", "PARTITION", "WINDOW",
     "CURRENT", "ROW", "ROWS", "RANGE", "INTERVAL",
 }
+
+_CODING_EXISTS_RE = re.compile(
+    r"^(?P<path>[A-Za-z][A-Za-z0-9_.]*)\.coding\.where\("
+    r"\s*system\s*=\s*'(?P<system>[^']+)'\s+and\s+code\s*=\s*'(?P<code>[^']+)'\s*"
+    r"\)\.exists\(\)$"
+)
+
 
 def _same_sql_expression(left: "SQLExpression", right: "SQLExpression") -> bool:
     """Compare small AST expressions by rendered SQL for normalization guards."""
@@ -107,6 +115,29 @@ def _fold_interval_bound_case(
         when_clauses=folded_when_clauses,
         else_clause=folded_else,
         operand=expr.operand,
+    )
+
+
+def _try_coding_match_call(call: "SQLFunctionCall") -> Optional["SQLExpression"]:
+    """Rewrite simple coding existence FHIRPath checks to a dedicated UDF."""
+    if call.name.lower() != "fhirpath_bool" or len(call.args) != 2:
+        return None
+    path_arg = call.args[1]
+    if not isinstance(path_arg, SQLLiteral) or not isinstance(path_arg.value, str):
+        return None
+
+    match = _CODING_EXISTS_RE.match(path_arg.value)
+    if not match:
+        return None
+
+    return SQLFunctionCall(
+        name="coding_matches",
+        args=[
+            call.args[0],
+            SQLLiteral(value=match.group("path")),
+            SQLLiteral(value=match.group("system")),
+            SQLLiteral(value=match.group("code")),
+        ],
     )
 
 
@@ -396,6 +427,10 @@ class SQLFunctionCall(SQLExpression):
         call ``normalize().to_sql()`` instead of ``to_sql()`` directly.
         The default ``to_sql()`` calls this internally for backward compatibility.
         """
+        coding_match_call = _try_coding_match_call(self)
+        if coding_match_call is not None:
+            return coding_match_call
+
         # Use precomputed retrieve CTE temporal bounds when intervalStart/End
         # receives a known temporal column such as Encounter.period or
         # Observation.effective.
