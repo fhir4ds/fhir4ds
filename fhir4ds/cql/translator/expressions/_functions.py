@@ -1073,9 +1073,21 @@ class FunctionsMixin:
             SQLFunctionCall(name="LN", args=[args[0]])
         ])
 
+    def _translate_exp(self, args: list) -> SQLExpression:
+        """Translate CQL Exp through the parity-aligned math UDF."""
+        if not args:
+            return SQLNull()
+        return SQLFunctionCall(name="mathExp", args=[
+            SQLCast(expression=args[0], target_type="VARCHAR")
+        ])
+
     def _translate_ln(self, args: list) -> SQLExpression:
-        """Translate CQL Ln (§16.12) — uses UDF that raises on invalid input."""
-        return SQLFunctionCall(name="mathLn", args=args)
+        """Translate CQL Ln (§16.12) through the parity-aligned math UDF."""
+        if not args:
+            return SQLNull()
+        return SQLFunctionCall(name="mathLn", args=[
+            SQLCast(expression=args[0], target_type="VARCHAR")
+        ])
 
     def _translate_power(self, args: list) -> SQLExpression:
         """Translate CQL Power to DuckDB POW."""
@@ -1119,10 +1131,25 @@ class FunctionsMixin:
         """
         if not args:
             return SQLNull()
-        # Check if severity (arg index 3) is the literal 'Error'
-        if len(args) >= 4 and isinstance(args[3], SQLLiteral) and args[3].value == 'Error':
-            return SQLFunctionCall(name="CQLMessage", args=args)
-        return args[0]
+        if len(args) < 5:
+            return args[0]
+
+        source, condition, _, severity, _ = args[:5]
+        if isinstance(condition, SQLLiteral) and condition.value is False:
+            return source
+        if isinstance(condition, SQLNull):
+            return source
+        if isinstance(severity, SQLLiteral) and str(severity.value).lower() != 'error':
+            return source
+
+        message_call = SQLFunctionCall(name="CQLMessage", args=args[:5])
+        if isinstance(condition, SQLLiteral) and condition.value is True:
+            return message_call
+
+        return SQLCase(
+            when_clauses=[(condition, message_call)],
+            else_clause=source,
+        )
 
     def _translate_quantity_constructor(self, args: list) -> SQLExpression:
         """Translate CQL Quantity(value, unit) constructor."""

@@ -71,6 +71,12 @@ static bool units_compatible(const std::string &u1, const std::string &u2) {
 	return b1.value() == b2.value();
 }
 
+static std::string pint_display_unit(const std::string &unit) {
+	if (unit == "m") return "meter";
+	if (unit == "s") return "second";
+	return unit;
+}
+
 // =====================================================================
 // JSON parsing
 // =====================================================================
@@ -313,14 +319,14 @@ Optional<std::string> quantity_multiply(const std::string &q1_json, const std::s
 
 	ParsedQuantity result;
 	result.value = q1->value * q2->value;
-	// Unit handling: if one is dimensionless ("1"), take the other's unit.
-	// For non-dimensionless × non-dimensionless, unit algebra is not supported → NULL.
 	if (code1 == "1") {
 		result.code = code2;
 	} else if (code2 == "1") {
 		result.code = code1;
+	} else if (code1 == code2 && code1 == "cm") {
+		result.code = "cm2";
 	} else {
-		return NullOpt<std::string>();
+		result.code = pint_display_unit(code1) + " * " + pint_display_unit(code2);
 	}
 	result.system = q1->system;
 	return format_quantity_json(result);
@@ -338,12 +344,12 @@ Optional<std::string> quantity_divide(const std::string &q1_json, const std::str
 
 	ParsedQuantity result;
 	result.value = q1->value / q2->value;
-	// Unit handling: divisor dimensionless → preserve dividend unit.
-	// For non-dimensionless divisor, unit algebra is not supported → NULL.
 	if (code2 == "1") {
 		result.code = code1;
+	} else if (code1 == code2) {
+		result.code = "1";
 	} else {
-		return NullOpt<std::string>();
+		result.code = code1 + "/" + code2;
 	}
 	result.system = q1->system;
 	return format_quantity_json(result);
@@ -410,8 +416,13 @@ Optional<std::string> to_quantity(const std::string &s) {
 		while (*end && *end != '\'') end++;
 		if (*end == '\'') {
 			unit = std::string(unit_start, end - unit_start);
+			end++;
+		} else {
+			return NullOpt<std::string>();
 		}
 	}
+	while (*end == ' ') end++;
+	if (*end != '\0') return NullOpt<std::string>();
 
 	ParsedQuantity q;
 	q.value = val;

@@ -744,22 +744,22 @@ NULL
 
 
 # CQLPrecision — date
-query T
+query I
 SELECT CQLPrecision('2024-01-15');
 ----
-Day
+8
 
 # CQLPrecision — datetime
-query T
+query I
 SELECT CQLPrecision('2024-01-15T10:30:45.100');
 ----
-Millisecond
+17
 
 # CQLPrecision — year only
-query T
+query I
 SELECT CQLPrecision('2024');
 ----
-Year
+4
 
 # cqlTimezoneOffset
 query R
@@ -1393,22 +1393,22 @@ SELECT YearsBetween('1980-06-15', '2024-06-14');
 43
 
 # CQLPrecision: month precision
-query T
+query I
 SELECT CQLPrecision('2024-01');
 ----
-Month
+6
 
 # CQLPrecision: hour precision
-query T
+query I
 SELECT CQLPrecision('2024-01-15T10');
 ----
-Hour
+10
 
 # CQLPrecision: minute precision
-query T
+query I
 SELECT CQLPrecision('2024-01-15T10:30');
 ----
-Minute
+12
 
 # HoursBetween: one day
 query I
@@ -1444,26 +1444,26 @@ SELECT millisecondsBetween('2024-01-01T10:00:00.000', '2024-01-01T10:00:01.000')
 # ----- Boundary Functions Extended -----
 
 
-# CQLPrecision: date → Day
-query T
+# CQLPrecision: date
+query I
 SELECT CQLPrecision('2024-01-15');
 ----
-Day
+8
 
-# CQLPrecision: datetime with seconds → Second
-query T
+# CQLPrecision: datetime with seconds
+query I
 SELECT CQLPrecision('2024-01-15T10:30:45');
 ----
-Second
+14
 
-# CQLPrecision: year only → Year
-query T
+# CQLPrecision: year only
+query I
 SELECT CQLPrecision('2024');
 ----
-Year
+4
 
 # CQLPrecision: NULL
-query T
+query I
 SELECT CQLPrecision(NULL);
 ----
 NULL
@@ -1990,11 +1990,11 @@ NULL
 
 # QA-009: overlaps_before fix verified through Python conformance tests (not a registered SQL UDF)
 
-# QA-010: quantityMultiply non-dimensionless should return NULL
+# QA-010: quantityMultiply non-dimensionless preserves composed unit
 query I
-SELECT quantityMultiply('{"value":5,"code":"m","system":"http://unitsofmeasure.org"}', '{"value":3,"code":"s","system":"http://unitsofmeasure.org"}');
+SELECT quantityMultiply('{"value":5,"code":"m","system":"http://unitsofmeasure.org"}', '{"value":3,"code":"s","system":"http://unitsofmeasure.org"}') LIKE '%meter * second%';
 ----
-NULL
+true
 
 # QA-010: quantityMultiply with dimensionless is fine
 query I
@@ -2014,15 +2014,14 @@ SELECT quantityAdd('{"value":5}', '{"value":3,"code":"1"}') LIKE '%8%';
 ----
 true
 
-# QA-012: quantityDivide non-dimensionless divisor should return NULL
+# QA-012: quantityDivide non-dimensionless divisor preserves composed unit
 query I
-SELECT quantityDivide('{"value":10,"code":"m","system":"http://unitsofmeasure.org"}', '{"value":2,"code":"s","system":"http://unitsofmeasure.org"}');
+SELECT quantityDivide('{"value":10,"code":"m","system":"http://unitsofmeasure.org"}', '{"value":2,"code":"s","system":"http://unitsofmeasure.org"}') LIKE '%m/s%';
 ----
-NULL
+true
 
 # QA-012: quantityDivide dimensionless divisor is fine
 query I
 SELECT quantityDivide('{"value":10,"code":"m"}', '{"value":2,"code":"1"}') LIKE '%5%';
 ----
 true
-

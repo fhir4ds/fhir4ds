@@ -262,6 +262,12 @@ Token Lexer::readString() {
 				case '\'':
 					value += '\'';
 					break;
+				case '"':
+					value += '"';
+					break;
+				case '`':
+					value += '`';
+					break;
 				case '\\':
 					value += '\\';
 					break;
@@ -274,19 +280,23 @@ Token Lexer::readString() {
 				case 't':
 					value += '\t';
 					break;
-				case '/':
-					value += '/';
-					break;
 				case 'f':
 					value += '\f';
 					break;
 				case 'u': {
 					// Unicode escape: \uXXXX
 					std::string hex;
-					for (int i = 0; i < 4 && !isAtEnd(); ++i) {
+					for (int i = 0; i < 4 && !isAtEnd() && peek() != '\''; ++i) {
 						hex += advance();
 					}
-					if (hex.size() == 4) {
+					bool valid_hex = hex.size() == 4;
+					for (char h : hex) {
+						if (!std::isxdigit(static_cast<unsigned char>(h))) {
+							valid_hex = false;
+							break;
+						}
+					}
+					if (valid_hex) {
 						unsigned int cp = std::stoul(hex, nullptr, 16);
 						if (cp < 0x80) {
 							value += static_cast<char>(cp);
@@ -298,6 +308,9 @@ Token Lexer::readString() {
 							value += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
 							value += static_cast<char>(0x80 | (cp & 0x3F));
 						}
+					} else {
+						value += 'u';
+						value += hex;
 					}
 					break;
 				}
@@ -325,6 +338,9 @@ Token Lexer::readNumber() {
 		if (peek() == '.') {
 			// Look ahead to distinguish decimal from member access
 			if (pos_ + 1 < input_.size() && std::isdigit(static_cast<unsigned char>(input_[pos_ + 1]))) {
+				if (has_dot) {
+					throw std::runtime_error("Invalid numeric literal at position " + std::to_string(start));
+				}
 				has_dot = true;
 				number += advance();
 			} else {

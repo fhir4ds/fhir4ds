@@ -338,7 +338,7 @@ def contains(ctx, a, b):
     if len(a) == 0:
         return False
     if len(b) > 1:
-        raise FHIRPathError("Expected singleton on right side of contains, got " + str(b))
+        return []
 
     return contains_impl(ctx, a, b)
 
@@ -349,6 +349,6 @@ def inn(ctx, a, b):
     if len(b) == 0:
         return False
     if len(a) > 1:
-        raise FHIRPathError("Expected singleton on right side of in, got " + str(b))
+        return []
 
     return contains_impl(ctx, b, a)

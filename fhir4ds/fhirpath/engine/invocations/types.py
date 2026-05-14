@@ -9,7 +9,7 @@ def is_fn(ctx, coll, type_info):
     if not coll:
         return []
     if len(coll) > 1:
-        raise ValueError(f"Expected singleton on left side of 'is', got {coll}")
+        return []
     # is() uses type hierarchy (subtype matching)
     # Return a list containing the boolean result (FHIRPath convention)
     return [TypeInfo.from_value(coll[0]).is_(type_info, model=model)]
@@ -20,8 +20,6 @@ def as_fn(ctx, coll, type_info):
     if not coll:
         return []
     if len(coll) > 1:
-        raise ValueError(
-            f"as() requires a singleton input, got collection with {len(coll)} items"
-        )
+        return []
     # as() requires exact type match (no subtype matching)
     return coll if TypeInfo.from_value(coll[0]).is_exact_type(type_info, model=model) else []

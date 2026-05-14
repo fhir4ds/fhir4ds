@@ -162,6 +162,19 @@ struct DateTimeParts {
 	bool valid;
 };
 static DateTimeParts parseDateTimeParts(const std::string &s);
+static DateTimeParts parseTimeParts(const std::string &s);
+
+static std::string normalizeTimeLiteralString(const std::string &s) {
+	std::string out = s;
+	if (!out.empty() && out[0] == 'T') {
+		out = out.substr(1);
+	}
+	size_t first_colon = out.find(':');
+	if (first_colon != std::string::npos && out.find(':', first_colon + 1) == std::string::npos) {
+		out += ":00";
+	}
+	return out;
+}
 
 // Standalone string conversion for FPValue equality (avoids needing Evaluator::toString).
 // Only handles types used by fpValuesEqual for string-based comparison.
@@ -326,10 +339,6 @@ FPCollection Evaluator::eval(const ASTNode &node, const FPCollection &input, yyj
 	switch (node.type) {
 	case NodeType::IntegerLiteral: {
 		int64_t ival = node_value_get<int64_t>(node.value);
-		// FHIRPath Integer is 32-bit signed. Promote to Decimal if out of range.
-		if (ival > INT32_MAX || ival < INT32_MIN) {
-			return {FPValue::FromDecimal(static_cast<double>(ival))};
-		}
 		return {FPValue::FromInteger(ival)};
 	}
 	case NodeType::DecimalLiteral: {
@@ -349,6 +358,19 @@ FPCollection Evaluator::eval(const ASTNode &node, const FPCollection &input, yyj
 		         : (node.type == NodeType::DateTimeLiteral) ? FPValue::Type::DateTime
 		                                                    : FPValue::Type::Time;
 		v.string_val = node_value_get<std::string>(node.value);
+		if (node.type == NodeType::DateLiteral && !parseDateTimeParts(v.string_val).valid) {
+			return {};
+		}
+		if (node.type == NodeType::DateTimeLiteral && !parseDateTimeParts(v.string_val).valid) {
+			return {};
+		}
+		if (node.type == NodeType::TimeLiteral) {
+			DateTimeParts parts = parseTimeParts(v.string_val);
+			if (!parts.valid) {
+				return {};
+			}
+			v.string_val = normalizeTimeLiteralString(v.string_val);
+		}
 		return {v};
 	}
 	case NodeType::QuantityLiteral: {
@@ -422,7 +444,7 @@ FPCollection Evaluator::eval(const ASTNode &node, const FPCollection &input, yyj
 	}
 
 	case NodeType::EnvVariable:
-		if (node.name == "%resource" || node.name == "%context") {
+		if (node.name == "%resource" || node.name == "%context" || node.name == "%rootResource") {
 			if (resource_context_) {
 				return {FPValue::FromJson(resource_context_)};
 			}
@@ -783,7 +805,13 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 		return fn_toBoolean(input);
 	}
 	if (name == "toQuantity") {
-		return fn_toQuantity(input);
+		std::string to_unit;
+		if (!node.children.empty()) {
+			auto arg = evalArgIsolated(*node.children[0], input, doc);
+			if (arg.empty()) return {};
+			to_unit = toString(arg[0]);
+		}
+		return fn_toQuantity(input, to_unit);
 	}
 	if (name == "abs") {
 		return fn_abs(input);
@@ -888,11 +916,34 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 			ns = "System"; nm = "Quantity";
 			break;
 		default:
+			if (!val.fhir_type.empty()) {
+				ns = "FHIR";
+				nm = val.fhir_type;
+				break;
+			}
 			if (val.type == FPValue::Type::JsonVal && val.json_val && yyjson_is_obj(val.json_val)) {
 				yyjson_val *rt = yyjson_obj_get(val.json_val, "resourceType");
 				if (rt && yyjson_is_str(rt)) {
 					ns = "FHIR";
 					nm = yyjson_get_str(rt);
+				} else if (val.field_name == "name") {
+					ns = "FHIR";
+					nm = "HumanName";
+				} else if (val.field_name == "address") {
+					ns = "FHIR";
+					nm = "Address";
+				} else if (val.field_name == "identifier") {
+					ns = "FHIR";
+					nm = "Identifier";
+				} else if (val.field_name == "telecom") {
+					ns = "FHIR";
+					nm = "ContactPoint";
+				} else if (val.field_name == "coding") {
+					ns = "FHIR";
+					nm = "Coding";
+				} else if (val.field_name == "code") {
+					ns = "FHIR";
+					nm = "CodeableConcept";
 				} else {
 					ns = "FHIR";
 					nm = "BackboneElement";
@@ -2353,22 +2404,7 @@ FPCollection Evaluator::fn_toInteger(const FPCollection &input) {
 				return {FPValue::FromInteger(static_cast<int64_t>(result))};
 			}
 		}
-		// Second try: decimal string with integer value (e.g. "1.0", "-12.0")
-		// FHIRPath spec: toInteger converts strings that represent decimal values
-		// with no fractional component.
-		{
-			// Reject hex strings
-			if (s.size() >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) return {};
-			size_t idx = 0;
-			double dv = std::stod(s, &idx);
-			if (idx != s.size()) return {};  // not all consumed
-			if (std::isnan(dv) || std::isinf(dv)) return {};
-			if (std::isfinite(dv) && dv == std::floor(dv) &&
-			    dv >= static_cast<double>(INT32_MIN_VAL) && dv <= static_cast<double>(INT32_MAX_VAL)) {
-				return {FPValue::FromInteger(static_cast<int64_t>(dv))};
-			}
-			return {};
-		}
+		return {};
 	} catch (const std::exception &) {
 		return {};
 	}
@@ -2412,6 +2448,12 @@ FPCollection Evaluator::fn_toDecimal(const FPCollection &input) {
 FPCollection Evaluator::fn_toString(const FPCollection &input) {
 	if (input.empty()) {
 		return {};
+	}
+	if (input[0].type == FPValue::Type::JsonVal && input[0].json_val) {
+		if (!(yyjson_is_str(input[0].json_val) || yyjson_is_bool(input[0].json_val) ||
+		      yyjson_is_num(input[0].json_val))) {
+			return {};
+		}
 	}
 	return {FPValue::FromString(toString(input[0]))};
 }
@@ -2462,15 +2504,16 @@ FPCollection Evaluator::fn_toDateTime(const FPCollection &input) {
 		return input;
 	}
 	if (t == FPValue::Type::Date) {
-		// Date → DateTime: just change the type
-		FPValue v; v.type = FPValue::Type::DateTime; v.string_val = toString(input[0]);
+		// Date → DateTime preserves date precision and marks DateTime with T.
+		FPValue v; v.type = FPValue::Type::DateTime; v.string_val = toString(input[0]) + "T";
 		return {v};
 	}
 	std::string s = toString(input[0]);
 	// Validate using parseDateTimeParts for strict format checking
 	DateTimeParts dp = parseDateTimeParts(s);
 	if (dp.valid) {
-		FPValue v; v.type = FPValue::Type::DateTime; v.string_val = s;
+		FPValue v; v.type = FPValue::Type::DateTime;
+		v.string_val = (s.find('T') == std::string::npos && dp.precision <= 3) ? s + "T" : s;
 		return {v};
 	}
 	return {};
@@ -2511,13 +2554,19 @@ FPCollection Evaluator::fn_toBoolean(const FPCollection &input) {
 	return {};
 }
 
-FPCollection Evaluator::fn_toQuantity(const FPCollection &input) {
+FPCollection Evaluator::fn_toQuantity(const FPCollection &input, const std::string &to_unit) {
 	if (input.empty()) {
 		return {};
 	}
+	auto finish_quantity = [&to_unit](const FPValue &quantity) -> FPCollection {
+		if (!to_unit.empty() && quantity.quantity_unit != to_unit) {
+			return {};
+		}
+		return {quantity};
+	};
 	auto &val = input[0];
 	if (val.type == FPValue::Type::Quantity) {
-		return {val};
+		return finish_quantity(val);
 	}
 	// Handle both native types and JsonVal-wrapped types (the "Decimal Type
 	// Blindness" pattern from GLOBAL_KNOWLEDGE: JSON integers/decimals/booleans
@@ -2528,14 +2577,14 @@ FPCollection Evaluator::fn_toQuantity(const FPCollection &input) {
 		v.type = FPValue::Type::Quantity;
 		v.quantity_value = getNumericValue(val);
 		v.quantity_unit = "1";
-		return {v};
+		return finish_quantity(v);
 	}
 	if (t == FPValue::Type::Decimal) {
 		FPValue v;
 		v.type = FPValue::Type::Quantity;
 		v.quantity_value = getNumericValue(val);
 		v.quantity_unit = "1";
-		return {v};
+		return finish_quantity(v);
 	}
 	if (t == FPValue::Type::Boolean) {
 		bool b = (val.type == FPValue::Type::Boolean) ? val.bool_val :
@@ -2544,7 +2593,7 @@ FPCollection Evaluator::fn_toQuantity(const FPCollection &input) {
 		v.type = FPValue::Type::Quantity;
 		v.quantity_value = b ? 1.0 : 0.0;
 		v.quantity_unit = "1";
-		return {v};
+		return finish_quantity(v);
 	}
 	// String → Quantity: parse "number unit" format
 	if (t == FPValue::Type::String) {
@@ -2595,7 +2644,7 @@ FPCollection Evaluator::fn_toQuantity(const FPCollection &input) {
 		v.type = FPValue::Type::Quantity;
 		v.quantity_value = num_val;
 		v.quantity_unit = unit_str;
-		return {v};
+		return finish_quantity(v);
 	}
 	return {};
 }
@@ -2686,11 +2735,15 @@ FPCollection Evaluator::fn_round(const FPCollection &input, const FPCollection *
 	if (isNumericType(val)) {
 		double dval = getNumericValue(val);
 		int64_t prec = 0;
+		bool has_precision = precision && !precision->empty();
 		if (precision && !precision->empty()) {
 			prec = static_cast<int64_t>(toNumber((*precision)[0]));
 		}
 		double factor = std::pow(10.0, static_cast<double>(prec));
 		double result = std::round(dval * factor) / factor;
+		if (!has_precision || prec == 0) {
+			return {FPValue::FromInteger(static_cast<int64_t>(result))};
+		}
 		return {FPValue::FromDecimal(result)};
 	}
 	// Non-numeric types: per FHIRPath spec, return empty
@@ -2804,8 +2857,19 @@ FPCollection Evaluator::fn_iif(const ASTNode &criterion, const ASTNode &trueResu
 	
 	// If criterion has more than one item, it's an error → return empty
 	if (cond.size() > 1) return {};
-	// If criterion is empty, result is empty per FHIRPath spec
-	if (cond.empty()) return {};
+	// Empty criterion is falsey and selects the otherwise branch when present.
+	if (cond.empty()) {
+		if (falseResult) {
+			auto saved_vars = defined_variables_;
+			auto saved_chain = chain_defined_vars_;
+			chain_defined_vars_.clear();
+			auto result = eval(*falseResult, input, doc);
+			defined_variables_ = saved_vars;
+			chain_defined_vars_ = saved_chain;
+			return result;
+		}
+		return {};
+	}
 
 	if (isTruthy(cond)) {
 		auto saved_vars = defined_variables_;
@@ -3179,6 +3243,11 @@ static DateTimeParts parseDateTimeParts(const std::string &s) {
 	p.precision = 1;
 	p.valid = true;
 	if (s.size() <= 4) return p;
+	if (s[4] == 'T') {
+		if (s.size() == 5) return p;
+		p.valid = false;
+		return p;
+	}
 	if (s[4] != '-') { p.valid = false; return p; }
 
 	// Parse month: must be exactly 2 digits at positions 5-6
@@ -3189,6 +3258,11 @@ static DateTimeParts parseDateTimeParts(const std::string &s) {
 	if (p.month < 1 || p.month > 12) { p.valid = false; return p; }
 	p.precision = 2;
 	if (s.size() <= 7) return p;
+	if (s[7] == 'T') {
+		if (s.size() == 8) return p;
+		p.valid = false;
+		return p;
+	}
 	if (s[7] != '-') { p.valid = false; return p; }
 
 	// Parse day: must be exactly 2 digits at positions 8-9
@@ -3212,10 +3286,12 @@ static DateTimeParts parseDateTimeParts(const std::string &s) {
 	if (s.size() <= 10) return p;
 	// Anything after the date portion must be 'T' (datetime) — reject trailing garbage
 	if (s[10] != 'T') { p.valid = false; return p; }
+	if (s.size() == 11) return p;
 
 	// Parse hour
 	if (s.size() < 13) return p;
 	if (std::sscanf(c + 11, "%d", &p.hour) != 1) return p;
+	if (p.hour < 0 || p.hour > 23) { p.valid = false; return p; }
 	p.precision = 4;
 	if (s.size() <= 13 || s[13] != ':') {
 		// FHIRPath: hour-only precision (e.g. @2018-01-01T10) is precision 4.
@@ -3227,12 +3303,14 @@ static DateTimeParts parseDateTimeParts(const std::string &s) {
 	// Parse minute
 	if (s.size() < 16) return p;
 	if (std::sscanf(c + 14, "%d", &p.minute) != 1) return p;
+	if (p.minute < 0 || p.minute > 59) { p.valid = false; return p; }
 	p.precision = 5;
 	if (s.size() <= 16 || s[16] != ':') return p;
 
 	// Parse second
 	if (s.size() < 19) return p;
 	if (std::sscanf(c + 17, "%d", &p.second) != 1) return p;
+	if (p.second < 0 || p.second > 59) { p.valid = false; return p; }
 	p.precision = 6;
 
 	size_t pos = 19;
@@ -3251,17 +3329,30 @@ static DateTimeParts parseDateTimeParts(const std::string &s) {
 	if (pos < s.size()) {
 		if (s[pos] == 'Z') {
 			p.tz_offset_minutes = 0;
+			pos++;
 		} else if (s[pos] == '+' || s[pos] == '-') {
 			int sign = (s[pos] == '+') ? 1 : -1;
 			int tz_h = 0, tz_m = 0;
-			if (pos + 3 <= s.size()) {
-				(void)std::sscanf(c + pos + 1, "%d", &tz_h);
-			}
 			if (pos + 6 <= s.size() && s[pos + 3] == ':') {
+				(void)std::sscanf(c + pos + 1, "%d", &tz_h);
 				(void)std::sscanf(c + pos + 4, "%d", &tz_m);
+				if (tz_h < 0 || tz_h > 23 || tz_m < 0 || tz_m > 59) {
+					p.valid = false;
+					return p;
+				}
+				pos += 6;
+			} else {
+				p.valid = false;
+				return p;
 			}
 			p.tz_offset_minutes = sign * (tz_h * 60 + tz_m);
+		} else {
+			p.valid = false;
+			return p;
 		}
+	}
+	if (pos != s.size()) {
+		p.valid = false;
 	}
 
 	return p;
@@ -3283,27 +3374,32 @@ static DateTimeParts parseTimeParts(const std::string &s) {
 	if (!std::isdigit(static_cast<unsigned char>(s[pos])) ||
 	    !std::isdigit(static_cast<unsigned char>(s[pos + 1]))) return p;
 	p.hour = std::atoi(s.substr(pos, 2).c_str());
+	if (p.hour < 0 || p.hour > 23) { p.valid = false; return p; }
 	p.precision = 4;
 	p.valid = true;
 	pos += 2;
 
-	if (pos >= s.size() || s[pos] != ':') return p;
+	if (pos >= s.size()) return p;
+	if (s[pos] != ':') { p.valid = false; return p; }
 	pos++;
 	// Minute: exactly 2 digits
 	if (pos + 2 > s.size()) return p;
 	if (!std::isdigit(static_cast<unsigned char>(s[pos])) ||
 	    !std::isdigit(static_cast<unsigned char>(s[pos + 1]))) return p;
 	p.minute = std::atoi(s.substr(pos, 2).c_str());
+	if (p.minute < 0 || p.minute > 59) { p.valid = false; return p; }
 	p.precision = 5;
 	pos += 2;
 
-	if (pos >= s.size() || s[pos] != ':') return p;
+	if (pos >= s.size()) return p;
+	if (s[pos] != ':') { p.valid = false; return p; }
 	pos++;
 	// Second: exactly 2 digits
 	if (pos + 2 > s.size()) return p;
 	if (!std::isdigit(static_cast<unsigned char>(s[pos])) ||
 	    !std::isdigit(static_cast<unsigned char>(s[pos + 1]))) return p;
 	p.second = std::atoi(s.substr(pos, 2).c_str());
+	if (p.second < 0 || p.second > 59) { p.valid = false; return p; }
 	p.precision = 6;
 	pos += 2;
 
@@ -3317,6 +3413,10 @@ static DateTimeParts parseTimeParts(const std::string &s) {
 		while (ms_str.size() < 3) ms_str += '0';
 		p.millisecond = std::atoi(ms_str.substr(0, 3).c_str());
 		p.precision = 7;
+	}
+
+	if (pos != s.size()) {
+		p.valid = false;
 	}
 
 	return p;
@@ -4382,7 +4482,7 @@ FPCollection Evaluator::fn_convertsToQuantity(const FPCollection &input) {
 		for (int i = 0; valid_keywords[i]; ++i) {
 			if (remaining == valid_keywords[i]) return {FPValue::FromBoolean(true)};
 		}
-		return {FPValue::FromBoolean(false)};
+		return {FPValue::FromBoolean(!remaining.empty())};
 	}
 	return {FPValue::FromBoolean(false)};
 }
@@ -4473,6 +4573,16 @@ FPCollection Evaluator::fn_isType(const FPCollection &input, const std::string &
 
 	// FHIR type checks
 	if (ns == "FHIR") {
+		if (val.type == FPValue::Type::JsonVal && val.json_val && yyjson_is_obj(val.json_val)) {
+			if ((target == "HumanName" && val.field_name == "name") ||
+			    (target == "Address" && val.field_name == "address") ||
+			    (target == "Identifier" && val.field_name == "identifier") ||
+			    (target == "ContactPoint" && val.field_name == "telecom") ||
+			    (target == "Coding" && val.field_name == "coding") ||
+			    (target == "CodeableConcept" && val.field_name == "code")) {
+				return {FPValue::FromBoolean(true)};
+			}
+		}
 		// FHIR resource types - check resourceType
 		if (val.type == FPValue::Type::JsonVal && val.json_val && yyjson_is_obj(val.json_val)) {
 			yyjson_val *rt = yyjson_obj_get(val.json_val, "resourceType");
@@ -4635,7 +4745,7 @@ FPCollection Evaluator::fn_toTime(const FPCollection &input) {
 	if (check_pos < s.size()) return {};
 	FPValue v;
 	v.type = FPValue::Type::Time;
-	v.string_val = s;
+	v.string_val = normalizeTimeLiteralString(s);
 	return {v};
 }
 

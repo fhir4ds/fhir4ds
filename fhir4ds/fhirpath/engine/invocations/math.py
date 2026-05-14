@@ -1,4 +1,5 @@
-from decimal import Decimal, ROUND_HALF_UP
+import math
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation, Overflow
 from ...engine.invocations.equality import remove_duplicate_extension
 from ...engine import util as util
 from ...engine import nodes as nodes
@@ -37,11 +38,19 @@ def ensure_number_singleton(x):
 
 
 def amp(ctx, x="", y=""):
-    if isinstance(x, list) and not x:
-        x = ""
-    if isinstance(y, list) and not y:
-        y = ""
-    return x + y
+    def _string_value(value):
+        if isinstance(value, list):
+            if not value:
+                return ""
+            value = value[0]
+        value = util.get_data(value)
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        return str(value)
+
+    return _string_value(x) + _string_value(y)
 
 
 def minus(ctx, xs_, ys_):
@@ -179,21 +188,27 @@ def ceiling(ctx, x):
     if is_empty(x):
         return []
     num = ensure_number_singleton(x)
-    return Decimal(num).to_integral_value(rounding="ROUND_CEILING")
+    return int(Decimal(num).to_integral_value(rounding="ROUND_CEILING"))
 
 
 def exp(ctx, x):
     if is_empty(x):
         return []
     num = ensure_number_singleton(x)
-    return Decimal(num).exp()
+    try:
+        result = math.exp(float(num))
+    except (OverflowError, ValueError):
+        return []
+    if math.isinf(result) or math.isnan(result):
+        return []
+    return Decimal(format(result, ".17g"))
 
 
 def floor(ctx, x):
     if is_empty(x):
         return []
     num = ensure_number_singleton(x)
-    return Decimal(num).to_integral_value(rounding="ROUND_FLOOR")
+    return int(Decimal(num).to_integral_value(rounding="ROUND_FLOOR"))
 
 
 def ln(ctx, x):
@@ -204,7 +219,7 @@ def ln(ctx, x):
     num = ensure_number_singleton(x)
     if num <= 0:
         return []
-    return Decimal(num).ln()
+    return math.log(float(num))
 
 
 def log(ctx, x, base):
@@ -218,7 +233,7 @@ def log(ctx, x, base):
     if num <= 0 or num2 <= 0 or num2 == 1:
         return []
 
-    return (num.ln() / num2.ln()).quantize(Decimal("1.000000000000000"))
+    return math.log(float(num)) / math.log(float(num2))
 
 
 def power(ctx, x, degree):
@@ -262,11 +277,11 @@ def sqrt(ctx, x):
     if num < 0:
         return []
 
-    return Decimal(num).sqrt()
+    return math.sqrt(float(num))
 
 
 def truncate(ctx, x):
     if is_empty(x):
         return []
     num = ensure_number_singleton(x)
-    return Decimal(num).to_integral_value(rounding="ROUND_DOWN")
+    return int(Decimal(num).to_integral_value(rounding="ROUND_DOWN"))

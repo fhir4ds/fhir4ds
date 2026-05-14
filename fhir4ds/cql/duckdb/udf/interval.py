@@ -1135,6 +1135,154 @@ def _is_temporal_string(s) -> bool:
     return len(s) >= 4 and s[0:4].isdigit() and (len(s) == 4 or s[4] == '-' or s[4] == 'T')
 
 
+_PRECISION_VALUES = frozenset((
+    "year", "month", "day", "hour", "minute", "second", "millisecond",
+))
+
+
+def _compare_bound_at_precision(a: Any, b: Any, precision: str | None) -> int | None:
+    """Compare interval bounds at an explicit CQL temporal precision."""
+    if precision not in _PRECISION_VALUES:
+        return None
+    if _is_temporal_string(a) and _is_temporal_string(b):
+        from .datetime import _compare_at_specified_precision
+        cmp, certain = _compare_at_specified_precision(str(a), str(b), precision)
+        return cmp if certain else None
+    na, nb = _normalize_for_compare(a, b)
+    if na < nb:
+        return -1
+    if na > nb:
+        return 1
+    return 0
+
+
+def _interval_bound(iv: dict, parsed_key: str, raw_key: str) -> Any:
+    raw = iv.get(raw_key)
+    return raw if _is_temporal_string(raw) else iv.get(parsed_key)
+
+
+def intervalBeforePrecise(interval1: str | None, interval2: str | None, precision: str | None) -> bool | None:
+    """Precision-aware CQL interval before."""
+    if interval1 is None or interval2 is None or precision is None:
+        return None
+    iv1 = _parse_interval(interval1)
+    iv2 = _parse_interval(interval2)
+    if not iv1 or not iv2 or iv1["high"] is None or iv2["low"] is None:
+        return False
+    cmp = _compare_bound_at_precision(
+        _interval_bound(iv1, "high", "high_raw"),
+        _interval_bound(iv2, "low", "low_raw"),
+        str(precision),
+    )
+    if cmp is None:
+        return False
+    if iv1["high_closed"] and iv2["low_closed"]:
+        return cmp < 0
+    return cmp <= 0
+
+
+def intervalAfterPrecise(interval1: str | None, interval2: str | None, precision: str | None) -> bool | None:
+    """Precision-aware CQL interval after."""
+    if interval1 is None or interval2 is None or precision is None:
+        return None
+    return intervalBeforePrecise(interval2, interval1, precision)
+
+
+def intervalContainsPrecise(interval: str | None, point: str | None, precision: str | None) -> bool | None:
+    """Precision-aware CQL interval contains point/interval."""
+    if interval is None or point is None or precision is None:
+        return None
+    iv = _parse_interval(interval)
+    if not iv:
+        return False
+    stripped = point.strip()
+    if stripped.startswith("{"):
+        try:
+            obj = orjson.loads(stripped)
+            if isinstance(obj, dict) and (
+                "low" in obj or "high" in obj or "lowClosed" in obj
+                or "start" in obj or "end" in obj
+            ):
+                return intervalIncludesPrecise(interval, point, precision)
+        except (JSONDecodeError, TypeError):
+            pass
+    pt = point if _is_temporal_string(point) else _parse_point(point)
+    if pt is None:
+        return False
+    if iv["low"] is not None:
+        cmp = _compare_bound_at_precision(_interval_bound(iv, "low", "low_raw"), pt, str(precision))
+        if cmp is None or cmp > 0 or (cmp == 0 and not iv["low_closed"]):
+            return False
+    if iv["high"] is not None:
+        cmp = _compare_bound_at_precision(_interval_bound(iv, "high", "high_raw"), pt, str(precision))
+        if cmp is None or cmp < 0 or (cmp == 0 and not iv["high_closed"]):
+            return False
+    return True
+
+
+def intervalOverlapsPrecise(interval1: str | None, interval2: str | None, precision: str | None) -> bool | None:
+    """Precision-aware CQL interval overlaps."""
+    if interval1 is None or interval2 is None or precision is None:
+        return None
+    iv1 = _parse_interval(interval1)
+    iv2 = _parse_interval(interval2)
+    if not iv1 or not iv2:
+        return False
+    if iv1["low"] is not None and iv2["high"] is not None:
+        cmp = _compare_bound_at_precision(
+            _interval_bound(iv2, "high", "high_raw"),
+            _interval_bound(iv1, "low", "low_raw"),
+            str(precision),
+        )
+        if cmp is None or cmp < 0 or (cmp == 0 and (not iv2["high_closed"] or not iv1["low_closed"])):
+            return False
+    if iv1["high"] is not None and iv2["low"] is not None:
+        cmp = _compare_bound_at_precision(
+            _interval_bound(iv1, "high", "high_raw"),
+            _interval_bound(iv2, "low", "low_raw"),
+            str(precision),
+        )
+        if cmp is None or cmp < 0 or (cmp == 0 and (not iv1["high_closed"] or not iv2["low_closed"])):
+            return False
+    return True
+
+
+def intervalOverlapsBeforePrecise(interval1: str | None, interval2: str | None, precision: str | None) -> bool | None:
+    """Precision-aware CQL interval overlaps before."""
+    if interval1 is None or interval2 is None or precision is None:
+        return None
+    iv1 = _parse_interval(interval1)
+    iv2 = _parse_interval(interval2)
+    if not iv1 or not iv2 or iv1["low"] is None or iv2["low"] is None:
+        return False
+    low_cmp = _compare_bound_at_precision(
+        _interval_bound(iv1, "low", "low_raw"),
+        _interval_bound(iv2, "low", "low_raw"),
+        str(precision),
+    )
+    if low_cmp is None or low_cmp >= 0:
+        return False
+    if iv1["high"] is None:
+        return True
+    high_cmp = _compare_bound_at_precision(
+        _interval_bound(iv1, "high", "high_raw"),
+        _interval_bound(iv2, "low", "low_raw"),
+        str(precision),
+    )
+    if high_cmp is None:
+        return False
+    if high_cmp == 0:
+        return iv1["high_closed"] and iv2["low_closed"]
+    return high_cmp > 0
+
+
+def intervalOverlapsAfterPrecise(interval1: str | None, interval2: str | None, precision: str | None) -> bool | None:
+    """Precision-aware CQL interval overlaps after."""
+    if interval1 is None or interval2 is None or precision is None:
+        return None
+    return intervalOverlapsBeforePrecise(interval2, interval1, precision)
+
+
 def intervalIncludes(interval1: str | None, interval2: str | None) -> bool | None:
     """Check if interval1 fully includes interval2.
 
@@ -1188,6 +1336,40 @@ def intervalIncludes(interval1: str | None, interval2: str | None) -> bool | Non
 def intervalIncludedIn(interval1: str | None, interval2: str | None) -> bool:
     """Check if interval1 is included in interval2."""
     return intervalIncludes(interval2, interval1)
+
+
+def intervalIncludesPrecise(interval1: str | None, interval2: str | None, precision: str | None) -> bool | None:
+    """Precision-aware CQL interval includes."""
+    if interval1 is None or interval2 is None or precision is None:
+        return None
+    iv1 = _parse_interval(interval1)
+    iv2 = _parse_interval(interval2)
+    if not iv1 or not iv2:
+        return False
+    if iv2["low"] is None and iv1["low"] is not None:
+        return False
+    if iv2["high"] is None and iv1["high"] is not None:
+        return False
+    if iv2["low"] is not None and not intervalContainsPrecise(
+        interval1,
+        str(_interval_bound(iv2, "low", "low_raw")),
+        precision,
+    ):
+        return False
+    if iv2["high"] is not None and not intervalContainsPrecise(
+        interval1,
+        str(_interval_bound(iv2, "high", "high_raw")),
+        precision,
+    ):
+        return False
+    return True
+
+
+def intervalIncludedInPrecise(interval1: str | None, interval2: str | None, precision: str | None) -> bool | None:
+    """Precision-aware CQL interval included in."""
+    if interval1 is None or interval2 is None or precision is None:
+        return None
+    return intervalIncludesPrecise(interval2, interval1, precision)
 
 
 def intervalProperlyIncludes(interval1: str | None, interval2: str | None) -> bool | None:
@@ -2488,6 +2670,14 @@ def registerIntervalUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("intervalMeetsAfter", intervalMeetsAfter, null_handling="special")
     con.create_function("intervalStartsSame", intervalStartsSame, null_handling="special")
     con.create_function("intervalEndsSame", intervalEndsSame, null_handling="special")
+    con.create_function("intervalContainsPrecise", intervalContainsPrecise, null_handling="special")
+    con.create_function("intervalOverlapsPrecise", intervalOverlapsPrecise, null_handling="special")
+    con.create_function("intervalIncludesPrecise", intervalIncludesPrecise, null_handling="special")
+    con.create_function("intervalIncludedInPrecise", intervalIncludedInPrecise, null_handling="special")
+    con.create_function("intervalBeforePrecise", intervalBeforePrecise, null_handling="special")
+    con.create_function("intervalAfterPrecise", intervalAfterPrecise, null_handling="special")
+    con.create_function("intervalOverlapsBeforePrecise", intervalOverlapsBeforePrecise, null_handling="special")
+    con.create_function("intervalOverlapsAfterPrecise", intervalOverlapsAfterPrecise, null_handling="special")
     con.create_function("intervalFromBounds", intervalFromBounds, null_handling="special")
     con.create_function("intervalIntersect", intervalIntersect, null_handling="special")
     con.create_function("intervalUnion", intervalUnion, null_handling="special")
@@ -2522,6 +2712,14 @@ __all__ = [
     "intervalMeetsAfter",
     "intervalStartsSame",
     "intervalEndsSame",
+    "intervalContainsPrecise",
+    "intervalOverlapsPrecise",
+    "intervalIncludesPrecise",
+    "intervalIncludedInPrecise",
+    "intervalBeforePrecise",
+    "intervalAfterPrecise",
+    "intervalOverlapsBeforePrecise",
+    "intervalOverlapsAfterPrecise",
     "intervalFromBounds",
     "intervalIntersect",
     "collapse_intervals",

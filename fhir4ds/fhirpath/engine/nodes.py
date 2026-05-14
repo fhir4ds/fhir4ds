@@ -693,18 +693,18 @@ class FP_TimeBase(FP_Type):
                 result = date_obj + relativedelta(months=trunc(value, divs[("hour", "month")]))
             elif precision == 3:
                 result = date_obj + relativedelta(days=trunc(value, divs[("hour", "day")]))
-            elif precision == 7:
+            elif precision >= 4:
                 result = date_obj + timedelta(hours=value)
             else:
                 result = date_obj
         elif time_unit in ("minute", "second", "millisecond"):
-            target_unit_by_precision = {4: "hour", 5: "minute", 7: None}
+            target_unit_by_precision = {4: "hour", 5: "minute"}
             target = target_unit_by_precision.get(precision)
             if target is not None:
                 result = date_obj + relativedelta(
                     **{target + "s": trunc(value, divs[(time_unit, target)])}
                 )
-            elif precision == 7:
+            elif precision >= 6:
                 result = date_obj + timedelta(**{time_unit + "s": value})
             else:
                 result = date_obj
@@ -914,7 +914,15 @@ class FP_Time(FP_TimeBase):
         if not isinstance(dateStr, str):
             return None
 
-        if not re.match(timeRE, dateStr):
+        m = re.match(timeRE, dateStr)
+        if not m:
+            return None
+        hour, minute, second = m.group(1), m.group(2), m.group(3)
+        if hour is not None and not (0 <= int(hour) <= 23):
+            return None
+        if minute is not None and not (0 <= int(minute) <= 59):
+            return None
+        if second is not None and not (0 <= int(second) <= 59):
             return None
 
         return super(FP_Time, cls).__new__(cls)
@@ -959,11 +967,19 @@ class FP_Time(FP_TimeBase):
                     continue
 
     def __str__(self):
-        if self._pyTimeObject:
-            time_str = self._pyTimeObject.isoformat()
-            if "." in time_str:
-                time_str = time_str[: time_str.index(".") + 4]
-            return time_str
+        if self._timeMatchData:
+            hour = self._timeMatchData.group(1)
+            minute = self._timeMatchData.group(2)
+            second = self._timeMatchData.group(3)
+            fraction = self._timeMatchData.group(4)
+            if second is not None:
+                value = f"{hour}:{minute}:{second}"
+                if fraction is not None:
+                    value += f".{fraction}"
+                return value
+            if minute is not None:
+                return f"{hour}:{minute}:00"
+            return hour
         return self.asStr
 
     def __eq__(self, other):
@@ -992,6 +1008,8 @@ class FP_Time(FP_TimeBase):
 
     def _extractTimeByPrecision(self, date_obj, precision):
         format = {1: "T%H", 2: "T%H:%M", 3: "T%H:%M:%S", 4: "T%H:%M:%S.%f"}
+        if precision == 4 and date_obj.microsecond == 0:
+            return date_obj.strftime("T%H:%M:%S")
         return date_obj.strftime(format.get(precision)) if precision in format else None
 
     def _calculateTimePrecision(self, dt_list):
@@ -1032,6 +1050,7 @@ class FP_DateTime(FP_TimeBase):
         hour = m.group("hour")
         minute = m.group("minute")
         second = m.group("second")
+        timezone = m.group("timezone")
         if month is not None and not (1 <= int(month) <= 12):
             return None
         if day is not None:
@@ -1046,6 +1065,13 @@ class FP_DateTime(FP_TimeBase):
             return None
         if second is not None and not (0 <= int(second) <= 59):
             return None
+        if timezone and timezone != "Z":
+            tz_body = timezone[1:]
+            tz_hour, tz_minute = tz_body.split(":")
+            if not (0 <= int(tz_hour) <= 23):
+                return None
+            if not (0 <= int(tz_minute) <= 59):
+                return None
 
         return super(FP_DateTime, cls).__new__(cls)
 
@@ -1069,15 +1095,6 @@ class FP_DateTime(FP_TimeBase):
             self._timezone = self._dateTimeAsList[7] if len(self._dateTimeAsList) > 7 else None
 
     def __str__(self):
-        if re.match(r"^\d{4}-\d{2}-\d{2}$", self.asStr):
-            return self.asStr
-        if self.asStr and len(self.asStr) <= 4:
-            return self.asStr
-        if self._getDateTimeObject():
-            iso_str = self._getDateTimeObject().isoformat()
-            if "." in iso_str:
-                iso_str = iso_str[: iso_str.index(".") + 4] + iso_str[iso_str.index(".") + 7 :]
-            return iso_str
         return self.asStr
 
     def __eq__(self, other):

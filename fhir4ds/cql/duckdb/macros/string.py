@@ -41,6 +41,11 @@ def registerStringMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # String manipulation
     con.execute("CREATE MACRO IF NOT EXISTS Replace(s, from_str, to_str) AS system.replace(s, from_str, to_str)")
     con.execute("CREATE MACRO IF NOT EXISTS Split(s, delim) AS system.string_split(s, delim)")
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS SplitOnMatches(s, pattern) AS "
+        "CASE WHEN s IS NULL OR pattern IS NULL THEN NULL "
+        "ELSE regexp_split_to_array(s, pattern) END"
+    )
 
     # Trimming functions
     con.execute("CREATE MACRO IF NOT EXISTS Trim(s) AS system.trim(s)")
@@ -76,6 +81,12 @@ def registerStringMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # NOTE: CQL IndexOf is a LIST operation (§20.13), not a string operation.
     # String position finding is PositionOf (§17.11), translated directly by
     # the translator to strpos().  The list IndexOf macro is in list.py.
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS PositionOf(pattern, s) AS "
+        "CASE WHEN s IS NULL OR pattern IS NULL THEN NULL "
+        "WHEN system.strpos(s, pattern) = 0 THEN -1 "
+        "ELSE system.strpos(s, pattern) - 1 END"
+    )
 
     # Indexer: CQL §17.6 — character at position (0-based)
     con.execute(

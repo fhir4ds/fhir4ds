@@ -243,6 +243,8 @@ def replace(ctx, coll, regex, repl):
     if util.is_empty(repl):
         return []
     if regex == "" and isinstance(repl, str):
+        if string == "":
+            return repl
         return repl + repl.join(character for character in string) + repl
     if not string or not regex:
         return []

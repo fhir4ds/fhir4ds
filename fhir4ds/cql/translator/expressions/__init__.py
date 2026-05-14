@@ -161,7 +161,6 @@ class ExpressionTranslator(
             "ceiling": "CEIL",
             "floor": "FLOOR",
             "sqrt": "SQRT",
-            "exp": "mathExp",
             "nullif": "NULLIF",
             "median": "MEDIAN",
             "mode": "MODE",
@@ -208,8 +207,10 @@ class ExpressionTranslator(
         registry.register("contains", lambda args, ctx: self._translate_contains_func(args))
         registry.register("positionof", lambda args, ctx: self._translate_positionof(args))
         registry.register("lastpositionof", lambda args, ctx: self._translate_lastpositionof(args))
+        registry.register("splitonmatches", lambda args, ctx: SQLFunctionCall(name="SplitOnMatches", args=args))
 
         # Math functions
+        registry.register("exp", lambda args, ctx: self._translate_exp(args))
         registry.register("log", lambda args, ctx: self._translate_log(args))
         registry.register("ln", lambda args, ctx: self._translate_ln(args))
         registry.register("power", lambda args, ctx: self._translate_power(args))

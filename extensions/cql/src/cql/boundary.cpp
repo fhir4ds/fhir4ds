@@ -5,6 +5,7 @@
 #include <sstream>
 #include <algorithm>
 #include <cstring>
+#include <cctype>
 
 namespace cql {
 
@@ -270,49 +271,62 @@ Optional<std::string> low_boundary(const std::string &value, int precision) {
 // =====================================================================
 // cql_precision
 // =====================================================================
-Optional<std::string> cql_precision(const std::string &value) {
-	if (value.empty()) return NullOpt<std::string>();
+Optional<int64_t> cql_precision(const std::string &value) {
+	if (value.empty()) return NullOpt<int64_t>();
 
-	auto kind = detect_kind(value);
-
-	if (kind == ValueKind::Date || kind == ValueKind::DateTime) {
-		// Parse to determine precision level, then return the name
-		auto dt = DateTimeValue::parse(value);
-		if (!dt) return NullOpt<std::string>();
-		switch (dt->precision) {
-		case DateTimeValue::Precision::Year:        return Optional<std::string>("Year");
-		case DateTimeValue::Precision::Month:       return Optional<std::string>("Month");
-		case DateTimeValue::Precision::Day:         return Optional<std::string>("Day");
-		case DateTimeValue::Precision::Hour:        return Optional<std::string>("Hour");
-		case DateTimeValue::Precision::Minute:      return Optional<std::string>("Minute");
-		case DateTimeValue::Precision::Second:      return Optional<std::string>("Second");
-		case DateTimeValue::Precision::Millisecond: return Optional<std::string>("Millisecond");
+	std::string s = value;
+	bool date_like = s.find('T') != std::string::npos ||
+	                 (s.size() >= 4 && std::isdigit(static_cast<unsigned char>(s[0])) &&
+	                  std::isdigit(static_cast<unsigned char>(s[1])) &&
+	                  std::isdigit(static_cast<unsigned char>(s[2])) &&
+	                  std::isdigit(static_cast<unsigned char>(s[3])) &&
+	                  (s.size() == 4 || s[4] == '-'));
+	if (date_like) {
+		for (char tz : {'+', 'Z'}) {
+			auto idx = s.find(tz, 10);
+			if (idx != std::string::npos) {
+				s = s.substr(0, idx);
+			}
 		}
-		return NullOpt<std::string>();
+		int64_t digits = 0;
+		for (char c : s) {
+			if (std::isdigit(static_cast<unsigned char>(c))) digits++;
+		}
+		return Optional<int64_t>(digits);
 	}
 
-	if (kind == ValueKind::Time) {
-		// Determine precision from the string format
-		std::string s = value;
+	if ((s.size() >= 1 && s[0] == 'T') || (s.size() >= 2 && s.find(':') != std::string::npos &&
+	                                       s.find('-') == std::string::npos)) {
 		if (!s.empty() && s[0] == 'T') s = s.substr(1);
-		size_t dot = s.find('.');
-		size_t colon1 = s.find(':');
-		if (dot != std::string::npos) return Optional<std::string>("Millisecond");
-		if (colon1 != std::string::npos) {
-			size_t colon2 = s.find(':', colon1 + 1);
-			if (colon2 != std::string::npos) return Optional<std::string>("Second");
-			return Optional<std::string>("Minute");
+		int64_t digits = 0;
+		for (char c : s) {
+			if (std::isdigit(static_cast<unsigned char>(c))) digits++;
 		}
-		return Optional<std::string>("Hour");
+		return Optional<int64_t>(digits);
 	}
 
-	if (kind == ValueKind::Numeric) {
-		size_t dot = value.find('.');
-		if (dot == std::string::npos) return Optional<std::string>("0");
-		return Optional<std::string>(std::to_string(static_cast<int>(value.size() - dot - 1)));
+	char *end = nullptr;
+	std::strtod(s.c_str(), &end);
+	if (end == s.c_str() || *end != '\0') return NullOpt<int64_t>();
+
+	auto exp_pos = s.find_first_of("eE");
+	std::string mantissa = exp_pos == std::string::npos ? s : s.substr(0, exp_pos);
+	int64_t exponent = 0;
+	if (exp_pos != std::string::npos) {
+		try {
+			exponent = std::stoll(s.substr(exp_pos + 1));
+		} catch (...) {
+			return NullOpt<int64_t>();
+		}
 	}
 
-	return NullOpt<std::string>();
+	int64_t fractional_digits = 0;
+	auto dot_pos = mantissa.find('.');
+	if (dot_pos != std::string::npos) {
+		fractional_digits = static_cast<int64_t>(mantissa.size() - dot_pos - 1);
+	}
+	int64_t precision = fractional_digits - exponent;
+	return Optional<int64_t>(precision > 0 ? precision : 0);
 }
 
 // =====================================================================

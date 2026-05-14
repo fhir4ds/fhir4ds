@@ -136,6 +136,8 @@ def type_specifier(ctx, parent_data, node):
         fhir_name = TypeInfo.SYSTEM_TO_FHIR_TYPE[name]
         if fhir_name != name:
             namespace = TypeInfo.System
+    elif namespace is None and name and name[0].islower():
+        namespace = TypeInfo.FHIR
 
     return TypeInfo(name=name, namespace=namespace)
 

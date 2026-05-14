@@ -352,6 +352,19 @@ def extractFirstCodeValue(resource: str | None, path: str) -> str | None:
     return None
 
 
+def extractCodesSql(resource: str | None, path: str) -> List[str]:
+    """SQL-facing extractCodes wrapper matching the native extension shape."""
+    return [f"{system}|{code}" for system, code in extractCodes(resource, path)]
+
+
+def extractFirstCodeSql(resource: str | None, path: str) -> str | None:
+    """SQL-facing extractFirstCode wrapper matching the native extension shape."""
+    codes = extractCodes(resource, path)
+    if codes:
+        return f"{codes[0][0]}|{codes[0][1]}"
+    return None
+
+
 _CODE_SYSTEM_ALIASES = {
     "QICoreCommon.SNOMEDCT": "http://snomed.info/sct",
     "SNOMEDCT": "http://snomed.info/sct",
@@ -576,15 +589,15 @@ def registerValuesetUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     Note: For valueset membership checking, use createValuesetMembershipUdf()
     to create a UDF with a pre-loaded codes cache, then register it separately.
     """
-    # Register extractCodes with explicit return type
-    # Returns a list of (system, code) tuples as VARCHAR[]
+    # Register extractCodes with explicit return type.
+    # SQL shape is VARCHAR[] entries formatted as "system|code", matching C++.
     con.create_function(
         "extractCodes",
-        extractCodes,
+        extractCodesSql,
         return_type="VARCHAR[]",
         null_handling="special"
     )
-    con.create_function("extractFirstCode", extractFirstCode, null_handling="special")
+    con.create_function("extractFirstCode", extractFirstCodeSql, null_handling="special")
     con.create_function("extractFirstCodeSystem", extractFirstCodeSystem, null_handling="special")
     con.create_function("extractFirstCodeValue", extractFirstCodeValue, null_handling="special")
     con.create_function("coding_matches", codingMatches, null_handling="special")
@@ -593,6 +606,8 @@ def registerValuesetUdfs(con: "duckdb.DuckDBPyConnection") -> None:
 
 __all__ = [
     "extractCodes",
+    "extractCodesSql",
+    "extractFirstCodeSql",
     "extractFirstCode",
     "extractFirstCodeSystem",
     "extractFirstCodeValue",

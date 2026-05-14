@@ -136,6 +136,13 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "ELSE list_aggregate(list_transform(lst, _v -> TRY_CAST(_v AS DOUBLE)), 'product') END"
     )
 
+    # GeometricMean - CQL aggregate over positive numeric values
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS GeometricMean(lst) AS "
+        "CASE WHEN lst IS NULL THEN NULL "
+        "ELSE exp(list_aggregate(list_transform(lst, _v -> ln(TRY_CAST(_v AS DOUBLE))), 'avg')) END"
+    )
+
     # ============================================
     # Descendents - CQL §20.4: returns null for null input
     # Full implementation would recursively collect all child properties;

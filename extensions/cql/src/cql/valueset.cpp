@@ -464,11 +464,15 @@ static void extract_codes_from_val(yyjson_val *val, std::vector<CodeValue> &code
 	}
 
 	if (yyjson_is_obj(val)) {
-		// Check if this is a Coding object (has system and code)
+		// Check if this is a Coding object. System is optional for code-only ValueSet entries.
 		yyjson_val *system_val = yyjson_obj_get(val, "system");
 		yyjson_val *code_val = yyjson_obj_get(val, "code");
-		if (system_val && code_val && yyjson_is_str(system_val) && yyjson_is_str(code_val)) {
-			codes.push_back({yyjson_get_str(system_val), yyjson_get_str(code_val)});
+		if (code_val && yyjson_is_str(code_val)) {
+			std::string system = "";
+			if (system_val && yyjson_is_str(system_val)) {
+				system = yyjson_get_str(system_val);
+			}
+			codes.push_back({system, yyjson_get_str(code_val)});
 		}
 
 		// Check for nested coding array

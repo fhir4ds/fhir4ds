@@ -7,6 +7,7 @@ with code that references the logicalCoalesce/logicalImplies/etc. function names
 New code should use the SQL macro versions (Coalesce, Implies, etc.) instead.
 """
 from __future__ import annotations
+import json
 from typing import TYPE_CHECKING, List, Any
 
 if TYPE_CHECKING:
@@ -15,6 +16,20 @@ if TYPE_CHECKING:
 
 def logicalCoalesce(*args: Any) -> Any:
     """CQL Coalesce(a, b, ...) - first non-null value."""
+    if len(args) == 1 and isinstance(args[0], str):
+        text = args[0].strip()
+        if text.startswith("["):
+            try:
+                values = json.loads(text)
+                if isinstance(values, list):
+                    for value in values:
+                        if value is not None:
+                            if isinstance(value, bool):
+                                return "true" if value else "false"
+                            return str(value)
+                    return None
+            except (TypeError, ValueError):
+                pass
     for arg in args:
         if arg is not None:
             return arg
@@ -45,6 +60,19 @@ def logicalImplies(a: bool | None, b: bool | None) -> bool | None:
     return b
 
 
+def _parse_bool_list(values: List[bool | None] | str | None) -> List[bool | None] | None:
+    if isinstance(values, str):
+        text = values.strip()
+        if text.startswith("["):
+            try:
+                parsed = json.loads(text)
+                if isinstance(parsed, list):
+                    return parsed
+            except (TypeError, ValueError):
+                return None
+    return values
+
+
 def logicalAllTrue(values: List[bool | None] | None) -> bool | None:
     """CQL AllTrue(list) — true iff no non-null element is false.
 
@@ -52,6 +80,7 @@ def logicalAllTrue(values: List[bool | None] | None) -> bool | None:
     (or there are no non-null elements), returns true.
     Null argument is treated as empty list → true.
     """
+    values = _parse_bool_list(values)
     if values is None or len(values) == 0:
         return True
     for v in values:
@@ -67,6 +96,7 @@ def logicalAnyTrue(values: List[bool | None] | None) -> bool | None:
     returns true. If no non-null elements, returns false.
     Null argument is treated as empty list → false.
     """
+    values = _parse_bool_list(values)
     if values is None or len(values) == 0:
         return False
     for v in values:
@@ -82,6 +112,7 @@ def logicalAllFalse(values: List[bool | None] | None) -> bool | None:
     (or there are no non-null elements), returns true.
     Null argument is treated as empty list → true.
     """
+    values = _parse_bool_list(values)
     if values is None or len(values) == 0:
         return True
     for v in values:
@@ -97,6 +128,7 @@ def logicalAnyFalse(values: List[bool | None] | None) -> bool | None:
     returns true. If no non-null elements, returns false.
     Null argument is treated as empty list → false.
     """
+    values = _parse_bool_list(values)
     if values is None or len(values) == 0:
         return False
     for v in values:

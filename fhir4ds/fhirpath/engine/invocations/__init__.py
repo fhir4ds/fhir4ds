@@ -124,7 +124,7 @@ invocation_registry = {
     "inOp": {"fn": collections.inn, "arity": {2: ["Any", "Any"]}},
     "isOp": {"fn": types.is_fn,  "arity": {2: ["Any", "TypeSpecifier"]}},
     "asOp": {"fn": types.as_fn,  "arity": {2: ["Any", "TypeSpecifier"]}},
-    "&": {"fn": math.amp, "arity": {2: ["String", "String"]}},
+    "&": {"fn": math.amp, "arity": {2: ["Any", "Any"]}},
     "+": {"fn": math.plus, "arity": {2: ["Any", "Any"]}, "nullable": True},
     "-": {"fn": math.minus, "arity": {2: ["Any", "Any"]}, "nullable": True},
     "*": {"fn": math.mul, "arity": {2: ["Number", "Number"]}, "nullable": True},

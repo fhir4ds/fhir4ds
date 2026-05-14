@@ -220,6 +220,7 @@ def string_literal(ctx, parentData, node):
     rtn = rtn.replace("\\f", "\f")
     rtn = rtn.replace("\\\\", "\\")
     rtn = re.sub(r"\\(u\d{4})", match, rtn)
+    rtn = re.sub(r"\\(.)", r"\1", rtn)
 
     return [rtn]
 

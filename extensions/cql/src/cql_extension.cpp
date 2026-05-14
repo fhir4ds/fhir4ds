@@ -614,7 +614,7 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalEndsSameFunc, {
 DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsPreciseFunc, iv1->overlaps(*iv2, *prec))
 DEFINE_PREC_INTERVAL_UDF(IntervalBeforePreciseFunc, iv1->before(*iv2, *prec))
 DEFINE_PREC_INTERVAL_UDF(IntervalAfterPreciseFunc, iv1->after(*iv2, *prec))
-DEFINE_PREC_INTERVAL_UDF(IntervalIncludesPreciseFunc, iv2->includes(*iv1, *prec))
+DEFINE_PREC_INTERVAL_UDF(IntervalIncludesPreciseFunc, iv1->includes(*iv2, *prec))
 DEFINE_PREC_INTERVAL_UDF(IntervalIncludedInPreciseFunc, iv2->includes(*iv1, *prec))
 DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsBeforePreciseFunc, iv1->overlaps_before(*iv2, *prec))
 DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsAfterPreciseFunc, iv1->overlaps_after(*iv2, *prec))
@@ -2638,7 +2638,7 @@ static void CQLPrecisionFunc(DataChunk &args, ExpressionState &state, Vector &re
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<string_t>(result);
+	auto result_data = FlatVector::GetData<int64_t>(result);
 	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
@@ -2650,7 +2650,7 @@ static void CQLPrecisionFunc(DataChunk &args, ExpressionState &state, Vector &re
 		std::string val = a_vals[a_idx].GetString();
 		auto res = cql::cql_precision(val);
 		if (!res) { result_mask.SetInvalid(i); continue; }
-		result_data[i] = StringVector::AddString(result, *res);
+		result_data[i] = *res;
 	}
 }
 
@@ -3185,11 +3185,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	// Boundary UDFs — deferred to Python (Time precision bugs, quantity predecessor/successor,
 	// overflow/underflow detection missing)
-	// CQLPrecision: deferred to Python — the C++ version returns precision names ("Year",
-	// "Millisecond") but CQL conformance tests expect integer digit counts (4, 17) which
-	// the Python cqlPrecision() correctly computes.
-	// RegisterSpecialScalar(loader, "CQLPrecision", {LogicalType::VARCHAR},
-	//                       LogicalType::VARCHAR, CQLPrecisionFunc);
+	RegisterSpecialScalar(loader, "CQLPrecision", {LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, CQLPrecisionFunc);
 	RegisterSpecialScalar(loader, "cqlTimezoneOffset", {LogicalType::VARCHAR},
 	                      LogicalType::DOUBLE, CQLTimezoneOffsetFunc);
 
@@ -3222,13 +3219,10 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::VARCHAR, MathTruncateFunc);
 
 	// Phase 6: Quantity arithmetic UDFs
-	// quantityMultiply / quantityDivide deferred to Python — the C++ versions lack
-	// UCUM unit algebra (pint) so cm*cm→NULL instead of cm², g/cm3/g/cm3→NULL instead of 1.
-	// The Python quantityMultiply/quantityDivide use pint for correct unit propagation.
-	// RegisterSpecialScalar(loader, "quantityMultiply", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	//                       LogicalType::VARCHAR, QuantityMultiplyFunc);
-	// RegisterSpecialScalar(loader, "quantityDivide", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	//                       LogicalType::VARCHAR, QuantityDivideFunc);
+	RegisterSpecialScalar(loader, "quantityMultiply", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, QuantityMultiplyFunc);
+	RegisterSpecialScalar(loader, "quantityDivide", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, QuantityDivideFunc);
 	RegisterSpecialScalar(loader, "quantityNegate", {LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, QuantityNegateFunc);
 	RegisterSpecialScalar(loader, "quantityAbs", {LogicalType::VARCHAR},

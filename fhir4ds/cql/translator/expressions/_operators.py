@@ -2239,6 +2239,8 @@ class OperatorsMixin:
                 inner_expr = expr.right.right
                 interval_start = SQLFunctionCall(name="intervalStart", args=[left])
                 right_translated = self.translate(inner_expr, usage=ExprUsage.SCALAR)
+                if self._is_fhir_interval_expression(right_translated) or isinstance(right_translated, SQLInterval):
+                    right_translated = SQLFunctionCall(name="intervalStart", args=[right_translated])
                 left_truncated = self._truncate_to_precision(interval_start, precision_str)
                 right_truncated = self._truncate_to_precision(right_translated, precision_str)
                 return SQLBinaryOp(operator="=", left=left_truncated, right=right_truncated)
@@ -2466,6 +2468,8 @@ class OperatorsMixin:
                 inner_expr = expr.right.right
                 interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
                 right_translated = self.translate(inner_expr, usage=ExprUsage.SCALAR)
+                if self._is_fhir_interval_expression(right_translated) or isinstance(right_translated, SQLInterval):
+                    right_translated = SQLFunctionCall(name="intervalEnd", args=[right_translated])
                 left_truncated = self._truncate_to_precision(interval_end, precision_str)
                 right_truncated = self._truncate_to_precision(right_translated, precision_str)
                 return SQLBinaryOp(operator="=", left=left_truncated, right=right_truncated)

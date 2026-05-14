@@ -1389,7 +1389,13 @@ static void FhirpathJsonFunction(DataChunk &args, ExpressionState &state, Vector
 					json_str += val.source_text;
 				} else {
 					snprintf(buf, sizeof(buf), "%.17g", val.decimal_val);
-					json_str += buf;
+					std::string num(buf);
+					if (num.find('.') == std::string::npos &&
+					    num.find('e') == std::string::npos &&
+					    num.find('E') == std::string::npos) {
+						num += ".0";
+					}
+					json_str += num;
 				}
 			} else if (val.type == fhirpath::FPValue::Type::Boolean) {
 				json_str += val.bool_val ? "true" : "false";

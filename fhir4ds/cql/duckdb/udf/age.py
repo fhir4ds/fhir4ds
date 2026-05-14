@@ -66,6 +66,59 @@ def _parse_datetime(value: str) -> datetime | None:
         return None
 
 
+def _parse_birthdate(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        if len(value) == 4:
+            return date(int(value), 1, 1)
+        if len(value) == 7:
+            parts = value.split("-")
+            return date(int(parts[0]), int(parts[1]), 1)
+        return date.fromisoformat(value[:10])
+    except (ValueError, TypeError) as e:
+        _logger.warning("_parse_birthdate failed: %s", e)
+        return None
+
+
+def _reference_now(as_of: str | None = None) -> tuple[date, datetime] | None:
+    if as_of is None:
+        now = datetime.now(timezone.utc)
+        return now.date(), now
+    try:
+        ref_date = date.fromisoformat(as_of[:10])
+        ref_now = datetime.combine(ref_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+        return ref_date, ref_now
+    except (ValueError, TypeError) as e:
+        _logger.warning("_reference_now failed: %s", e)
+        return None
+
+
+def _calculate_age(birth_date: str | None, unit: str, as_of: str | None = None) -> int | None:
+    birth = _parse_birthdate(birth_date)
+    ref = _reference_now(as_of)
+    if birth is None or ref is None:
+        return None
+    ref_date, ref_now = ref
+    if ref_date < birth:
+        return None
+    if unit == "years":
+        return _calc_years(birth, ref_date, ref_now)
+    if unit == "months":
+        return _calc_months(birth, ref_date, ref_now)
+    if unit == "weeks":
+        return (ref_date - birth).days // 7
+    if unit == "days":
+        return _calc_days(birth, ref_date, ref_now)
+    if unit == "hours":
+        return _calc_hours(birth, ref_date, ref_now)
+    if unit == "minutes":
+        return _calc_minutes(birth, ref_date, ref_now)
+    if unit == "seconds":
+        return _calc_seconds(birth, ref_date, ref_now)
+    return None
+
+
 # ========================================
 # Scalar versions (fallback)
 # ========================================
@@ -179,6 +232,81 @@ def ageInDaysAt_scalar(resource: str | None, as_of: str) -> int | None:
     return days if days >= 0 else None
 
 
+def ageInWeeks_scalar(resource: str | None) -> int | None:
+    """CQL AgeInWeeks() - scalar version."""
+    birth = _extract_birthdate(resource)
+    if not birth:
+        return None
+    today = datetime.now(timezone.utc).date()
+    return (today - birth).days // 7
+
+
+def ageInWeeksAt_scalar(resource: str | None, as_of: str) -> int | None:
+    """CQL AgeInWeeksAt(date) - scalar version."""
+    birth = _extract_birthdate(resource)
+    ref = _reference_now(as_of)
+    if not birth or ref is None:
+        return None
+    days = (ref[0] - birth).days
+    return days // 7 if days >= 0 else None
+
+
+def calculateAgeInYears(birth_date: str | None) -> int | None:
+    return _calculate_age(birth_date, "years")
+
+
+def calculateAgeInMonths(birth_date: str | None) -> int | None:
+    return _calculate_age(birth_date, "months")
+
+
+def calculateAgeInWeeks(birth_date: str | None) -> int | None:
+    return _calculate_age(birth_date, "weeks")
+
+
+def calculateAgeInDays(birth_date: str | None) -> int | None:
+    return _calculate_age(birth_date, "days")
+
+
+def calculateAgeInHours(birth_date: str | None) -> int | None:
+    return _calculate_age(birth_date, "hours")
+
+
+def calculateAgeInMinutes(birth_date: str | None) -> int | None:
+    return _calculate_age(birth_date, "minutes")
+
+
+def calculateAgeInSeconds(birth_date: str | None) -> int | None:
+    return _calculate_age(birth_date, "seconds")
+
+
+def calculateAgeInYearsAt(birth_date: str | None, as_of: str | None) -> int | None:
+    return _calculate_age(birth_date, "years", as_of)
+
+
+def calculateAgeInMonthsAt(birth_date: str | None, as_of: str | None) -> int | None:
+    return _calculate_age(birth_date, "months", as_of)
+
+
+def calculateAgeInWeeksAt(birth_date: str | None, as_of: str | None) -> int | None:
+    return _calculate_age(birth_date, "weeks", as_of)
+
+
+def calculateAgeInDaysAt(birth_date: str | None, as_of: str | None) -> int | None:
+    return _calculate_age(birth_date, "days", as_of)
+
+
+def calculateAgeInHoursAt(birth_date: str | None, as_of: str | None) -> int | None:
+    return _calculate_age(birth_date, "hours", as_of)
+
+
+def calculateAgeInMinutesAt(birth_date: str | None, as_of: str | None) -> int | None:
+    return _calculate_age(birth_date, "minutes", as_of)
+
+
+def calculateAgeInSecondsAt(birth_date: str | None, as_of: str | None) -> int | None:
+    return _calculate_age(birth_date, "seconds", as_of)
+
+
 # ========================================
 # Arrow vectorized versions (factory-based)
 # ========================================
@@ -270,6 +398,7 @@ def registerAgeUdfs(con: "duckdb.DuckDBPyConnection") -> None:
         con.create_function("AgeInYears", ageInYears_arrow, type="arrow", return_type="BIGINT", null_handling="special")
         con.create_function("AgeInMonths", ageInMonths_arrow, type="arrow", return_type="BIGINT", null_handling="special")
         con.create_function("AgeInDays", ageInDays_arrow, type="arrow", return_type="BIGINT", null_handling="special")
+        con.create_function("AgeInWeeks", ageInWeeks_scalar, null_handling="special")
         con.create_function("AgeInHours", ageInHours_arrow, type="arrow", return_type="BIGINT", null_handling="special")
         con.create_function("AgeInMinutes", ageInMinutes_arrow, type="arrow", return_type="BIGINT", null_handling="special")
         con.create_function("AgeInSeconds", ageInSeconds_arrow, type="arrow", return_type="BIGINT", null_handling="special")
@@ -278,6 +407,7 @@ def registerAgeUdfs(con: "duckdb.DuckDBPyConnection") -> None:
         con.create_function("AgeInYears", ageInYears_scalar, null_handling="special")
         con.create_function("AgeInMonths", ageInMonths_scalar, null_handling="special")
         con.create_function("AgeInDays", ageInDays_scalar, null_handling="special")
+        con.create_function("AgeInWeeks", ageInWeeks_scalar, null_handling="special")
         con.create_function("AgeInHours", ageInHours_scalar, null_handling="special")
         con.create_function("AgeInMinutes", ageInMinutes_scalar, null_handling="special")
         con.create_function("AgeInSeconds", ageInSeconds_scalar, null_handling="special")
@@ -285,7 +415,22 @@ def registerAgeUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     # At-time functions (scalar only for now)
     con.create_function("AgeInYearsAt", ageInYearsAt_scalar, null_handling="special")
     con.create_function("AgeInMonthsAt", ageInMonthsAt_scalar, null_handling="special")
+    con.create_function("AgeInWeeksAt", ageInWeeksAt_scalar, null_handling="special")
     con.create_function("AgeInDaysAt", ageInDaysAt_scalar, null_handling="special")
+    con.create_function("CalculateAgeInYears", calculateAgeInYears, null_handling="special")
+    con.create_function("CalculateAgeInMonths", calculateAgeInMonths, null_handling="special")
+    con.create_function("CalculateAgeInWeeks", calculateAgeInWeeks, null_handling="special")
+    con.create_function("CalculateAgeInDays", calculateAgeInDays, null_handling="special")
+    con.create_function("CalculateAgeInHours", calculateAgeInHours, null_handling="special")
+    con.create_function("CalculateAgeInMinutes", calculateAgeInMinutes, null_handling="special")
+    con.create_function("CalculateAgeInSeconds", calculateAgeInSeconds, null_handling="special")
+    con.create_function("CalculateAgeInYearsAt", calculateAgeInYearsAt, null_handling="special")
+    con.create_function("CalculateAgeInMonthsAt", calculateAgeInMonthsAt, null_handling="special")
+    con.create_function("CalculateAgeInWeeksAt", calculateAgeInWeeksAt, null_handling="special")
+    con.create_function("CalculateAgeInDaysAt", calculateAgeInDaysAt, null_handling="special")
+    con.create_function("CalculateAgeInHoursAt", calculateAgeInHoursAt, null_handling="special")
+    con.create_function("CalculateAgeInMinutesAt", calculateAgeInMinutesAt, null_handling="special")
+    con.create_function("CalculateAgeInSecondsAt", calculateAgeInSecondsAt, null_handling="special")
 
 
 # Legacy aliases for backward compatibility
