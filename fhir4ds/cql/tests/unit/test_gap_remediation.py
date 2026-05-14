@@ -19,6 +19,7 @@ from ...translator.types import (
     SQLFunctionCall,
     SQLLiteral,
     SQLParameterRef,
+    SQLQualifiedIdentifier,
     SQLRaw,
 )
 from ...translator.cte_builder import (
@@ -350,8 +351,8 @@ class TestGap6ColumnContamination:
         assert "intervalStart" not in sql
         assert "intervalEnd" not in sql
 
-    def test_non_period_choice_columns_do_not_get_bounds(self):
-        """Mixed choice elements like Observation.value[x] do not get bounds."""
+    def test_temporal_choice_columns_include_derived_bounds(self):
+        """Temporal choice precomputed columns expose reusable start/end bounds."""
         ctx = _make_context_with_schema()
         _, cte_ast, col_info = build_retrieve_cte(
             resource_type="Observation",
@@ -364,9 +365,18 @@ class TestGap6ColumnContamination:
         assert "value" in col_info
         assert "value_start" not in col_info
         assert "value_end" not in col_info
-        assert "effective_start" not in col_info
-        assert "effective_end" not in col_info
+        assert "effective_start" in col_info
+        assert "effective_end" in col_info
         assert "value_start" not in sql
+        assert "effective_start" in sql
+        assert "effective_end" in sql
+
+    def test_interval_bound_calls_use_precomputed_temporal_columns(self):
+        """intervalStart/End over temporal CTE columns serialize to bound columns."""
+        effective = SQLQualifiedIdentifier(parts=["Obs", "effective"])
+
+        assert SQLFunctionCall(name="intervalStart", args=[effective]).to_sql() == "Obs.effective_start"
+        assert SQLFunctionCall(name="intervalEnd", args=[effective]).to_sql() == "Obs.effective_end"
 
     def test_period_json_bound_extraction_requires_scalar_path(self):
         """Direct Period JSON extraction is only used for scalar schema paths."""

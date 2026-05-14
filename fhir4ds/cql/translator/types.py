@@ -16,6 +16,7 @@ from .column_generation import (
     build_column_definitions,
     get_default_property_paths,
 )
+from .temporal_fields import TEMPORAL_BOUND_COLUMN_NAMES
 
 
 # SQL reserved words that must be quoted when used as identifiers/aliases
@@ -33,6 +34,31 @@ _SQL_RESERVED_WORDS = {
     "CAST", "FILTER", "OVER", "PARTITION", "WINDOW",
     "CURRENT", "ROW", "ROWS", "RANGE", "INTERVAL",
 }
+
+def _same_sql_expression(left: "SQLExpression", right: "SQLExpression") -> bool:
+    """Compare small AST expressions by rendered SQL for normalization guards."""
+    return left.to_sql() == right.to_sql()
+
+
+def _extract_to_interval_case_source(expr: "SQLCase") -> Optional["SQLExpression"]:
+    """Return the source column for CASE produced by fluent toInterval()."""
+    if not expr.when_clauses or not isinstance(expr.else_clause, SQLFunctionCall):
+        return None
+    if expr.else_clause.name != "intervalFromBounds" or len(expr.else_clause.args) < 2:
+        return None
+
+    source = expr.else_clause.args[0]
+    if not _same_sql_expression(source, expr.else_clause.args[1]):
+        return None
+
+    for _, result in expr.when_clauses:
+        if isinstance(result, SQLNull) or (
+            isinstance(result, SQLLiteral) and result.value is None
+        ):
+            continue
+        if not _same_sql_expression(result, source):
+            return None
+    return source
 
 # Operator precedence levels (higher = binds tighter)
 PRECEDENCE = {
@@ -320,6 +346,22 @@ class SQLFunctionCall(SQLExpression):
         call ``normalize().to_sql()`` instead of ``to_sql()`` directly.
         The default ``to_sql()`` calls this internally for backward compatibility.
         """
+        # Use precomputed retrieve CTE temporal bounds when intervalStart/End
+        # receives a known temporal column such as Encounter.period or
+        # Observation.effective.
+        if self.name in ("intervalStart", "intervalEnd") and len(self.args) == 1:
+            arg = self.args[0]
+            if isinstance(arg, SQLCase):
+                arg = _extract_to_interval_case_source(arg) or arg
+            if isinstance(arg, SQLQualifiedIdentifier) and len(arg.parts) >= 2:
+                col_name = arg.parts[-1]
+                if (
+                    col_name in TEMPORAL_BOUND_COLUMN_NAMES
+                    and not col_name.endswith(("_start", "_end"))
+                ):
+                    suffix = "start" if self.name == "intervalStart" else "end"
+                    return SQLQualifiedIdentifier(parts=arg.parts[:-1] + [f"{col_name}_{suffix}"])
+
         # array_length on non-array arguments → CASE IS NOT NULL / CASE WHEN
         # SQLRaw used here: normalize() is called only from to_sql() (final rendering).
         if self.name.lower() == "array_length" and len(self.args) >= 1:

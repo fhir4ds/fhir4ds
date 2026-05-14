@@ -38,6 +38,11 @@ from .column_generation import (
     infer_sql_type_from_function,
     is_choice_type_column,
 )
+from .temporal_fields import (
+    TEMPORAL_CHOICE_PATHS,
+    TEMPORAL_CHOICE_SUFFIXES,
+    TEMPORAL_FHIR_TYPES,
+)
 
 if TYPE_CHECKING:
     from .context import SQLTranslationContext
@@ -172,10 +177,15 @@ def _is_temporal_bound_column(
     col_def: ColumnDefinition,
     fhir_schema,
 ) -> bool:
-    """Return true when a precomputed property is a direct FHIR Period."""
+    """Return true when a precomputed property can expose temporal bounds."""
+    resource = fhir_schema.resources.get(resource_type)
     for path in col_def.paths:
-        if fhir_schema.get_element_type(resource_type, path) == "Period":
+        if fhir_schema.get_element_type(resource_type, path) in TEMPORAL_FHIR_TYPES:
             return True
+        if resource and path in TEMPORAL_CHOICE_PATHS and path in resource.choice_elements:
+            for suffix in TEMPORAL_CHOICE_SUFFIXES:
+                if fhir_schema.get_element_type(resource_type, f"{path}{suffix}") in TEMPORAL_FHIR_TYPES:
+                    return True
     return False
 
 
