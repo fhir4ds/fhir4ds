@@ -662,7 +662,8 @@ class FHIRDataLoader:
     def _refresh_cpp_in_valueset_cache(self, table_name: str = "valueset_codes") -> bool:
         """Populate the native CQL valueset cache when the C++ extension exposes it."""
         import os
-        if os.environ.get("FHIR4DS_USE_CPP_VALUESET_CACHE", "").lower() not in ("1", "true", "yes"):
+        use_native = os.environ.get("FHIR4DS_USE_CPP_VALUESET_CACHE", "").lower()
+        if use_native in ("0", "false", "no", "off"):
             return False
 
         try:
