@@ -136,8 +136,14 @@ class ExpressionTranslator(
             context: The translation context for symbol resolution.
         """
         self.context = context
-        self._function_registry = self._build_function_registry()
+        self._function_registry = None
         self._handler_cache: Dict[str, Optional[Tuple[Any, str]]] = {}
+
+    def _get_function_registry(self):
+        """Return the built-in function registry, constructing it on first use."""
+        if self._function_registry is None:
+            self._function_registry = self._build_function_registry()
+        return self._function_registry
 
     def _build_function_registry(self):
         """Build the FunctionTranslationRegistry with all built-in CQL functions."""

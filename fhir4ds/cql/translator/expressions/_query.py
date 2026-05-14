@@ -468,7 +468,14 @@ class QueryMixin:
 
     def _count_let_refs(self, ast_node, var_name: int) -> int:
         """Count how many times *var_name* appears as an Identifier in an AST subtree."""
-        count = 0
+        return self._count_let_refs_many(ast_node, {var_name}).get(var_name, 0)
+
+    def _count_let_refs_many(self, ast_node, var_names: set[str]) -> dict[str, int]:
+        """Count Identifier references for multiple let variables in one AST walk."""
+        if not var_names:
+            return {}
+
+        counts = {name: 0 for name in var_names}
         # Use a stack to avoid recursion on deep ASTs
         stack = [ast_node]
         while stack:
@@ -478,13 +485,14 @@ class QueryMixin:
             if isinstance(n, Identifier) and id(n) != id(ast_node):
                 # Use object identity on the `name` field isn't reliable
                 # because Identifier may be subclassed; compare by name.
-                if getattr(n, 'name', None) == var_name:
-                    count += 1
+                name = getattr(n, 'name', None)
+                if name in counts:
+                    counts[name] += 1
                 continue
             # Recurse into common AST node children
             for child in self._ast_children(n):
                 stack.append(child)
-        return count
+        return counts
 
     @staticmethod
     def _ast_children(node) -> list:
@@ -743,21 +751,21 @@ class QueryMixin:
             body_ref_counts = {name: 0 for name in let_names}
             let_deps = {name: {} for name in let_names}
 
-            for let_clause in let_clauses:
-                name = let_clause.alias
-                # Count in WHERE
-                if hasattr(node, 'where') and node.where:
-                    body_ref_counts[name] += self._count_let_refs(node.where, name)
-                # Count in RETURN
-                if hasattr(node, 'return_clause') and node.return_clause:
-                    body_ref_counts[name] += self._count_let_refs(node.return_clause, name)
+            if hasattr(node, 'where') and node.where:
+                where_counts = self._count_let_refs_many(node.where, let_names)
+                for name, count in where_counts.items():
+                    body_ref_counts[name] += count
+            if hasattr(node, 'return_clause') and node.return_clause:
+                return_counts = self._count_let_refs_many(node.return_clause, let_names)
+                for name, count in return_counts.items():
+                    body_ref_counts[name] += count
 
             for let_clause in let_clauses:
                 deps = let_deps[let_clause.alias]
-                for dep_name in let_names:
+                dep_counts = self._count_let_refs_many(let_clause.expression, let_names)
+                for dep_name, dep_count in dep_counts.items():
                     if dep_name == let_clause.alias:
                         continue
-                    dep_count = self._count_let_refs(let_clause.expression, dep_name)
                     if dep_count:
                         deps[dep_name] = dep_count
 

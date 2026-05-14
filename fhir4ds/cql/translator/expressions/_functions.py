@@ -425,7 +425,8 @@ class FunctionsMixin:
                 return self._translate_first_last_with_window(arg, direction=direction)
 
         # Step 1: Check for pre-translate strategies (aggregates on Queries, maximum/minimum)
-        pre_strategy = self._function_registry.get_pre_translate(name, arity)
+        function_registry = self._get_function_registry()
+        pre_strategy = function_registry.get_pre_translate(name, arity)
         if pre_strategy is not None:
             result = pre_strategy.translator(func, self)
             if result is not None:
@@ -489,7 +490,7 @@ class FunctionsMixin:
             )
 
         # Step 3: Check registry for simple renames and parameterized translations
-        strategy = self._function_registry.get(name, arity)
+        strategy = function_registry.get(name, arity)
         if isinstance(strategy, SimpleRename):
             return SQLFunctionCall(name=strategy.sql_name, args=args)
         if isinstance(strategy, ParameterizedTranslation):
@@ -1786,4 +1787,3 @@ class FunctionsMixin:
             return SQLNull()
 
         return SQLFunctionCall(name=udf_name, args=[patient_resource, as_of_date])
-
