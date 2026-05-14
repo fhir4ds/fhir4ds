@@ -60,6 +60,56 @@ def _extract_to_interval_case_source(expr: "SQLCase") -> Optional["SQLExpression
             return None
     return source
 
+
+def _is_null_expression(expr: Optional["SQLExpression"]) -> bool:
+    return isinstance(expr, SQLNull) or (
+        isinstance(expr, SQLLiteral) and expr.value is None
+    )
+
+
+def _extract_interval_bound_expression(
+    expr: "SQLExpression",
+    bound_name: str,
+) -> Optional["SQLExpression"]:
+    """Return the known bound expression for an interval-producing expression."""
+    if isinstance(expr, SQLFunctionCall) and expr.name == "intervalFromBounds" and len(expr.args) >= 2:
+        return expr.args[0] if bound_name == "intervalStart" else expr.args[1]
+    if _is_null_expression(expr):
+        return SQLNull()
+    return None
+
+
+def _fold_interval_bound_case(
+    expr: "SQLCase",
+    bound_name: str,
+) -> Optional["SQLCase"]:
+    """Fold intervalStart/End(CASE ... intervalFromBounds ... END)."""
+    folded_when_clauses = []
+    changed = False
+
+    for condition, result in expr.when_clauses:
+        folded_result = _extract_interval_bound_expression(result, bound_name)
+        if folded_result is None:
+            return None
+        changed = changed or folded_result is not result
+        folded_when_clauses.append((condition, folded_result))
+
+    folded_else = None
+    if expr.else_clause is not None:
+        folded_else = _extract_interval_bound_expression(expr.else_clause, bound_name)
+        if folded_else is None:
+            return None
+        changed = changed or folded_else is not expr.else_clause
+
+    if not changed:
+        return None
+    return SQLCase(
+        when_clauses=folded_when_clauses,
+        else_clause=folded_else,
+        operand=expr.operand,
+    )
+
+
 # Operator precedence levels (higher = binds tighter)
 PRECEDENCE = {
     # Set operators (lowest — standard SQL: INTERSECT > UNION/EXCEPT)
@@ -352,7 +402,12 @@ class SQLFunctionCall(SQLExpression):
         if self.name in ("intervalStart", "intervalEnd") and len(self.args) == 1:
             arg = self.args[0]
             if isinstance(arg, SQLCase):
+                folded_case = _fold_interval_bound_case(arg, self.name)
+                if folded_case is not None:
+                    return folded_case
                 arg = _extract_to_interval_case_source(arg) or arg
+            if isinstance(arg, SQLFunctionCall) and arg.name == "intervalFromBounds" and len(arg.args) >= 2:
+                return arg.args[0] if self.name == "intervalStart" else arg.args[1]
             if isinstance(arg, SQLQualifiedIdentifier) and len(arg.parts) >= 2:
                 col_name = arg.parts[-1]
                 if (

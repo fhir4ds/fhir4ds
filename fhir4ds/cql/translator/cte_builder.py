@@ -141,6 +141,52 @@ def _can_extract_period_bound_from_json(
     return True
 
 
+def _can_extract_temporal_scalar_from_json(
+    resource_type: str,
+    path: str,
+    fhir_schema,
+) -> bool:
+    """Return true when a scalar temporal path can be read by JSON traversal."""
+    if (
+        fhir_schema.get_element_type(resource_type, path) not in {"dateTime", "date", "instant"}
+        or not _is_simple_fhir_field_path(path)
+    ):
+        return False
+
+    parts = path.split(".")
+    for index in range(1, len(parts) + 1):
+        prefix = ".".join(parts[:index])
+        element = _schema_element_for_path(fhir_schema, resource_type, prefix)
+        if element is None:
+            return False
+        if element.cardinality and element.cardinality.endswith("*"):
+            return False
+    return True
+
+
+def _temporal_json_bound_expression(
+    resource_type: str,
+    path: str,
+    fhir_schema,
+    suffix: str,
+):
+    """Build a direct JSON extraction for a temporal scalar or Period bound."""
+    if _can_extract_period_bound_from_json(resource_type, path, fhir_schema):
+        json_path = f"$.{path}.{suffix}"
+    elif _can_extract_temporal_scalar_from_json(resource_type, path, fhir_schema):
+        json_path = f"$.{path}"
+    else:
+        return None
+
+    return SQLFunctionCall(
+        name="json_extract_string",
+        args=[
+            SQLQualifiedIdentifier(parts=["r", "resource"]),
+            SQLLiteral(value=json_path),
+        ],
+    )
+
+
 def _build_period_bound_expression(
     resource_type: str,
     col_def: ColumnDefinition,
@@ -151,16 +197,22 @@ def _build_period_bound_expression(
     """Build a reusable Period start/end expression for a precomputed column."""
     json_extracts = []
     for path in col_def.paths:
-        if _can_extract_period_bound_from_json(resource_type, path, fhir_schema):
-            json_extracts.append(
-                SQLFunctionCall(
-                    name="json_extract_string",
-                    args=[
-                        SQLQualifiedIdentifier(parts=["r", "resource"]),
-                        SQLLiteral(value=f"$.{path}.{suffix}"),
-                    ],
+        bound_expr = _temporal_json_bound_expression(resource_type, path, fhir_schema, suffix)
+        if bound_expr is not None:
+            json_extracts.append(bound_expr)
+            continue
+
+        resource = fhir_schema.resources.get(resource_type)
+        if resource and path in resource.choice_elements:
+            for choice_suffix in TEMPORAL_CHOICE_SUFFIXES:
+                bound_expr = _temporal_json_bound_expression(
+                    resource_type,
+                    f"{path}{choice_suffix}",
+                    fhir_schema,
+                    suffix,
                 )
-            )
+                if bound_expr is not None:
+                    json_extracts.append(bound_expr)
     if len(json_extracts) == 1:
         return json_extracts[0]
     if len(json_extracts) > 1:

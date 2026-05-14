@@ -18,6 +18,7 @@ from ...translator.types import (
     SQLCase,
     SQLFunctionCall,
     SQLLiteral,
+    SQLNull,
     SQLParameterRef,
     SQLQualifiedIdentifier,
     SQLRaw,
@@ -377,6 +378,52 @@ class TestGap6ColumnContamination:
 
         assert SQLFunctionCall(name="intervalStart", args=[effective]).to_sql() == "Obs.effective_start"
         assert SQLFunctionCall(name="intervalEnd", args=[effective]).to_sql() == "Obs.effective_end"
+
+    def test_interval_bound_calls_fold_interval_from_bounds(self):
+        """intervalStart/End over intervalFromBounds serialize to direct bounds."""
+        start = SQLQualifiedIdentifier(parts=["Obs", "effective_start"])
+        end = SQLQualifiedIdentifier(parts=["Obs", "effective_end"])
+        interval = SQLFunctionCall(
+            name="intervalFromBounds",
+            args=[
+                start,
+                end,
+                SQLLiteral(value=True),
+                SQLLiteral(value=True),
+            ],
+        )
+
+        assert SQLFunctionCall(name="intervalStart", args=[interval]).to_sql() == "Obs.effective_start"
+        assert SQLFunctionCall(name="intervalEnd", args=[interval]).to_sql() == "Obs.effective_end"
+
+    def test_interval_bound_calls_fold_case_interval_from_bounds(self):
+        """intervalStart/End over CASE intervals serialize to CASE over bounds."""
+        condition = SQLFunctionCall(name="isPeriod", args=[SQLQualifiedIdentifier(parts=["Obs", "effective"])])
+        start = SQLQualifiedIdentifier(parts=["Obs", "effective_start"])
+        end = SQLQualifiedIdentifier(parts=["Obs", "effective_end"])
+        interval = SQLFunctionCall(
+            name="intervalFromBounds",
+            args=[
+                start,
+                end,
+                SQLLiteral(value=True),
+                SQLLiteral(value=True),
+            ],
+        )
+        case = SQLCase(
+            when_clauses=[(condition, interval)],
+            else_clause=SQLNull(),
+        )
+
+        start_sql = SQLFunctionCall(name="intervalStart", args=[case]).to_sql()
+        end_sql = SQLFunctionCall(name="intervalEnd", args=[case]).to_sql()
+
+        assert "intervalStart" not in start_sql
+        assert "intervalEnd" not in end_sql
+        assert "intervalFromBounds" not in start_sql
+        assert "intervalFromBounds" not in end_sql
+        assert "THEN Obs.effective_start" in start_sql
+        assert "THEN Obs.effective_end" in end_sql
 
     def test_period_json_bound_extraction_requires_scalar_path(self):
         """Direct Period JSON extraction is only used for scalar schema paths."""
