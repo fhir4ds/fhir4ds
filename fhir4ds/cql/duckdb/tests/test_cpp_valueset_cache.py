@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -116,3 +117,41 @@ def test_json_encoded_synthetic_terminology_field(cpp_con):
         [resource, valueset_url],
     ).fetchone()[0] is True
 
+
+def test_valueset_profile_is_opt_in(cpp_con):
+    valueset_url = "http://example.org/fhir/ValueSet/profiled"
+    _load_cache(cpp_con, valueset_url, "http://loinc.org", "1234")
+    resource = json.dumps({
+        "code": {
+            "coding": [{
+                "system": "http://loinc.org",
+                "code": "1234",
+            }],
+        },
+    })
+
+    previous = os.environ.get("FHIR4DS_PROFILE_CPP_VALUESET")
+    os.environ.pop("FHIR4DS_PROFILE_CPP_VALUESET", None)
+    try:
+        assert cpp_con.execute("SELECT cql_valueset_profile_clear()").fetchone()[0] is True
+        assert cpp_con.execute(
+            "SELECT in_valueset(?, 'code', ?)",
+            [resource, valueset_url],
+        ).fetchone()[0] is True
+        assert json.loads(cpp_con.execute("SELECT cql_valueset_profile_json()").fetchone()[0]) == []
+
+        os.environ["FHIR4DS_PROFILE_CPP_VALUESET"] = "1"
+        assert cpp_con.execute(
+            "SELECT in_valueset(?, 'code', ?)",
+            [resource, valueset_url],
+        ).fetchone()[0] is True
+        profile = json.loads(cpp_con.execute("SELECT cql_valueset_profile_json()").fetchone()[0])
+        assert profile[0]["path"] == "code"
+        assert profile[0]["valueset_url"] == valueset_url
+        assert profile[0]["calls"] == 1
+        assert profile[0]["code_matches"] == 1
+    finally:
+        if previous is None:
+            os.environ.pop("FHIR4DS_PROFILE_CPP_VALUESET", None)
+        else:
+            os.environ["FHIR4DS_PROFILE_CPP_VALUESET"] = previous

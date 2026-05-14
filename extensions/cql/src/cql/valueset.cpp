@@ -2,6 +2,7 @@
 #include "yyjson.hpp"
 
 #include <cctype>
+#include <mutex>
 
 using namespace duckdb_yyjson; // NOLINT
 
@@ -111,6 +112,69 @@ bool starts_with(const std::string &value, const std::string &prefix) {
 bool ends_with(const std::string &value, const std::string &suffix) {
 	return value.size() >= suffix.size() &&
 	       value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+bool is_simple_path_segment(const std::string &part) {
+	if (part.empty()) {
+		return false;
+	}
+	for (char ch : part) {
+		auto uch = static_cast<unsigned char>(ch);
+		if (!(std::isalnum(uch) || ch == '_' || ch == '-')) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool split_simple_path(const std::string &path, std::vector<std::string> &parts) {
+	parts.clear();
+	if (path.empty()) {
+		return false;
+	}
+
+	std::string current;
+	for (char ch : path) {
+		if (ch == '.') {
+			if (!is_simple_path_segment(current)) {
+				parts.clear();
+				return false;
+			}
+			parts.push_back(current);
+			current.clear();
+			continue;
+		}
+		current.push_back(ch);
+	}
+	if (!is_simple_path_segment(current)) {
+		parts.clear();
+		return false;
+	}
+	parts.push_back(current);
+	return true;
+}
+
+const std::vector<std::string> *cached_simple_path_parts(const std::string &path) {
+	static std::unordered_map<std::string, std::vector<std::string>> simple_path_cache;
+	static std::unordered_set<std::string> non_simple_path_cache;
+	static std::mutex cache_mutex;
+
+	std::lock_guard<std::mutex> lock(cache_mutex);
+	auto it = simple_path_cache.find(path);
+	if (it != simple_path_cache.end()) {
+		return &it->second;
+	}
+	if (non_simple_path_cache.find(path) != non_simple_path_cache.end()) {
+		return nullptr;
+	}
+
+	std::vector<std::string> parts;
+	if (!split_simple_path(path, parts)) {
+		non_simple_path_cache.insert(path);
+		return nullptr;
+	}
+	auto inserted = simple_path_cache.emplace(path, std::move(parts));
+	return &inserted.first->second;
 }
 
 std::string canonicalize_profile_url(const std::string &profile_url) {
@@ -335,7 +399,52 @@ yyjson_val *resolve_child(yyjson_val *current, const std::string &part) {
 	return value;
 }
 
+yyjson_val *resolve_simple_child(yyjson_val *current, const std::string &part) {
+	if (!current) {
+		return nullptr;
+	}
+	bool from_array = false;
+	if (yyjson_is_arr(current)) {
+		current = first_list_item(current);
+		from_array = true;
+	}
+	if (!current || !yyjson_is_obj(current)) {
+		return nullptr;
+	}
+
+	yyjson_val *value = yyjson_obj_get(current, part.c_str());
+	if (!value && !from_array) {
+		const char *suffixes[] = {"CodeableConcept", "Coding"};
+		for (auto *suffix : suffixes) {
+			auto choice_key = part + suffix;
+			value = yyjson_obj_get(current, choice_key.c_str());
+			if (value) {
+				break;
+			}
+		}
+	}
+	if (!value && !from_array) {
+		const auto &props = qicore_extension_props();
+		auto it = props.find(part);
+		if (it != props.end()) {
+			value = resolve_extension_value(current, it->second);
+		}
+	}
+	return value;
+}
+
 yyjson_val *resolve_path(yyjson_val *root, const std::string &path) {
+	if (const auto *simple_parts = cached_simple_path_parts(path)) {
+		yyjson_val *current = root;
+		for (const auto &part : *simple_parts) {
+			current = resolve_simple_child(current, part);
+			if (!current) {
+				return nullptr;
+			}
+		}
+		return current;
+	}
+
 	auto parts = split_fhir_path(path);
 	yyjson_val *current = root;
 	for (const auto &part : parts) {
@@ -396,6 +505,34 @@ static void extract_codes_from_val(yyjson_val *val, std::vector<CodeValue> &code
 	}
 }
 
+static bool has_not_done_valueset_value(yyjson_val *val, const std::string &valueset_url) {
+	if (!val || !yyjson_is_obj(val)) {
+		return false;
+	}
+	yyjson_val *extensions = yyjson_obj_get(val, "extension");
+	if (!extensions || !yyjson_is_arr(extensions)) {
+		return false;
+	}
+
+	auto canonical_target = canonicalize_url(valueset_url);
+	size_t idx, max;
+	yyjson_val *ext;
+	yyjson_arr_foreach(extensions, idx, max, ext) {
+		if (!yyjson_is_obj(ext)) {
+			continue;
+		}
+		yyjson_val *url = yyjson_obj_get(ext, "url");
+		if (!url || !yyjson_is_str(url) || std::string(yyjson_get_str(url)) != NOT_DONE_VALUESET_EXT) {
+			continue;
+		}
+		yyjson_val *value = yyjson_obj_get(ext, "valueCanonical");
+		if (value && yyjson_is_str(value) && canonicalize_url(yyjson_get_str(value)) == canonical_target) {
+			return true;
+		}
+	}
+	return false;
+}
+
 std::vector<CodeValue> extract_codes(const std::string &resource_json, const std::string &path) {
 	std::vector<CodeValue> codes;
 
@@ -411,6 +548,26 @@ std::vector<CodeValue> extract_codes(const std::string &resource_json, const std
 
 	yyjson_doc_free(doc);
 	return codes;
+}
+
+CodeExtractionResult extract_codes_with_not_done_valueset(const std::string &resource_json, const std::string &path,
+                                                          const std::string &valueset_url) {
+	CodeExtractionResult result;
+
+	yyjson_doc *doc = yyjson_read(resource_json.c_str(), resource_json.size(), 0);
+	if (!doc) {
+		return result;
+	}
+
+	yyjson_val *root = yyjson_doc_get_root(doc);
+	yyjson_val *val = resolve_path(root, path);
+	extract_codes_from_val(val, result.codes);
+	if (result.codes.empty()) {
+		result.has_not_done_valueset = has_not_done_valueset_value(val, valueset_url);
+	}
+
+	yyjson_doc_free(doc);
+	return result;
 }
 
 std::string extract_first_code(const std::string &resource_json, const std::string &path) {
@@ -489,29 +646,7 @@ bool has_not_done_valueset(const std::string &resource_json, const std::string &
 
 	yyjson_val *root = yyjson_doc_get_root(doc);
 	yyjson_val *val = resolve_path(root, path);
-	bool found = false;
-	if (val && yyjson_is_obj(val)) {
-		yyjson_val *extensions = yyjson_obj_get(val, "extension");
-		if (extensions && yyjson_is_arr(extensions)) {
-			auto canonical_target = canonicalize_url(valueset_url);
-			size_t idx, max;
-			yyjson_val *ext;
-			yyjson_arr_foreach(extensions, idx, max, ext) {
-				if (!yyjson_is_obj(ext)) {
-					continue;
-				}
-				yyjson_val *url = yyjson_obj_get(ext, "url");
-				if (!url || !yyjson_is_str(url) || std::string(yyjson_get_str(url)) != NOT_DONE_VALUESET_EXT) {
-					continue;
-				}
-				yyjson_val *value = yyjson_obj_get(ext, "valueCanonical");
-				if (value && yyjson_is_str(value) && canonicalize_url(yyjson_get_str(value)) == canonical_target) {
-					found = true;
-					break;
-				}
-			}
-		}
-	}
+	bool found = has_not_done_valueset_value(val, valueset_url);
 	yyjson_doc_free(doc);
 	return found;
 }

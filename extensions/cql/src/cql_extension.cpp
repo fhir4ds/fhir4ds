@@ -20,8 +20,11 @@
 #include "duckdb/function/scalar_function.hpp"
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <mutex>
+#include <sstream>
 #include <stdexcept>
+#include <unordered_map>
 
 namespace duckdb {
 
@@ -1343,6 +1346,75 @@ static void ResolveProfileUrlFunc(DataChunk &args, ExpressionState &state, Vecto
 static cql::ValuesetCache g_valueset_cache;
 static std::mutex g_valueset_cache_mutex;
 
+struct ValuesetProfileEntry {
+	int64_t calls = 0;
+	int64_t null_inputs = 0;
+	int64_t unloaded_valueset = 0;
+	int64_t empty_codes = 0;
+	int64_t not_done_matches = 0;
+	int64_t code_matches = 0;
+	int64_t misses = 0;
+	int64_t extracted_codes = 0;
+};
+
+static std::unordered_map<std::string, ValuesetProfileEntry> g_valueset_profile;
+static std::mutex g_valueset_profile_mutex;
+
+static bool ValuesetProfilingEnabled() {
+	const char *value = std::getenv("FHIR4DS_PROFILE_CPP_VALUESET");
+	return value && (std::string(value) == "1" || std::string(value) == "true" || std::string(value) == "yes");
+}
+
+static std::string ValuesetProfileKey(const std::string &path, const std::string &url) {
+	return path + "\t" + url;
+}
+
+static std::string EscapeJsonString(const std::string &value) {
+	std::ostringstream out;
+	for (char ch : value) {
+		switch (ch) {
+		case '\\':
+			out << "\\\\";
+			break;
+		case '"':
+			out << "\\\"";
+			break;
+		case '\n':
+			out << "\\n";
+			break;
+		case '\r':
+			out << "\\r";
+			break;
+		case '\t':
+			out << "\\t";
+			break;
+		default:
+			out << ch;
+			break;
+		}
+	}
+	return out.str();
+}
+
+static void UpdateValuesetProfile(bool enabled, const std::string &path, const std::string &url, int64_t calls = 0,
+                                  int64_t null_inputs = 0, int64_t unloaded_valueset = 0, int64_t empty_codes = 0,
+                                  int64_t not_done_matches = 0, int64_t code_matches = 0, int64_t misses = 0,
+                                  int64_t extracted_codes = 0) {
+	if (!enabled) {
+		return;
+	}
+	std::lock_guard<std::mutex> lock(g_valueset_profile_mutex);
+	auto &entry = g_valueset_profile[ValuesetProfileKey(path, url)];
+	entry.calls += calls;
+	entry.null_inputs += null_inputs;
+	entry.unloaded_valueset += unloaded_valueset;
+	entry.empty_codes += empty_codes;
+	entry.not_done_matches += not_done_matches;
+	entry.code_matches += code_matches;
+	entry.misses += misses;
+	entry.extracted_codes += extracted_codes;
+}
+
 // in_valueset(resource VARCHAR, path VARCHAR, valueset_url VARCHAR) → BOOLEAN
 static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
@@ -1358,6 +1430,7 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 	result.SetVectorType(VectorType::FLAT_VECTOR);
 	auto result_data = FlatVector::GetData<bool>(result);
 	auto &result_mask = FlatVector::Validity(result);
+	bool profile_enabled = ValuesetProfilingEnabled();
 
 	for (idx_t i = 0; i < count; i++) {
 		auto r_idx = res_data.sel->get_index(i);
@@ -1366,6 +1439,7 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 
 		if (!res_data.validity.RowIsValid(r_idx) || !path_data.validity.RowIsValid(p_idx) ||
 		    !url_data.validity.RowIsValid(u_idx)) {
+			UpdateValuesetProfile(profile_enabled, "<null>", "<null>", 1, 1);
 			result_mask.SetInvalid(i);
 			continue;
 		}
@@ -1373,6 +1447,7 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 		auto resource_str = resources[r_idx].GetString();
 		auto path_str = paths[p_idx].GetString();
 		auto url_str = urls[u_idx].GetString();
+		UpdateValuesetProfile(profile_enabled, path_str, url_str, 1);
 
 		bool valueset_loaded = false;
 		{
@@ -1380,16 +1455,22 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 			valueset_loaded = g_valueset_cache.find(url_str) != g_valueset_cache.end();
 		}
 		if (!valueset_loaded) {
+			UpdateValuesetProfile(profile_enabled, path_str, url_str, 0, 0, 1);
 			result_mask.SetInvalid(i);
 			continue;
 		}
 
-		auto codes = cql::extract_codes(resource_str, path_str);
+		auto extraction = cql::extract_codes_with_not_done_valueset(resource_str, path_str, url_str);
+		const auto &codes = extraction.codes;
+		UpdateValuesetProfile(profile_enabled, path_str, url_str, 0, 0, 0, 0, 0, 0, 0,
+		                      static_cast<int64_t>(codes.size()));
 		if (codes.empty()) {
-			if (cql::has_not_done_valueset(resource_str, path_str, url_str)) {
+			if (extraction.has_not_done_valueset) {
 				result_data[i] = true;
+				UpdateValuesetProfile(profile_enabled, path_str, url_str, 0, 0, 0, 1, 1);
 			} else {
 				result_data[i] = false;
+				UpdateValuesetProfile(profile_enabled, path_str, url_str, 0, 0, 0, 1, 0, 0, 1);
 			}
 			continue;
 		}
@@ -1414,6 +1495,7 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 			}
 		}
 		result_data[i] = found;
+		UpdateValuesetProfile(profile_enabled, path_str, url_str, 0, 0, 0, 0, 0, found ? 1 : 0, found ? 0 : 1);
 	}
 }
 
@@ -1473,6 +1555,55 @@ static void ValuesetCacheSizeFunc(DataChunk &args, ExpressionState &state, Vecto
 	}
 	result.SetVectorType(VectorType::CONSTANT_VECTOR);
 	ConstantVector::GetData<int64_t>(result)[0] = total;
+}
+
+static void ValuesetProfileClearFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	std::lock_guard<std::mutex> lock(g_valueset_profile_mutex);
+	g_valueset_profile.clear();
+	result.SetVectorType(VectorType::CONSTANT_VECTOR);
+	ConstantVector::GetData<bool>(result)[0] = true;
+}
+
+static void ValuesetProfileJsonFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	std::vector<std::pair<std::string, ValuesetProfileEntry>> entries;
+	{
+		std::lock_guard<std::mutex> lock(g_valueset_profile_mutex);
+		entries.reserve(g_valueset_profile.size());
+		for (const auto &entry : g_valueset_profile) {
+			entries.push_back(entry);
+		}
+	}
+	typedef std::pair<std::string, ValuesetProfileEntry> ProfilePair;
+	std::sort(entries.begin(), entries.end(), [](const ProfilePair &left, const ProfilePair &right) {
+		return left.second.calls > right.second.calls;
+	});
+
+	std::ostringstream out;
+	out << "[";
+	bool first = true;
+	for (const auto &entry : entries) {
+		auto sep = entry.first.find('\t');
+		auto path = sep == std::string::npos ? entry.first : entry.first.substr(0, sep);
+		auto url = sep == std::string::npos ? "" : entry.first.substr(sep + 1);
+		if (!first) {
+			out << ",";
+		}
+		first = false;
+		out << "{\"path\":\"" << EscapeJsonString(path) << "\",";
+		out << "\"valueset_url\":\"" << EscapeJsonString(url) << "\",";
+		out << "\"calls\":" << entry.second.calls << ",";
+		out << "\"null_inputs\":" << entry.second.null_inputs << ",";
+		out << "\"unloaded_valueset\":" << entry.second.unloaded_valueset << ",";
+		out << "\"empty_codes\":" << entry.second.empty_codes << ",";
+		out << "\"not_done_matches\":" << entry.second.not_done_matches << ",";
+		out << "\"code_matches\":" << entry.second.code_matches << ",";
+		out << "\"misses\":" << entry.second.misses << ",";
+		out << "\"extracted_codes\":" << entry.second.extracted_codes << "}";
+	}
+	out << "]";
+
+	result.SetVectorType(VectorType::CONSTANT_VECTOR);
+	ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, out.str());
 }
 
 // =====================================================================
@@ -3004,6 +3135,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, ValuesetCacheAddFunc);
 	RegisterSpecialScalar(loader, "cql_valueset_cache_size", {}, LogicalType::BIGINT, ValuesetCacheSizeFunc);
+	RegisterSpecialScalar(loader, "cql_valueset_profile_clear", {}, LogicalType::BOOLEAN, ValuesetProfileClearFunc);
+	RegisterSpecialScalar(loader, "cql_valueset_profile_json", {}, LogicalType::VARCHAR, ValuesetProfileJsonFunc);
 
 	// Ratio UDFs (5)
 	RegisterSpecialScalar(loader, "ratioNumeratorValue", {LogicalType::VARCHAR}, LogicalType::DOUBLE,
