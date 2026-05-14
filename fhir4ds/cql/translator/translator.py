@@ -190,6 +190,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         library_loader: Optional[Callable[[str], Optional[Library]]] = None,
         model_config: Optional["ModelConfig"] = None,
         _library_cache: Optional[dict] = None,
+        _library_ast_cache: Optional[dict] = None,
         _resolving_stack: Optional[Set[tuple]] = None,
         audit_mode: bool = False,
         audit_expressions: bool = True,
@@ -226,6 +227,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # diamond dependencies (e.g. FHIRHelpers included by many libraries)
         # are translated only once instead of once per include path.
         self._library_cache: dict = _library_cache if _library_cache is not None else {}
+        self._library_ast_cache: dict = _library_ast_cache if _library_ast_cache is not None else {}
         self._resolving_stack: Set[tuple] = _resolving_stack if _resolving_stack is not None else set()
         self._included_definitions: Dict[str, SQLExpression] = {}
 
@@ -315,6 +317,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                    the parsed Library AST, or None if not found.
         """
         self._library_loader = loader
+        self._library_ast_cache.clear()
 
     def register_retrieve_cte(
         self,

@@ -48,12 +48,16 @@ class IncludeHandlerMixin:
 
         errors: list[str] = []
         for candidate in candidates:
+            cache_key = (candidate,)
+            if cache_key in self._library_ast_cache:
+                return self._library_ast_cache[cache_key]
             try:
                 library = loader(candidate)
             except Exception as exc:
                 errors.append(f"{candidate}: {exc}")
                 continue
             if library is not None:
+                self._library_ast_cache[cache_key] = library
                 return library
 
         if errors:
@@ -254,6 +258,7 @@ class IncludeHandlerMixin:
                 use_fhirpath_udfs=self._use_fhirpath_udfs,
                 library_loader=self._library_loader,
                 _library_cache=self._library_cache,
+                _library_ast_cache=self._library_ast_cache,
                 _resolving_stack=child_stack,
             )
 
