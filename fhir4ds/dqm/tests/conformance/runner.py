@@ -50,6 +50,7 @@ def run_measure(
     verbose: bool = False,
     all_columns: bool = True,
     audit: bool = False,
+    library_cache: Optional[dict] = None,
 ) -> MeasureResult:
     """
     Execute a single measure and collect results.
@@ -62,6 +63,9 @@ def run_measure(
         all_columns: If True, output all definitions; if False, only population definitions
         audit: If True, run with audit_mode=True to capture evidence structs.
                Falls back to non-audit mode if audit translation or execution fails.
+        library_cache: Optional in-process cache for included-library translation
+               results. Scope this to one conformance run so it refreshes naturally
+               on the next process invocation.
     """
     _clear_runtime_state(conn)
     timings = {}
@@ -119,7 +123,7 @@ def run_measure(
     # Always generate non-audit SQL first (cheapest, always needed)
     noaudit_sql, noaudit_gen_ms, noaudit_lib_ms = _translate_measure(
         conn, library, measure_config, output_columns, mp_params,
-        measure_patient_ids, audit_mode=False,
+        measure_patient_ids, audit_mode=False, library_cache=library_cache,
     )
     timings["library_translation_ms"] = noaudit_lib_ms
 
@@ -137,6 +141,7 @@ def run_measure(
                     sql, gen_ms, lib_ms = _translate_measure(
                         conn, library, measure_config, output_columns, mp_params,
                         measure_patient_ids, audit_mode=True, audit_expressions=True,
+                        library_cache=library_cache,
                     )
                     timings["library_translation_ms"] = lib_ms
                     timings["sql_generation_ms"] = gen_ms
@@ -209,6 +214,7 @@ def run_measure(
                         conn, library, measure_config, output_columns, mp_params,
                         measure_patient_ids, audit_mode=True,
                         audit_expressions=False,
+                        library_cache=library_cache,
                     )
                     timings["library_translation_ms"] = lib_ms
                     timings["sql_generation_ms"] = gen_ms
@@ -342,6 +348,7 @@ def _translate_measure(
     patient_ids,
     audit_mode: bool,
     audit_expressions: bool = True,
+    library_cache: Optional[dict] = None,
 ) -> tuple:
     """Translate a CQL library to population SQL.
 
@@ -360,6 +367,7 @@ def _translate_measure(
     translator = CQLToSQLTranslator(
         connection=conn,
         library_loader=library_loader,
+        _library_cache=library_cache,
         audit_mode=audit_mode,
         audit_expressions=audit_expressions,
     )

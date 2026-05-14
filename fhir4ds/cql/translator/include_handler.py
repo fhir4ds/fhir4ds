@@ -207,7 +207,21 @@ class IncludeHandlerMixin:
                 (k, _binding_to_hashable(v))
                 for k, v in context._parameter_bindings.items()
             ))
-            cache_key = (inc.path, inc.version or "", bindings_key)
+            model_key = (
+                self._model_config.fhir_r4_version,
+                self._model_config.us_core_version,
+                self._model_config.qicore_version,
+                str(self._model_config.schema_root),
+            )
+            cache_key = (
+                inc.path,
+                inc.version or "",
+                bindings_key,
+                self._use_fhirpath_udfs,
+                context.audit_mode,
+                context.audit_expressions,
+                model_key,
+            )
             if cache_key in self._library_cache:
                 cached = self._library_cache[cache_key]
                 lib_info.library_ast = cached["library_ast"]
@@ -216,7 +230,7 @@ class IncludeHandlerMixin:
                     # Deep-copy resolved ASTs because _prefix_intra_library_refs
                     # mutates them in place; the cache must hold pristine originals.
                     _copy.deepcopy(cached["resolved_asts"]),
-                    cached["phase2_ctes"],
+                    _copy.deepcopy(cached["phase2_ctes"]),
                     alias,
                     lib_info,
                 )

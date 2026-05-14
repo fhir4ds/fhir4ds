@@ -92,6 +92,7 @@ def run_cql_py_all(n_runs: int) -> list[dict]:
         # Load test data and valuesets (mirrors cli.py setup)
         db.load_all_test_data(configs)
         db.load_all_valuesets(_collect_vs_paths(configs))
+        library_cache = {}
 
         for i, config in enumerate(configs, 1):
             print(f"    [{i:2d}/{len(configs)}] {config.id}", end="", flush=True)
@@ -117,6 +118,7 @@ def run_cql_py_all(n_runs: int) -> list[dict]:
                     verbose=False,
                     all_columns=False,
                     audit=False,
+                    library_cache=library_cache,
                 )
                 parse_ms        = result.timings.get("cql_parse_ms", 0.0)
                 translation_ms  = result.timings.get("sql_generation_ms", 0.0)

@@ -153,6 +153,7 @@ def main():
     successful = 0
     failed = 0
     skipped = 0
+    library_cache = {}
 
     for config in configs:
         print(f"\n{'='*60}")
@@ -189,6 +190,7 @@ def main():
                 verbose=args.verbose,
                 all_columns=args.all_columns,
                 audit=args.audit,
+                library_cache=library_cache,
             )
 
             # Write outputs
@@ -355,6 +357,7 @@ def main():
                 "perfect": len(perfect),
                 "known_failures": len(known),
                 "regressions": len(regressions),
+                "library_cache_entries": len(library_cache),
                 "measures": results_summary
             }, f, indent=2)
         print(f"\nSummary written to: {summary_path}")
