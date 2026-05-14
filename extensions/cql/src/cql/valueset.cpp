@@ -186,7 +186,8 @@ std::vector<std::string> split_fhir_path(const std::string &path) {
 	std::string current;
 	int paren_depth = 0;
 	bool in_quote = false;
-	for (char ch : path) {
+	for (size_t i = 0; i < path.size(); i++) {
+		char ch = path[i];
 		if (ch == '\'') {
 			in_quote = !in_quote;
 			current.push_back(ch);
@@ -198,6 +199,10 @@ std::vector<std::string> split_fhir_path(const std::string &path) {
 			} else if (ch == ')' && paren_depth > 0) {
 				paren_depth--;
 			} else if (ch == '.' && paren_depth == 0) {
+				if (path.compare(i + 1, 6, "where(") == 0) {
+					current.push_back(ch);
+					continue;
+				}
 				if (!current.empty()) {
 					parts.push_back(current);
 					current.clear();
@@ -295,8 +300,10 @@ yyjson_val *resolve_child(yyjson_val *current, const std::string &part) {
 	if (!current) {
 		return nullptr;
 	}
+	bool from_array = false;
 	if (yyjson_is_arr(current)) {
 		current = first_list_item(current);
+		from_array = true;
 	}
 	if (!current || !yyjson_is_obj(current)) {
 		return nullptr;
@@ -308,7 +315,7 @@ yyjson_val *resolve_child(yyjson_val *current, const std::string &part) {
 	}
 
 	yyjson_val *value = yyjson_obj_get(current, part.c_str());
-	if (!value) {
+	if (!value && !from_array) {
 		const char *suffixes[] = {"CodeableConcept", "Coding"};
 		for (auto *suffix : suffixes) {
 			auto choice_key = part + suffix;
@@ -318,7 +325,7 @@ yyjson_val *resolve_child(yyjson_val *current, const std::string &part) {
 			}
 		}
 	}
-	if (!value) {
+	if (!value && !from_array) {
 		const auto &props = qicore_extension_props();
 		auto it = props.find(part);
 		if (it != props.end()) {
@@ -370,6 +377,22 @@ static void extract_codes_from_val(yyjson_val *val, std::vector<CodeValue> &code
 		yyjson_arr_foreach(val, idx, max, elem) {
 			extract_codes_from_val(elem, codes);
 		}
+	} else if (yyjson_is_str(val)) {
+		const char *raw = yyjson_get_str(val);
+		if (!raw) {
+			return;
+		}
+		std::string nested(raw);
+		auto first = nested.find_first_not_of(" \t\r\n");
+		if (first == std::string::npos || (nested[first] != '{' && nested[first] != '[')) {
+			return;
+		}
+		yyjson_doc *nested_doc = yyjson_read(nested.c_str(), nested.size(), 0);
+		if (!nested_doc) {
+			return;
+		}
+		extract_codes_from_val(yyjson_doc_get_root(nested_doc), codes);
+		yyjson_doc_free(nested_doc);
 	}
 }
 
