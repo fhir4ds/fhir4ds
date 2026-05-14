@@ -2,6 +2,7 @@
 Command-line interface for benchmarking runner.
 """
 import argparse
+import os
 from pathlib import Path
 import sys
 import json
@@ -381,22 +382,26 @@ def _discover_measures(suite: str = "2025"):
         print(f"ERROR: Test directory not found: {tests_dir}")
         return measures
 
-    for test_dir in sorted(tests_dir.iterdir()):
-        if not test_dir.is_dir():
+    cql_files = sorted(cql_dir.glob("*.cql"))
+    cql_by_stem = {path.stem: path for path in cql_files}
+
+    for entry in sorted(os.scandir(tests_dir), key=lambda e: e.name):
+        if not entry.is_dir():
             continue
 
-        measure_name = test_dir.name
+        measure_name = entry.name
+        test_dir = Path(entry.path)
 
         # Find CQL file
-        cql_path = cql_dir / f"{measure_name}.cql"
-        if not cql_path.exists():
+        cql_path = cql_by_stem.get(measure_name)
+        if cql_path is None:
             # Try alternate naming (some measures have different CQL names)
-            for cql_file in cql_dir.glob("*.cql"):
+            for cql_file in cql_files:
                 if measure_name in cql_file.stem or cql_file.stem in measure_name:
                     cql_path = cql_file
                     break
 
-        if not cql_path.exists():
+        if cql_path is None:
             continue
 
         # Get population definitions from a MeasureReport in the test directory
@@ -470,12 +475,20 @@ def _extract_population_definitions(test_dir: Path) -> list:
     ``"Denominator 1"``, ``"Denominator 2"``).  Single-group measures
     produce plain names (``"Denominator"``).
     """
-    for patient_dir in sorted(test_dir.iterdir()):
-        if not patient_dir.is_dir():
+    for patient_entry in sorted(os.scandir(test_dir), key=lambda e: e.name):
+        if not patient_entry.is_dir():
             continue
-        for report_file in sorted(patient_dir.glob("MeasureReport-*.json")):
+        patient_dir = patient_entry.path
+        with os.scandir(patient_dir) as report_iter:
+            report_entries = [
+                entry for entry in report_iter
+                if entry.is_file()
+                and entry.name.startswith("MeasureReport-")
+                and entry.name.endswith(".json")
+            ]
+        for report_entry in sorted(report_entries, key=lambda e: e.name):
             try:
-                with open(report_file) as f:
+                with open(report_entry.path) as f:
                     data = json.load(f)
             except Exception:
                 continue

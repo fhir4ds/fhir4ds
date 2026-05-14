@@ -56,11 +56,10 @@ def get_suite_paths(suite: str = "2025") -> dict:
 # Measures that may fail and should be skipped
 SKIP_ON_FAILURE = {
     "CMS139",   # Not in submodule
-    "CMS1218",  # Extremely slow due to recursion fix
 }
 
 # Known failures with documented root causes (all external test-data issues).
-# These are tracked separately in the benchmark summary so CI can assert 42/47.
+# These are tracked separately in the benchmark summary.
 # Each entry maps measure ID -> { mismatches: int, reason: str, upstream: str }.
 KNOWN_FAILURES = {
     "CMS135": {
