@@ -506,7 +506,7 @@ def build_retrieve_cte(
                 target_type = med_ref_alt["target_type"]
                 target_code = med_ref_alt["target_code_property"]
                 # Match: fhirpath_text(r.resource, 'medicationReference.reference') ends with Medication.id
-                # Use: LIST_EXTRACT(STR_SPLIT(ref, '/'), -1) = fhirpath_text(m.resource, 'id')
+                # Use direct JSON extraction for the target resource id.
                 ref_id_expr = SQLFunctionCall(
                     name="LIST_EXTRACT",
                     args=[
@@ -547,10 +547,10 @@ def build_retrieve_cte(
                                         operator="=",
                                         left=ref_id_expr,
                                         right=SQLFunctionCall(
-                                            name="fhirpath_text",
+                                            name="json_extract_string",
                                             args=[
                                                 SQLQualifiedIdentifier(parts=["m", "resource"]),
-                                                SQLLiteral("id"),
+                                                SQLLiteral("$.id"),
                                             ]
                                         )
                                     )

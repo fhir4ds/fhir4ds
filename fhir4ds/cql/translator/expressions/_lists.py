@@ -609,14 +609,14 @@ class ListsMixin:
                 if isinstance(arg, SQLIdentifier):
                     # Arg is a resource alias — extract its id
                     id_expr = SQLFunctionCall(
-                        name="fhirpath_text",
-                        args=[SQLQualifiedIdentifier(parts=[arg.name, "resource"]), SQLLiteral(value="id")],
+                        name="json_extract_string",
+                        args=[SQLQualifiedIdentifier(parts=[arg.name, "resource"]), SQLLiteral(value="$.id")],
                     )
                 elif isinstance(arg, SQLQualifiedIdentifier) and arg.parts[-1] == "resource":
                     # Arg is a resource column (e.g., QualifyingEncounter.resource) — extract id
                     id_expr = SQLFunctionCall(
-                        name="fhirpath_text",
-                        args=[arg, SQLLiteral(value="id")],
+                        name="json_extract_string",
+                        args=[arg, SQLLiteral(value="$.id")],
                     )
                 elif (
                     isinstance(arg, SQLFunctionCall)
