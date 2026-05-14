@@ -313,6 +313,29 @@ def _parse_interval(value: str) -> dict | None:
     }
 
 
+def _raw_closed_bound(interval: str, primary_key: str, fhir_key: str, closed_key: str) -> str | None:
+    """Return an explicit closed/default-closed raw interval bound.
+
+    This avoids the full interval parser for common FHIR Period JSON such as
+    {"start": "...", "end": "..."} while preserving fallback behavior for
+    open bounds, null bounds, malformed JSON, and non-object values.
+    """
+    try:
+        raw = orjson.loads(interval)
+    except JSONDecodeError:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    if raw.get(closed_key, True) is not True:
+        return None
+    raw_bound = raw.get(primary_key)
+    if raw_bound is None:
+        raw_bound = raw.get(fhir_key)
+    if raw_bound is None:
+        return None
+    return raw_bound if isinstance(raw_bound, str) else str(raw_bound)
+
+
 def _parse_date_or_datetime(value: str | date | datetime | None) -> date | datetime | None:
     """Parse date or datetime from ISO string.
 
@@ -376,6 +399,9 @@ def intervalStart(interval: str | None) -> str | None:
     stripped = interval.strip()
     if not stripped.startswith('{'):
         return stripped if _POINT_VALUE_RE.match(stripped) else None
+    raw_low = _raw_closed_bound(interval, "low", "start", "lowClosed")
+    if raw_low is not None:
+        return raw_low
     iv = _parse_interval(interval)
     if not iv:
         return None
@@ -415,6 +441,9 @@ def intervalEnd(interval: str | None) -> str | None:
     stripped = interval.strip()
     if not stripped.startswith('{'):
         return stripped if _POINT_VALUE_RE.match(stripped) else None
+    raw_high = _raw_closed_bound(interval, "high", "end", "highClosed")
+    if raw_high is not None:
+        return raw_high
     iv = _parse_interval(interval)
     if not iv:
         return None
@@ -723,7 +752,7 @@ def _precision_aware_compare(a, b) -> int | None:
 
 def _normalize_for_compare(a, b):
     """Normalize date/datetime pair for comparison.
-    
+
     Per CQL spec, when comparing values of different precisions (date vs datetime),
     comparison is done at the precision of the less precise operand. So when one is
     a date and the other is a datetime, we truncate the datetime to date precision.
@@ -828,7 +857,7 @@ def _normalize_for_compare(a, b):
 
 def _normalize_bound(raw_val, is_closed: bool, is_high: bool, parsed) -> tuple:
     """Normalize an interval bound to closed form for discrete types.
-    
+
     For discrete types (int, date, datetime), open bounds are converted
     to equivalent closed bounds by adjusting ±1 predecessor step.
     Returns (new_raw_val, new_is_closed).
@@ -886,7 +915,7 @@ def _is_time_raw(raw_val) -> bool:
 
 def _normalize_bound_for_output(raw_val, is_closed: bool, is_high: bool, parsed) -> tuple:
     """Like _normalize_bound but preserves time/quantity format in output.
-    
+
     When parsed is an integer from a time string, the result integer is
     converted back to a time string for JSON serialization.
     When the raw_val is a quantity JSON string, the result is wrapped back
@@ -913,7 +942,7 @@ def _normalize_bound_for_output(raw_val, is_closed: bool, is_high: bool, parsed)
 
 def _unwrap_bound_for_json(val):
     """Unwrap a JSON-encoded bound value for proper nesting in output.
-    
+
     If val is a string containing JSON (e.g., quantity), parse it to a dict
     so json.dumps produces properly nested output instead of double-encoding.
     """
@@ -2170,7 +2199,7 @@ def _expand_single_interval(
 
 def _expand_numeric(low, high, low_closed, high_closed, step_value, is_int=True):
     """Expand a numeric interval into unit intervals.
-    
+
     CQL §19.25: Each sub-interval has size = per.
     For integers per N: [start, start+N-1] (N integer points).
     For decimals per X: [start, start] (unit interval at per-precision).
@@ -2348,7 +2377,7 @@ def _expand_temporal(low_raw, high_raw, low_parsed, high_parsed,
 def _expand_time(low_raw, high_raw, low_parsed_millis, high_parsed_millis,
                  low_closed, high_closed, step_value, step_unit):
     """Expand a time interval into unit intervals.
-    
+
     CQL §19.25: If per is more precise than the boundary precision, return empty.
     Output times are formatted at the per unit's precision.
     """
