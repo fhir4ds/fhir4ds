@@ -5,7 +5,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const baseUrl = process.env.BASE_URL || '/';
 
 const config: Config = {
-  title: 'FHIR4DS',
+  title: 'FHIR for Data Science',
   tagline: 'SQL-Native CQL Evaluation — Production-Accurate, In-Browser, Auditable',
   favicon: 'img/icon.svg',
 
@@ -87,6 +87,9 @@ const config: Config = {
         {to: '/docs/examples/cql-playground', label: 'Examples', position: 'left'},
         {
           href: 'https://github.com/fhir4ds/fhir4ds',
+          position: 'right',
+          className: 'navbar-github-link',
+          'aria-label': 'GitHub repository',
         },
       ],
     },

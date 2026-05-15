@@ -13,11 +13,10 @@ FHIR4DS achieves **100% spec compliance** across all test suites — 2,822 total
 
 | Metric | Result |
 |--------|-----------------|
-| **Measures Tested** | 47 (QI-Core 2025) |
 | **Spec Compliance (CQL)** | **100%** (1,706 / 1,706 tests) |
 | **Spec Compliance (FHIRPath)** | **100%** (935 / 935 tests) |
 | **Spec Compliance (SQL-on-FHIR)** | **100%** (134 / 134 tests) |
-| **DQM Measures** | **100% pass rate** (47 / 47) |
+| **eCQM Measures** | **100% pass rate** (47 / 47) |
 
 ### Known Upstream Accuracy Gaps
 4 measures have documented accuracy gaps caused by bugs in the official CMS test bundles, not by FHIR4DS implementation errors. These measures fail equally in all conformant engines.

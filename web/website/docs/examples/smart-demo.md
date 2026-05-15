@@ -4,7 +4,7 @@ Experience the full FHIR4DS workbench connected to live EHR data. This demo foll
 
 import WasmDemoWC from '@site/src/components/WasmDemoWC';
 
-<WasmDemoWC scenario="smart-flow" height="90vh" lazyLaunch />
+<WasmDemoWC scenario="smart-flow" height="90vh" />
 
 ## The Workflow
 1.  **Connect:** Select a sandbox (Epic or Cerner) and log in using the provided test credentials.

@@ -7,13 +7,24 @@ import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
+const PRODUCT_VERSION = '0.0.5';
+const SQL_EXECUTION_MEAN_ALL_MEASURES = '~3.9ms';
+const SQL_EXECUTION_MEAN_SHARED_MEASURES = '~6.9ms';
+const JAVA_EXECUTION_MEAN_SHARED_MEASURES = '~936ms';
+const MEAN_SPEEDUP_SHARED_MEASURES = '~137×';
+const TOTAL_CONFORMANCE_TESTS = '2,822';
+const CQL_CONFORMANCE_TESTS = '1,706';
+const FHIRPATH_CONFORMANCE_TESTS = '935';
+const VIEWDEF_CONFORMANCE_TESTS = '134';
+const ECQM_MEASURES = '47/47';
+
 // ── Stats bar ────────────────────────────────────────────────────────────────
 
 function StatsBar() {
   const stats = [
-    {value: '~13ms', label: 'SQL per patient'},
+    {value: SQL_EXECUTION_MEAN_ALL_MEASURES, label: 'SQL mean / patient'},
     {value: 'Zero', label: 'Server infrastructure'},
-    {value: '100%', label: 'Standards Compliance'},
+    {value: TOTAL_CONFORMANCE_TESTS, label: 'Tests passing'},
     {value: 'Full', label: 'Audit Evidence'},
   ];
   return (
@@ -110,7 +121,7 @@ const FEATURES: Feature[] = [
     title: 'Columnar Speed',
     description: (
       <>
-        Process entire populations in a single SQL scan. ~73× faster than 
+        Process entire populations in a single SQL scan. {MEAN_SPEEDUP_SHARED_MEASURES} faster than 
         traditional engines by utilizing vectorized execution and SIMD.
       </>
     ),
@@ -160,9 +171,10 @@ const FEATURES: Feature[] = [
     title: 'Standards Compliant',
     description: (
       <ul style={{listStyleType: 'none', padding: 0, margin: '0.5rem 0 0', fontSize: '0.88rem'}}>
-        <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> CQL (1,706 tests)</li>
-        <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> FHIRPath (935 tests)</li>
-        <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> SQL-on-FHIR v2 (134 tests)</li>
+        <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> CQL ({CQL_CONFORMANCE_TESTS} tests)</li>
+        <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> FHIRPath ({FHIRPATH_CONFORMANCE_TESTS} tests)</li>
+        <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> SQL-on-FHIR v2 ({VIEWDEF_CONFORMANCE_TESTS} tests)</li>
+        <li><strong style={{color: 'rgb(95, 237, 131)'}}>{ECQM_MEASURES}</strong> eCQM measures</li>
       </ul>
     ),
   },
@@ -249,8 +261,9 @@ function ComparisonSection() {
             </thead>
             <tbody>
               {[
-                ['SQL execution per patient (mean)', '~13ms', '~968ms', true],
-                ['Speedup (mean per patient)', '~73× faster', 'baseline', true],
+                ['SQL execution per patient (all 47 measures)', SQL_EXECUTION_MEAN_ALL_MEASURES, 'N/A', true],
+                ['SQL execution per patient (12 shared measures)', SQL_EXECUTION_MEAN_SHARED_MEASURES, JAVA_EXECUTION_MEAN_SHARED_MEASURES, true],
+                ['Speedup (mean, 12 shared measures)', `${MEAN_SPEEDUP_SHARED_MEASURES} faster`, 'baseline', true],
                 ['Zero server infrastructure', '✅ DuckDB-WASM', '❌ Requires JVM + server', true],
                 ['Audit evidence trail', '✅ Full narrative', '❌ Aggregate counts only', true],
                 ['Output is inspectable', '✅ Plain SQL', '❌ Black-box engine', true],
@@ -316,7 +329,7 @@ function Hero() {
           <Heading as="h1" className="hero__title" style={{marginBottom: 0, background: 'none', WebkitTextFillColor: 'rgb(95, 237, 131)', color: 'rgb(95, 237, 131)'}}>
             FHIR4DS
           </Heading>
-          <span className={styles.versionBadge}>v0.0.4</span>
+          <span className={styles.versionBadge}>v{PRODUCT_VERSION}</span>
         </div>
         <p style={{fontSize: '1.35rem', fontWeight: 600, color: '#e2e8f0', margin: '0.4rem 0 0.6rem'}}>
           Production-Scale FHIR Analytics. In Your Browser.
