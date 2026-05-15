@@ -41,14 +41,14 @@ def _parse_column(col_data: Dict[str, Any]) -> Column:
     )
 
 
-def _parse_where(where_data: List[Any]) -> List[Dict[str, str]]:
+def _parse_where(where_data: Union[List[Any], Dict[str, Any], str]) -> List[Dict[str, str]]:
     """Parse where conditions from JSON.
 
     Accepts both spec-compliant dict format ({"path": "expr"}) and
     convenience string format ("expr") which is wrapped automatically.
 
     Args:
-        where_data: List of where condition objects or strings
+        where_data: Where condition object, string, or list of either form
 
     Returns:
         List of condition dictionaries with 'path' keys
@@ -56,8 +56,20 @@ def _parse_where(where_data: List[Any]) -> List[Dict[str, str]]:
     Raises:
         ParseError: If a where condition has an unsupported type
     """
+    if isinstance(where_data, str):
+        where_items = [where_data]
+    elif isinstance(where_data, dict):
+        where_items = [where_data]
+    elif isinstance(where_data, list):
+        where_items = where_data
+    else:
+        raise ParseError(
+            f"Where must be a string, object, or list, got "
+            f"{type(where_data).__name__}: {where_data!r}"
+        )
+
     result = []
-    for w in where_data:
+    for w in where_items:
         if isinstance(w, dict):
             result.append(dict(w))
         elif isinstance(w, str):

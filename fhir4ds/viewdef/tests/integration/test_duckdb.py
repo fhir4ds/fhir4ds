@@ -299,6 +299,37 @@ class TestWhereClause:
         result = connection.execute(sql).fetchall()
         assert len(result) >= 1
 
+    def test_top_level_where_string_condition(self, connection, generator):
+        """Test filtering with a convenience string where clause."""
+        patients = [
+            {"resourceType": "Patient", "id": "patient-1", "gender": "male"},
+            {"resourceType": "Patient", "id": "patient-2", "gender": "female"},
+            {"resourceType": "Patient", "id": "patient-3", "gender": "male"},
+        ]
+        connection.execute("CREATE TABLE patients (resource JSON)")
+        for patient in patients:
+            connection.execute("INSERT INTO patients VALUES (?)", [json.dumps(patient)])
+
+        vd_json = json.dumps({
+            "resource": "Patient",
+            "where": "gender = 'male'",
+            "select": [{
+                "column": [
+                    {"path": "id", "name": "pid", "type": "id"},
+                    {"path": "gender", "name": "gender", "type": "string"},
+                ]
+            }]
+        })
+        vd = parse_view_definition(vd_json)
+        sql = generator.generate(vd)
+
+        result = connection.execute(sql).fetchall()
+
+        assert result == [
+            ("patient-1", "male"),
+            ("patient-3", "male"),
+        ]
+
     def test_where_with_fhirpath_function(self, connection, generator):
         """Test WHERE with FHIRPath functions."""
         patients = [
