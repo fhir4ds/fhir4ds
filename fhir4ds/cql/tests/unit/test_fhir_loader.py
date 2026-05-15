@@ -48,6 +48,48 @@ def test_load_multiple_resources(loader):
     assert loader.count("Condition") == 1
 
 
+def test_load_resource_rejects_non_standard_json_numbers(loader):
+    with pytest.raises(ValueError, match="standard JSON"):
+        loader.load_resource({"resourceType": "Patient", "id": "nan", "value": float("nan")})
+
+    with pytest.raises(ValueError, match="standard JSON"):
+        loader.load_resource({"resourceType": "Patient", "id": "inf", "value": float("inf")})
+
+
+@pytest.mark.parametrize(
+    "resource_type",
+    ["Pаtient", "Patient'; DROP TABLE resources; --", "patient", ""],
+)
+def test_load_resource_rejects_invalid_resource_type(loader, resource_type):
+    with pytest.raises(ValueError, match="resourceType"):
+        loader.load_resource({"resourceType": resource_type, "id": "p1"})
+
+
+@pytest.mark.parametrize("resource_id", [" ", "bad/id", "x" * 65])
+def test_load_resource_rejects_invalid_fhir_id(loader, resource_id):
+    with pytest.raises(ValueError, match="FHIR id pattern"):
+        loader.load_resource({"resourceType": "Patient", "id": resource_id})
+
+
+def test_load_resources_rejects_none(loader):
+    with pytest.raises(TypeError, match="Expected list"):
+        loader.load_resources(None)
+
+
+def test_load_resources_rejects_non_list(loader):
+    with pytest.raises(TypeError, match="Expected list"):
+        loader.load_resources("not resources")
+
+
+def test_load_resources_validates_before_insert(loader):
+    with pytest.raises(ValueError, match="standard JSON"):
+        loader.load_resources([
+            {"resourceType": "Patient", "id": "p1"},
+            {"resourceType": "Patient", "id": "bad", "value": float("nan")},
+        ])
+    assert loader.count() == 0
+
+
 def test_load_bundle(loader):
     """Test loading resources from a FHIR Bundle."""
     bundle = {
@@ -260,6 +302,26 @@ def test_load_valuesets_from_dict(loader):
     assert loader.count_valueset_codes("http://example.org/ValueSet/Dict") == 1
 
 
+def test_load_valuesets_rejects_invalid_inputs(loader):
+    with pytest.raises(TypeError, match="valuesets must be a list"):
+        loader.load_valuesets(None)
+
+    with pytest.raises(TypeError, match="valuesets must be a list"):
+        loader.load_valuesets("not a valueset")
+
+    with pytest.raises(ValueError, match="non-empty string 'url'"):
+        loader.load_valuesets([{"not": "a valueset"}])
+
+    with pytest.raises(ValueError, match="'system' and 'code'"):
+        loader.load_valuesets([{"url": "http://example.org/vs", "codes": [{"code": "x"}]}])
+
+
+def test_empty_valueset_helpers_do_not_require_table(loader):
+    assert loader.count_valueset_codes() == 0
+    loader.clear_valuesets()
+    assert loader.count_valueset_codes() == 0
+
+
 def test_count_valueset_codes(loader):
     """Test counting valueset codes."""
     valuesets = [
@@ -360,6 +422,16 @@ def test_load_from_url(loader, tmp_path, monkeypatch):
     count = loader.load_from_url("http://example.org/fhir/Patient")
     assert count == 1
     assert loader.count("Patient") == 1
+
+
+def test_load_from_url_rejects_file_scheme(loader):
+    with pytest.raises(ValueError, match="Only 'http' and 'https'"):
+        loader.load_from_url("file:///tmp/patient.json")
+
+
+def test_load_from_url_rejects_non_http_scheme(loader):
+    with pytest.raises(ValueError, match="Unsupported URL scheme"):
+        loader.load_from_url("ftp://example.org/patient.json")
 
 
 def test_resource_json_stored_correctly(loader, duckdb_con):

@@ -3,11 +3,37 @@
 import pytest
 import sys
 from pathlib import Path
+import duckdb
 
 
 from ...generator import SQLGenerator, _quote_identifier, _quote_table_reference
 from ...errors import ValidationError
 from ...parser import Column, parse_view_definition
+
+
+def _assert_generated_sql_does_not_execute_injection(view_definition, source_table="resources"):
+    import fhir4ds
+
+    con = duckdb.connect(config={"allow_unsigned_extensions": True})
+    try:
+        fhir4ds.register(con)
+        con.execute("CREATE TABLE resources (resource JSON)")
+        con.execute("INSERT INTO resources VALUES (?)", ['{"resourceType":"Patient","id":"p1","gender":"male"}'])
+        con.execute("CREATE TABLE sentinel (id INTEGER)")
+        try:
+            sql = fhir4ds.generate_view_sql(view_definition, source_table=source_table)
+        except ValidationError:
+            assert con.execute("SELECT COUNT(*) FROM sentinel").fetchone()[0] == 0
+            assert con.execute("SELECT COUNT(*) FROM resources").fetchone()[0] == 1
+            return
+        try:
+            con.execute(sql).fetchall()
+        except duckdb.Error:
+            pass
+        assert con.execute("SELECT COUNT(*) FROM sentinel").fetchone()[0] == 0
+        assert con.execute("SELECT COUNT(*) FROM resources").fetchone()[0] == 1
+    finally:
+        con.close()
 
 
 class TestQuoteIdentifier:
@@ -78,6 +104,46 @@ class TestSourceTableSanitization:
         })
         with pytest.raises(ValidationError, match="Invalid SQL identifier"):
             gen.generate(vd)
+
+
+class TestViewDefinitionInjectionRegression:
+    """Generated SQL must keep FHIRPath strings inside SQL literals."""
+
+    def test_column_path_injection_does_not_execute(self):
+        _assert_generated_sql_does_not_execute_injection({
+            "resource": "Patient",
+            "select": [{
+                "column": [{
+                    "path": "id') as \"id\" FROM resources; DROP TABLE sentinel; --",
+                    "name": "id",
+                }],
+            }],
+        })
+
+    def test_where_path_injection_does_not_execute(self):
+        _assert_generated_sql_does_not_execute_injection({
+            "resource": "Patient",
+            "where": [{"path": "gender = 'male'') OR (''1'' = ''1"}],
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        })
+
+    def test_foreach_path_injection_does_not_execute(self):
+        _assert_generated_sql_does_not_execute_injection({
+            "resource": "Patient",
+            "select": [{
+                "forEach": "name; DROP TABLE sentinel; --",
+                "column": [{"path": "$this", "name": "name"}],
+            }],
+        })
+
+    def test_repeat_path_injection_does_not_execute(self):
+        _assert_generated_sql_does_not_execute_injection({
+            "resource": "Patient",
+            "select": [{
+                "repeat": ["name; DROP TABLE sentinel; --"],
+                "column": [{"path": "$this", "name": "name"}],
+            }],
+        })
 
 
 class TestColumnNameSanitization:
