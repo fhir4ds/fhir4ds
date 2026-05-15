@@ -426,7 +426,7 @@ ASTNodePtr Parser::parsePrimaryExpression() {
 		// Check if it's a function call without a source (standalone function)
 		if (check(TokenType::LParen)) {
 			auto func_node = std::make_shared<ASTNode>();
-			func_node->type = NodeType::FunctionCall;
+			func_node->type = (name == "extension") ? NodeType::ExtensionCall : NodeType::FunctionCall;
 			func_node->name = name;
 			advance(); // skip (
 			if (!check(TokenType::RParen)) {

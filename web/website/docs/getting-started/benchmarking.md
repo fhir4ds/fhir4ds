@@ -9,7 +9,7 @@ FHIR4DS is rigorously tested against the official CMS eCQM test bundles from the
 
 ## 1. Accuracy Results
 
-FHIR4DS achieves **100% spec compliance** across all test suites — 2,821 total tests passing.
+FHIR4DS achieves **100% spec compliance** across all test suites — 2,822 total tests passing.
 
 | Metric | Result |
 |--------|-----------------|

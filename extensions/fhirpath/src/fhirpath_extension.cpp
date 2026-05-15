@@ -1049,62 +1049,49 @@ static void FhirpathNumberFunction(DataChunk &args, ExpressionState &state, Vect
 		}
 
 		// Phase 7: Simple path fast path for numeric extraction.
-		// Uses ComputeSegStart to skip resource-type prefix without allocation.
-		// W2: non-numeric terminal values fall through to the full evaluator
-		// instead of silently returning NULL (matches FhirpathTextFunction behavior).
+		// Use the flattened resolver so repeating intermediate arrays still
+		// participate in singleton enforcement before a scalar is emitted.
 		if (func_state.is_simple_path() && !func_state.path_segments().empty()) {
 			yyjson_doc *doc = yyjson_read(resources[r_idx].GetData(), resources[r_idx].GetSize(), 0);
 			if (doc) {
-				yyjson_val *current = yyjson_doc_get_root(doc);
+				yyjson_val *root = yyjson_doc_get_root(doc);
 				const auto &segments = func_state.path_segments();
-				size_t seg_start = ComputeSegStart(current, segments);
+				size_t seg_start = ComputeSegStart(root, segments);
 
 				// W3: all segments consumed by prefix — fall through
 				if (seg_start >= segments.size()) {
 					yyjson_doc_free(doc);
 					// fall through to full evaluator below
 				} else {
-					bool found = true;
-					for (size_t seg_idx = seg_start; seg_idx < segments.size(); seg_idx++) {
-						const auto &seg = segments[seg_idx];
-						if (current && yyjson_is_arr(current)) {
-							current = yyjson_arr_get_first(current);
-						}
-						if (!current || !yyjson_is_obj(current)) {
-							found = false;
-							break;
-						}
-						current = yyjson_obj_get(current, seg.c_str());
-					}
+					std::vector<yyjson_val *> start;
+					start.push_back(root);
+					auto values = ResolveJsonPath(root, start, segments, true);
 					// Extract value BEFORE freeing the document to avoid use-after-free.
 					// Copy the numeric value into a local while the yyjson doc is still alive.
-					bool is_int = found && current && yyjson_is_int(current);
-					bool is_real = found && current && yyjson_is_real(current);
+					yyjson_val *value = values.size() == 1 ? values[0] : nullptr;
+					bool is_int = value && yyjson_is_int(value);
+					bool is_real = value && yyjson_is_real(value);
 					double extracted = 0.0;
 					if (is_int) {
-						extracted = static_cast<double>(yyjson_get_sint(current));
+						extracted = static_cast<double>(yyjson_get_sint(value));
 					} else if (is_real) {
-						extracted = yyjson_get_real(current);
+						extracted = yyjson_get_real(value);
 					}
 					yyjson_doc_free(doc);
 					if (is_int || is_real) {
 						result_data[i] = extracted;
 						continue;
 					}
-					if (found && current) {
+					if (values.size() == 1 && value) {
 						// Non-numeric type (e.g. string "42"): fall through to full
 						// evaluator which applies a type gate — returns NULL for non-numeric.
-					} else if (!found) {
+					} else if (values.empty()) {
 						// Path not found in this resource: NULL
 						result_mask.SetInvalid(i);
 						continue;
 					}
-					// current==NULL (key exists but value is null): NULL
-					if (!current) {
-						result_mask.SetInvalid(i);
-						continue;
-					}
-					// fall through for non-numeric types
+					// Multiple values: let the full evaluator apply scalar singleton
+					// enforcement consistently with the Python fallback.
 				}
 			}
 		}

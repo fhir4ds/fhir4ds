@@ -7,10 +7,10 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
-## Version 0.0.4
+## Version 0.0.5
 *May 2026*
 
-Version 0.0.4 marks the **100% Compliance Milestone** — every test suite now passes at 100%, totaling 2,821 tests across CQL, FHIRPath, ViewDefinition, and DQM.
+Version 0.0.5 continues the **100% Compliance Milestone** — every conformance suite passes at 100%, totaling 2,822 tests across CQL, FHIRPath, ViewDefinition, and DQM.
 
 ### Highlights
 
@@ -30,13 +30,13 @@ Version 0.0.4 marks the **100% Compliance Milestone** — every test suite now p
 ### API Changes
 
 - **`ReactiveEvaluator.__init__`**: Parameters changed from `(con, measure, adapter)` to `(con, measure_bundle, cql_library_path, adapter)`.
-- **Version Bump**: All `fhir4ds` packages bumped to version `0.0.4`.
-- **WASM Assets**: Updated translator wheel to `fhir4ds_v2-0.0.4-py3-none-any.whl`.
+- **Version Bump**: All `fhir4ds` packages bumped to version `0.0.5`.
+- **WASM Assets**: Updated translator wheel to `fhir4ds_v2-0.0.5-py3-none-any.whl`.
 
 ### Upgrade
 
 ```bash
-pip install fhir4ds-v2==0.0.4
+pip install fhir4ds-v2==0.0.5
 ```
 
 ---
