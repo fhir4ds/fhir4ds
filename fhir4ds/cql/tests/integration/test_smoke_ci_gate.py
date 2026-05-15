@@ -7,6 +7,7 @@ import pytest
 
 from ...parser import parse_cql, Library
 from ...translator import CQLToSQLTranslator
+from .helpers import make_cql_library_loader
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -32,18 +33,12 @@ class TestMeasureSmokeCI:
         """Generate SQL for a measure and return (name, sql, elapsed)."""
         name, cql_path = request.param
         from pathlib import Path
-        from ...errors import TranslationError
 
         cql_text = Path(cql_path).read_text()
         library = parse_cql(cql_text)
-        translator = CQLToSQLTranslator()
+        translator = CQLToSQLTranslator(library_loader=make_cql_library_loader(_CQL_DIR))
         start = time.monotonic()
-        try:
-            sql = translator.translate_library_to_sql(library)
-        except TranslationError as e:
-            if "no library_loader" in str(e):
-                pytest.skip(f"{name}: requires library_loader for include resolution")
-            raise
+        sql = translator.translate_library_to_sql(library)
         elapsed = time.monotonic() - start
         return name, sql, elapsed
 

@@ -17,6 +17,7 @@ from pathlib import Path
 
 from ...parser import parse_cql, Library
 from ...translator import CQLToSQLTranslator, LibraryResolver
+from .helpers import make_cql_library_loader
 
 
 # Path to CMS124 measure files (from submodule ecqm-content-qicore-2025)
@@ -41,7 +42,7 @@ def cms124_library(cms124_cql_text: str) -> Library:
 @pytest.fixture
 def translator() -> CQLToSQLTranslator:
     """Create a V2 translator instance."""
-    return CQLToSQLTranslator()
+    return CQLToSQLTranslator(library_loader=make_cql_library_loader(CQL_DIR))
 
 
 @pytest.fixture
@@ -128,30 +129,19 @@ class TestCMS124IncludeResolution:
         """CMS124 include statements resolve correctly."""
         registered = library_resolver.get_library_names()
 
-        # Skip if no dependencies could be parsed
-        if not registered:
-            pytest.skip("No dependency libraries could be parsed")
-
-        # At minimum, we expect some libraries to be registered
         assert len(registered) > 0, "At least some libraries should be registered"
 
     @pytest.mark.integration
     def test_fhirhelpers_functions_available(self, library_resolver: LibraryResolver):
         """FHIRHelpers functions are available for resolution."""
-        # Check if FHIRHelpers was parsed successfully
-        if not library_resolver.is_registered("FHIRHelpers"):
-            pytest.skip("FHIRHelpers.cql could not be parsed")
-
+        assert library_resolver.is_registered("FHIRHelpers")
         functions = library_resolver.get_all_functions("FHIRHelpers")
         assert len(functions) > 0, "FHIRHelpers should have functions defined"
 
     @pytest.mark.integration
     def test_qicorecommon_functions_available(self, library_resolver: LibraryResolver):
         """QICoreCommon functions are available for resolution."""
-        # Check if QICoreCommon was parsed successfully
-        if not library_resolver.is_registered("QICoreCommon"):
-            pytest.skip("QICoreCommon.cql could not be parsed")
-
+        assert library_resolver.is_registered("QICoreCommon")
         functions = library_resolver.get_all_functions("QICoreCommon")
         # QICoreCommon may have fluent functions like verified(), prevalenceInterval()
         assert len(functions) >= 0, "QICoreCommon functions should be queryable"
@@ -213,10 +203,7 @@ class TestCMS124DefinitionTranslation:
         """Initial Population definition translates to valid SQL."""
         from ...translator.translator import TranslationError
 
-        try:
-            results = translator.translate_library(cms124_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms124_library)
 
         assert "Initial Population" in results
 
@@ -233,10 +220,7 @@ class TestCMS124DefinitionTranslation:
         """Denominator definition translates to valid SQL."""
         from ...translator.translator import TranslationError
 
-        try:
-            results = translator.translate_library(cms124_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms124_library)
 
         assert "Denominator" in results
 
@@ -253,10 +237,7 @@ class TestCMS124DefinitionTranslation:
         """Numerator definition translates to valid SQL."""
         from ...translator.translator import TranslationError
 
-        try:
-            results = translator.translate_library(cms124_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms124_library)
 
         assert "Numerator" in results
 
@@ -272,10 +253,7 @@ class TestCMS124DefinitionTranslation:
         """Denominator Exclusions definition translates to valid SQL."""
         from ...translator.translator import TranslationError
 
-        try:
-            results = translator.translate_library(cms124_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms124_library)
 
         assert "Denominator Exclusions" in results
 
@@ -319,10 +297,7 @@ class TestCMS124FullTranslation:
         """Full CMS124 measure translates without errors."""
         from ...translator.translator import TranslationError
 
-        try:
-            sql_definitions = translator.translate_library(cms124_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Full translation not yet supported: {e}")
+        sql_definitions = translator.translate_library(cms124_library)
 
         # Should have all population criteria
         assert "Initial Population" in sql_definitions
@@ -336,10 +311,7 @@ class TestCMS124FullTranslation:
         """All CMS124 definitions are translated."""
         from ...translator.translator import TranslationError
 
-        try:
-            sql_definitions = translator.translate_library(cms124_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Full translation not yet supported: {e}")
+        sql_definitions = translator.translate_library(cms124_library)
 
         # Expected definitions from CMS124
         expected_definitions = [
@@ -363,10 +335,7 @@ class TestCMS124FullTranslation:
         """Generated SQL is syntactically valid."""
         from ...translator.translator import TranslationError
 
-        try:
-            sql_definitions = translator.translate_library(cms124_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Full translation not yet supported: {e}")
+        sql_definitions = translator.translate_library(cms124_library)
 
         for name, sql_expr in sql_definitions.items():
             sql = sql_expr.to_sql()
@@ -471,10 +440,7 @@ class TestCMS124RetrievePatterns:
         """Encounter retrieves translate to SQL queries."""
         from ...translator.translator import TranslationError
 
-        try:
-            results = translator.translate_library(cms124_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms124_library)
 
         # Qualifying Encounters uses multiple Encounter retrieves
         assert "Qualifying Encounters" in results
@@ -490,10 +456,7 @@ class TestCMS124RetrievePatterns:
         """Procedure retrieves translate correctly."""
         from ...translator.translator import TranslationError
 
-        try:
-            results = translator.translate_library(cms124_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms124_library)
 
         # Absence of Cervix uses Procedure retrieve
         assert "Absence of Cervix" in results
@@ -505,10 +468,7 @@ class TestCMS124RetrievePatterns:
         """Observation retrieves for cytology translate correctly."""
         from ...translator.translator import TranslationError
 
-        try:
-            results = translator.translate_library(cms124_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms124_library)
 
         # Cervical Cytology Within 3 Years uses LaboratoryResultObservation retrieve
         assert "Cervical Cytology Within 3 Years" in results
@@ -550,10 +510,7 @@ class TestCMS124WithDependencyLibraries:
                     pass
 
         # Now translate main library
-        try:
-            results = translator.translate_library(cms124_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms124_library)
 
         # Should have definitions
         assert len(results) > 0

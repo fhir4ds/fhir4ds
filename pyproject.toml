@@ -31,12 +31,12 @@ dependencies = [
     "python-dateutil>=2.8,<3.0",
     "pyarrow>=14.0.0",
     "orjson>=3.9.0",
+    "pint>=0.21.0",
+    "numpy",
 ]
 
 [project.optional-dependencies]
 measures = [
-    "pint>=0.21.0",
-    "numpy",
     "pandas",
 ]
 dev = [
@@ -72,10 +72,11 @@ testpaths = ["fhir4ds"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -p no:benchmark"
 markers = [
     "slow: marks tests as slow",
     "compliance: FHIRPath compliance tests",
+    "integration: integration tests",
 ]
 norecursedirs = ["_archived_v1", "cql-tests", "spec_tests", "fixtures", "data"]
 

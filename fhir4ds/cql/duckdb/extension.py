@@ -92,7 +92,12 @@ def _register_python_supplements(
     from .macros import register_all_macros
     try:
         register_all_macros(con)
-    except (duckdb.CatalogException, duckdb.InvalidInputException):
+    except (
+        duckdb.CatalogException,
+        duckdb.InvalidInputException,
+        duckdb.NotImplementedException,
+        duckdb.BinderException,
+    ):
         pass  # some macros may conflict with C++ functions; that's OK
 
     # When C++ is loaded, wrap the connection so create_function silently

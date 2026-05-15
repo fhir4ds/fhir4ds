@@ -46,6 +46,7 @@ from .errors import ValidationError
 
 from .unnest import generate_foreach_unnest, generate_foreachornull_unnest, generate_repeat_unnest
 from .constants import ConstantResolver
+from fhir4ds.fhirpath.parser import parse as parse_fhirpath
 
 
 def _load_fhir_array_elements() -> set:
@@ -415,6 +416,19 @@ class SQLGenerator:
                 f"Undefined constant(s) referenced: {', '.join(undefined_list)}",
                 details={"undefined_constants": undefined_list}
             )
+
+    def _validate_fhirpath_syntax(self, view_definition: ViewDefinition) -> None:
+        """Validate that ViewDefinition FHIRPath expressions parse."""
+        for path in self._collect_all_paths(view_definition):
+            if not path:
+                continue
+            try:
+                parse_fhirpath(path, strict_mode=True)
+            except Exception as exc:
+                raise ValidationError(
+                    f"Invalid FHIRPath expression: {path!r}",
+                    details={"path": path, "error": str(exc)},
+                ) from exc
 
     # Known FHIR R4 array element names (max cardinality = *).
     # Loaded from resources/fhir_array_elements.json at module init.
@@ -1058,6 +1072,7 @@ class SQLGenerator:
                 fhirpath_text(t.resource, 'gender') as gender
             FROM patients t
         """
+        self._validate_fhirpath_syntax(view_definition)
         self._validate_constants(view_definition)
         self._validate_collection_columns(view_definition)
         self._validate_unique_column_names(view_definition)

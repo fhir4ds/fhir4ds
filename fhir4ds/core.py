@@ -16,6 +16,35 @@ if TYPE_CHECKING:
     import duckdb
 
 
+def _register_valueset_cache(con: "duckdb.DuckDBPyConnection", valueset_cache: dict) -> None:
+    """Register cache-backed ValueSet membership functions for standalone use."""
+    from fhir4ds.cql.duckdb.udf.valueset import createValuesetMembershipUdf
+
+    udf_func = createValuesetMembershipUdf(valueset_cache)
+
+    # Use an internal function name and public macros. This lets a caller-provided
+    # cache override the placeholder Python UDF or native C++ function without
+    # relying on DuckDB's remove_function behavior.
+    try:
+        con.remove_function("_fhir4ds_in_valueset_cache")
+    except Exception:
+        pass
+
+    con.create_function(
+        "_fhir4ds_in_valueset_cache",
+        udf_func,
+        null_handling="special",
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO in_valueset(res, path, vs_url) AS "
+        "_fhir4ds_in_valueset_cache(res, path, vs_url)"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO fhirpath_in_valueset(res, path, vs_url) AS "
+        "_fhir4ds_in_valueset_cache(res, path, vs_url)"
+    )
+
+
 def register_fhirpath(con: "duckdb.DuckDBPyConnection") -> bool:
     """
     Register FHIRPath UDFs on the given DuckDB connection.
@@ -29,9 +58,7 @@ def register_fhirpath(con: "duckdb.DuckDBPyConnection") -> bool:
             f"Expected a DuckDB connection for 'con', got {type(con).__name__}"
         )
     from fhir4ds.fhirpath.duckdb.extension import register_fhirpath as _register
-    from fhir4ds.fhirpath.duckdb.extension import _try_load_bundled_cpp_extension as _check
-    _register(con)
-    return _check(con)
+    return bool(_register(con))
 
 
 def register_cql(
@@ -131,13 +158,12 @@ def register_cql(
     try:
         register_all_macros(con)
     except (_duckdb_mod.CatalogException, _duckdb_mod.InvalidInputException,
-            _duckdb_mod.NotImplementedException):
+            _duckdb_mod.NotImplementedException, _duckdb_mod.BinderException):
         pass  # macros may already exist; that's OK
 
     # Step 3: ValueSet expansion always uses Python
     if valueset_cache is not None:
-        from fhir4ds.cql.duckdb.udf.valueset import registerValuesetUdfs
-        registerValuesetUdfs(con, valueset_cache)
+        _register_valueset_cache(con, valueset_cache)
 
     return cql_cpp
 
@@ -182,4 +208,6 @@ def register(
             f"Expected a DuckDB connection for 'con', got {type(con).__name__}"
         )
     cql_cpp = register_cql(con, valueset_cache=valueset_cache)
-    return {"fhirpath_cpp": cql_cpp, "cql_cpp": cql_cpp}
+    from fhir4ds.fhirpath.duckdb.extension import _is_cpp_extension_loaded
+    fhirpath_cpp = _is_cpp_extension_loaded(con)
+    return {"fhirpath_cpp": fhirpath_cpp, "cql_cpp": cql_cpp}

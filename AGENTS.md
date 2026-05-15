@@ -82,6 +82,31 @@ python3 conformance/scripts/run_all.py
 
 Reports are generated in `conformance/reports/`.
 
+### Pytest Plugin Note
+
+`pyproject.toml` intentionally sets `-p no:benchmark` in pytest `addopts`.
+The auto-loaded `pytest-benchmark` plugin can hang pytest startup/collection in
+this workspace. Do not remove that option unless the plugin issue has been
+verified fixed; benchmark runs are handled by the scripts in `benchmarks/`.
+
+### Test Skip / XFail Policy
+
+Do not use `pytest.skip(...)` to hide translator, parser, or generator behavior
+that is expected to work. Tests for supported behavior should fail normally.
+
+Use `pytest.mark.xfail(..., raises=ExpectedError)` or an equivalent explicit
+expected-error assertion when a spec case is intentionally invalid or a known
+gap must remain visible. This keeps XPASS behavior visible when support lands.
+
+Skips are appropriate for environment or fixture availability only, such as a
+missing optional DuckDB/C++ extension build, missing external FHIR datasets, or
+benchmark/conformance fixture submodules that are not present.
+
+CMS integration tests that need include resolution should use
+`fhir4ds/cql/tests/integration/helpers.py::make_cql_library_loader` so included
+libraries such as `FHIRHelpers`, `QICoreCommon`, `Status`, `Hospice`, `SDE`,
+`AHA`, and `AdultOutpatientEncounters` are exercised instead of skipped.
+
 ---
 
 ## Development Workflow

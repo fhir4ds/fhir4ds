@@ -147,6 +147,10 @@ pip install -e ".[dev]"
 
 ### Running Tests
 
+Pytest is configured in `pyproject.toml`. The config disables the auto-loaded
+`pytest-benchmark` plugin because it can hang pytest startup/collection in this
+workspace; normal benchmark runs use the scripts in `benchmarks/` instead.
+
 ```bash
 # Run all Python tests
 pytest fhir4ds/
