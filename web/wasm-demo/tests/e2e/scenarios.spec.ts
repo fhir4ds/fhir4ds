@@ -30,6 +30,19 @@ test.describe("WASM Workbench Scenarios", () => {
     await expect(page.locator(".pane-title:has-text('Form Preview')")).toBeVisible();
   });
 
+  test("SDC pre-populate uses the selected patient context", async ({ page }) => {
+    await page.goto("/?scenario=sdc-forms");
+
+    await expect(page.locator(".loading-overlay")).toBeHidden({ timeout: 90_000 });
+    await page.locator("select[title='Patient context for pre-population']").selectOption("patient-002");
+    await page.click("button:has-text('Pre-Populate')");
+
+    await expect(page.locator("#sdc-intake-family")).toHaveValue("Smith", {
+      timeout: 30_000,
+    });
+    await expect(page.locator("#sdc-intake-given")).toHaveValue("Bob");
+  });
+
   test("Dynamic Switch: should change scenario when URL changes", async ({ page }) => {
     await page.goto("/?scenario=cql-sandbox");
     await expect(page.locator(".pane-title:has-text('CQL Editor')")).toBeVisible();

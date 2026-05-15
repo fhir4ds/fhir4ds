@@ -76,12 +76,31 @@ export function SDCPlayground({
   const [patientList, setPatientList] = useState<{id: string, label: string}[]>([]);
   useEffect(() => {
     if (duckdbReady) {
-      executeQuery("SELECT DISTINCT json_extract_string(resource, '$.id') as id, json_extract_string(resource, '$.name[0].family') as family FROM resources WHERE resourceType = 'Patient' ORDER BY family")
+      executeQuery(`SELECT DISTINCT
+          json_extract_string(resource, '$.id') as id,
+          COALESCE(
+            json_extract_string(resource, '$.name[0].family') || ', ' ||
+            json_extract_string(resource, '$.name[0].given[0]'),
+            json_extract_string(resource, '$.id')
+          ) as label
+        FROM resources
+        WHERE resourceType = 'Patient'
+        ORDER BY label`)
         .then(res => {
-          setPatientList(res.rows.map((r: any) => ({ id: String(r[0]), label: String(r[1]) })));
+          const patients = res.rows.map((r: any) => ({ id: String(r[0]), label: String(r[1]) }));
+          setPatientList(patients);
+          if (!selectedPatientId && patients.length > 0) {
+            onPatientSelect?.(patients[0].id);
+          }
         }).catch(() => {});
     }
-  }, [duckdbReady, executeQuery]);
+  }, [duckdbReady, executeQuery, onPatientSelect, selectedPatientId]);
+
+  const activePatientId = selectedPatientId ?? patientList[0]?.id ?? "";
+
+  const handlePatientChange = useCallback((patientId: string) => {
+    onPatientSelect?.(patientId);
+  }, [onPatientSelect]);
 
   // Recalculate all calculatedExpressions after response changes.
   // When `silent` is true, don't update the status message (used for
@@ -197,10 +216,10 @@ export function SDCPlayground({
 
     try {
       // Use the globally selected patient if available
-      const pid = selectedPatientId || "first";
-      const sql = pid === "first" 
-        ? "SELECT resource FROM resources WHERE resourceType = 'Patient' LIMIT 1"
-        : `SELECT resource FROM resources WHERE resourceType = 'Patient' AND id = '${pid}' LIMIT 1`;
+      const pid = activePatientId;
+      const sql = pid
+        ? `SELECT resource FROM resources WHERE resourceType = 'Patient' AND id = '${pid.replace(/'/g, "''")}' LIMIT 1`
+        : "SELECT resource FROM resources WHERE resourceType = 'Patient' ORDER BY id LIMIT 1";
 
       const result = await executeQuery(sql);
       if (result.rows.length > 0) {
@@ -252,7 +271,7 @@ export function SDCPlayground({
 
     // Run calculations after pre-population
     setTimeout(() => runCalculations(questionnaire, updated), 50);
-  }, [duckdbReady, executeQuery, questionnaire, response, runCalculations, selectedPatientId]);
+  }, [activePatientId, duckdbReady, executeQuery, questionnaire, response, runCalculations]);
 
   // Initial calculation run
   useEffect(() => {
@@ -287,6 +306,20 @@ export function SDCPlayground({
         >
           ▶ Pre-Populate
         </button>
+        {patientList.length > 0 && (
+          <select
+            className="sample-select"
+            value={activePatientId}
+            onChange={(e) => handlePatientChange(e.target.value)}
+            title="Patient context for pre-population"
+          >
+            {patientList.map((patient) => (
+              <option key={patient.id} value={patient.id}>
+                {patient.label}
+              </option>
+            ))}
+          </select>
+        )}
 
         <div className="header-status">
           <StatusDot ready={duckdbReady} label="DuckDB" />
@@ -336,7 +369,7 @@ export function SDCPlayground({
               <PatientDataViewer
                 executeQuery={executeQuery}
                 duckdbReady={duckdbReady}
-                selectedPatientId={selectedPatientId}
+                selectedPatientId={activePatientId}
                 onPatientSelect={onPatientSelect}
               />
             ),

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useCMSDuckDB, type MeasureRunResult } from "../hooks/useCMSDuckDB";
 import { isAuditCell, generateNarrative, type AuditCell } from "../lib/narrative";
 import { EvidenceModal } from "./EvidenceModal";
@@ -6,24 +6,45 @@ import { PatientDataViewer } from "./PatientDataViewer";
 import { WorkspaceLayout, type PaneConfig } from "./WorkspaceLayout";
 import { BrandedHeader } from "./BrandedHeader";
 import { StatusDot } from "./StatusDot";
+import { getAssetBase } from "../lib/asset-base";
 
-const MEASURES = [
+interface MeasureOption {
+  id: string;
+  label: string;
+  description: string;
+  populations: string[];
+}
+
+interface MeasureManifest {
+  measures: Record<string, {
+    title: string;
+    populations: string[];
+  }>;
+}
+
+const MEASURE_DESCRIPTIONS: Record<string, string> = {
+  CMS124: "Women 21-64 who were screened for cervical cancer using either cytology or hrHPV testing.",
+  CMS159: "Patients 12+ with a diagnosis of depression whose PHQ-9 score was <5 at twelve months.",
+  CMS349: "Patients 15-65 who were screened for HIV infection using a FDA-approved test.",
+};
+
+const DEFAULT_MEASURES: MeasureOption[] = [
   {
     id: "CMS124",
-    label: "CMS124 – Cervical Cancer Screening",
-    description: "Women 21–64 who were screened for cervical cancer using either cytology or hrHPV testing.",
+    label: "CMS124 - Cervical Cancer Screening",
+    description: MEASURE_DESCRIPTIONS.CMS124,
     populations: ["Initial Population", "Denominator", "Denominator Exclusions", "Numerator"],
   },
   {
     id: "CMS159",
-    label: "CMS159 – Depression Remission at Twelve Months",
-    description: "Patients 12+ with a diagnosis of depression whose PHQ-9 score was <5 at twelve months.",
+    label: "CMS159 - Depression Remission at Twelve Months",
+    description: MEASURE_DESCRIPTIONS.CMS159,
     populations: ["Initial Population", "Denominator", "Denominator Exclusions", "Numerator"],
   },
   {
     id: "CMS349",
-    label: "CMS349 – HIV Screening",
-    description: "Patients 15–65 who were screened for HIV infection using a FDA-approved test.",
+    label: "CMS349 - HIV Screening",
+    description: MEASURE_DESCRIPTIONS.CMS349,
     populations: ["Initial Population", "Denominator", "Denominator Exclusions", "Numerator"],
   },
 ];
@@ -53,13 +74,49 @@ export function CMSMeasures({
   } | null;
   wasmAppUrl?: string;
 }) {
-  const [selectedMeasureId, setSelectedSample] = useState(MEASURES[0].id);
+  const [measures, setMeasures] = useState<MeasureOption[]>(DEFAULT_MEASURES);
+  const [selectedMeasureId, setSelectedSample] = useState(DEFAULT_MEASURES[0].id);
   const selectedMeasure = useMemo(
-    () => MEASURES.find((m) => m.id === selectedMeasureId)!,
-    [selectedMeasureId],
+    () => measures.find((m) => m.id === selectedMeasureId) ?? measures[0],
+    [measures, selectedMeasureId],
   );
 
-  const { executeMeasure, error, loadingMessage, ready } = useCMSDuckDB(wasmAppUrl);
+  useEffect(() => {
+    let cancelled = false;
+    async function loadManifest() {
+      try {
+        const resp = await fetch(`${getAssetBase(wasmAppUrl)}/data/manifest.json`);
+        if (!resp.ok) return;
+        const manifest = await resp.json() as MeasureManifest;
+        const next = Object.entries(manifest.measures)
+          .map(([id, measure]) => ({
+            id,
+            label: `${id} - ${measure.title}`,
+            description: MEASURE_DESCRIPTIONS[id] ?? measure.title,
+            populations: measure.populations,
+          }))
+          .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+        if (!cancelled && next.length > 0) {
+          setMeasures(next);
+          setSelectedSample((current) => next.some((m) => m.id === current) ? current : next[0].id);
+        }
+      } catch {
+        // Keep built-in measure metadata if the manifest is unavailable.
+      }
+    }
+    loadManifest();
+    return () => {
+      cancelled = true;
+    };
+  }, [wasmAppUrl]);
+
+  const {
+    executeMeasure,
+    executeQuery: executeCMSQuery,
+    error,
+    loadingMessage,
+    ready,
+  } = useCMSDuckDB(wasmAppUrl);
   const [runResult, setRunResult] = useState<MeasureRunResult | null>(null);
   const [executing, setExecuting] = useState(false);
   const [modalCell, setModalCell] = useState<{ cell: AuditCell; columnName: string } | null>(null);
@@ -95,7 +152,7 @@ export function CMSMeasures({
             setRunResult(null); // Clear stale results when measure changes
           }}
         >
-          {MEASURES.map((m) => (
+          {measures.map((m) => (
             <option key={m.id} value={m.id}>
               {m.label}
             </option>
@@ -168,8 +225,8 @@ export function CMSMeasures({
             icon: "🧑",
             content: (
               <PatientDataViewer
-                executeQuery={executeQuery}
-                duckdbReady={duckdbReady}
+                executeQuery={executeCMSQuery}
+                duckdbReady={ready}
                 selectedPatientId={selectedPatientId}
                 onPatientSelect={onPatientSelect}
               />

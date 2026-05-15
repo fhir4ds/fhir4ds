@@ -40,6 +40,29 @@ test.describe("Web Component", () => {
     await expect(tabNav).toBeHidden();
   });
 
+  test("generated SQL output scrolls inside website web component", async ({ page }) => {
+    await page.goto("/wc-test.html?scenario=cql-sandbox");
+
+    const loadingOverlay = page.locator("fhir4ds-demo >> .loading-overlay");
+    await expect(loadingOverlay).toBeHidden({ timeout: 90_000 });
+
+    await page.locator("fhir4ds-demo >> .app-header button:has-text('Run')").click();
+    const sqlViewer = page.locator("fhir4ds-demo >> [data-testid='sql-output-viewer'] .sql-viewer-scroll");
+    await expect(sqlViewer.locator("text=WITH")).toBeVisible({ timeout: 60_000 });
+
+    const scrollState = await sqlViewer.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+      return {
+        scrollTop: el.scrollTop,
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+      };
+    });
+
+    expect(scrollState.scrollHeight).toBeGreaterThan(scrollState.clientHeight);
+    expect(scrollState.scrollTop).toBeGreaterThan(0);
+  });
+
   test('<fhir4ds-demo scenario="cms-measures"> renders CMS', async ({
     page,
   }) => {

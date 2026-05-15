@@ -4,7 +4,7 @@ import { test, expect } from "@playwright/test";
  * E2E tests for the CMS Measures tab.
  *
  * These tests validate:
- * - Measure selector shows the 3 current measures (CMS124, CMS159, CMS349)
+ * - Measure selector shows measures from the public manifest
  * - Non-audit execution returns results and 100% accuracy
  * - Evidence cells render with 🔍 icon in audit mode
  * - Population summary bar appears after run
@@ -16,12 +16,6 @@ import { test, expect } from "@playwright/test";
 const INIT_TIMEOUT = 120_000;   // Wait for DuckDB + extensions to load
 const MEASURE_TIMEOUT = 120_000; // Wait for SQL execution to complete
 
-const MEASURES = [
-  { id: "CMS124", label: "Cervical Cancer Screening", patients: 33 },
-  { id: "CMS349", label: "HIV Screening", patients: 36 },
-  { id: "CMS159", label: "Depression Remission", patients: 67 },
-];
-
 test.describe("CMS Measures Tab", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
@@ -31,15 +25,17 @@ test.describe("CMS Measures Tab", () => {
 
   // ─── Smoke tests ────────────────────────────────────────────────────────────
 
-  test("measure selector shows all 3 current measures", async ({ page }) => {
+  test("measure selector shows manifest measures", async ({ page }) => {
     // Scope to the measure selector inside the cms-shell
     const select = page.locator(".cms-shell select.sample-select").first();
     await expect(select).toBeVisible({ timeout: 10_000 });
     const options = select.locator("option");
-    await expect(options).toHaveCount(3);
-    await expect(options.nth(0)).toContainText("CMS124");
-    await expect(options.nth(1)).toContainText("CMS159");
-    await expect(options.nth(2)).toContainText("CMS349");
+    await expect(options).toHaveCount(5);
+    await expect(options.nth(0)).toContainText("CMS74");
+    await expect(options.nth(1)).toContainText("CMS75");
+    await expect(options.nth(2)).toContainText("CMS124");
+    await expect(options.nth(3)).toContainText("CMS159");
+    await expect(options.nth(4)).toContainText("CMS349");
   });
 
   test("DuckDB initialises successfully (status dot turns ready)", async ({ page }) => {
@@ -128,6 +124,25 @@ test.describe("CMS Measures Tab", () => {
 
     // EvidenceModal uses .evidence-backdrop / .evidence-modal classes
     await expect(page.locator(".evidence-modal")).toBeVisible({ timeout: 5_000 });
+  });
+
+  test("clicking a patient result loads that patient's FHIR resources", async ({ page }) => {
+    await expect(page.locator(".status-dot.ready")).toBeVisible({ timeout: INIT_TIMEOUT });
+
+    const select = page.locator(".cms-shell select.sample-select").first();
+    await select.selectOption("CMS124");
+    await page.click("button:has-text('▶ Run')");
+
+    const table = page.locator("table.results-table");
+    await expect(table).toBeVisible({ timeout: MEASURE_TIMEOUT });
+
+    await table.locator("tbody tr").first().click();
+
+    const viewer = page.locator("[data-testid='patient-data-viewer']");
+    await expect(viewer).toBeVisible();
+    await expect(viewer.locator(".patient-viewer-summary")).toContainText("resource", {
+      timeout: 30_000,
+    });
   });
 
   // ─── Switching measures ─────────────────────────────────────────────────

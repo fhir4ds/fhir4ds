@@ -4,7 +4,7 @@
  * - Syntax-highlighted JSON block showing the FHIR bundle for that patient.
  * - External selection support: a parent component can set selectedPatientId.
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 
 interface PatientInfo {
   id: string;
@@ -30,6 +30,8 @@ export function PatientDataViewer({
   const [resources, setResources] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filterText, setFilterText] = useState("");
+  const [expanded, setExpanded] = useState(true);
 
   // Load patient list from DuckDB
   const refreshPatients = useCallback(async () => {
@@ -54,11 +56,12 @@ export function PatientDataViewer({
       setPatients(list);
       if (list.length > 0 && !activePatientId) {
         setActivePatientId(list[0].id);
+        onPatientSelect?.(list[0].id);
       }
     } catch {
       setPatients([]);
     }
-  }, [executeQuery, duckdbReady, activePatientId]);
+  }, [executeQuery, duckdbReady, activePatientId, onPatientSelect]);
 
   useEffect(() => {
     refreshPatients();
@@ -77,7 +80,7 @@ export function PatientDataViewer({
         setActivePatientId(id);
       }
     }
-  }, [selectedPatientId]);
+  }, [selectedPatientId, activePatientId]);
 
   // Load resources for the selected patient
   useEffect(() => {
@@ -130,6 +133,23 @@ export function PatientDataViewer({
     [onPatientSelect],
   );
 
+  const filteredResources = useMemo(() => {
+    const query = filterText.trim().toLowerCase();
+    if (!query) return resources;
+    return resources.filter((resource) => resourceSearchText(resource).includes(query));
+  }, [filterText, resources]);
+
+  const resourceGroups = useMemo(() => {
+    const groups = new Map<string, any[]>();
+    for (const resource of filteredResources) {
+      const type = String(resource.resourceType ?? "Unknown");
+      const existing = groups.get(type) ?? [];
+      existing.push(resource);
+      groups.set(type, existing);
+    }
+    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [filteredResources]);
+
   return (
     <div className="patient-viewer" data-testid="patient-data-viewer">
       <div className="patient-viewer-controls">
@@ -155,6 +175,23 @@ export function PatientDataViewer({
         </button>
       </div>
 
+      <div className="patient-viewer-tools">
+        <input
+          className="patient-viewer-filter"
+          type="search"
+          placeholder="Filter resources"
+          value={filterText}
+          onChange={(e) => setFilterText(e.target.value)}
+          aria-label="Filter patient resources"
+        />
+        <button
+          className="btn btn-secondary patient-viewer-tree-toggle"
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? "Collapse all" : "Expand all"}
+        </button>
+      </div>
+
       <div className="patient-viewer-body">
         {loading && (
           <div className="patient-viewer-loading">Loading patient data…</div>
@@ -172,16 +209,127 @@ export function PatientDataViewer({
         {!loading && !error && resources.length > 0 && (
           <div className="patient-viewer-content">
             <div className="patient-viewer-summary">
-              {resources.length} resource{resources.length !== 1 ? "s" : ""}
+              {filteredResources.length} of {resources.length} resource{resources.length !== 1 ? "s" : ""}
               {" · "}
-              {[...new Set(resources.map((r) => r.resourceType))].join(", ")}
+              {resourceGroups.map(([type, items]) => `${type} (${items.length})`).join(", ")}
             </div>
-            <pre className="patient-viewer-json">
-              <code>{JSON.stringify(resources, null, 2)}</code>
-            </pre>
+            <div className="patient-resource-tree">
+              {resourceGroups.map(([type, items]) => (
+                <details className="patient-resource-group" key={type} open={expanded}>
+                  <summary>
+                    <span className="patient-tree-caret" />
+                    <span className="patient-resource-type">{type}</span>
+                    <span className="patient-resource-count">{items.length}</span>
+                  </summary>
+                  <div className="patient-resource-list">
+                    {items.map((resource, index) => (
+                      <details
+                        className="patient-resource-item"
+                        key={`${resource.resourceType ?? "Unknown"}-${resource.id ?? index}`}
+                        open={expanded}
+                      >
+                        <summary>
+                          <span className="patient-tree-caret" />
+                          <span className="patient-resource-title">
+                            {resourceLabel(resource)}
+                          </span>
+                          <span className="patient-resource-meta">
+                            {resourceMeta(resource)}
+                          </span>
+                        </summary>
+                        <JsonTree value={resource} expanded={expanded} />
+                      </details>
+                    ))}
+                  </div>
+                </details>
+              ))}
+              {resourceGroups.length === 0 && (
+                <div className="patient-viewer-empty">
+                  No resources match "{filterText}".
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
     </div>
   );
+}
+
+function resourceSearchText(resource: any): string {
+  return JSON.stringify(resource).toLowerCase();
+}
+
+function resourceLabel(resource: any): string {
+  const type = resource.resourceType ?? "Resource";
+  const id = resource.id ? `/${resource.id}` : "";
+  const code = codingDisplay(resource);
+  return code ? `${type}${id} · ${code}` : `${type}${id}`;
+}
+
+function resourceMeta(resource: any): string {
+  const candidates = [
+    resource.effectiveDateTime,
+    resource.authoredOn,
+    resource.recordedDate,
+    resource.onsetDateTime,
+    resource.performedDateTime,
+    resource.period?.start,
+    resource.effectivePeriod?.start,
+  ].filter(Boolean);
+  return candidates.length > 0 ? String(candidates[0]) : "";
+}
+
+function codingDisplay(resource: any): string {
+  const coding = resource.code?.coding?.[0] ?? resource.type?.[0]?.coding?.[0] ?? resource.category?.[0]?.coding?.[0];
+  return coding?.display ?? coding?.code ?? resource.code?.text ?? "";
+}
+
+function JsonTree({
+  value,
+  name,
+  expanded,
+}: {
+  value: unknown;
+  name?: string;
+  expanded: boolean;
+}) {
+  if (value === null || typeof value !== "object") {
+    return (
+      <div className="json-tree-row">
+        {name && <span className="json-tree-key">{name}: </span>}
+        <span className={`json-tree-value json-tree-${typeof value}`}>
+          {formatScalar(value)}
+        </span>
+      </div>
+    );
+  }
+
+  const entries = Array.isArray(value)
+    ? value.map((item, index) => [String(index), item] as const)
+    : Object.entries(value as Record<string, unknown>);
+  const label = Array.isArray(value)
+    ? `Array(${entries.length})`
+    : `Object(${entries.length})`;
+
+  return (
+    <details className="json-tree-node" open={expanded}>
+      <summary>
+        <span className="patient-tree-caret" />
+        {name && <span className="json-tree-key">{name}: </span>}
+        <span className="json-tree-kind">{label}</span>
+      </summary>
+      <div className="json-tree-children">
+        {entries.map(([key, child]) => (
+          <JsonTree key={key} name={key} value={child} expanded={expanded} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function formatScalar(value: unknown): string {
+  if (typeof value === "string") return `"${value}"`;
+  if (value === null) return "null";
+  return String(value);
 }

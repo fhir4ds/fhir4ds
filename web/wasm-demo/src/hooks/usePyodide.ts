@@ -20,7 +20,7 @@ interface PyodideWorkerResponse {
   error?: string;
 }
 
-export function usePyodide() {
+export function usePyodide(enabled = true) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -30,6 +30,13 @@ export function usePyodide() {
   const nextIdRef = useRef(1);
 
   useEffect(() => {
+    if (!enabled) {
+      setReady(false);
+      setError(null);
+      workerRef.current = null;
+      return;
+    }
+
     let worker: Worker;
     try {
       worker = new Worker(
@@ -85,8 +92,10 @@ export function usePyodide() {
       });
       pendingRef.current.clear();
       worker.terminate();
+      workerRef.current = null;
+      setReady(false);
     };
-  }, []);
+  }, [enabled]);
 
   const translate = useCallback(
     (cql: string, audit?: boolean): Promise<TranslateResult> => {
