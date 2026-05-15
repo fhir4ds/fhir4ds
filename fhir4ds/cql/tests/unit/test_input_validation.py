@@ -65,6 +65,15 @@ def test_evaluate_measure_rejects_string_patient_ids(tmp_path):
         con.close()
 
 
+def test_translator_empty_patient_filter_matches_no_patients():
+    from fhir4ds.cql.translator import CQLToSQLTranslator
+
+    translator = CQLToSQLTranslator()
+    sql = translator._build_patients_only_sql(patient_ids=[])
+
+    assert "False" in sql or "FALSE" in sql
+
+
 def test_evaluate_measure_threads_audit_mode_to_translator(tmp_path, monkeypatch):
     import duckdb
     import fhir4ds.cql.translator as translator_module
@@ -129,3 +138,20 @@ def test_register_rejects_none_con():
 
     with pytest.raises(TypeError, match="Expected a DuckDB connection for 'con'"):
         register(None)
+
+
+def test_root_register_exposes_in_valueset_without_preloaded_valuesets():
+    import duckdb
+    import fhir4ds
+
+    con = duckdb.connect()
+    try:
+        fhir4ds.register(con)
+        result = con.execute(
+            "SELECT in_valueset(?, 'code', ?)",
+            ['{"resourceType":"Observation","code":{"coding":[{"system":"http://loinc.org","code":"1234-5"}]}}',
+             "http://example.org/ValueSet/not-loaded"],
+        ).fetchone()[0]
+        assert result is None
+    finally:
+        con.close()

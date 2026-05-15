@@ -119,6 +119,18 @@ def _calculate_age(birth_date: str | None, unit: str, as_of: str | None = None) 
     return None
 
 
+def _calculate_age_at(birth_date: str | None, unit: str, as_of: str | None) -> int | None:
+    """Calculate age at an explicit reference date.
+
+    The CQL CalculateAgeIn*At functions require both operands.  A NULL
+    reference date propagates to NULL instead of silently using the current
+    date/time.
+    """
+    if birth_date is None or as_of is None:
+        return None
+    return _calculate_age(birth_date, unit, as_of)
+
+
 # ========================================
 # Scalar versions (fallback)
 # ========================================
@@ -280,31 +292,31 @@ def calculateAgeInSeconds(birth_date: str | None) -> int | None:
 
 
 def calculateAgeInYearsAt(birth_date: str | None, as_of: str | None) -> int | None:
-    return _calculate_age(birth_date, "years", as_of)
+    return _calculate_age_at(birth_date, "years", as_of)
 
 
 def calculateAgeInMonthsAt(birth_date: str | None, as_of: str | None) -> int | None:
-    return _calculate_age(birth_date, "months", as_of)
+    return _calculate_age_at(birth_date, "months", as_of)
 
 
 def calculateAgeInWeeksAt(birth_date: str | None, as_of: str | None) -> int | None:
-    return _calculate_age(birth_date, "weeks", as_of)
+    return _calculate_age_at(birth_date, "weeks", as_of)
 
 
 def calculateAgeInDaysAt(birth_date: str | None, as_of: str | None) -> int | None:
-    return _calculate_age(birth_date, "days", as_of)
+    return _calculate_age_at(birth_date, "days", as_of)
 
 
 def calculateAgeInHoursAt(birth_date: str | None, as_of: str | None) -> int | None:
-    return _calculate_age(birth_date, "hours", as_of)
+    return _calculate_age_at(birth_date, "hours", as_of)
 
 
 def calculateAgeInMinutesAt(birth_date: str | None, as_of: str | None) -> int | None:
-    return _calculate_age(birth_date, "minutes", as_of)
+    return _calculate_age_at(birth_date, "minutes", as_of)
 
 
 def calculateAgeInSecondsAt(birth_date: str | None, as_of: str | None) -> int | None:
-    return _calculate_age(birth_date, "seconds", as_of)
+    return _calculate_age_at(birth_date, "seconds", as_of)
 
 
 # ========================================
@@ -338,7 +350,7 @@ def _calc_total_seconds_divisor(divisor: float) -> Callable[[date, date, datetim
     """Factory for hours/minutes/seconds calculators."""
     def calc(birth: date, ref_date: date, ref_now: datetime) -> int:
         delta = ref_now - datetime.combine(birth, datetime.min.time()).replace(tzinfo=timezone.utc)
-        return int(delta.total_seconds() // divisor)
+        return int(delta.total_seconds() / divisor)
     return calc
 
 

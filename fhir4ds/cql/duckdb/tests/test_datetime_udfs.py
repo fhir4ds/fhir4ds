@@ -18,6 +18,11 @@ from ..udf.datetime import (
     minutesBetween,
     secondsBetween,
     millisecondsBetween,
+    differenceInWeeks,
+    differenceInHours,
+    differenceInMinutes,
+    differenceInSeconds,
+    differenceInMilliseconds,
     registerDatetimeUdfs,
 )
 
@@ -154,6 +159,11 @@ def test_weeks_between_null_end():
     assert weeksBetween("2020-01-01", None) is None
 
 
+def test_difference_in_weeks_negative_truncates_toward_zero():
+    assert differenceInWeeks("2020-01-10", "2020-01-01") == -1
+    assert differenceInWeeks("2020-01-06", "2020-01-01") == 0
+
+
 # ========================================
 # daysBetween tests
 # ========================================
@@ -279,6 +289,17 @@ def test_minutes_between_null_end():
 
 def test_minutes_between_negative():
     assert minutesBetween("2012-12-30T08:40:00", "2012-12-30T06:50:00") == -110
+
+
+def test_difference_in_time_units_truncate_toward_zero_and_handle_timezones():
+    assert differenceInHours("2013-10-10T12:30:00", "2013-10-10T08:40:00") == -3
+    assert differenceInMinutes("2013-10-10T12:30:00", "2013-10-10T12:29:30") == 0
+    assert differenceInSeconds("2013-10-10T12:30:00", "2013-10-10T12:29:59.500") == 0
+    assert differenceInMilliseconds("2013-10-10T12:30:00.000", "2013-10-10T12:29:59.999") == -1
+    assert differenceInHours(
+        "2017-03-12T01:12:05.100-05:00",
+        "2017-03-12T03:22:27.600",
+    ) is None
 
 
 # ========================================

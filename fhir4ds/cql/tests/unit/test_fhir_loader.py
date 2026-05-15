@@ -139,6 +139,17 @@ def test_load_bundle_invalid(loader):
         loader.load_bundle(not_a_bundle)
 
 
+def test_load_bundle_rejects_malformed_entries(loader):
+    with pytest.raises(TypeError, match=r"Bundle\.entry must be a list"):
+        loader.load_bundle({"resourceType": "Bundle", "entry": {"resource": {}}})
+
+    with pytest.raises(TypeError, match=r"Bundle\.entry\[0\] must be an object"):
+        loader.load_bundle({"resourceType": "Bundle", "entry": ["not an entry"]})
+
+    with pytest.raises(TypeError, match=r"Bundle\.entry\[0\]\.resource must be an object"):
+        loader.load_bundle({"resourceType": "Bundle", "entry": [{"resource": "not a resource"}]})
+
+
 def test_load_ndjson(loader, tmp_path):
     """Test loading from NDJSON file."""
     ndjson_file = tmp_path / "test.ndjson"
@@ -300,6 +311,39 @@ def test_load_valuesets_from_dict(loader):
     count = loader.load_valuesets(valuesets)
     assert count == 1
     assert loader.count_valueset_codes("http://example.org/ValueSet/Dict") == 1
+
+
+def test_load_valuesets_from_raw_fhir_valueset(loader):
+    valuesets = [
+        {
+            "resourceType": "ValueSet",
+            "url": "http://example.org/ValueSet/Raw",
+            "compose": {
+                "include": [
+                    {
+                        "system": "http://loinc.org",
+                        "concept": [
+                            {"code": "1234-5", "display": "Compose Code"},
+                        ],
+                    }
+                ]
+            },
+            "expansion": {
+                "contains": [
+                    {
+                        "system": "http://snomed.info/sct",
+                        "code": "67890",
+                        "display": "Expansion Code",
+                    }
+                ]
+            },
+        }
+    ]
+
+    count = loader.load_valuesets(valuesets)
+
+    assert count == 2
+    assert loader.count_valueset_codes("http://example.org/ValueSet/Raw") == 2
 
 
 def test_load_valuesets_rejects_invalid_inputs(loader):

@@ -640,7 +640,17 @@ def differenceInWeeks(start: str | None, end: str | None) -> int | None:
     days = differenceInDays(start, end)
     if days is None:
         return None
-    return days // 7
+    return int(days / 7)
+
+
+def _parse_difference_datetime(value: str) -> datetime | None:
+    parsed = _parse_datetime(value)
+    if parsed:
+        return parsed
+    parsed_time = _parse_time(value)
+    if parsed_time:
+        return _dt_class.combine(date(2000, 1, 1), parsed_time)
+    return None
 
 
 def differenceInHours(start: str | None, end: str | None) -> int | None:
@@ -648,12 +658,14 @@ def differenceInHours(start: str | None, end: str | None) -> int | None:
     if start is None or end is None:
         return None
     try:
-        s = _parse_datetime(start) or (_dt_class.combine(date(2000, 1, 1), _parse_time(start)) if _parse_time(start) else None)
-        e = _parse_datetime(end) or (_dt_class.combine(date(2000, 1, 1), _parse_time(end)) if _parse_time(end) else None)
+        s = _parse_difference_datetime(start)
+        e = _parse_difference_datetime(end)
         if not s or not e:
             return None
-        delta = e - s
-        return int(delta.total_seconds()) // 3600
+        total_seconds = _elapsed_seconds(s, e)
+        if total_seconds is None:
+            return None
+        return int(total_seconds / 3600)
     except (ValueError, TypeError, AttributeError) as ex:
         _logger.warning("UDF differenceInHours failed: %s", ex)
         return None
@@ -664,12 +676,14 @@ def differenceInMinutes(start: str | None, end: str | None) -> int | None:
     if start is None or end is None:
         return None
     try:
-        s = _parse_datetime(start) or (_dt_class.combine(date(2000, 1, 1), _parse_time(start)) if _parse_time(start) else None)
-        e = _parse_datetime(end) or (_dt_class.combine(date(2000, 1, 1), _parse_time(end)) if _parse_time(end) else None)
+        s = _parse_difference_datetime(start)
+        e = _parse_difference_datetime(end)
         if not s or not e:
             return None
-        delta = e - s
-        return int(delta.total_seconds()) // 60
+        total_seconds = _elapsed_seconds(s, e)
+        if total_seconds is None:
+            return None
+        return int(total_seconds / 60)
     except (ValueError, TypeError, AttributeError) as ex:
         _logger.warning("UDF differenceInMinutes failed: %s", ex)
         return None
@@ -680,12 +694,14 @@ def differenceInSeconds(start: str | None, end: str | None) -> int | None:
     if start is None or end is None:
         return None
     try:
-        s = _parse_datetime(start) or (_dt_class.combine(date(2000, 1, 1), _parse_time(start)) if _parse_time(start) else None)
-        e = _parse_datetime(end) or (_dt_class.combine(date(2000, 1, 1), _parse_time(end)) if _parse_time(end) else None)
+        s = _parse_difference_datetime(start)
+        e = _parse_difference_datetime(end)
         if not s or not e:
             return None
-        delta = e - s
-        return int(delta.total_seconds())
+        total_seconds = _elapsed_seconds(s, e)
+        if total_seconds is None:
+            return None
+        return int(total_seconds)
     except (ValueError, TypeError, AttributeError) as ex:
         _logger.warning("UDF differenceInSeconds failed: %s", ex)
         return None
@@ -696,12 +712,14 @@ def differenceInMilliseconds(start: str | None, end: str | None) -> int | None:
     if start is None or end is None:
         return None
     try:
-        s = _parse_datetime(start) or (_dt_class.combine(date(2000, 1, 1), _parse_time(start)) if _parse_time(start) else None)
-        e = _parse_datetime(end) or (_dt_class.combine(date(2000, 1, 1), _parse_time(end)) if _parse_time(end) else None)
+        s = _parse_difference_datetime(start)
+        e = _parse_difference_datetime(end)
         if not s or not e:
             return None
-        delta = e - s
-        return int(delta.total_seconds() * 1000)
+        total_seconds = _elapsed_seconds(s, e)
+        if total_seconds is None:
+            return None
+        return int(total_seconds * 1000)
     except (ValueError, TypeError, AttributeError) as ex:
         _logger.warning("UDF differenceInMilliseconds failed: %s", ex)
         return None

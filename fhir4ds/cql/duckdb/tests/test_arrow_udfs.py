@@ -54,9 +54,9 @@ class TestAgeUdfs:
     def test_age_in_months(self, con):
         patient = make_patient("2024-01-15")
         result = con.execute("SELECT AgeInMonths(?)", [patient]).fetchone()[0]
-        # Born Jan 15, 2024, as of Feb 20, 2026: around 25 months
+        # Current-date dependent; verify a plausible age for this fixture.
         assert result >= 24
-        assert result <= 27
+        assert result <= 36
 
     def test_age_in_days(self, con):
         patient = make_patient("2026-02-01")
@@ -108,6 +108,21 @@ class TestAgeUdfs:
             "SELECT AgeInYearsAt(NULL, '2020-01-01')",
             "SELECT AgeInMonthsAt(NULL, '2020-01-01')",
             "SELECT AgeInDaysAt(NULL, '2020-01-01')",
+        ]
+        for sql in null_tests:
+            result = con.execute(sql).fetchone()[0]
+            assert result is None, f"{sql} should return NULL"
+
+    def test_calculate_age_at_null_as_of_returns_null(self, con):
+        """CalculateAgeIn*At requires an explicit reference date."""
+        null_tests = [
+            "SELECT CalculateAgeInYearsAt('2000-01-01', NULL)",
+            "SELECT CalculateAgeInMonthsAt('2000-01-01', NULL)",
+            "SELECT CalculateAgeInWeeksAt('2000-01-01', NULL)",
+            "SELECT CalculateAgeInDaysAt('2000-01-01', NULL)",
+            "SELECT CalculateAgeInHoursAt('2000-01-01', NULL)",
+            "SELECT CalculateAgeInMinutesAt('2000-01-01', NULL)",
+            "SELECT CalculateAgeInSecondsAt('2000-01-01', NULL)",
         ]
         for sql in null_tests:
             result = con.execute(sql).fetchone()[0]

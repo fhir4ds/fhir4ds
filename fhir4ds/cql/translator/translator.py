@@ -969,7 +969,13 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 ),
             ))),
         )
-        if patient_ids is not None and len(patient_ids) > 0:
+        if patient_ids is not None and len(patient_ids) == 0:
+            where_condition = SQLBinaryOp(
+                operator="AND",
+                left=where_condition,
+                right=SQLLiteral(value=False),
+            )
+        elif patient_ids is not None:
             id_literals = [
                 SQLLiteral(value=pid) for pid in patient_ids
             ]

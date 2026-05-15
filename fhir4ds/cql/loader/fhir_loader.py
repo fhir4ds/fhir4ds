@@ -68,6 +68,47 @@ def _serialize_resource(resource: dict) -> str:
         ) from exc
 
 
+def _extract_codes_from_valueset_resource(valueset: dict) -> list[dict[str, str | None]]:
+    """Extract codes from a raw FHIR ValueSet compose/expansion resource."""
+    codes: list[dict[str, str | None]] = []
+
+    expansion_contains = valueset.get("expansion", {}).get("contains", [])
+    if isinstance(expansion_contains, list):
+        for item in expansion_contains:
+            if not isinstance(item, dict):
+                raise TypeError("ValueSet.expansion.contains entries must be objects")
+            system = item.get("system")
+            code = item.get("code")
+            if system is not None or code is not None:
+                codes.append({
+                    "system": system,
+                    "code": code,
+                    "display": item.get("display"),
+                })
+
+    compose_includes = valueset.get("compose", {}).get("include", [])
+    if isinstance(compose_includes, list):
+        for include in compose_includes:
+            if not isinstance(include, dict):
+                raise TypeError("ValueSet.compose.include entries must be objects")
+            system = include.get("system")
+            concepts = include.get("concept", [])
+            if concepts is None:
+                concepts = []
+            if not isinstance(concepts, list):
+                raise TypeError("ValueSet.compose.include.concept must be a list")
+            for concept in concepts:
+                if not isinstance(concept, dict):
+                    raise TypeError("ValueSet.compose.include.concept entries must be objects")
+                codes.append({
+                    "system": system,
+                    "code": concept.get("code"),
+                    "display": concept.get("display"),
+                })
+
+    return codes
+
+
 class FHIRDataLoader:
     """
     Load FHIR resources into DuckDB for CQL evaluation.
@@ -311,11 +352,21 @@ class FHIRDataLoader:
         if bundle.get("resourceType") != "Bundle":
             raise ValueError("Expected a FHIR Bundle resource")
 
+        entries = bundle.get("entry") or []
+        if not isinstance(entries, list):
+            raise TypeError("Bundle.entry must be a list")
+
         resources = []
-        for entry in bundle.get("entry") or []:
+        for index, entry in enumerate(entries):
             if entry is None:
                 continue
+            if not isinstance(entry, dict):
+                raise TypeError(f"Bundle.entry[{index}] must be an object")
             resource = entry.get("resource")
+            if resource is None:
+                continue
+            if not isinstance(resource, dict):
+                raise TypeError(f"Bundle.entry[{index}].resource must be an object")
             if resource:
                 resources.append(resource)
 
@@ -529,7 +580,11 @@ class FHIRDataLoader:
                 codes = vs.codes
             elif isinstance(vs, dict):
                 vs_url = vs.get("url")
-                codes = vs.get("codes", [])
+                codes = vs.get("codes")
+                if codes is None and vs.get("resourceType") == "ValueSet":
+                    codes = _extract_codes_from_valueset_resource(vs)
+                if codes is None:
+                    codes = []
             else:
                 raise TypeError(
                     f"valuesets[{index}] must be a ValueSet object or dict, "

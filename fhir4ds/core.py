@@ -45,6 +45,17 @@ def _register_valueset_cache(con: "duckdb.DuckDBPyConnection", valueset_cache: d
     )
 
 
+def _ensure_valueset_membership_surface(con: "duckdb.DuckDBPyConnection") -> None:
+    """Ensure generated CQL can call in_valueset even before valuesets load."""
+    import duckdb as _duckdb_mod
+
+    try:
+        con.execute("SELECT in_valueset(NULL, 'code', 'http://example.org/ValueSet/empty')").fetchone()
+        return
+    except _duckdb_mod.CatalogException:
+        _register_valueset_cache(con, {})
+
+
 def register_fhirpath(con: "duckdb.DuckDBPyConnection") -> bool:
     """
     Register FHIRPath UDFs on the given DuckDB connection.
@@ -164,6 +175,8 @@ def register_cql(
     # Step 3: ValueSet expansion always uses Python
     if valueset_cache is not None:
         _register_valueset_cache(con, valueset_cache)
+    else:
+        _ensure_valueset_membership_surface(con)
 
     return cql_cpp
 
