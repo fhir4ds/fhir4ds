@@ -44,6 +44,67 @@ static constexpr int64_t MS_PER_DAY = 86400000LL;
 static constexpr double DAYS_PER_YEAR = 365.25;
 static constexpr double DAYS_PER_MONTH = 30.4375;
 
+static int CqlDaysInMonth(int year, int month) {
+	static const int dim[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+	if (month < 1 || month > 12) {
+		return 0;
+	}
+	if (month == 2 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))) {
+		return 29;
+	}
+	return dim[month];
+}
+
+static int64_t FloorDiv(int64_t a, int64_t b) {
+	int64_t q = a / b;
+	int64_t r = a % b;
+	if (r != 0 && ((r > 0) != (b > 0))) {
+		--q;
+	}
+	return q;
+}
+
+static cql::DateTimeValue AddCalendarMonths(const cql::DateTimeValue &value, int64_t months) {
+	cql::DateTimeValue result = value;
+	int64_t month_index = static_cast<int64_t>(value.year) * 12 + (value.month - 1) + months;
+	int64_t year = FloorDiv(month_index, 12);
+	int64_t month_zero = month_index - year * 12;
+	result.year = static_cast<int32_t>(year);
+	result.month = static_cast<int32_t>(month_zero + 1);
+	result.day = std::min<int32_t>(value.day, CqlDaysInMonth(result.year, result.month));
+	return result;
+}
+
+static int64_t DurationInCalendarMonths(const cql::DateTimeValue &start, const cql::DateTimeValue &end) {
+	if (end < start) {
+		return -DurationInCalendarMonths(end, start);
+	}
+	int64_t months = (static_cast<int64_t>(end.year) - start.year) * 12 + (end.month - start.month);
+	if (AddCalendarMonths(start, months) > end) {
+		--months;
+	}
+	return months;
+}
+
+static int64_t DurationInCalendarYears(const cql::DateTimeValue &start, const cql::DateTimeValue &end) {
+	if (end < start) {
+		return -DurationInCalendarYears(end, start);
+	}
+	int64_t years = static_cast<int64_t>(end.year) - start.year;
+	if (AddCalendarMonths(start, years * 12) > end) {
+		--years;
+	}
+	return years;
+}
+
+static int64_t ToEpochMillisForElapsed(const cql::DateTimeValue &value) {
+	int64_t millis = value.to_epoch_millis();
+	if (value.has_tz) {
+		millis -= static_cast<int64_t>(value.tz_offset_minutes) * MS_PER_MINUTE;
+	}
+	return millis;
+}
+
 // =====================================================================
 // Helper: get current date for age calculations
 // =====================================================================
@@ -318,53 +379,64 @@ DEFINE_TWO_STR_BIGINT_UDF(DifferenceInSecondsFunc, {
 
 DEFINE_TWO_STR_BIGINT_UDF(WeeksBetweenFunc, {
 	// CQL §16.14: WeeksBetween counts *complete* 7-day periods.
-	// Use epoch_millis for time-aware calculation instead of Julian-day integer division.
-	int64_t ms_diff = b_dt->to_epoch_millis() - a_dt->to_epoch_millis();
-	if (ms_diff < 0) {
+	if (a_dt->has_tz != b_dt->has_tz) {
 		result_mask.SetInvalid(i);
 	} else {
-		int64_t complete_days = ms_diff / (24LL * 60 * 60 * 1000);
-		result_data[i] = complete_days / 7;
+		int64_t ms_diff = ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt);
+		result_data[i] = ms_diff / (MS_PER_DAY * 7);
 	}
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(MillisecondsBetweenFunc, {
-	result_data[i] = b_dt->to_epoch_millis() - a_dt->to_epoch_millis();
+	if (a_dt->has_tz != b_dt->has_tz) {
+		result_mask.SetInvalid(i);
+	} else {
+		result_data[i] = ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt);
+	}
 })
 
 // date_diff equivalents (match Python's DaysBetween/MonthsBetween/etc. macros)
 DEFINE_TWO_STR_BIGINT_UDF(YearsBetweenFunc, {
 	// CQL §16.14: YearsBetween counts *complete* calendar years, not raw year subtraction.
-	int64_t years = b_dt->year - a_dt->year;
-	if (b_dt->month < a_dt->month || (b_dt->month == a_dt->month && b_dt->day < a_dt->day)) {
-		years--;
-	}
-	result_data[i] = years;
+	result_data[i] = DurationInCalendarYears(*a_dt, *b_dt);
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(MonthsBetweenFunc, {
 	// CQL §16.14: MonthsBetween counts *complete* months, not calendar boundary crossings.
-	int64_t months = (b_dt->year - a_dt->year) * 12 + (b_dt->month - a_dt->month);
-	if (b_dt->day < a_dt->day) {
-		months--;
-	}
-	result_data[i] = months;
+	result_data[i] = DurationInCalendarMonths(*a_dt, *b_dt);
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(DaysBetweenFunc, {
-	result_data[i] = b_dt->to_julian_day() - a_dt->to_julian_day();
+	if (a_dt->has_tz != b_dt->has_tz) {
+		result_mask.SetInvalid(i);
+	} else {
+		int64_t ms_diff = ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt);
+		result_data[i] = ms_diff / MS_PER_DAY;
+	}
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(HoursBetweenFunc, {
-	result_data[i] = (b_dt->to_epoch_millis() - a_dt->to_epoch_millis()) / MS_PER_HOUR;
+	if (a_dt->has_tz != b_dt->has_tz) {
+		result_mask.SetInvalid(i);
+	} else {
+		result_data[i] = (ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt)) / MS_PER_HOUR;
+	}
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(MinutesBetweenFunc, {
-	result_data[i] = (b_dt->to_epoch_millis() - a_dt->to_epoch_millis()) / MS_PER_MINUTE;
+	if (a_dt->has_tz != b_dt->has_tz) {
+		result_mask.SetInvalid(i);
+	} else {
+		result_data[i] = (ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt)) / MS_PER_MINUTE;
+	}
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(SecondsBetweenFunc, {
-	result_data[i] = (b_dt->to_epoch_millis() - a_dt->to_epoch_millis()) / MS_PER_SECOND;
+	if (a_dt->has_tz != b_dt->has_tz) {
+		result_mask.SetInvalid(i);
+	} else {
+		result_data[i] = (ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt)) / MS_PER_SECOND;
+	}
 })
 
 // =====================================================================

@@ -36,10 +36,21 @@ def _quote_identifier(name: str) -> str:
     if not name or not _SAFE_IDENTIFIER_RE.match(name):
         raise ValidationError(
             f"Invalid SQL identifier: {name!r}. "
-            "Column names must start with a letter or underscore and contain "
+            "SQL identifiers must start with a letter or underscore and contain "
             "only alphanumeric characters and underscores."
         )
     return f'"{name}"'
+
+
+def _quote_table_reference(name: str) -> str:
+    """Quote a table reference, allowing schema-qualified identifiers."""
+    if not isinstance(name, str) or not name:
+        raise ValidationError("Invalid SQL table reference: table name must be a non-empty string.")
+
+    parts = name.split(".")
+    if any(part == "" for part in parts):
+        raise ValidationError(f"Invalid SQL table reference: {name!r}.")
+    return ".".join(_quote_identifier(part) for part in parts)
 
 from .types import Column, ColumnType, Select, ViewDefinition
 from .errors import ValidationError
@@ -180,7 +191,7 @@ class SQLGenerator:
             )
         if self._source_table is not None:
             self._current_resource_type = resource
-            return self._source_table
+            return _quote_table_reference(self._source_table)
         return pluralize_resource(resource)
 
     def _resolve_path(self, path: str) -> str:

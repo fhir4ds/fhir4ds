@@ -97,6 +97,26 @@ class TestWhereClauses:
         # Patients 0, 2, 4, 6, 8 have active=True
         assert len(result) == 5
 
+    def test_codeable_concept_where_uses_singleton_boolean_criteria(self, con):
+        """Nested repeating codings should be filtered with exists(...)."""
+        obs = json.dumps({
+            "resourceType": "Observation",
+            "interpretation": [
+                {"coding": [{"code": "H"}, {"code": "HH"}]},
+                {"coding": [{"code": "A"}]},
+            ],
+        })
+
+        result = con.execute(
+            "SELECT fhirpath(?, ?)",
+            [
+                obs,
+                "interpretation.where(coding.exists(code = 'HH')).coding.code",
+            ],
+        ).fetchone()
+
+        assert result[0] == ["H", "HH"]
+
 
 class TestCTEsAndJoins:
     """Test FHIRPath with CTEs and JOINs."""

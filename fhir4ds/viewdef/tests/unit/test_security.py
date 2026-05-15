@@ -5,9 +5,9 @@ import sys
 from pathlib import Path
 
 
-from ...generator import SQLGenerator, _quote_identifier
+from ...generator import SQLGenerator, _quote_identifier, _quote_table_reference
 from ...errors import ValidationError
-from ...parser import Column
+from ...parser import Column, parse_view_definition
 
 
 class TestQuoteIdentifier:
@@ -55,6 +55,29 @@ class TestQuoteIdentifier:
     def test_rejects_none(self):
         with pytest.raises((ValidationError, TypeError)):
             _quote_identifier(None)
+
+
+class TestSourceTableSanitization:
+    """Test that user-supplied source_table values cannot inject SQL."""
+
+    def test_simple_source_table_is_quoted(self):
+        assert _quote_table_reference("resources") == '"resources"'
+
+    def test_schema_qualified_source_table_is_quoted(self):
+        assert _quote_table_reference("main.resources") == '"main"."resources"'
+
+    def test_malicious_source_table_rejected(self):
+        with pytest.raises(ValidationError, match="Invalid SQL identifier"):
+            _quote_table_reference("resources; DROP TABLE resources; --")
+
+    def test_generate_rejects_malicious_source_table(self):
+        gen = SQLGenerator(source_table="resources; DROP TABLE resources; --")
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+        })
+        with pytest.raises(ValidationError, match="Invalid SQL identifier"):
+            gen.generate(vd)
 
 
 class TestColumnNameSanitization:
