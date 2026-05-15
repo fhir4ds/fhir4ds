@@ -1,4 +1,5 @@
 from ...engine.nodes import TypeInfo
+from ...engine.errors import FHIRPathError
 
 def type_fn(ctx, coll):
     return [TypeInfo.from_value(value).__dict__ for value in coll]
@@ -20,6 +21,6 @@ def as_fn(ctx, coll, type_info):
     if not coll:
         return []
     if len(coll) > 1:
-        return []
+        raise FHIRPathError("as() requires a singleton input collection")
     # as() requires exact type match (no subtype matching)
     return coll if TypeInfo.from_value(coll[0]).is_exact_type(type_info, model=model) else []

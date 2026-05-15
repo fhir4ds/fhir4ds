@@ -1030,8 +1030,7 @@
       {
         "name": "testTypes/testStringQuantityWeekConvertsToQuantityFalse",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: [False]"
+          "passed": true
         }
       },
       {
@@ -1397,8 +1396,7 @@
       {
         "name": "testQuantity/testQuantity4",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: [False]"
+          "passed": true
         }
       },
       {
@@ -1638,8 +1636,7 @@
       {
         "name": "testIndexer/testIndexer1",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
@@ -1663,36 +1660,31 @@
       {
         "name": "testFirstLast/testFirstLast1",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testFirstLast/testFirstLast2",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testTail/testTail1",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testTail/testTail2",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testSkip/testSkip1",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
@@ -1704,8 +1696,7 @@
       {
         "name": "testSkip/testSkip3",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
@@ -1723,22 +1714,19 @@
       {
         "name": "testTake/testTake2",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testTake/testTake3",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testTake/testTake4",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
@@ -1942,8 +1930,7 @@
       {
         "name": "testToChars/testToChars1",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
@@ -2609,64 +2596,55 @@
       {
         "name": "testSort/testSort1",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testSort/testSort2",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testSort/testSort3",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testSort/testSort4",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testSort/testSort5",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testSort/testSort6",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testSort/testSort7",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testSort/testSort8",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testSort/testSort9",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
@@ -2702,22 +2680,19 @@
       {
         "name": "testEquality/testEquality5",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testEquality/testEquality6",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testEquality/testEquality7",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): false, Got: []"
+          "passed": true
         }
       },
       {
@@ -2825,22 +2800,19 @@
       {
         "name": "testEquality/testEquality25",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testEquality/testEquality26",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testEquality/testEquality27",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): false, Got: []"
+          "passed": true
         }
       },
       {
@@ -2960,22 +2932,19 @@
       {
         "name": "testNEquality/testNEquality19",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): false, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testNEquality/testNEquality20",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): false, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testNEquality/testNEquality21",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
@@ -4031,22 +4000,19 @@
       {
         "name": "testExclude/testExclude1",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testExclude/testExclude2",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
         "name": "testExclude/testExclude3",
         "result": {
-          "passed": false,
-          "error": "Expected (boolean): true, Got: []"
+          "passed": true
         }
       },
       {
@@ -4502,8 +4468,7 @@
       {
         "name": "testConcatenate/testConcatenate4",
         "result": {
-          "passed": false,
-          "error": "Expected error (execution) but got result"
+          "passed": true
         }
       },
       {
@@ -5169,8 +5134,7 @@
       {
         "name": "LowBoundary/LowBoundaryDecimal7",
         "result": {
-          "passed": false,
-          "error": "Expected (unknown): 0.50000000, Got: [Decimal('0.95000000')]"
+          "passed": true
         }
       },
       {
@@ -5614,8 +5578,7 @@
       {
         "name": "testInheritance/testFHIRPathAsFunction21",
         "result": {
-          "passed": false,
-          "error": "Expected error (execution) but got result"
+          "passed": true
         }
       },
       {

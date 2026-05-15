@@ -38,6 +38,11 @@ def ensure_number_singleton(x):
 
 
 def amp(ctx, x="", y=""):
+    if isinstance(x, list) and len(x) > 1:
+        raise FHIRPathError("Cannot concatenate a collection with more than one item")
+    if isinstance(y, list) and len(y) > 1:
+        raise FHIRPathError("Cannot concatenate a collection with more than one item")
+
     def _string_value(value):
         if isinstance(value, list):
             if not value:

@@ -100,9 +100,16 @@ def to_quantity(ctx, coll, to_unit=None):
 
                 if not time:
                     result = nodes.FP_Quantity(Decimal(value), unit or "'1'")
-                elif nodes.FP_Quantity.timeUnitsToUCUM.get(time) or nodes.FP_Quantity.timeUnitsToUCUM.get(time.lower()):
-                    result = nodes.FP_Quantity(Decimal(value), time.lower() if not nodes.FP_Quantity.timeUnitsToUCUM.get(time) else time)
-                elif time:
+                elif nodes.FP_Quantity.timeUnitsToUCUM.get(time) and len(time) > 2:
+                    result = nodes.FP_Quantity(Decimal(value), time)
+                elif nodes.FP_Quantity.timeUnitsToUCUM.get(time.lower()) and len(time) > 2:
+                    result = nodes.FP_Quantity(Decimal(value), time.lower())
+                elif time and time.lower() not in {
+                    unit.strip("'") for unit in nodes.FP_Quantity.mapUCUMCodeToTimeUnits
+                } and not (
+                    nodes.FP_Quantity.timeUnitsToUCUM.get(time)
+                    or nodes.FP_Quantity.timeUnitsToUCUM.get(time.lower())
+                ):
                     result = nodes.FP_Quantity(Decimal(value), f"'{time}'")
 
         if result and to_unit and result.unit != to_unit:
@@ -131,7 +138,7 @@ def to_decimal(ctx, coll):
 
     if util.is_number(value):
         if isinstance(value, int) and not isinstance(value, bool):
-            return Decimal(f"{value}.0")
+            return Decimal(value)
         return Decimal(value)
 
     if isinstance(value, str):

@@ -16,16 +16,17 @@ def equality(ctx, x, y):
     if util.is_empty(x) or util.is_empty(y):
         return None
 
-    # FHIRPath equality is defined for singleton operands. Multi-item
-    # comparisons are semantic errors surfaced by the DuckDB wrappers as empty.
-    if len(x) > 1 or len(y) > 1:
-        return None
-
     if type(x[0]) in DATETIME_NODES_LIST or type(y[0]) in DATETIME_NODES_LIST:
         return datetime_equality(ctx, x, y)
 
     if len(x) != len(y):
         return False
+
+    if len(x) > 1:
+        results = [equality(ctx, [left], [right]) for left, right in zip(x, y, strict=True)]
+        if any(result is None for result in results):
+            return None
+        return all(results)
 
     a = util.parse_value(x[0])
     b = util.parse_value(y[0])
@@ -151,7 +152,7 @@ def equivalence(ctx, x, y):
         r_value, r_unit = r_base
         if l_unit != r_unit:
             return False
-        return abs(l_value - r_value) < Decimal("1e-10")
+        return is_equivalent(l_value, r_value)
 
     if isinstance(a, (abc.Mapping, list)) and isinstance(b, (abc.Mapping, list)):
 
