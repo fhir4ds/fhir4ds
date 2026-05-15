@@ -98,10 +98,6 @@ export function SDCPlayground({
 
   const activePatientId = selectedPatientId ?? patientList[0]?.id ?? "";
 
-  const handlePatientChange = useCallback((patientId: string) => {
-    onPatientSelect?.(patientId);
-  }, [onPatientSelect]);
-
   // Recalculate all calculatedExpressions after response changes.
   // When `silent` is true, don't update the status message (used for
   // background recalculations triggered by answer changes).
@@ -306,21 +302,6 @@ export function SDCPlayground({
         >
           ▶ Pre-Populate
         </button>
-        {patientList.length > 0 && (
-          <select
-            className="sample-select"
-            value={activePatientId}
-            onChange={(e) => handlePatientChange(e.target.value)}
-            title="Patient context for pre-population"
-          >
-            {patientList.map((patient) => (
-              <option key={patient.id} value={patient.id}>
-                {patient.label}
-              </option>
-            ))}
-          </select>
-        )}
-
         <div className="header-status">
           <StatusDot ready={duckdbReady} label="DuckDB" />
         </div>

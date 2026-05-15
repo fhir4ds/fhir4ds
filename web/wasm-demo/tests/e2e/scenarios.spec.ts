@@ -34,7 +34,7 @@ test.describe("WASM Workbench Scenarios", () => {
     await page.goto("/?scenario=sdc-forms");
 
     await expect(page.locator(".loading-overlay")).toBeHidden({ timeout: 90_000 });
-    await page.locator("select[title='Patient context for pre-population']").selectOption("patient-002");
+    await page.locator("[data-testid='patient-data-viewer'] .patient-viewer-select").selectOption("patient-002");
     await page.click("button:has-text('Pre-Populate')");
 
     await expect(page.locator("#sdc-intake-family")).toHaveValue("Smith", {

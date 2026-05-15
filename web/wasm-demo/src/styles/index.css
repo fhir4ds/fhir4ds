@@ -849,12 +849,21 @@ body,
   gap: 8px;
 }
 
-.patient-resource-group,
-.patient-resource-item,
-.json-tree-node {
+.patient-resource-group {
   border: 1px solid var(--color-border);
   border-radius: 4px;
   background: rgba(2, 6, 23, 0.58);
+}
+
+.patient-resource-item {
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.64);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.json-tree-node {
+  border: 0;
+  background: transparent;
 }
 
 .patient-resource-group > summary,
@@ -914,12 +923,13 @@ details[open] > summary > .patient-tree-caret::before {
 }
 
 .json-tree-node {
-  margin: 6px 8px 8px;
-  background: #020617;
+  margin: 2px 8px 2px;
 }
 
 .json-tree-children {
-  padding: 0 0 8px 22px;
+  margin-left: 16px;
+  padding: 0 0 4px 10px;
+  border-left: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 .json-tree-row {
