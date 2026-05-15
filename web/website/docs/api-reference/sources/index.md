@@ -122,10 +122,10 @@ Used internally by `PostgresSource` and `ExistingTableSource` to safely handle u
 
 | Adapter | Purpose | Details |
 |---------|---------|---------|
-| [`FileSystemSource`](filesystem) | Parquet, NDJSON, Iceberg (local or cloud) | [API Reference →](filesystem) |
-| [`PostgresSource`](relational) | FHIR JSON in Postgres columns | [API Reference →](relational) |
-| [`ExistingTableSource`](existing) | Wrap pre-loaded DuckDB tables | [API Reference →](existing) |
-| [`CSVSource`](csv) | CSV files with user-defined projection | [API Reference →](csv) |
+| [`FileSystemSource`](/docs/api-reference/sources/sources-filesystem) | Parquet, NDJSON, Iceberg (local or cloud) | [API Reference →](/docs/api-reference/sources/sources-filesystem) |
+| [`PostgresSource`](/docs/api-reference/sources/sources-relational) | FHIR JSON in Postgres columns | [API Reference →](/docs/api-reference/sources/sources-relational) |
+| [`ExistingTableSource`](/docs/api-reference/sources/sources-existing) | Wrap pre-loaded DuckDB tables | [API Reference →](/docs/api-reference/sources/sources-existing) |
+| [`CSVSource`](/docs/api-reference/sources/sources-csv) | CSV files with user-defined projection | [API Reference →](/docs/api-reference/sources/sources-csv) |
 
 ### CloudCredentials
 

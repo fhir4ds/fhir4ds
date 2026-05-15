@@ -30,16 +30,48 @@ const config: Config = {
   },
 
   headTags: [
-    // COI service worker registration for SharedArrayBuffer (DuckDB-WASM on GitHub Pages)
+    // COI service worker registration for SharedArrayBuffer (DuckDB-WASM on GitHub Pages).
+    // The document must be loaded through the service worker before
+    // crossOriginIsolated becomes true, so reload once after activation.
     {
       tagName: 'script',
       attributes: {},
       innerHTML: `
-        if (typeof SharedArrayBuffer === 'undefined') {
-          const script = document.createElement('script');
-          script.src = '${baseUrl}coi-serviceworker.js';
-          document.head.appendChild(script);
-        }
+        (function () {
+          if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+            return;
+          }
+
+          var reloadKey = 'fhir4ds-coi-reload-attempted';
+
+          if (window.crossOriginIsolated) {
+            sessionStorage.removeItem(reloadKey);
+            return;
+          }
+
+          function reloadOnce() {
+            if (sessionStorage.getItem(reloadKey) === '1') {
+              return;
+            }
+            sessionStorage.setItem(reloadKey, '1');
+            window.location.reload();
+          }
+
+          navigator.serviceWorker
+            .register('${baseUrl}coi-serviceworker.js')
+            .then(function (registration) {
+              navigator.serviceWorker.addEventListener('controllerchange', reloadOnce, {
+                once: true,
+              });
+
+              if (navigator.serviceWorker.controller || registration.active) {
+                navigator.serviceWorker.ready.then(reloadOnce);
+              }
+            })
+            .catch(function (error) {
+              console.error('[FHIR4DS] COI service worker registration failed:', error);
+            });
+        })();
       `,
     },
   ],

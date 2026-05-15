@@ -11,6 +11,36 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("WasmDemoWC Docusaurus integration", () => {
+  test("CQL Playground initializes DuckDB under cross-origin isolation", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    const consoleMessages: string[] = [];
+    page.on("console", (message) => consoleMessages.push(message.text()));
+    page.on("pageerror", (error) => consoleMessages.push(error.message));
+
+    const duckDbReady = page.waitForEvent("console", {
+      predicate: (message) => message.text().includes("[DuckDB] Ready"),
+      timeout: 45_000,
+    });
+
+    await page.goto("/docs/examples/cql-playground");
+    await expect(page.locator("#fhir4ds-wc-bundle")).toHaveCount(1, {
+      timeout: 15_000,
+    });
+    await expect(page.locator("fhir4ds-demo")).toHaveCount(1);
+    await expect
+      .poll(() => page.evaluate(() => window.crossOriginIsolated), {
+        timeout: 15_000,
+      })
+      .toBe(true);
+    await duckDbReady;
+
+    const allMessages = consoleMessages.join("\n");
+    expect(allMessages).not.toContain("SharedArrayBuffer is unavailable");
+    expect(allMessages).not.toContain("[DuckDB] Initialization failed");
+  });
+
   test("CQL Playground page loads WC script", async ({ page }) => {
     await page.goto("/docs/examples/cql-playground");
     // Docusaurus navbar should still be present

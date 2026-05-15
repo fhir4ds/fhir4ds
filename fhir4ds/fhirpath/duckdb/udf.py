@@ -334,6 +334,11 @@ def fhirpath_udf(
                         serialized.append(_json_serialize(item))
                     elif isinstance(item, bool):
                         serialized.append("true" if item else "false")
+                    elif isinstance(item, Decimal):
+                        text = format(item, "f")
+                        if "." not in text:
+                            text += ".0"
+                        serialized.append(text)
                     elif isinstance(item, str):
                         serialized.append(item)
                     else:
@@ -354,9 +359,9 @@ def fhirpath_udf(
             # represents a user mistake, not a data-dependent condition.
             raise
         except FHIRPathError:
-            # FHIRPathError represents spec-mandated evaluation errors (e.g., single()
-            # on multi-element collections). These must always propagate per spec.
-            raise
+            if _STRICT_MODE:
+                raise
+            results.append([])
         except NotImplementedError:
             raise
         except (ValueError, TypeError, KeyError, AttributeError, IndexError) as e:
@@ -490,6 +495,11 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
                     if "." not in text and "e" not in text and "E" not in text:
                         text += ".0"
                     return text
+                if isinstance(item, Decimal):
+                    text = format(item, "f")
+                    if "." not in text:
+                        text += ".0"
+                    return text
                 if isinstance(item, str):
                     return item
                 if isinstance(item, (dict, list)):
@@ -512,9 +522,10 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         # Syntax errors are never valid "no data" — always propagate.
         raise
     except FHIRPathError:
-        # FHIRPathError represents spec-mandated evaluation errors (e.g., single()
-        # on multi-element collections). These must always propagate per spec.
-        raise
+        if _STRICT_MODE:
+            raise
+        _logger.warning("FHIRPath scalar evaluation error for '%s'", expression)
+        return []
     except NotImplementedError:
         # Unimplemented functions should be visible to users
         raise
@@ -683,7 +694,9 @@ def fhirpath_bool_udf(resource: str | None, expression: str | None) -> bool | No
     """
     try:
         result = fhirpath_scalar(resource, expression)
-    except NotImplementedError:
+    except FHIRPathSyntaxError:
+        raise
+    except (NotImplementedError, FHIRPathError):
         # Unimplemented functions return NULL in boolean context (used by ViewDef)
         return None
     if not result:
@@ -753,7 +766,9 @@ def fhirpath_number_udf(resource: str | None, expression: str | None) -> float |
                 result = _resolve_choice_type(resource_dict, expression)
             if not result and isinstance(resource_dict, dict):
                 result = _resolve_choice_oftype(resource_dict, expression)
-    except NotImplementedError:
+    except FHIRPathSyntaxError:
+        raise
+    except (NotImplementedError, FHIRPathError):
         return None
     except (orjson.JSONDecodeError, ValueError, TypeError, KeyError, AttributeError, IndexError):
         if _STRICT_MODE:
@@ -863,8 +878,12 @@ def fhirpath_json_udf(resource: str | None, expression: str | None) -> str | Non
             return _json_serialize(item)
 
         return "[" + ",".join(_json_item(item) for item in native) + "]"
-    except (FHIRPathSyntaxError, FHIRPathError):
+    except FHIRPathSyntaxError:
         raise
+    except FHIRPathError:
+        if _STRICT_MODE:
+            raise
+        return None
     except NotImplementedError:
         return None
     except Exception:

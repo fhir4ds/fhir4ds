@@ -3652,8 +3652,7 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		if (left.size() > 1 || right.size() > 1) {
 			if (left.size() != right.size()) {
 				if (is_equiv) return {FPValue::FromBoolean(op == "!~")};
-				// FHIRPath §6.1: equality on multi-item collections returns empty
-				return {};
+				return {FPValue::FromBoolean(op == "!=")};
 			}
 			if (is_equiv) {
 				// Equivalence: compare as sets (same elements regardless of order)
@@ -3678,8 +3677,14 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				}
 				return {FPValue::FromBoolean(op == "~" ? all_match : !all_match)};
 			} else {
-				// FHIRPath §6.1: equality (=, !=) on multi-item collections returns empty
-				return {};
+				bool all_match = true;
+				for (size_t i = 0; i < left.size(); ++i) {
+					if (!fpValuesEqual(left[i], right[i])) {
+						all_match = false;
+						break;
+					}
+				}
+				return {FPValue::FromBoolean(op == "=" ? all_match : !all_match)};
 			}
 		}
 

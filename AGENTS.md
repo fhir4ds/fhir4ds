@@ -230,6 +230,12 @@ When adding a new `fhirpath_*` UDF function with a fast path, copy this pattern 
 
 **Pattern**: This is the first memory safety bug found in the QA loop. Unlike all previous bugs (behavioral divergences found by comparing C++ vs Python output), this class of bug requires manual code archaeology of pointer lifecycles. The code "worked" because the allocator typically hadn't reused the freed memory yet, but could produce garbage under memory pressure or with alternative allocators.
 
+### FHIRPath Collection Equality and DuckDB Wrapper Resilience
+
+**Discovered in the fresh 0.0.5 release loop rerun (2026-05-15).** Multi-item equality must use ordered collection semantics, not singleton-only empty propagation. The official R4 conformance case `(1 | 1) = (1 | 2 | {})` expects `false`; same-length collections compare element-by-element. The C++ evaluator in `extensions/fhirpath/src/fhirpath/evaluator.cpp` was fixed to return boolean results for multi-item `=`/`!=` instead of empty.
+
+The Python core evaluator must remain spec-strict for execution errors such as multi-item `as(...)`, but DuckDB-facing wrapper UDFs should preserve row-level resilience by converting `FHIRPathError` to empty/NULL outside strict mode. This keeps direct conformance behavior and SQL UDF behavior intentionally distinct.
+
 ## Asset Relocation Reference
 
 - **C++ Source:** `extensions/fhirpath/` and `extensions/cql/`

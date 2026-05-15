@@ -1,9 +1,11 @@
 import { test, expect } from "@playwright/test";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 
 test.describe("Landing page", () => {
   test("loads with correct hero subtitle and stats", async ({ page }) => {
     await page.goto(".");
-    await expect(page).toHaveTitle(/FHIR4DS/);
+    await expect(page).toHaveTitle(/FHIR for Data Science/);
 
     // Hero secondary line
     await expect(page.getByText("Production-Scale FHIR Analytics")).toBeVisible();
@@ -15,8 +17,8 @@ test.describe("Landing page", () => {
     await expect(subtitle).toContainText("auditable", { ignoreCase: true });
 
     // Stats bar — mean per-patient timing
-    await expect(page.getByText("~13ms").first()).toBeVisible();
-    await expect(page.getByText("SQL per patient").first()).toBeVisible();
+    await expect(page.getByText("~3.9ms").first()).toBeVisible();
+    await expect(page.getByText("SQL mean / patient").first()).toBeVisible();
     await expect(page.getByText("Zero").first()).toBeVisible();
     await expect(page.getByText("Audit Evidence").first()).toBeVisible();
   });
@@ -32,9 +34,9 @@ test.describe("Landing page", () => {
     await page.goto(".");
     await expect(page.getByRole("heading", { level: 2 }).filter({ hasText: "FHIR4DS vs" })).toBeVisible();
     // Per-patient metric row in table (mean)
-    await expect(page.getByRole("cell", { name: "SQL execution per patient (mean)" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "SQL execution per patient (all 47 measures)" })).toBeVisible();
     // Speedup row
-    await expect(page.getByRole("cell", { name: /73×/ })).toBeVisible();
+    await expect(page.getByRole("cell", { name: /137×/ })).toBeVisible();
     // Benchmarking report link is present
     await expect(page.getByRole("link", { name: /View Full Benchmarking Report/ })).toBeVisible();
   });
@@ -75,27 +77,20 @@ test.describe("Demo page", () => {
     expect(src).toContain("wasm-app");
   });
 
-  test("wasm-app WHL and extensions accessible at correct paths", async ({ page }) => {
-    const responses: Record<string, number> = {};
-    page.on("response", (r) => {
-      const url = r.url();
-      if (url.includes("cql_py") || url.includes(".duckdb_extension.wasm")) {
-        responses[url] = r.status();
-      }
-    });
+  test("wasm-app WHL is accessible at the current Vite asset path", async ({
+    request,
+    baseURL,
+  }) => {
+    const base = (baseURL ?? "http://localhost:3000/").replace(/\/$/, "");
+    const assetsDir = join(process.cwd(), "static", "wasm-app", "assets");
+    const wheel = readdirSync(assetsDir).find((name) =>
+      /^fhir4ds_v2-.*\.whl$/.test(name)
+    );
 
-    await page.goto("demo");
-    await page.click("button:has-text('Launch Demo')");
-    // Give the iframe a moment to start loading
-    await page.waitForTimeout(3000);
-
-    // Verify WHL resolves correctly (path must NOT contain /assets/)
-    const whlUrl = Object.keys(responses).find((u) => u.includes("cql_py"));
-    if (whlUrl) {
-      expect(whlUrl).not.toContain("/assets/cql_py");
-      expect(whlUrl).toContain("wasm-app/cql_py");
-      expect(responses[whlUrl]).toBeLessThan(400);
-    }
+    expect(wheel, "deployed fhir4ds_v2 wheel in wasm-app assets").toBeTruthy();
+    const response = await request.get(`${base}/wasm-app/assets/${wheel}`);
+    expect(response.status(), `${wheel} at /wasm-app/assets/`).toBe(200);
+    expect((await response.body()).byteLength).toBeGreaterThan(0);
   });
 
   test("DuckDB extension files accessible at both extensions/ and assets/ paths", async ({
@@ -123,4 +118,3 @@ test.describe("Demo page", () => {
     }
   });
 });
-
