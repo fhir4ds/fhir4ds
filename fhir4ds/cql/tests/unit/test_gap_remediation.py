@@ -177,7 +177,7 @@ class TestGap9AgeInYearsAt:
 # ---------------------------------------------------------------------------
 # Gap 12: Equivalent (~) Operator for Code Matching
 # Acceptance Criteria:
-# - ~ with code-typed operand emits fhirpath_bool() with system and code
+# - ~ with code-typed operand emits coding_matches() with system and code
 # - Code references resolved through context's code system registry
 # ---------------------------------------------------------------------------
 
@@ -196,8 +196,8 @@ class TestGap12Equivalence:
         ctx = SQLTranslationContext()
         return ExpressionTranslator(ctx)
 
-    def test_equivalence_with_code_uses_fhirpath_bool(self, translator):
-        """AC: ~ with code-typed operand emits fhirpath_bool()."""
+    def test_equivalence_with_code_uses_coding_matches(self, translator):
+        """AC: ~ with code-typed operand emits coding_matches()."""
         expr = BinaryExpression(
             operator="~",
             left=Identifier(name="some_resource"),
@@ -206,10 +206,10 @@ class TestGap12Equivalence:
         translator.context.add_alias("some_resource", sql_expr="r.resource")
         result = translator.translate(expr)
         sql = result.to_sql()
-        assert "fhirpath_bool" in sql
+        assert "coding_matches" in sql
 
     def test_equivalence_with_code_includes_system_and_code(self, translator):
-        """AC: fhirpath_bool includes both system and code in FHIRPath expression."""
+        """AC: coding_matches includes both system and code."""
         expr = BinaryExpression(
             operator="~",
             left=Identifier(name="some_resource"),

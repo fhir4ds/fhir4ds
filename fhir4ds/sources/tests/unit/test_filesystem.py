@@ -186,6 +186,40 @@ class TestNDJSONSource:
             assert ("obs-1",) in rows
             assert ("pat-1",) in rows
 
+    def test_mounts_raw_fhir_ndjson_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "patients.ndjson")
+            patient = {
+                "resourceType": "Patient",
+                "id": "patient-1",
+                "gender": "male",
+            }
+            observation = {
+                "resourceType": "Observation",
+                "id": "obs-1",
+                "subject": {"reference": "Patient/patient-1"},
+            }
+            with open(path, "w") as f:
+                f.write(json.dumps(patient) + "\n")
+                f.write(json.dumps(observation) + "\n")
+
+            con = _make_con()
+            source = FileSystemSource(path, format="ndjson")
+            source.register(con)
+
+            rows = con.execute(
+                """
+                SELECT id, resourceType, patient_ref, json_extract_string(resource, '$.id')
+                FROM resources
+                ORDER BY id
+                """
+            ).fetchall()
+
+            assert rows == [
+                ("obs-1", "Observation", "patient-1", "obs-1"),
+                ("patient-1", "Patient", "patient-1", "patient-1"),
+            ]
+
     def test_json_format_uses_read_json_auto(self):
         source = FileSystemSource("/data/fhir.json", format="json")
         expr = source._build_scan_expression()
