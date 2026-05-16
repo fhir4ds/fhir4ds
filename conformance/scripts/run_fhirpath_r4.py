@@ -14,6 +14,7 @@ from datetime import datetime
 import json
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).parent))
 from conformance_log import log_run
 

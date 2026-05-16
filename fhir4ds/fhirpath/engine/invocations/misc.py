@@ -85,12 +85,12 @@ def to_quantity(ctx, coll, to_unit=None):
         v = util.val_data_converted(coll[0])
         quantity_regex_res = None
 
-        if isinstance(v, (int, Decimal)):
+        if isinstance(v, bool):
+            result = nodes.FP_Quantity(1 if v else 0, "'1'")
+        elif isinstance(v, (int, float, Decimal)):
             result = nodes.FP_Quantity(v, "'1'")
         elif isinstance(v, nodes.FP_Quantity):
             result = v
-        elif isinstance(v, bool):
-            result = nodes.FP_Quantity(1 if v else 0, "'1'")
         elif isinstance(v, str):
             quantity_regex_res = quantity_regex.match(v)
             if quantity_regex_res:
@@ -100,12 +100,17 @@ def to_quantity(ctx, coll, to_unit=None):
 
                 if not time:
                     result = nodes.FP_Quantity(Decimal(value), unit or "'1'")
-                elif nodes.FP_Quantity.timeUnitsToUCUM.get(time) or nodes.FP_Quantity.timeUnitsToUCUM.get(time.lower()):
-                    result = nodes.FP_Quantity(Decimal(value), time.lower() if not nodes.FP_Quantity.timeUnitsToUCUM.get(time) else time)
-                # else: unquoted non-time-keyword units (e.g. 'wk', 'mg')
-                # are not valid per FHIRPath §2.6.4; only UCUM-quoted units
-                # (within single quotes in the string) or FHIRPath time
-                # keywords are accepted.
+                elif nodes.FP_Quantity.timeUnitsToUCUM.get(time) and len(time) > 2:
+                    result = nodes.FP_Quantity(Decimal(value), time)
+                elif nodes.FP_Quantity.timeUnitsToUCUM.get(time.lower()) and len(time) > 2:
+                    result = nodes.FP_Quantity(Decimal(value), time.lower())
+                elif time and time.lower() not in {
+                    unit.strip("'") for unit in nodes.FP_Quantity.mapUCUMCodeToTimeUnits
+                } and not (
+                    nodes.FP_Quantity.timeUnitsToUCUM.get(time)
+                    or nodes.FP_Quantity.timeUnitsToUCUM.get(time.lower())
+                ):
+                    result = nodes.FP_Quantity(Decimal(value), f"'{time}'")
 
         if result and to_unit and result.unit != to_unit:
             converted = nodes.FP_Quantity.conv_unit_to(result.unit, result.value, to_unit)
@@ -126,12 +131,14 @@ def to_decimal(ctx, coll):
     value = util.get_data(coll[0])
 
     if value is False:
-        return Decimal(0)
+        return Decimal("0.0")
 
     if value is True:
-        return Decimal(1.0)
+        return Decimal("1.0")
 
     if util.is_number(value):
+        if isinstance(value, int) and not isinstance(value, bool):
+            return Decimal(value)
         return Decimal(value)
 
     if isinstance(value, str):
@@ -146,6 +153,9 @@ def to_string(ctx, coll):
         return []
 
     value = util.get_data(coll[0])
+
+    if isinstance(value, (dict, list)):
+        return []
 
     # Handle boolean values - FHIRPath uses lowercase 'true'/'false'
     if isinstance(value, bool):
@@ -217,6 +227,16 @@ def to_date(ctx, coll):
 
         if dateObject:
             rtn.append(dateObject)
+        else:
+            dateTimeObject = nodes.FP_DateTime(value)
+            if dateTimeObject:
+                date_str = str(dateTimeObject)
+                tpos = date_str.find("T")
+                if tpos != -1:
+                    date_str = date_str[:tpos]
+                dateObject = nodes.FP_Date(date_str)
+                if dateObject:
+                    rtn.append(dateObject)
 
     return util.get_data(rtn[0]) if rtn else []
 

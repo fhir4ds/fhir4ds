@@ -220,6 +220,22 @@ class TestSelectParsing:
         assert len(vd.select[0].where) == 1
         assert vd.select[0].where[0]["path"] == "active = true"
 
+    def test_select_with_string_where(self):
+        """Test parsing select where clause from a convenience string."""
+        vd = parse_view_definition('''
+        {
+            "resource": "Patient",
+            "select": [{
+                "column": [
+                    {"path": "id", "name": "patient_id"}
+                ],
+                "where": "active = true"
+            }]
+        }
+        ''')
+
+        assert vd.select[0].where == [{"path": "active = true"}]
+
 
 class TestConstantParsing:
     """Tests for Constant parsing."""
@@ -502,6 +518,22 @@ class TestViewDefinitionParsing:
 
         assert len(vd.where) == 1
         assert vd.where[0]["path"] == "active = true"
+
+    def test_view_definition_with_string_where(self):
+        """Test parsing top-level where from a convenience string."""
+        vd = parse_view_definition('''
+        {
+            "resource": "Patient",
+            "where": "active = true",
+            "select": [{
+                "column": [
+                    {"path": "id", "name": "patient_id"}
+                ]
+            }]
+        }
+        ''')
+
+        assert vd.where == [{"path": "active = true"}]
 
     def test_invalid_json_raises_error(self):
         """Test that invalid JSON raises ParseError."""

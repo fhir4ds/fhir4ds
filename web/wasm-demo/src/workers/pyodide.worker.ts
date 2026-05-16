@@ -10,7 +10,7 @@
 
 declare const self: DedicatedWorkerGlobalScope;
 // Injected at build/dev time by vite.config.ts via `define`.
-// Resolves to the actual wheel filename (e.g. "fhir4ds_v2-0.0.4-py3-none-any.whl").
+// Resolves to the actual wheel filename (e.g. "fhir4ds_v2-0.0.5-py3-none-any.whl").
 declare const __FHIR4DS_WHEEL_NAME__: string;
 
 interface WorkerMessage {
@@ -192,4 +192,3 @@ function removeListExtractFhirpathWrappers(sql: string): string {
   }
   return result;
 }
-

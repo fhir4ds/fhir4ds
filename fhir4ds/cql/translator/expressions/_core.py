@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import re as _re
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from ...parser.ast_nodes import (
@@ -93,16 +94,22 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+@lru_cache(maxsize=None)
+def _camel_to_snake_cached(name: str) -> str:
+    """Convert CamelCase to snake_case."""
+    result = []
+    for i, char in enumerate(name):
+        if char.isupper() and i > 0:
+            result.append("_")
+        result.append(char.lower())
+    return "".join(result)
+
+
 class CoreMixin:
     """Mixin providing literal, identifier, and basic conversion translations."""
     def _camel_to_snake(self, name: str) -> str:
         """Convert CamelCase to snake_case."""
-        result = []
-        for i, char in enumerate(name):
-            if char.isupper() and i > 0:
-                result.append("_")
-            result.append(char.lower())
-        return "".join(result)
+        return _camel_to_snake_cached(name)
 
     def _translate_literal(self, lit: Literal, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL literal to SQL."""
@@ -256,6 +263,52 @@ class CoreMixin:
         system_url = self.context.codesystems.get(cs.system, cs.system)
         return SQLLiteral(value=f"{system_url}|{cs.code}")
 
+    def _build_promoted_definition_lookup(self, name: str, usage: ExprUsage) -> SQLExpression:
+        """Build a correlated subquery lookup for a promoted global definition.
+        
+        Ensures that definitions are translated once as CTEs and referenced via 
+        lightweight lookups rather than inline expansion.
+        """
+        meta = self.context.definition_meta.get(name)
+        _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
+
+        # 1. BOOLEAN/EXISTS context: return EXISTS (...)
+        # Only use EXISTS if the CTE actually drops rows when false/empty.
+        # Boolean definitions (no resource, Boolean type) and Collection definitions drop rows.
+        # Scalar definitions (e.g. First(), Last()) always return 1 row per patient with NULL resource.
+        is_scalar = meta is None or meta.is_scalar
+        if usage in (ExprUsage.BOOLEAN, ExprUsage.EXISTS) and not is_scalar:
+            return self._build_correlated_exists(name)
+
+        # 2. LIST/SCALAR context: return (SELECT col FROM "CTE" WHERE patient_id = ...)
+        # Narrow to the appropriate column
+        if meta and meta.has_resource:
+            col = "resource"
+        elif meta and not meta.has_resource and meta.cql_type != "Boolean":
+            col = meta.value_column or "value"
+        else:
+            col = self._get_definition_value_column(name)
+
+        select = SQLSelect(
+            columns=[SQLQualifiedIdentifier(parts=["sub", col])],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name=name, quoted=True),
+                alias="sub",
+            ),
+            where=SQLBinaryOp(
+                operator="=",
+                left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=[_outer_pid_alias, "patient_id"]),
+            )
+        )
+        
+        # If scalar context OR scalar definition, add LIMIT 1
+        if usage == ExprUsage.SCALAR or is_scalar:
+            select.limit = 1
+
+        res = SQLSubquery(query=select)
+        return res
+
     def _translate_identifier(self, ident: Identifier, usage: ExprUsage = ExprUsage.LIST) -> SQLExpression:
         """Translate a CQL identifier to SQL.
 
@@ -273,6 +326,11 @@ class CoreMixin:
 
         name = ident.name
 
+        # Check if this definition is promoted to a global CTE for deduplication.
+        # If so, we MUST return a subquery lookup instead of the full AST
+        # to prevent combinatorial explosion.
+        if name in self.context.promoted_definitions:
+            return self._build_promoted_definition_lookup(name, usage)
 
         # Check if this is a known alias with a stored SQL expression
         if self.context.is_alias(name):
@@ -960,3 +1018,55 @@ class CoreMixin:
 
         # Default: qualified identifier
         return SQLQualifiedIdentifier(parts=parts)
+
+    def _translate_promoted_function_ref(self, expr, boolean_context: bool = False) -> SQLExpression:
+        """Translate a PromotedFunctionRef to a CTE lookup.
+
+        The inliner has decided this function call should use a pre-computed
+        CTE instead of inline expansion. Generate a correlated subquery lookup.
+        """
+        from ...translator.function_inliner import PromotedFunctionRef
+
+        func_name = expr.func_name
+        source_expr = expr.source_expr
+
+        # Strip library prefix for CTE name matching
+        bare_name = func_name.rsplit(".", 1)[-1] if "." in func_name else func_name
+
+        # Determine the source CTE name from the source_expr or current context
+        cql_def_name = None
+        if isinstance(source_expr, Identifier):
+            sym = self.context.lookup_symbol(source_expr.name)
+            if sym and sym.cte_name:
+                cql_def_name = sym.cte_name
+
+        # Fallback: use current resource_alias
+        if not cql_def_name:
+            resource_alias = self.context.resource_alias
+            if resource_alias:
+                sym = self.context.lookup_symbol(resource_alias)
+                if sym and sym.cte_name:
+                    cql_def_name = sym.cte_name
+
+        if not cql_def_name:
+            # Can't determine source — fall back to function call
+            source_sql = self.translate(source_expr, boolean_context=False) if source_expr else SQLNull()
+            return SQLFunctionCall(name=bare_name, args=[source_sql])
+
+        # Check for exact match in _promoted_cte_keys
+        key = (bare_name, cql_def_name)
+        if key not in self.context._promoted_cte_keys:
+            # No matching CTE — fall back to function call
+            source_sql = self.translate(source_expr, boolean_context=False) if source_expr else SQLNull()
+            return SQLFunctionCall(name=bare_name, args=[source_sql])
+
+        # Generate deterministic CTE name (must match _build_function_promotion_cte)
+        from ...translator.cte_manager import generate_function_cte_name
+        fn_cte_name = generate_function_cte_name(bare_name, cql_def_name)
+        source_alias = (
+            source_expr.name
+            if isinstance(source_expr, Identifier)
+            else self.context.resource_alias or "E"
+        )
+
+        return self._make_function_cte_lookup(fn_cte_name, source_alias)

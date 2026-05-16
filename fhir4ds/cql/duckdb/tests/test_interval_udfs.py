@@ -80,6 +80,18 @@ def test_interval_start_invalid_json():
     assert intervalStart("not json") is None
 
 
+def test_interval_start_fhir_period_keys_default_closed():
+    """Test getting start from FHIR Period-style interval JSON."""
+    interval = '{"start": "2024-01-01", "end": "2024-12-31"}'
+    assert intervalStart(interval) == "2024-01-01"
+
+
+def test_interval_start_open_bound_falls_back():
+    """Test explicit open bounds preserve existing interval parsing behavior."""
+    interval = '{"low": "2024-01-01", "high": "2024-12-31", "lowClosed": false, "highClosed": true}'
+    assert intervalStart(interval) == "2024-01-01"
+
+
 # ========================================
 # intervalEnd tests
 # ========================================
@@ -104,6 +116,18 @@ def test_interval_end_null():
 def test_interval_end_empty_string():
     """Test interval end with empty string."""
     assert intervalEnd("") is None
+
+
+def test_interval_end_fhir_period_keys_default_closed():
+    """Test getting end from FHIR Period-style interval JSON."""
+    interval = '{"start": "2024-01-01", "end": "2024-12-31"}'
+    assert intervalEnd(interval) == "2024-12-31"
+
+
+def test_interval_end_open_bound_falls_back():
+    """Test explicit open bounds preserve existing interval parsing behavior."""
+    interval = '{"low": "2024-01-01", "high": "2024-12-31", "lowClosed": true, "highClosed": false}'
+    assert intervalEnd(interval) == "2024-12-31"
 
 
 # ========================================

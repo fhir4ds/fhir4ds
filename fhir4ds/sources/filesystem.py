@@ -170,6 +170,78 @@ class FileSystemSource:
         else:
             raise ValueError(f"Unsupported format: {self._format}")
 
+    def _scan_column_names(self, con: Any, scan_expr: str) -> set[str]:
+        """Return the columns exposed by a DuckDB scan expression."""
+        rows = con.execute(f"DESCRIBE SELECT * FROM {scan_expr}").fetchall()
+        return {row[0] for row in rows}
+
+    def _raw_fhir_patient_ref_sql(self, resource_expr: str) -> str:
+        """Build SQL that derives patient_ref from a raw FHIR resource JSON."""
+        reference_expr = (
+            f"COALESCE("
+            f"json_extract_string({resource_expr}, '$.subject.reference'), "
+            f"json_extract_string({resource_expr}, '$.patient.reference'), "
+            f"json_extract_string({resource_expr}, '$.beneficiary.reference')"
+            f")"
+        )
+        normalized_ref = (
+            f"regexp_replace("
+            f"regexp_replace({reference_expr}, '^urn:uuid:', ''), "
+            f"'^.*/', ''"
+            f")"
+        )
+        return (
+            f"CASE "
+            f"WHEN src.resourceType = 'Patient' THEN src.id::VARCHAR "
+            f"ELSE {normalized_ref} "
+            f"END"
+        )
+
+    def _resources_view_sql(self, con: Any, scan_expr: str) -> str:
+        """Build the CREATE VIEW statement for the configured file source."""
+        columns = self._scan_column_names(con, scan_expr)
+        has_resources_schema = {
+            "id",
+            "resourceType",
+            "resource",
+            "patient_ref",
+        }.issubset(columns)
+
+        if has_resources_schema:
+            # Qualify source columns with src.* so a missing input column cannot
+            # be confused with a SELECT-list alias of the same name.
+            return f"""
+                CREATE OR REPLACE VIEW resources AS
+                SELECT
+                    src.id::VARCHAR           AS id,
+                    src.resourceType::VARCHAR AS resourceType,
+                    src.resource::JSON        AS resource,
+                    src.patient_ref::VARCHAR  AS patient_ref
+                FROM {scan_expr} AS src
+            """
+
+        if self._format in ("ndjson", "json") and {"id", "resourceType"}.issubset(columns):
+            resource_expr = "to_json(src)"
+            return f"""
+                CREATE OR REPLACE VIEW resources AS
+                SELECT
+                    src.id::VARCHAR           AS id,
+                    src.resourceType::VARCHAR AS resourceType,
+                    {resource_expr}::JSON     AS resource,
+                    {self._raw_fhir_patient_ref_sql(resource_expr)}::VARCHAR AS patient_ref
+                FROM {scan_expr} AS src
+            """
+
+        return f"""
+            CREATE OR REPLACE VIEW resources AS
+            SELECT
+                src.id::VARCHAR           AS id,
+                src.resourceType::VARCHAR AS resourceType,
+                src.resource::JSON        AS resource,
+                src.patient_ref::VARCHAR  AS patient_ref
+            FROM {scan_expr} AS src
+        """
+
     # ------------------------------------------------------------------
     # SourceAdapter interface
     # ------------------------------------------------------------------
@@ -196,15 +268,7 @@ class FileSystemSource:
         try:
             # Explicit casts ensure portable JSON type regardless of whether
             # the source is Parquet, NDJSON (STRUCT), or already-typed JSON.
-            con.execute(f"""
-                CREATE OR REPLACE VIEW resources AS
-                SELECT
-                    id::VARCHAR          AS id,
-                    resourceType::VARCHAR AS resourceType,
-                    resource::JSON        AS resource,
-                    patient_ref::VARCHAR  AS patient_ref
-                FROM {scan_expr}
-            """)
+            con.execute(self._resources_view_sql(con, scan_expr))
         except Exception as exc:
             raise SchemaValidationError(
                 f"{self.__class__.__name__} failed to create the 'resources' view: {exc}"

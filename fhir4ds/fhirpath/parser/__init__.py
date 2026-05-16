@@ -31,14 +31,39 @@ def _check_syntax_strict(expression: str) -> None:
             )
 
 
+class _FHIRPathErrorListener(ErrorListener):
+    def __init__(self, expression: str) -> None:
+        super().__init__()
+        self.expression = expression
+
+    def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
+        token = getattr(offendingSymbol, "text", None)
+        raise FHIRPathSyntaxError(
+            msg or "Invalid FHIRPath syntax",
+            expression=self.expression,
+            position=column,
+            token=token,
+        )
+
+
 def parse(value, strict_mode=False):
+    if not isinstance(value, str):
+        raise FHIRPathSyntaxError(
+            f"FHIRPath expression must be a string, got {type(value).__name__}"
+        )
+    if not value.strip():
+        raise FHIRPathSyntaxError(
+            "FHIRPath expression must be a non-empty string",
+            expression=value,
+            position=0,
+        )
     if strict_mode:
         _check_syntax_strict(value)
 
     textStream = InputStream(value)
 
     astPathListener = ASTPathListener()
-    errorListener = ErrorListener()
+    errorListener = _FHIRPathErrorListener(value)
 
     lexer = FHIRPathLexer(textStream)
     lexer.recover = recover
@@ -51,6 +76,13 @@ def parse(value, strict_mode=False):
     parser.addErrorListener(errorListener)
 
     walker = ParseTreeWalker()
-    walker.walk(astPathListener, parser.expression())
-
-    return astPathListener.parentStack[0]
+    try:
+        walker.walk(astPathListener, parser.expression())
+        return astPathListener.parentStack[0]
+    except FHIRPathSyntaxError:
+        raise
+    except (LexerNoViableAltException, IndexError, KeyError) as exc:
+        raise FHIRPathSyntaxError(
+            "Invalid FHIRPath syntax",
+            expression=value,
+        ) from exc

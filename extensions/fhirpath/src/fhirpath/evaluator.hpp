@@ -149,7 +149,7 @@ private:
 	FPCollection fn_toDate(const FPCollection &input);
 	FPCollection fn_toDateTime(const FPCollection &input);
 	FPCollection fn_toBoolean(const FPCollection &input);
-	FPCollection fn_toQuantity(const FPCollection &input);
+	FPCollection fn_toQuantity(const FPCollection &input, const std::string &to_unit = "");
 	FPCollection fn_abs(const FPCollection &input);
 	FPCollection fn_ceiling(const FPCollection &input);
 	FPCollection fn_floor(const FPCollection &input);

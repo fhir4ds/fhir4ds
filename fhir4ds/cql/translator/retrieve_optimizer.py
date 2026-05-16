@@ -9,14 +9,18 @@ This module coordinates the three phases:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
 from .types import (
-    SQLExpression, SQLSelect, SQLFunctionCall, SQLLiteral,
+    SQLExpression, SQLSelect, SQLFunctionCall, SQLLiteral, SQLNamedArg,
     SQLQualifiedIdentifier, SQLIdentifier, SQLAlias, SQLJoin,
-    SQLBinaryOp, SQLUnaryOp, SQLCase, SQLList, SQLArray,
-    SQLUnion, SQLSubquery
+    SQLBinaryOp, SQLUnaryOp, SQLCase, SQLList, SQLArray, SQLLambda,
+    SQLLambda2, SQLStructFieldAccess, SQLInterval, SQLCast, SQLExtract,
+    SQLUnion, SQLIntersect, SQLExcept, SQLSubquery, SQLRaw, SQLExists,
+    SQLRecursiveCTEFold, SQLWindowFunction, SQLEvidenceItem, SQLAuditStruct,
+    CTEDefinition,
 )
 from .column_registry import ColumnRegistry, ColumnInfo
 from .placeholder import RetrievePlaceholder, resolve_placeholders, find_all_placeholders
@@ -227,6 +231,47 @@ def optimize_property_access(
     return _optimize_fhirpath_calls(ast, registry, alias_to_cte)
 
 
+def propagate_resource_column_lineage(
+    ctes: List[CTEDefinition],
+    registry: ColumnRegistry,
+) -> List[CTEDefinition]:
+    """
+    Carry precomputed-column metadata through resource-preserving derived CTEs.
+
+    A derived CTE is safe to register when it selects the same ``resource`` rows
+    from one already-registered CTE. For explicit ``patient_id, resource``
+    projections, the inherited columns are also appended to the projection so
+    downstream references can use them physically. This is generic lineage
+    propagation over CTE shape, not measure/library/profile-specific logic.
+    """
+    propagated: List[CTEDefinition] = []
+
+    for cte in ctes:
+        query = cte.query
+        if cte.columns is not None:
+            propagated.append(cte)
+            continue
+        cte_name = _normalize_cte_name(cte.name)
+        if isinstance(query, SQLSelect):
+            updated_query, inherited = _propagate_select_resource_columns(query, registry)
+        elif isinstance(query, SQLUnion):
+            updated_query, inherited = _propagate_union_resource_columns(query, registry)
+        else:
+            propagated.append(cte)
+            continue
+
+        if inherited:
+            existing = dict(registry.get_columns(cte_name))
+            merged = dict(inherited)
+            merged.update(existing)
+            registry.register_cte(cte_name, merged)
+            propagated.append(CTEDefinition(name=cte.name, query=updated_query, columns=cte.columns))
+        else:
+            propagated.append(cte)
+
+    return propagated
+
+
 def _extract_alias_to_cte_mapping(ast: SQLExpression) -> Dict[str, str]:
     """
     Extract mapping from SQL table aliases to CTE names from the AST.
@@ -308,6 +353,339 @@ def _extract_alias_from_table_ref(
                 alias_map[cte_name] = cte_name
 
 
+def _extend_alias_mapping_for_select(
+    select: SQLSelect,
+    alias_to_cte: Dict[str, str],
+) -> Dict[str, str]:
+    """Return alias mappings with aliases scoped to one SELECT added."""
+    local_aliases = dict(alias_to_cte)
+    if select.from_clause:
+        _extract_alias_from_table_ref(select.from_clause, local_aliases)
+    if select.joins:
+        for join in select.joins:
+            if isinstance(join, SQLJoin):
+                _extract_alias_from_table_ref(join.table, local_aliases, join.alias)
+    return local_aliases
+
+
+def _normalize_cte_name(name: str) -> str:
+    """Return an unquoted CTE identifier suitable for ColumnRegistry lookups."""
+    if len(name) >= 2 and name.startswith('"') and name.endswith('"'):
+        return name[1:-1].replace('""', '"')
+    return name
+
+
+def _table_ref_cte_and_alias(table_ref: SQLExpression) -> Tuple[Optional[str], Optional[str]]:
+    """Extract ``(cte_name, alias)`` from a simple FROM/JOIN table reference."""
+    if isinstance(table_ref, SQLAlias):
+        cte_name, _alias = _table_ref_cte_and_alias(table_ref.expr)
+        return cte_name, table_ref.alias
+
+    if isinstance(table_ref, SQLIdentifier):
+        cte_name = _normalize_cte_name(table_ref.name)
+        return cte_name, cte_name
+
+    if isinstance(table_ref, SQLQualifiedIdentifier) and table_ref.parts:
+        cte_name = _normalize_cte_name(table_ref.parts[-1])
+        return cte_name, cte_name
+
+    if isinstance(table_ref, SQLRaw):
+        raw = table_ref.raw_sql.strip()
+        if len(raw) >= 2 and raw.startswith('"') and raw.endswith('"'):
+            cte_name = _normalize_cte_name(raw)
+            return cte_name, cte_name
+        if raw.replace("_", "").replace(".", "").isalnum():
+            cte_name = raw.split(".")[-1]
+            return cte_name, cte_name
+
+    return None, None
+
+
+def _selected_column_name(col: Any) -> Optional[str]:
+    """Return the output column name for a simple SELECT projection."""
+    if isinstance(col, tuple):
+        _expr, alias = col
+        return alias
+    if isinstance(col, SQLAlias):
+        return col.alias
+    if isinstance(col, SQLIdentifier):
+        return col.name
+    if isinstance(col, SQLQualifiedIdentifier) and col.parts:
+        return col.parts[-1]
+    return None
+
+
+def _select_has_star_for_alias(select: SQLSelect, source_alias: str) -> bool:
+    """Check for SELECT * or SELECT source_alias.*."""
+    if not select.columns:
+        return False
+    for col in select.columns:
+        expr = col[0] if isinstance(col, tuple) else col.expr if isinstance(col, SQLAlias) else col
+        if isinstance(expr, SQLIdentifier) and expr.name == "*":
+            return True
+        if (
+            isinstance(expr, SQLQualifiedIdentifier)
+            and len(expr.parts) == 2
+            and expr.parts[0] == source_alias
+            and expr.parts[1] == "*"
+        ):
+            return True
+    return False
+
+
+def _selects_direct_column(select: SQLSelect, source_alias: str, column_name: str) -> bool:
+    """Return true when SELECT projects source_alias.column_name unchanged."""
+    for col in select.columns:
+        expr = col[0] if isinstance(col, tuple) else col.expr if isinstance(col, SQLAlias) else col
+        output_name = _selected_column_name(col)
+        if output_name != column_name:
+            continue
+        if isinstance(expr, SQLQualifiedIdentifier):
+            if len(expr.parts) == 2 and expr.parts == [source_alias, column_name]:
+                return True
+        elif isinstance(expr, SQLIdentifier):
+            if expr.name == column_name and not select.joins:
+                return True
+    return False
+
+
+def _select_resource_lineage(
+    select: SQLSelect,
+    registry: ColumnRegistry,
+    allow_missing_patient_id: bool = False,
+) -> Tuple[Optional[str], Dict[str, ColumnInfo]]:
+    """Return source alias and inherited columns for a resource-preserving SELECT."""
+    if select.from_clause is None or select.group_by or select.having:
+        return None, {}
+
+    source_cte, source_alias = _table_ref_cte_and_alias(select.from_clause)
+    if not source_cte or not source_alias:
+        return None, {}
+
+    inherited = registry.get_columns(source_cte)
+    if not inherited:
+        return None, {}
+
+    has_single_source = not select.joins
+    has_star = has_single_source and _select_has_star_for_alias(select, source_alias)
+    has_resource = has_star or _selects_direct_column(select, source_alias, "resource")
+    has_patient_id = has_star or _selects_direct_column(select, source_alias, "patient_id")
+    if not has_resource or not (has_patient_id or allow_missing_patient_id):
+        return None, {}
+
+    return source_alias, dict(inherited)
+
+
+def _materialize_select_inherited_columns(
+    select: SQLSelect,
+    source_alias: str,
+    inherited: Dict[str, ColumnInfo],
+    force_explicit: bool = False,
+) -> Tuple[SQLSelect, Dict[str, ColumnInfo]]:
+    """Add inherited columns to a resource-preserving SELECT projection."""
+    if force_explicit:
+        columns: List[SQLExpression] = [
+            SQLQualifiedIdentifier(parts=[source_alias, "patient_id"]),
+            SQLQualifiedIdentifier(parts=[source_alias, "resource"]),
+        ]
+        columns.extend(
+            SQLQualifiedIdentifier(parts=[source_alias, column_name])
+            for column_name in inherited
+        )
+        return (
+            SQLSelect(
+                columns=columns,
+                from_clause=select.from_clause,
+                joins=select.joins,
+                where=select.where,
+                group_by=select.group_by,
+                having=select.having,
+                order_by=select.order_by,
+                limit=select.limit,
+                distinct=select.distinct,
+            ),
+            dict(inherited),
+        )
+
+    has_star = _select_has_star_for_alias(select, source_alias)
+    if has_star:
+        return select, dict(inherited)
+
+    if not inherited:
+        return select, {}
+
+    projected_names = {
+        name
+        for name in (_selected_column_name(col) for col in select.columns)
+        if name is not None
+    }
+    additions: List[SQLExpression] = []
+    inherited_available: Dict[str, ColumnInfo] = {}
+    for column_name, info in inherited.items():
+        if column_name in projected_names:
+            inherited_available[column_name] = info
+            continue
+        additions.append(SQLQualifiedIdentifier(parts=[source_alias, column_name]))
+        inherited_available[column_name] = info
+
+    if not additions:
+        return select, inherited_available
+
+    return (
+        SQLSelect(
+            columns=[*select.columns, *additions],
+            from_clause=select.from_clause,
+            joins=select.joins,
+            where=select.where,
+            group_by=select.group_by,
+            having=select.having,
+            order_by=select.order_by,
+            limit=select.limit,
+            distinct=select.distinct,
+        ),
+        inherited_available,
+    )
+
+
+def _propagate_select_resource_columns(
+    select: SQLSelect,
+    registry: ColumnRegistry,
+) -> Tuple[SQLSelect, Dict[str, ColumnInfo]]:
+    """Infer and materialize inherited precomputed columns for one SQLSelect."""
+    source_alias, inherited = _select_resource_lineage(select, registry)
+    if not source_alias:
+        return select, {}
+    return _materialize_select_inherited_columns(select, source_alias, inherited)
+
+
+def _union_operand_inherited_columns(
+    operand: SQLExpression,
+    registry: ColumnRegistry,
+) -> Dict[str, ColumnInfo]:
+    """Return inherited columns available to one resource-shaped UNION operand."""
+    if isinstance(operand, SQLIdentifier):
+        return dict(registry.get_columns(_normalize_cte_name(operand.name)))
+
+    if isinstance(operand, SQLSubquery):
+        query = operand.query
+        if isinstance(query, SQLIdentifier):
+            return dict(registry.get_columns(_normalize_cte_name(query.name)))
+        if isinstance(query, SQLSelect):
+            _alias, inherited = _select_resource_lineage(
+                query, registry, allow_missing_patient_id=True
+            )
+            return inherited
+        return {}
+
+    if isinstance(operand, SQLSelect):
+        _alias, inherited = _select_resource_lineage(
+            operand, registry, allow_missing_patient_id=True
+        )
+        return inherited
+
+    return {}
+
+
+def _common_union_columns(
+    branch_columns: List[Dict[str, ColumnInfo]],
+) -> Dict[str, ColumnInfo]:
+    """Return column metadata common to every UNION branch."""
+    if not branch_columns:
+        return {}
+
+    common_names = set(branch_columns[0])
+    for columns in branch_columns[1:]:
+        common_names &= set(columns)
+
+    common: Dict[str, ColumnInfo] = {}
+    for column_name, first_info in branch_columns[0].items():
+        if column_name not in common_names:
+            continue
+        if all(
+            columns[column_name].fhirpath == first_info.fhirpath
+            and columns[column_name].sql_type == first_info.sql_type
+            for columns in branch_columns[1:]
+        ):
+            common[column_name] = first_info
+    return common
+
+
+def _materialize_union_operand_columns(
+    operand: SQLExpression,
+    inherited: Dict[str, ColumnInfo],
+) -> SQLExpression:
+    """Rewrite a UNION operand to project patient_id, resource, and common columns."""
+    if isinstance(operand, SQLIdentifier):
+        select = SQLSelect(
+            columns=[
+                SQLIdentifier(name="patient_id"),
+                SQLIdentifier(name="resource"),
+                *[SQLIdentifier(name=column_name) for column_name in inherited],
+            ],
+            from_clause=operand,
+        )
+        return SQLSubquery(query=select)
+
+    if isinstance(operand, SQLSubquery):
+        query = operand.query
+        if isinstance(query, SQLIdentifier):
+            select = SQLSelect(
+                columns=[
+                    SQLIdentifier(name="patient_id"),
+                    SQLIdentifier(name="resource"),
+                    *[SQLIdentifier(name=column_name) for column_name in inherited],
+                ],
+                from_clause=query,
+            )
+            return SQLSubquery(query=select)
+        if isinstance(query, SQLSelect):
+            source_cte, source_alias = _table_ref_cte_and_alias(query.from_clause) if query.from_clause else (None, None)
+            if source_alias:
+                updated, _cols = _materialize_select_inherited_columns(
+                    query, source_alias, inherited, force_explicit=True
+                )
+                return SQLSubquery(query=updated)
+        return operand
+
+    if isinstance(operand, SQLSelect):
+        _source_cte, source_alias = _table_ref_cte_and_alias(operand.from_clause) if operand.from_clause else (None, None)
+        if source_alias:
+            updated, _cols = _materialize_select_inherited_columns(
+                operand, source_alias, inherited, force_explicit=True
+            )
+            return updated
+
+    return operand
+
+
+def _propagate_union_resource_columns(
+    union: SQLUnion,
+    registry: ColumnRegistry,
+) -> Tuple[SQLUnion, Dict[str, ColumnInfo]]:
+    """Propagate common precomputed columns through resource-shaped UNIONs."""
+    branch_columns = [
+        _union_operand_inherited_columns(operand, registry)
+        for operand in union.operands
+    ]
+    if not branch_columns or any(not columns for columns in branch_columns):
+        return union, {}
+
+    common = _common_union_columns(branch_columns)
+    if not common:
+        return union, {}
+
+    return (
+        SQLUnion(
+            operands=[
+                _materialize_union_operand_columns(operand, common)
+                for operand in union.operands
+            ],
+            distinct=union.distinct,
+        ),
+        common,
+    )
+
+
 def _walk_for_from_clauses(node, visitor):
     """
     Walk AST looking for SELECT statements to extract FROM clause info.
@@ -320,6 +698,28 @@ def _walk_for_from_clauses(node, visitor):
     if isinstance(node, SQLFunctionCall):
         for arg in node.args:
             visitor(arg)
+        if node.order_by:
+            for expr, _direction in node.order_by:
+                visitor(expr)
+
+    elif isinstance(node, SQLNamedArg):
+        visitor(node.value)
+
+    elif isinstance(node, SQLStructFieldAccess):
+        visitor(node.expr)
+
+    elif isinstance(node, (SQLLambda, SQLLambda2)):
+        visitor(node.body)
+
+    elif isinstance(node, SQLInterval):
+        visitor(node.low)
+        visitor(node.high)
+
+    elif isinstance(node, SQLCast):
+        visitor(node.expression)
+
+    elif isinstance(node, SQLExtract):
+        visitor(node.source)
 
     elif isinstance(node, SQLSelect):
         # Already handled by visitor, but recurse into columns/where
@@ -335,6 +735,12 @@ def _walk_for_from_clauses(node, visitor):
                 visitor(g)
         if node.having:
             visitor(node.having)
+        if node.joins:
+            for join in node.joins:
+                visitor(join)
+        if node.order_by:
+            for expr, _direction in node.order_by:
+                visitor(expr)
 
     elif isinstance(node, SQLBinaryOp):
         visitor(node.left)
@@ -362,14 +768,145 @@ def _walk_for_from_clauses(node, visitor):
         if node.on_condition:
             visitor(node.on_condition)
 
-    elif isinstance(node, SQLUnion):
-        # Recurse into each operand of the UNION
+    elif isinstance(node, (SQLUnion, SQLIntersect, SQLExcept)):
+        # Recurse into each operand of the set operation
         for operand in node.operands:
             visitor(operand)
 
     elif isinstance(node, SQLSubquery):
         # Recurse into the subquery
         visitor(node.query)
+
+    elif isinstance(node, SQLExists):
+        visitor(node.subquery)
+
+    elif isinstance(node, SQLRecursiveCTEFold):
+        visitor(node.source_expr)
+        visitor(node.anchor)
+        visitor(node.body)
+
+    elif isinstance(node, SQLWindowFunction):
+        for arg in node.function_args:
+            visitor(arg)
+        for expr in node.partition_by:
+            visitor(expr)
+        for expr, _direction in node.order_by:
+            visitor(expr)
+
+    elif isinstance(node, SQLEvidenceItem):
+        visitor(node.target)
+        visitor(node.attribute)
+        visitor(node.value)
+        visitor(node.threshold)
+
+    elif isinstance(node, SQLAuditStruct):
+        visitor(node.result_expr)
+        visitor(node.evidence_expr)
+
+
+_RAW_CTE_ALIAS_RE = re.compile(
+    r'\b(?:FROM|JOIN)\s+"((?:[^"]|"")*)"\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)',
+    re.IGNORECASE,
+)
+_RAW_UNQUOTED_ALIAS_RE = re.compile(
+    r"\b(?:FROM|JOIN)\s+(?!\")([A-Za-z_][A-Za-z0-9_.]*)"
+    r"(?:\s+AS)?\s+([A-Za-z_][A-Za-z0-9_]*)",
+    re.IGNORECASE,
+)
+_RAW_FHIRPATH_RESOURCE_RE = re.compile(
+    r"\b(fhirpath_(?:text|date|number|bool|quantity|timestamp))"
+    r"\(([A-Za-z_][A-Za-z0-9_]*)\.resource,\s*'((?:''|[^'])+)'\)"
+)
+_RAW_ALIAS_STOPWORDS = {
+    "AS", "ON", "WHERE", "GROUP", "ORDER", "HAVING", "LIMIT", "JOIN",
+    "LEFT", "RIGHT", "INNER", "OUTER", "FULL", "CROSS", "UNION",
+}
+
+
+def _merge_raw_alias_mapping(
+    raw_sql: str,
+    alias_to_cte: Dict[str, str],
+    registry: Optional[ColumnRegistry] = None,
+) -> Dict[str, str]:
+    """
+    Extract additional alias mappings from trusted translator-generated SQL text.
+
+    SQLRaw is used for residual template paths that can contain complete
+    subqueries. The normal AST alias scanner cannot see inside those strings,
+    so this recognizes quoted CTE references emitted by this translator. If an
+    alias maps to multiple CTEs in the same raw fragment, it is dropped rather
+    than guessed.
+    """
+    merged = dict(alias_to_cte)
+    conflicts: Set[str] = set()
+
+    for raw_cte_name, alias in _RAW_CTE_ALIAS_RE.findall(raw_sql):
+        cte_name = raw_cte_name.replace('""', '"')
+        existing = merged.get(alias)
+        if existing is not None and existing != cte_name:
+            conflicts.add(alias)
+        else:
+            merged[alias] = cte_name
+
+    for raw_table_name, alias in _RAW_UNQUOTED_ALIAS_RE.findall(raw_sql):
+        if alias.upper() in _RAW_ALIAS_STOPWORDS:
+            continue
+        cte_name = raw_table_name.split(".")[-1]
+        if registry is not None and registry.get_columns(cte_name):
+            existing = merged.get(alias)
+            if existing is not None and existing != cte_name:
+                conflicts.add(alias)
+            else:
+                merged[alias] = cte_name
+        else:
+            conflicts.add(alias)
+
+    for alias in conflicts:
+        merged.pop(alias, None)
+
+    return merged
+
+
+def _optimize_raw_fhirpath_resource_calls(
+    raw_sql: str,
+    registry: ColumnRegistry,
+    alias_to_cte: Dict[str, str],
+) -> str:
+    """
+    Replace direct fhirpath_*(alias.resource, 'path') calls inside SQLRaw.
+
+    This mirrors the AST optimizer for trusted SQLRaw generated by translator
+    templates. It remains conservative: only direct resource extraction is rewritten
+    and only when the column registry has an exact path match for the alias' CTE.
+    """
+    raw_alias_to_cte = _merge_raw_alias_mapping(raw_sql, alias_to_cte, registry)
+
+    def replace(match: re.Match[str]) -> str:
+        alias = match.group(2)
+        path = match.group(3).replace("''", "'")
+        cte_name = raw_alias_to_cte.get(alias, alias)
+        column_name = registry.lookup(cte_name, path)
+        if not column_name:
+            return match.group(0)
+        return f"{alias}.{column_name}"
+
+    return _RAW_FHIRPATH_RESOURCE_RE.sub(replace, raw_sql)
+
+
+def optimize_rendered_property_access(
+    sql_text: str,
+    registry: ColumnRegistry,
+    alias_to_cte: Optional[Dict[str, str]] = None,
+) -> str:
+    """
+    Apply registry-driven property-column optimization to rendered SQL text.
+
+    This is the final boundary for translator constructs that only materialize
+    as SQL text during serialization. It uses the same conservative replacement
+    rules as SQLRaw optimization and is not tied to a measure, library, or FHIR
+    profile.
+    """
+    return _optimize_raw_fhirpath_resource_calls(sql_text, registry, alias_to_cte or {})
 
 
 def _optimize_fhirpath_calls(
@@ -391,6 +928,14 @@ def _optimize_fhirpath_calls(
     if ast is None:
         return ast
 
+    if isinstance(ast, SQLRaw):
+        optimized_sql = _optimize_raw_fhirpath_resource_calls(
+            ast.raw_sql, registry, alias_to_cte
+        )
+        if optimized_sql == ast.raw_sql:
+            return ast
+        return SQLRaw(optimized_sql)
+
     # Check if this is a fhirpath function call we can optimize
     if isinstance(ast, SQLFunctionCall):
         if ast.name in ('fhirpath_text', 'fhirpath_date', 'fhirpath_number',
@@ -404,15 +949,28 @@ def _optimize_fhirpath_calls(
             return SQLFunctionCall(
                 name=ast.name,
                 args=[_optimize_fhirpath_calls(arg, registry, alias_to_cte) for arg in ast.args],
-                distinct=ast.distinct
+                distinct=ast.distinct,
+                order_by=[
+                    (_optimize_fhirpath_calls(expr, registry, alias_to_cte), direction)
+                    for expr, direction in ast.order_by
+                ] if ast.order_by else None,
             )
 
-        # For other function calls, recurse into args
-        return SQLFunctionCall(
+        # For other function calls, recurse into args, then fold temporal
+        # bound extraction to retrieve CTE sibling columns when available.
+        optimized_call = SQLFunctionCall(
             name=ast.name,
             args=[_optimize_fhirpath_calls(arg, registry, alias_to_cte) for arg in ast.args],
-            distinct=ast.distinct
+            distinct=ast.distinct,
+            order_by=[
+                (_optimize_fhirpath_calls(expr, registry, alias_to_cte), direction)
+                for expr, direction in ast.order_by
+            ] if ast.order_by else None,
         )
+        bound_optimized = _try_optimize_interval_bound_call(
+            optimized_call, registry, alias_to_cte
+        )
+        return bound_optimized if bound_optimized is not None else optimized_call
 
     # Recurse into other node types
     return _recurse_ast(ast, registry, alias_to_cte)
@@ -441,6 +999,23 @@ def _try_optimize_fhirpath_call(
     resource_arg = call.args[0]
     path_arg = call.args[1]
 
+    # Extract the FHIRPath string
+    path = None
+    if isinstance(path_arg, SQLLiteral) and isinstance(path_arg.value, str):
+        path = path_arg.value
+
+    if not path:
+        return None
+
+    subquery_optimized = _try_optimize_scalar_subquery_fhirpath_call(
+        resource_arg,
+        path,
+        registry,
+        alias_to_cte,
+    )
+    if subquery_optimized is not None:
+        return subquery_optimized
+
     # Extract the alias from the resource reference
     alias = None
     if isinstance(resource_arg, SQLQualifiedIdentifier) and len(resource_arg.parts) >= 2:
@@ -459,20 +1034,137 @@ def _try_optimize_fhirpath_call(
         # Fall back: maybe the alias IS the CTE name
         cte_name = alias
 
-    # Extract the FHIRPath string
-    path = None
-    if isinstance(path_arg, SQLLiteral) and isinstance(path_arg.value, str):
-        path = path_arg.value
-
-    if not path:
-        return None
-
     # Look up the column in the registry
     column_name = registry.lookup(cte_name, path)
     if column_name:
         # Found a precomputed column - return a reference to it
         return SQLQualifiedIdentifier(parts=[alias, column_name])
 
+    return None
+
+
+def _single_selected_resource_alias(select: SQLSelect) -> Optional[str]:
+    """Return the source alias when a scalar subquery selects only resource."""
+    if len(select.columns) != 1:
+        return None
+
+    col = select.columns[0]
+    expr = col[0] if isinstance(col, tuple) else col.expr if isinstance(col, SQLAlias) else col
+    if (
+        isinstance(expr, SQLQualifiedIdentifier)
+        and len(expr.parts) == 2
+        and expr.parts[1] == "resource"
+    ):
+        return expr.parts[0]
+    if isinstance(expr, SQLIdentifier) and expr.name == "resource":
+        return ""
+    return None
+
+
+def _replace_select_columns(select: SQLSelect, columns: List[SQLExpression]) -> SQLSelect:
+    """Return a copy of select with a different projection."""
+    return SQLSelect(
+        columns=columns,
+        from_clause=select.from_clause,
+        joins=select.joins,
+        where=select.where,
+        group_by=select.group_by,
+        having=select.having,
+        order_by=select.order_by,
+        limit=select.limit,
+        distinct=select.distinct,
+    )
+
+
+def _try_optimize_scalar_subquery_fhirpath_call(
+    resource_arg: SQLExpression,
+    path: str,
+    registry: ColumnRegistry,
+    alias_to_cte: Dict[str, str],
+) -> Optional[SQLExpression]:
+    """Replace fhirpath_*((SELECT alias.resource FROM CTE alias ...), path)."""
+    if not isinstance(resource_arg, SQLSubquery) or not isinstance(resource_arg.query, SQLSelect):
+        return None
+
+    select = resource_arg.query
+    if not select.from_clause:
+        return None
+
+    source_cte, source_alias = _table_ref_cte_and_alias(select.from_clause)
+    if not source_cte or not source_alias:
+        return None
+
+    selected_alias = _single_selected_resource_alias(select)
+    if selected_alias is None:
+        return None
+    if selected_alias and selected_alias != source_alias:
+        return None
+
+    column_name = registry.lookup(source_cte, path)
+    if not column_name:
+        return None
+
+    projected = SQLSubquery(
+        query=_replace_select_columns(
+            select,
+            [SQLQualifiedIdentifier(parts=[source_alias, column_name])],
+        )
+    )
+    return _optimize_fhirpath_calls(projected, registry, alias_to_cte)
+
+
+def _single_selected_column(select: SQLSelect) -> Optional[Tuple[str, str, str]]:
+    """Return (source_cte, source_alias, column_name) for a simple scalar column subquery."""
+    if not select.from_clause:
+        return None
+    source_cte, source_alias = _table_ref_cte_and_alias(select.from_clause)
+    if not source_cte or not source_alias or len(select.columns) != 1:
+        return None
+
+    col = select.columns[0]
+    expr = col[0] if isinstance(col, tuple) else col.expr if isinstance(col, SQLAlias) else col
+    if isinstance(expr, SQLQualifiedIdentifier):
+        if len(expr.parts) == 2 and expr.parts[0] == source_alias:
+            return source_cte, source_alias, expr.parts[1]
+    elif isinstance(expr, SQLIdentifier):
+        return source_cte, source_alias, expr.name
+    return None
+
+
+def _try_optimize_interval_bound_call(
+    call: SQLFunctionCall,
+    registry: ColumnRegistry,
+    alias_to_cte: Dict[str, str],
+) -> Optional[SQLExpression]:
+    """Replace intervalStart/intervalEnd(alias.col) with precomputed bounds."""
+    if call.name not in ("intervalStart", "intervalEnd") or len(call.args) != 1:
+        return None
+    arg = call.args[0]
+    suffix = "start" if call.name == "intervalStart" else "end"
+
+    if isinstance(arg, SQLSubquery) and isinstance(arg.query, SQLSelect):
+        selected = _single_selected_column(arg.query)
+        if selected is None:
+            return None
+        cte_name, alias, column_name = selected
+        bound_col_name = f"{column_name}_{suffix}"
+        if registry.has_column(cte_name, bound_col_name):
+            return SQLSubquery(
+                query=_replace_select_columns(
+                    arg.query,
+                    [SQLQualifiedIdentifier(parts=[alias, bound_col_name])],
+                )
+            )
+        return None
+
+    if not isinstance(arg, SQLQualifiedIdentifier) or len(arg.parts) < 2:
+        return None
+    alias = arg.parts[-2]
+    column_name = arg.parts[-1]
+    cte_name = alias_to_cte.get(alias, alias)
+    bound_col_name = f"{column_name}_{suffix}"
+    if registry.has_column(cte_name, bound_col_name):
+        return SQLQualifiedIdentifier(parts=[alias, bound_col_name])
     return None
 
 
@@ -487,15 +1179,16 @@ def _recurse_ast(
     This mirrors the structure in placeholder.py's resolve_placeholders.
     """
     if isinstance(ast, SQLSelect):
+        select_alias_to_cte = _extend_alias_mapping_for_select(ast, alias_to_cte)
         resolved_columns = []
         for col in ast.columns:
             if isinstance(col, tuple):
                 resolved_columns.append((
-                    _optimize_fhirpath_calls(col[0], registry, alias_to_cte),
+                    _optimize_fhirpath_calls(col[0], registry, select_alias_to_cte),
                     col[1]
                 ))
             else:
-                resolved_columns.append(_optimize_fhirpath_calls(col, registry, alias_to_cte))
+                resolved_columns.append(_optimize_fhirpath_calls(col, registry, select_alias_to_cte))
 
         resolved_joins = None
         if ast.joins:
@@ -504,21 +1197,24 @@ def _recurse_ast(
                 if isinstance(join, SQLJoin):
                     resolved_joins.append(SQLJoin(
                         join_type=join.join_type,
-                        table=_optimize_fhirpath_calls(join.table, registry, alias_to_cte),
+                        table=_optimize_fhirpath_calls(join.table, registry, select_alias_to_cte),
                         alias=join.alias,
-                        on_condition=_optimize_fhirpath_calls(join.on_condition, registry, alias_to_cte) if join.on_condition else None
+                        on_condition=_optimize_fhirpath_calls(join.on_condition, registry, select_alias_to_cte) if join.on_condition else None
                     ))
                 else:
                     resolved_joins.append(join)
 
         return SQLSelect(
             columns=resolved_columns,
-            from_clause=_optimize_fhirpath_calls(ast.from_clause, registry, alias_to_cte) if ast.from_clause else None,
+            from_clause=_optimize_fhirpath_calls(ast.from_clause, registry, select_alias_to_cte) if ast.from_clause else None,
             joins=resolved_joins,
-            where=_optimize_fhirpath_calls(ast.where, registry, alias_to_cte) if ast.where else None,
-            group_by=[_optimize_fhirpath_calls(g, registry, alias_to_cte) for g in ast.group_by] if ast.group_by else None,
-            having=_optimize_fhirpath_calls(ast.having, registry, alias_to_cte) if ast.having else None,
-            order_by=ast.order_by,
+            where=_optimize_fhirpath_calls(ast.where, registry, select_alias_to_cte) if ast.where else None,
+            group_by=[_optimize_fhirpath_calls(g, registry, select_alias_to_cte) for g in ast.group_by] if ast.group_by else None,
+            having=_optimize_fhirpath_calls(ast.having, registry, select_alias_to_cte) if ast.having else None,
+            order_by=[
+                (_optimize_fhirpath_calls(expr, registry, select_alias_to_cte), direction)
+                for expr, direction in ast.order_by
+            ] if ast.order_by else None,
             distinct=ast.distinct,
             limit=ast.limit
         )
@@ -554,14 +1250,82 @@ def _recurse_ast(
             items=[_optimize_fhirpath_calls(item, registry, alias_to_cte) for item in ast.items]
         )
 
+    elif isinstance(ast, SQLArray):
+        return SQLArray(
+            elements=[_optimize_fhirpath_calls(item, registry, alias_to_cte) for item in ast.elements]
+        )
+
+    elif isinstance(ast, SQLNamedArg):
+        return SQLNamedArg(
+            name=ast.name,
+            value=_optimize_fhirpath_calls(ast.value, registry, alias_to_cte),
+        )
+
+    elif isinstance(ast, SQLStructFieldAccess):
+        return SQLStructFieldAccess(
+            expr=_optimize_fhirpath_calls(ast.expr, registry, alias_to_cte),
+            field_name=ast.field_name,
+        )
+
+    elif isinstance(ast, SQLLambda):
+        return SQLLambda(
+            param=ast.param,
+            body=_optimize_fhirpath_calls(ast.body, registry, alias_to_cte),
+        )
+
+    elif isinstance(ast, SQLLambda2):
+        return SQLLambda2(
+            params=ast.params,
+            body=_optimize_fhirpath_calls(ast.body, registry, alias_to_cte),
+        )
+
+    elif isinstance(ast, SQLInterval):
+        return SQLInterval(
+            low=_optimize_fhirpath_calls(ast.low, registry, alias_to_cte) if ast.low else None,
+            high=_optimize_fhirpath_calls(ast.high, registry, alias_to_cte) if ast.high else None,
+            low_closed=ast.low_closed,
+            high_closed=ast.high_closed,
+        )
+
+    elif isinstance(ast, SQLCast):
+        return SQLCast(
+            expression=_optimize_fhirpath_calls(ast.expression, registry, alias_to_cte),
+            target_type=ast.target_type,
+            try_cast=ast.try_cast,
+        )
+
+    elif isinstance(ast, SQLExtract):
+        return SQLExtract(
+            extract_field=ast.extract_field,
+            source=_optimize_fhirpath_calls(ast.source, registry, alias_to_cte),
+        )
+
     elif isinstance(ast, SQLAlias):
         return SQLAlias(
             expr=_optimize_fhirpath_calls(ast.expr, registry, alias_to_cte),
-            alias=ast.alias
+            alias=ast.alias,
+            implicit_alias=ast.implicit_alias,
         )
 
     elif isinstance(ast, SQLUnion):
         return SQLUnion(
+            operands=[
+                _optimize_fhirpath_calls(operand, registry, alias_to_cte)
+                for operand in ast.operands
+            ],
+            distinct=ast.distinct,
+        )
+
+    elif isinstance(ast, SQLIntersect):
+        return SQLIntersect(
+            operands=[
+                _optimize_fhirpath_calls(operand, registry, alias_to_cte)
+                for operand in ast.operands
+            ]
+        )
+
+    elif isinstance(ast, SQLExcept):
+        return SQLExcept(
             operands=[
                 _optimize_fhirpath_calls(operand, registry, alias_to_cte)
                 for operand in ast.operands
@@ -571,6 +1335,55 @@ def _recurse_ast(
     elif isinstance(ast, SQLSubquery):
         return SQLSubquery(
             query=_optimize_fhirpath_calls(ast.query, registry, alias_to_cte)
+        )
+
+    elif isinstance(ast, SQLExists):
+        return SQLExists(
+            subquery=_optimize_fhirpath_calls(ast.subquery, registry, alias_to_cte)
+        )
+
+    elif isinstance(ast, SQLRecursiveCTEFold):
+        return SQLRecursiveCTEFold(
+            source_expr=_optimize_fhirpath_calls(ast.source_expr, registry, alias_to_cte),
+            source_alias=ast.source_alias,
+            anchor=_optimize_fhirpath_calls(ast.anchor, registry, alias_to_cte),
+            body=_optimize_fhirpath_calls(ast.body, registry, alias_to_cte),
+            distinct=ast.distinct,
+            accum_alias=ast.accum_alias,
+        )
+
+    elif isinstance(ast, SQLWindowFunction):
+        return SQLWindowFunction(
+            function=ast.function,
+            function_args=[
+                _optimize_fhirpath_calls(arg, registry, alias_to_cte)
+                for arg in ast.function_args
+            ],
+            partition_by=[
+                _optimize_fhirpath_calls(expr, registry, alias_to_cte)
+                for expr in ast.partition_by
+            ],
+            order_by=[
+                (_optimize_fhirpath_calls(expr, registry, alias_to_cte), direction)
+                for expr, direction in ast.order_by
+            ],
+            frame_clause=ast.frame_clause,
+        )
+
+    elif isinstance(ast, SQLEvidenceItem):
+        return SQLEvidenceItem(
+            target=_optimize_fhirpath_calls(ast.target, registry, alias_to_cte),
+            attribute=_optimize_fhirpath_calls(ast.attribute, registry, alias_to_cte),
+            value=_optimize_fhirpath_calls(ast.value, registry, alias_to_cte),
+            operator_str=ast.operator_str,
+            threshold=_optimize_fhirpath_calls(ast.threshold, registry, alias_to_cte),
+            trace=ast.trace,
+        )
+
+    elif isinstance(ast, SQLAuditStruct):
+        return SQLAuditStruct(
+            result_expr=_optimize_fhirpath_calls(ast.result_expr, registry, alias_to_cte),
+            evidence_expr=_optimize_fhirpath_calls(ast.evidence_expr, registry, alias_to_cte),
         )
 
     # For other types (literals, identifiers, etc.), return as-is
@@ -679,6 +1492,12 @@ def run_optimization_phases(
         phase1_result.placeholders.extend(placeholders)
         stats.num_retrieves += len(placeholders)
 
+        # Also scan let-variable CTE bodies produced by this definition
+        for let_cte_body in context._let_variable_ctes.get(statement.name, {}).values():
+            let_placeholders = find_all_placeholders(let_cte_body)
+            phase1_result.placeholders.extend(let_placeholders)
+            stats.num_retrieves += len(let_placeholders)
+
         # Scan for property accesses
         property_map = scan_definition_for_properties(sql_ast, placeholders)
 
@@ -691,6 +1510,13 @@ def run_optimization_phases(
         # Scan for AgeInYearsAt/AgeInMonthsAt/AgeInDaysAt usage
         if _contains_age_at_function(sql_ast):
             phase1_result.needs_patient_demographics = True
+
+    # Scan function promotion CTE bodies for placeholders (done once, not per-definition)
+    for fn_ctes in context._function_promotion_ctes.values():
+        for fn_cte_body in fn_ctes.values():
+            fn_placeholders = find_all_placeholders(fn_cte_body)
+            phase1_result.placeholders.extend(fn_placeholders)
+            stats.num_retrieves += len(fn_placeholders)
 
     # ========================================================================
     # PHASE 2: Build CTEs
@@ -789,7 +1615,17 @@ def run_optimization_phases(
 
         resolved_asts[def_name] = optimized_ast
 
-        # Count resolved placeholders
+        # Also resolve placeholders in let-variable CTE bodies for this definition
+        let_ctes = context._let_variable_ctes.get(def_name, {})
+        for let_cte_name, let_cte_body in list(let_ctes.items()):
+            resolved_body = resolve_placeholders(let_cte_body, phase2_result.cte_name_map)
+            optimized_body = optimize_property_access(
+                resolved_body,
+                phase2_result.column_registry
+            )
+            context._let_variable_ctes[def_name][let_cte_name] = optimized_body
+
+        # Count resolved placeholders (definition + let-variable CTEs)
         placeholders_in_def = find_all_placeholders(ast)
         stats.num_placeholders_resolved += len(placeholders_in_def)
 
@@ -798,6 +1634,16 @@ def run_optimization_phases(
         stats.num_fhirpath_calls_optimized += _count_optimized_fhirpath_calls(
             resolved_ast, optimized_ast
         )
+
+    # Resolve placeholders in function promotion CTE bodies
+    for fn_key, fn_ctes in context._function_promotion_ctes.items():
+        for fn_cte_name, fn_cte_body in list(fn_ctes.items()):
+            resolved_body = resolve_placeholders(fn_cte_body, phase2_result.cte_name_map)
+            optimized_body = optimize_property_access(
+                resolved_body,
+                phase2_result.column_registry
+            )
+            context._function_promotion_ctes[fn_key][fn_cte_name] = optimized_body
 
     return resolved_asts, phase1_result, phase2_result, stats
 

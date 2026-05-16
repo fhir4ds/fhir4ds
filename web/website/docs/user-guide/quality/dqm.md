@@ -21,7 +21,7 @@ Evaluating quality measures with FHIR4DS typically follows a four-step process t
 
 ## 2. Evaluating CMS Bundles
 
-FHIR4DS is designed to work out-of-the-box with official CMS eCQM bundles. It supports the **QI-Core 2025** profile with near-perfect accuracy.
+FHIR4DS is designed to work out-of-the-box with official CMS eCQM bundles. It supports the **QI-Core 2025** profile with 100% accuracy across the 47-measure benchmark suite.
 
 ```python
 import fhir4ds

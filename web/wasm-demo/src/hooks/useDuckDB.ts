@@ -1,33 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { QueryResult } from "../components/ResultsTable";
-import { getAssetBase } from "../lib/asset-base";
+import { clearStaleDuckDBStorage, createDuckDBConnection } from "../lib/duckdb-wasm";
 
-// Vite resolves these ?url imports to same-origin localhost paths, which lets
-// DuckDB's internal Emscripten XHR requests resolve file URLs correctly.
-// Using CDN blob-worker URLs caused "Invalid URL" errors in dlopen.
-import duckdbWorkerUrl from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
-import duckdbWasmUrl from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url";
-
-/** Clear stale DuckDB IndexedDB entries that can cause FILE_ERROR_NO_SPACE. */
-async function clearStaleDuckDBStorage(): Promise<void> {
-  try {
-    if (typeof indexedDB !== "undefined" && typeof indexedDB.databases === "function") {
-      const dbs = await indexedDB.databases();
-      for (const entry of dbs) {
-        if (entry.name) {
-          await new Promise<void>((res) => {
-            const req = indexedDB.deleteDatabase(entry.name!);
-            req.onsuccess = req.onerror = () => res();
-          });
-        }
-      }
-    }
-  } catch {
-    // Not all browsers support indexedDB.databases(); silently ignore.
-  }
-}
-
-export function useDuckDB(wasmAppUrl?: string) {
+export function useDuckDB(wasmAppUrl?: string, enabled = true) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [extensionsLoaded, setExtensionsLoaded] = useState(false);
@@ -35,6 +10,13 @@ export function useDuckDB(wasmAppUrl?: string) {
   const connRef = useRef<any>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      setReady(false);
+      setError(null);
+      setExtensionsLoaded(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function init() {
@@ -47,43 +29,7 @@ export function useDuckDB(wasmAppUrl?: string) {
         // Clear stale IndexedDB data to prevent FILE_ERROR_NO_SPACE
         await clearStaleDuckDBStorage();
 
-        const duckdb = await import("@duckdb/duckdb-wasm");
-
-        // Use local same-origin worker URL (not CDN blob) so Emscripten's
-        // internal XHR requests can resolve relative paths correctly.
-        const worker = new Worker(duckdbWorkerUrl, { type: "classic" });
-
-        const db = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), worker);
-        await db.instantiate(duckdbWasmUrl, null);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (db.open as any)({
-          path: ":memory:",
-          query: { castBigIntToDouble: true },
-          allowUnsignedExtensions: true,
-          autoInstallExtensions: false,
-          autoLoadExtensions: false,
-        });
-
-        const conn = await db.connect();
-
-        // ── Load compiled C++ WASM extensions ──
-        const base = getAssetBase(wasmAppUrl);
-        const extBase = `${base}/extensions/`;
-        await db.registerFileURL(
-          "fhirpath.duckdb_extension.wasm",
-          extBase + "fhirpath.duckdb_extension.wasm",
-          4 /* DuckDBDataProtocol.HTTP */,
-          false,
-        );
-        await db.registerFileURL(
-          "cql.duckdb_extension.wasm",
-          extBase + "cql.duckdb_extension.wasm",
-          4 /* DuckDBDataProtocol.HTTP */,
-          false,
-        );
-
-        await conn.query("LOAD 'fhirpath.duckdb_extension.wasm'");
-        await conn.query("LOAD 'cql.duckdb_extension.wasm'");
+        const { db, conn } = await createDuckDBConnection(wasmAppUrl);
         const cppExtLoaded = true;
         console.log("[DuckDB] C++ extensions loaded (fhirpath + cql)");
 
@@ -131,8 +77,12 @@ export function useDuckDB(wasmAppUrl?: string) {
       cancelled = true;
       connRef.current?.close();
       dbRef.current?.terminate();
+      connRef.current = null;
+      dbRef.current = null;
+      setReady(false);
+      setExtensionsLoaded(false);
     };
-  }, []);
+  }, [enabled, wasmAppUrl]);
 
   const executeQuery = useCallback(
     async (sql: string): Promise<QueryResult> => {
@@ -186,4 +136,3 @@ function extractPatientRef(resource: any): string | null {
   }
   return null;
 }
-

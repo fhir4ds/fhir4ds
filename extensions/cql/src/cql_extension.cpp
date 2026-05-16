@@ -20,8 +20,11 @@
 #include "duckdb/function/scalar_function.hpp"
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <mutex>
+#include <sstream>
 #include <stdexcept>
+#include <unordered_map>
 
 namespace duckdb {
 
@@ -40,6 +43,67 @@ static constexpr int64_t MS_PER_HOUR = 3600000LL;
 static constexpr int64_t MS_PER_DAY = 86400000LL;
 static constexpr double DAYS_PER_YEAR = 365.25;
 static constexpr double DAYS_PER_MONTH = 30.4375;
+
+static int CqlDaysInMonth(int year, int month) {
+	static const int dim[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+	if (month < 1 || month > 12) {
+		return 0;
+	}
+	if (month == 2 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))) {
+		return 29;
+	}
+	return dim[month];
+}
+
+static int64_t FloorDiv(int64_t a, int64_t b) {
+	int64_t q = a / b;
+	int64_t r = a % b;
+	if (r != 0 && ((r > 0) != (b > 0))) {
+		--q;
+	}
+	return q;
+}
+
+static cql::DateTimeValue AddCalendarMonths(const cql::DateTimeValue &value, int64_t months) {
+	cql::DateTimeValue result = value;
+	int64_t month_index = static_cast<int64_t>(value.year) * 12 + (value.month - 1) + months;
+	int64_t year = FloorDiv(month_index, 12);
+	int64_t month_zero = month_index - year * 12;
+	result.year = static_cast<int32_t>(year);
+	result.month = static_cast<int32_t>(month_zero + 1);
+	result.day = std::min<int32_t>(value.day, CqlDaysInMonth(result.year, result.month));
+	return result;
+}
+
+static int64_t DurationInCalendarMonths(const cql::DateTimeValue &start, const cql::DateTimeValue &end) {
+	if (end < start) {
+		return -DurationInCalendarMonths(end, start);
+	}
+	int64_t months = (static_cast<int64_t>(end.year) - start.year) * 12 + (end.month - start.month);
+	if (AddCalendarMonths(start, months) > end) {
+		--months;
+	}
+	return months;
+}
+
+static int64_t DurationInCalendarYears(const cql::DateTimeValue &start, const cql::DateTimeValue &end) {
+	if (end < start) {
+		return -DurationInCalendarYears(end, start);
+	}
+	int64_t years = static_cast<int64_t>(end.year) - start.year;
+	if (AddCalendarMonths(start, years * 12) > end) {
+		--years;
+	}
+	return years;
+}
+
+static int64_t ToEpochMillisForElapsed(const cql::DateTimeValue &value) {
+	int64_t millis = value.to_epoch_millis();
+	if (value.has_tz) {
+		millis -= static_cast<int64_t>(value.tz_offset_minutes) * MS_PER_MINUTE;
+	}
+	return millis;
+}
 
 // =====================================================================
 // Helper: get current date for age calculations
@@ -315,53 +379,64 @@ DEFINE_TWO_STR_BIGINT_UDF(DifferenceInSecondsFunc, {
 
 DEFINE_TWO_STR_BIGINT_UDF(WeeksBetweenFunc, {
 	// CQL §16.14: WeeksBetween counts *complete* 7-day periods.
-	// Use epoch_millis for time-aware calculation instead of Julian-day integer division.
-	int64_t ms_diff = b_dt->to_epoch_millis() - a_dt->to_epoch_millis();
-	if (ms_diff < 0) {
+	if (a_dt->has_tz != b_dt->has_tz) {
 		result_mask.SetInvalid(i);
 	} else {
-		int64_t complete_days = ms_diff / (24LL * 60 * 60 * 1000);
-		result_data[i] = complete_days / 7;
+		int64_t ms_diff = ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt);
+		result_data[i] = ms_diff / (MS_PER_DAY * 7);
 	}
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(MillisecondsBetweenFunc, {
-	result_data[i] = b_dt->to_epoch_millis() - a_dt->to_epoch_millis();
+	if (a_dt->has_tz != b_dt->has_tz) {
+		result_mask.SetInvalid(i);
+	} else {
+		result_data[i] = ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt);
+	}
 })
 
 // date_diff equivalents (match Python's DaysBetween/MonthsBetween/etc. macros)
 DEFINE_TWO_STR_BIGINT_UDF(YearsBetweenFunc, {
 	// CQL §16.14: YearsBetween counts *complete* calendar years, not raw year subtraction.
-	int64_t years = b_dt->year - a_dt->year;
-	if (b_dt->month < a_dt->month || (b_dt->month == a_dt->month && b_dt->day < a_dt->day)) {
-		years--;
-	}
-	result_data[i] = years;
+	result_data[i] = DurationInCalendarYears(*a_dt, *b_dt);
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(MonthsBetweenFunc, {
 	// CQL §16.14: MonthsBetween counts *complete* months, not calendar boundary crossings.
-	int64_t months = (b_dt->year - a_dt->year) * 12 + (b_dt->month - a_dt->month);
-	if (b_dt->day < a_dt->day) {
-		months--;
-	}
-	result_data[i] = months;
+	result_data[i] = DurationInCalendarMonths(*a_dt, *b_dt);
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(DaysBetweenFunc, {
-	result_data[i] = b_dt->to_julian_day() - a_dt->to_julian_day();
+	if (a_dt->has_tz != b_dt->has_tz) {
+		result_mask.SetInvalid(i);
+	} else {
+		int64_t ms_diff = ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt);
+		result_data[i] = ms_diff / MS_PER_DAY;
+	}
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(HoursBetweenFunc, {
-	result_data[i] = (b_dt->to_epoch_millis() - a_dt->to_epoch_millis()) / MS_PER_HOUR;
+	if (a_dt->has_tz != b_dt->has_tz) {
+		result_mask.SetInvalid(i);
+	} else {
+		result_data[i] = (ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt)) / MS_PER_HOUR;
+	}
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(MinutesBetweenFunc, {
-	result_data[i] = (b_dt->to_epoch_millis() - a_dt->to_epoch_millis()) / MS_PER_MINUTE;
+	if (a_dt->has_tz != b_dt->has_tz) {
+		result_mask.SetInvalid(i);
+	} else {
+		result_data[i] = (ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt)) / MS_PER_MINUTE;
+	}
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(SecondsBetweenFunc, {
-	result_data[i] = (b_dt->to_epoch_millis() - a_dt->to_epoch_millis()) / MS_PER_SECOND;
+	if (a_dt->has_tz != b_dt->has_tz) {
+		result_mask.SetInvalid(i);
+	} else {
+		result_data[i] = (ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt)) / MS_PER_SECOND;
+	}
 })
 
 // =====================================================================
@@ -611,7 +686,7 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalEndsSameFunc, {
 DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsPreciseFunc, iv1->overlaps(*iv2, *prec))
 DEFINE_PREC_INTERVAL_UDF(IntervalBeforePreciseFunc, iv1->before(*iv2, *prec))
 DEFINE_PREC_INTERVAL_UDF(IntervalAfterPreciseFunc, iv1->after(*iv2, *prec))
-DEFINE_PREC_INTERVAL_UDF(IntervalIncludesPreciseFunc, iv2->includes(*iv1, *prec))
+DEFINE_PREC_INTERVAL_UDF(IntervalIncludesPreciseFunc, iv1->includes(*iv2, *prec))
 DEFINE_PREC_INTERVAL_UDF(IntervalIncludedInPreciseFunc, iv2->includes(*iv1, *prec))
 DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsBeforePreciseFunc, iv1->overlaps_before(*iv2, *prec))
 DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsAfterPreciseFunc, iv1->overlaps_after(*iv2, *prec))
@@ -1343,6 +1418,75 @@ static void ResolveProfileUrlFunc(DataChunk &args, ExpressionState &state, Vecto
 static cql::ValuesetCache g_valueset_cache;
 static std::mutex g_valueset_cache_mutex;
 
+struct ValuesetProfileEntry {
+	int64_t calls = 0;
+	int64_t null_inputs = 0;
+	int64_t unloaded_valueset = 0;
+	int64_t empty_codes = 0;
+	int64_t not_done_matches = 0;
+	int64_t code_matches = 0;
+	int64_t misses = 0;
+	int64_t extracted_codes = 0;
+};
+
+static std::unordered_map<std::string, ValuesetProfileEntry> g_valueset_profile;
+static std::mutex g_valueset_profile_mutex;
+
+static bool ValuesetProfilingEnabled() {
+	const char *value = std::getenv("FHIR4DS_PROFILE_CPP_VALUESET");
+	return value && (std::string(value) == "1" || std::string(value) == "true" || std::string(value) == "yes");
+}
+
+static std::string ValuesetProfileKey(const std::string &path, const std::string &url) {
+	return path + "\t" + url;
+}
+
+static std::string EscapeJsonString(const std::string &value) {
+	std::ostringstream out;
+	for (char ch : value) {
+		switch (ch) {
+		case '\\':
+			out << "\\\\";
+			break;
+		case '"':
+			out << "\\\"";
+			break;
+		case '\n':
+			out << "\\n";
+			break;
+		case '\r':
+			out << "\\r";
+			break;
+		case '\t':
+			out << "\\t";
+			break;
+		default:
+			out << ch;
+			break;
+		}
+	}
+	return out.str();
+}
+
+static void UpdateValuesetProfile(bool enabled, const std::string &path, const std::string &url, int64_t calls = 0,
+                                  int64_t null_inputs = 0, int64_t unloaded_valueset = 0, int64_t empty_codes = 0,
+                                  int64_t not_done_matches = 0, int64_t code_matches = 0, int64_t misses = 0,
+                                  int64_t extracted_codes = 0) {
+	if (!enabled) {
+		return;
+	}
+	std::lock_guard<std::mutex> lock(g_valueset_profile_mutex);
+	auto &entry = g_valueset_profile[ValuesetProfileKey(path, url)];
+	entry.calls += calls;
+	entry.null_inputs += null_inputs;
+	entry.unloaded_valueset += unloaded_valueset;
+	entry.empty_codes += empty_codes;
+	entry.not_done_matches += not_done_matches;
+	entry.code_matches += code_matches;
+	entry.misses += misses;
+	entry.extracted_codes += extracted_codes;
+}
+
 // in_valueset(resource VARCHAR, path VARCHAR, valueset_url VARCHAR) → BOOLEAN
 static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
@@ -1358,6 +1502,7 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 	result.SetVectorType(VectorType::FLAT_VECTOR);
 	auto result_data = FlatVector::GetData<bool>(result);
 	auto &result_mask = FlatVector::Validity(result);
+	bool profile_enabled = ValuesetProfilingEnabled();
 
 	for (idx_t i = 0; i < count; i++) {
 		auto r_idx = res_data.sel->get_index(i);
@@ -1366,6 +1511,7 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 
 		if (!res_data.validity.RowIsValid(r_idx) || !path_data.validity.RowIsValid(p_idx) ||
 		    !url_data.validity.RowIsValid(u_idx)) {
+			UpdateValuesetProfile(profile_enabled, "<null>", "<null>", 1, 1);
 			result_mask.SetInvalid(i);
 			continue;
 		}
@@ -1373,18 +1519,43 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 		auto resource_str = resources[r_idx].GetString();
 		auto path_str = paths[p_idx].GetString();
 		auto url_str = urls[u_idx].GetString();
+		UpdateValuesetProfile(profile_enabled, path_str, url_str, 1);
 
-		auto codes = cql::extract_codes(resource_str, path_str);
-		if (codes.empty()) {
-			// No code found in resource → NULL (not false)
+		bool valueset_loaded = false;
+		{
+			std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
+			valueset_loaded = g_valueset_cache.find(url_str) != g_valueset_cache.end();
+		}
+		if (!valueset_loaded) {
+			UpdateValuesetProfile(profile_enabled, path_str, url_str, 0, 0, 1);
 			result_mask.SetInvalid(i);
+			continue;
+		}
+
+		auto extraction = cql::extract_codes_with_not_done_valueset(resource_str, path_str, url_str);
+		const auto &codes = extraction.codes;
+		UpdateValuesetProfile(profile_enabled, path_str, url_str, 0, 0, 0, 0, 0, 0, 0,
+		                      static_cast<int64_t>(codes.size()));
+		if (codes.empty()) {
+			if (extraction.has_not_done_valueset) {
+				result_data[i] = true;
+				UpdateValuesetProfile(profile_enabled, path_str, url_str, 0, 0, 0, 1, 1);
+			} else {
+				result_data[i] = false;
+				UpdateValuesetProfile(profile_enabled, path_str, url_str, 0, 0, 0, 1, 0, 0, 1);
+			}
 			continue;
 		}
 		bool found = false;
 		{
 			std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
 			for (const auto &code : codes) {
-				if (cql::in_valueset(code.code, code.system, url_str, g_valueset_cache)) {
+				auto norm_system = cql::normalize_system(code.system);
+				if (cql::in_valueset(code.code, norm_system, url_str, g_valueset_cache)) {
+					found = true;
+					break;
+				}
+				if (norm_system != code.system && cql::in_valueset(code.code, code.system, url_str, g_valueset_cache)) {
 					found = true;
 					break;
 				}
@@ -1396,7 +1567,115 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 			}
 		}
 		result_data[i] = found;
+		UpdateValuesetProfile(profile_enabled, path_str, url_str, 0, 0, 0, 0, 0, found ? 1 : 0, found ? 0 : 1);
 	}
+}
+
+static void ValuesetCacheClearFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
+	g_valueset_cache.clear();
+	result.SetVectorType(VectorType::CONSTANT_VECTOR);
+	ConstantVector::GetData<bool>(result)[0] = true;
+}
+
+static void ValuesetCacheAddFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat url_data, system_data, code_data;
+	args.data[0].ToUnifiedFormat(count, url_data);
+	args.data[1].ToUnifiedFormat(count, system_data);
+	args.data[2].ToUnifiedFormat(count, code_data);
+
+	auto urls = UnifiedVectorFormat::GetData<string_t>(url_data);
+	auto systems = UnifiedVectorFormat::GetData<string_t>(system_data);
+	auto codes = UnifiedVectorFormat::GetData<string_t>(code_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
+	for (idx_t i = 0; i < count; i++) {
+		auto u_idx = url_data.sel->get_index(i);
+		auto c_idx = code_data.sel->get_index(i);
+		if (!url_data.validity.RowIsValid(u_idx) || !code_data.validity.RowIsValid(c_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		std::string url = urls[u_idx].GetString();
+		std::string code = codes[c_idx].GetString();
+		std::string system;
+		auto s_idx = system_data.sel->get_index(i);
+		if (system_data.validity.RowIsValid(s_idx)) {
+			system = systems[s_idx].GetString();
+		}
+		auto normalized_system = cql::normalize_system(system);
+		g_valueset_cache[url].insert(normalized_system + "|" + code);
+		if (normalized_system != system) {
+			g_valueset_cache[url].insert(system + "|" + code);
+		}
+		result_data[i] = true;
+	}
+}
+
+static void ValuesetCacheSizeFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	int64_t total = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_valueset_cache_mutex);
+		for (const auto &entry : g_valueset_cache) {
+			total += static_cast<int64_t>(entry.second.size());
+		}
+	}
+	result.SetVectorType(VectorType::CONSTANT_VECTOR);
+	ConstantVector::GetData<int64_t>(result)[0] = total;
+}
+
+static void ValuesetProfileClearFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	std::lock_guard<std::mutex> lock(g_valueset_profile_mutex);
+	g_valueset_profile.clear();
+	result.SetVectorType(VectorType::CONSTANT_VECTOR);
+	ConstantVector::GetData<bool>(result)[0] = true;
+}
+
+static void ValuesetProfileJsonFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	std::vector<std::pair<std::string, ValuesetProfileEntry>> entries;
+	{
+		std::lock_guard<std::mutex> lock(g_valueset_profile_mutex);
+		entries.reserve(g_valueset_profile.size());
+		for (const auto &entry : g_valueset_profile) {
+			entries.push_back(entry);
+		}
+	}
+	typedef std::pair<std::string, ValuesetProfileEntry> ProfilePair;
+	std::sort(entries.begin(), entries.end(), [](const ProfilePair &left, const ProfilePair &right) {
+		return left.second.calls > right.second.calls;
+	});
+
+	std::ostringstream out;
+	out << "[";
+	bool first = true;
+	for (const auto &entry : entries) {
+		auto sep = entry.first.find('\t');
+		auto path = sep == std::string::npos ? entry.first : entry.first.substr(0, sep);
+		auto url = sep == std::string::npos ? "" : entry.first.substr(sep + 1);
+		if (!first) {
+			out << ",";
+		}
+		first = false;
+		out << "{\"path\":\"" << EscapeJsonString(path) << "\",";
+		out << "\"valueset_url\":\"" << EscapeJsonString(url) << "\",";
+		out << "\"calls\":" << entry.second.calls << ",";
+		out << "\"null_inputs\":" << entry.second.null_inputs << ",";
+		out << "\"unloaded_valueset\":" << entry.second.unloaded_valueset << ",";
+		out << "\"empty_codes\":" << entry.second.empty_codes << ",";
+		out << "\"not_done_matches\":" << entry.second.not_done_matches << ",";
+		out << "\"code_matches\":" << entry.second.code_matches << ",";
+		out << "\"misses\":" << entry.second.misses << ",";
+		out << "\"extracted_codes\":" << entry.second.extracted_codes << "}";
+	}
+	out << "]";
+
+	result.SetVectorType(VectorType::CONSTANT_VECTOR);
+	ConstantVector::GetData<string_t>(result)[0] = StringVector::AddString(result, out.str());
 }
 
 // =====================================================================
@@ -2431,7 +2710,7 @@ static void CQLPrecisionFunc(DataChunk &args, ExpressionState &state, Vector &re
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<string_t>(result);
+	auto result_data = FlatVector::GetData<int64_t>(result);
 	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
@@ -2443,7 +2722,7 @@ static void CQLPrecisionFunc(DataChunk &args, ExpressionState &state, Vector &re
 		std::string val = a_vals[a_idx].GetString();
 		auto res = cql::cql_precision(val);
 		if (!res) { result_mask.SetInvalid(i); continue; }
-		result_data[i] = StringVector::AddString(result, *res);
+		result_data[i] = *res;
 	}
 }
 
@@ -2808,18 +3087,56 @@ static void LoadInternal(ExtensionLoader &loader) {
 	RegisterSpecialScalar(loader, "AgeInDaysAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
 	                      AgeInDaysAtFunc);
 
-	// Interval UDFs — deferred entirely to Python.  The Python implementations
-	// handle precision-aware comparison for temporal bounds (e.g. date vs
-	// datetime at millisecond precision), bound normalization (open → closed),
-	// Quantity extraction, and three-valued NULL logic that the C++ versions
-	// do not yet replicate exactly.  Registering C++ overrides here would
-	// silently break ~30 DQM measures that depend on these subtleties.
-	// RegisterSpecialScalar(loader, "intervalStart", {LogicalType::VARCHAR}, LogicalType::VARCHAR, IntervalStartFunc);
-	// RegisterSpecialScalar(loader, "intervalEnd", {LogicalType::VARCHAR}, LogicalType::VARCHAR, IntervalEndFunc);
-	// RegisterSpecialScalar(loader, "intervalWidth", {LogicalType::VARCHAR}, LogicalType::BIGINT, IntervalWidthFunc);
-	// RegisterSpecialScalar(loader, "intervalFromBounds",
-	//                       {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::BOOLEAN, LogicalType::BOOLEAN},
-	//                       LogicalType::VARCHAR, IntervalFromBoundsFunc);
+	// Interval UDFs (22 — includes collapse_intervals). Native Python keeps
+	// these deferred to Python fallback UDFs for full DQM conformance. Browser
+	// DuckDB-WASM cannot call those Python fallbacks, so the WASM build must
+	// expose the C++ surface.
+#ifdef __EMSCRIPTEN__
+	RegisterSpecialScalar(loader, "intervalStart", {LogicalType::VARCHAR}, LogicalType::VARCHAR, IntervalStartFunc);
+	RegisterSpecialScalar(loader, "intervalEnd", {LogicalType::VARCHAR}, LogicalType::VARCHAR, IntervalEndFunc);
+	RegisterSpecialScalar(loader, "intervalWidth", {LogicalType::VARCHAR}, LogicalType::BIGINT, IntervalWidthFunc);
+	RegisterSpecialScalar(loader, "intervalContains", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalContainsFunc);
+	RegisterSpecialScalar(loader, "intervalProperlyContains", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalProperlyContainsFunc);
+	RegisterSpecialScalar(loader, "intervalOverlaps", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalOverlapsFunc);
+	RegisterSpecialScalar(loader, "intervalBefore", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
+	                      IntervalBeforeFunc);
+	RegisterSpecialScalar(loader, "intervalAfter", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
+	                      IntervalAfterFunc);
+	RegisterSpecialScalar(loader, "intervalMeets", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
+	                      IntervalMeetsFunc);
+	RegisterSpecialScalar(loader, "intervalIncludes", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalIncludesFunc);
+	RegisterSpecialScalar(loader, "intervalIncludedIn", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalIncludedInFunc);
+	RegisterSpecialScalar(loader, "intervalProperlyIncludes", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalProperlyIncludesFunc);
+	RegisterSpecialScalar(loader, "intervalProperlyIncludedIn", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalProperlyIncludedInFunc);
+	RegisterSpecialScalar(loader, "intervalOverlapsBefore", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalOverlapsBeforeFunc);
+	RegisterSpecialScalar(loader, "intervalOverlapsAfter", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalOverlapsAfterFunc);
+	RegisterSpecialScalar(loader, "intervalMeetsBefore", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalMeetsBeforeFunc);
+	RegisterSpecialScalar(loader, "intervalMeetsAfter", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalMeetsAfterFunc);
+	RegisterSpecialScalar(loader, "intervalStartsSame", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalStartsSameFunc);
+	RegisterSpecialScalar(loader, "intervalEndsSame", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalEndsSameFunc);
+	RegisterSpecialScalar(loader, "intervalFromBounds",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::BOOLEAN, LogicalType::BOOLEAN},
+	                      LogicalType::VARCHAR, IntervalFromBoundsFunc);
+	RegisterSpecialScalar(loader, "collapse_intervals", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
+	                      CollapseIntervalsFunc);
+#else
+	// Deferred to Python on native builds: Time bounds, successor/predecessor
+	// semantics, exclusive boundaries, and quantity units are not yet fully
+	// equivalent in C++.
+#endif
 
 	// Precision-aware interval UDFs (3-arg: interval, interval/point, precision → BOOLEAN)
 	RegisterSpecialScalar(loader, "intervalOverlapsPrecise",
@@ -2883,8 +3200,14 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      DateTimeSameOrAfterFunc);
 	RegisterSpecialScalar(loader, "dateComponent", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
 	                      DateComponentFunc);
-	// quantityToInterval, dateAddQuantity, dateSubtractQuantity — deferred to Python
-	// (Time input bugs and edge cases in date arithmetic)
+#ifdef __EMSCRIPTEN__
+	RegisterSpecialScalar(loader, "quantityToInterval", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
+	                      QuantityToIntervalFunc);
+	RegisterSpecialScalar(loader, "dateAddQuantity", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, DateAddQuantityFunc);
+	RegisterSpecialScalar(loader, "dateSubtractQuantity", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, DateSubtractQuantityFunc);
+#endif
 
 	// Clinical UDFs (4)
 	RegisterSpecialScalar(loader, "Latest",
@@ -2923,6 +3246,13 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// in_valueset (stub — cache not yet populated)
 	RegisterSpecialScalar(loader, "in_valueset", {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, InValuesetFunc);
+	RegisterSpecialScalar(loader, "cql_valueset_cache_clear", {}, LogicalType::BOOLEAN, ValuesetCacheClearFunc);
+	RegisterSpecialScalar(loader, "cql_valueset_cache_add",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, ValuesetCacheAddFunc);
+	RegisterSpecialScalar(loader, "cql_valueset_cache_size", {}, LogicalType::BIGINT, ValuesetCacheSizeFunc);
+	RegisterSpecialScalar(loader, "cql_valueset_profile_clear", {}, LogicalType::BOOLEAN, ValuesetProfileClearFunc);
+	RegisterSpecialScalar(loader, "cql_valueset_profile_json", {}, LogicalType::VARCHAR, ValuesetProfileJsonFunc);
 
 	// Ratio UDFs (5)
 	RegisterSpecialScalar(loader, "ratioNumeratorValue", {LogicalType::VARCHAR}, LogicalType::DOUBLE,
@@ -2969,19 +3299,38 @@ static void LoadInternal(ExtensionLoader &loader) {
 	RegisterSpecialScalar(loader, "jsonConcat", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::LIST(LogicalType::VARCHAR), JsonConcatFunc);
 
-	// Boundary UDFs — deferred to Python (Time precision bugs, quantity predecessor/successor,
-	// overflow/underflow detection missing)
-	// CQLPrecision: deferred to Python — the C++ version returns precision names ("Year",
-	// "Millisecond") but CQL conformance tests expect integer digit counts (4, 17) which
-	// the Python cqlPrecision() correctly computes.
-	// RegisterSpecialScalar(loader, "CQLPrecision", {LogicalType::VARCHAR},
-	//                       LogicalType::VARCHAR, CQLPrecisionFunc);
+	// Boundary UDFs. These remain less complete than Python for some edge
+	// cases, but browser/WASM requires the C++ surface to be available.
+#ifdef __EMSCRIPTEN__
+	RegisterSpecialScalar(loader, "HighBoundary", {LogicalType::VARCHAR, LogicalType::BIGINT},
+	                      LogicalType::VARCHAR, HighBoundaryFunc2);
+	RegisterSpecialScalar(loader, "LowBoundary", {LogicalType::VARCHAR, LogicalType::BIGINT},
+	                      LogicalType::VARCHAR, LowBoundaryFunc2);
+	RegisterSpecialScalar(loader, "predecessorOf", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, PredecessorOfFunc);
+	RegisterSpecialScalar(loader, "successorOf", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, SuccessorOfFunc);
+#endif
+	RegisterSpecialScalar(loader, "CQLPrecision", {LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, CQLPrecisionFunc);
 	RegisterSpecialScalar(loader, "cqlTimezoneOffset", {LogicalType::VARCHAR},
 	                      LogicalType::DOUBLE, CQLTimezoneOffsetFunc);
 
-	// Interval set operations — deferred to Python (same fundamental interval bugs)
+	// Interval set operations.
+#ifdef __EMSCRIPTEN__
+	RegisterSpecialScalar(loader, "intervalIntersect", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, IntervalIntersectFunc);
+	RegisterSpecialScalar(loader, "intervalUnion", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, IntervalUnionFunc);
+	RegisterSpecialScalar(loader, "intervalExcept", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, IntervalExceptFunc);
+	RegisterSpecialScalar(loader, "intervalOnOrAfter", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalOnOrAfterFunc);
+	RegisterSpecialScalar(loader, "intervalOnOrBefore", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, IntervalOnOrBeforeFunc);
+#endif
 
-	// Phase 4: pointFrom (working) + diff aliases (deferred to Python)
+	// Phase 4: pointFrom
 	RegisterSpecialScalar(loader, "pointFrom", {LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, PointFromFunc);
 
@@ -3008,13 +3357,10 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::VARCHAR, MathTruncateFunc);
 
 	// Phase 6: Quantity arithmetic UDFs
-	// quantityMultiply / quantityDivide deferred to Python — the C++ versions lack
-	// UCUM unit algebra (pint) so cm*cm→NULL instead of cm², g/cm3/g/cm3→NULL instead of 1.
-	// The Python quantityMultiply/quantityDivide use pint for correct unit propagation.
-	// RegisterSpecialScalar(loader, "quantityMultiply", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	//                       LogicalType::VARCHAR, QuantityMultiplyFunc);
-	// RegisterSpecialScalar(loader, "quantityDivide", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	//                       LogicalType::VARCHAR, QuantityDivideFunc);
+	RegisterSpecialScalar(loader, "quantityMultiply", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, QuantityMultiplyFunc);
+	RegisterSpecialScalar(loader, "quantityDivide", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, QuantityDivideFunc);
 	RegisterSpecialScalar(loader, "quantityNegate", {LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, QuantityNegateFunc);
 	RegisterSpecialScalar(loader, "quantityAbs", {LogicalType::VARCHAR},

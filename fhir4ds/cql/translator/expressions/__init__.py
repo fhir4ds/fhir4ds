@@ -7,9 +7,8 @@ CQL expressions to SQL using the DuckDB FHIRPath UDFs.
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import TYPE_CHECKING, Any, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +136,14 @@ class ExpressionTranslator(
             context: The translation context for symbol resolution.
         """
         self.context = context
-        self._function_registry = self._build_function_registry()
+        self._function_registry = None
+        self._handler_cache: Dict[str, Optional[Tuple[Any, str]]] = {}
+
+    def _get_function_registry(self):
+        """Return the built-in function registry, constructing it on first use."""
+        if self._function_registry is None:
+            self._function_registry = self._build_function_registry()
+        return self._function_registry
 
     def _build_function_registry(self):
         """Build the FunctionTranslationRegistry with all built-in CQL functions."""
@@ -155,7 +161,6 @@ class ExpressionTranslator(
             "ceiling": "CEIL",
             "floor": "FLOOR",
             "sqrt": "SQRT",
-            "exp": "mathExp",
             "nullif": "NULLIF",
             "median": "MEDIAN",
             "mode": "MODE",
@@ -202,8 +207,10 @@ class ExpressionTranslator(
         registry.register("contains", lambda args, ctx: self._translate_contains_func(args))
         registry.register("positionof", lambda args, ctx: self._translate_positionof(args))
         registry.register("lastpositionof", lambda args, ctx: self._translate_lastpositionof(args))
+        registry.register("splitonmatches", lambda args, ctx: SQLFunctionCall(name="SplitOnMatches", args=args))
 
         # Math functions
+        registry.register("exp", lambda args, ctx: self._translate_exp(args))
         registry.register("log", lambda args, ctx: self._translate_log(args))
         registry.register("ln", lambda args, ctx: self._translate_ln(args))
         registry.register("power", lambda args, ctx: self._translate_power(args))
@@ -545,22 +552,37 @@ class ExpressionTranslator(
         # Dispatch based on expression type
         expr_type = type(expr).__name__
 
-        handler = getattr(self, f"_translate_{self._camel_to_snake(expr_type)}", None)
-        if handler:
-            # Check if handler accepts 'usage' or 'boolean_context' parameter.
-            # Use __code__.co_varnames instead of inspect.signature to avoid
-            # expensive introspection that can trigger RecursionError at deep stacks.
-            func_obj = getattr(handler, "__func__", handler)
-            code = getattr(func_obj, "__code__", None)
-            if code is not None:
-                co_vars = code.co_varnames[:code.co_argcount]
-            else:
-                co_vars = ()
+        cached_handler = self._handler_cache.get(expr_type)
+        if cached_handler is None and expr_type not in self._handler_cache:
+            handler = getattr(self, f"_translate_{self._camel_to_snake(expr_type)}", None)
+            if handler:
+                # Check if handler accepts 'usage' or 'boolean_context' parameter.
+                # Use __code__.co_varnames instead of inspect.signature to avoid
+                # expensive introspection that can trigger RecursionError at deep stacks.
+                func_obj = getattr(handler, "__func__", handler)
+                code = getattr(func_obj, "__code__", None)
+                if code is not None:
+                    co_vars = code.co_varnames[:code.co_argcount]
+                else:
+                    co_vars = ()
 
-            if 'usage' in co_vars:
+                if 'usage' in co_vars:
+                    mode = "usage"
+                elif 'boolean_context' in co_vars:
+                    mode = "boolean_context"
+                else:
+                    mode = "none"
+                cached_handler = (handler, mode)
+            else:
+                cached_handler = None
+            self._handler_cache[expr_type] = cached_handler
+
+        if cached_handler:
+            handler, mode = cached_handler
+            if mode == "usage":
                 # Handler accepts usage directly
                 result = handler(expr, usage)
-            elif 'boolean_context' in co_vars:
+            elif mode == "boolean_context":
                 # Legacy handler - convert usage to boolean_context
                 _boolean_context = usage in (ExprUsage.BOOLEAN, ExprUsage.EXISTS)
                 result = handler(expr, _boolean_context)

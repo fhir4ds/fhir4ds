@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 from pathlib import Path
 from typing import Union, List, Optional, Any
+from urllib.parse import urlparse
 from weakref import WeakKeyDictionary, WeakSet
 try:
     import duckdb
@@ -20,6 +22,91 @@ _logger = logging.getLogger(__name__)
 _CACHE_LOCK = threading.Lock()
 _VALUESET_UDF_CACHE_BY_CONNECTION = WeakKeyDictionary()
 _VALUESET_UDF_REGISTERED_CONNECTIONS = WeakSet()
+_FHIR_RESOURCE_TYPE_RE = re.compile(r"^[A-Z][A-Za-z0-9]*$")
+_FHIR_ID_RE = re.compile(r"^[A-Za-z0-9\-.]{1,64}$")
+
+
+def _validate_resource_identity(resource: dict) -> tuple[str, str | None]:
+    resource_type = resource.get("resourceType")
+    if not resource_type:
+        raise ValueError(
+            "Resource must have a 'resourceType' field. "
+            f"Got keys: {sorted(resource.keys())}"
+        )
+    if not isinstance(resource_type, str):
+        raise ValueError(
+            f"'resourceType' must be a string, got {type(resource_type).__name__}: "
+            f"{resource_type!r}"
+        )
+    if not _FHIR_RESOURCE_TYPE_RE.match(resource_type):
+        raise ValueError(
+            f"'resourceType' must be an ASCII FHIR resource type name, got {resource_type!r}"
+        )
+
+    resource_id = resource.get("id")
+    if resource_id is not None:
+        if not isinstance(resource_id, str):
+            raise ValueError(
+                f"Resource 'id' must be a string per FHIR R4 spec, "
+                f"got {type(resource_id).__name__}: {resource_id!r}"
+            )
+        if not _FHIR_ID_RE.match(resource_id):
+            raise ValueError(
+                f"Resource 'id' must match the FHIR id pattern [A-Za-z0-9-.]{{1,64}}, "
+                f"got {resource_id!r}"
+            )
+    return resource_type, resource_id
+
+
+def _serialize_resource(resource: dict) -> str:
+    try:
+        return json.dumps(resource, allow_nan=False)
+    except ValueError as exc:
+        raise ValueError(
+            "Resource contains values that cannot be represented as standard JSON "
+            "(for example NaN or Infinity)."
+        ) from exc
+
+
+def _extract_codes_from_valueset_resource(valueset: dict) -> list[dict[str, str | None]]:
+    """Extract codes from a raw FHIR ValueSet compose/expansion resource."""
+    codes: list[dict[str, str | None]] = []
+
+    expansion_contains = valueset.get("expansion", {}).get("contains", [])
+    if isinstance(expansion_contains, list):
+        for item in expansion_contains:
+            if not isinstance(item, dict):
+                raise TypeError("ValueSet.expansion.contains entries must be objects")
+            system = item.get("system")
+            code = item.get("code")
+            if system is not None or code is not None:
+                codes.append({
+                    "system": system,
+                    "code": code,
+                    "display": item.get("display"),
+                })
+
+    compose_includes = valueset.get("compose", {}).get("include", [])
+    if isinstance(compose_includes, list):
+        for include in compose_includes:
+            if not isinstance(include, dict):
+                raise TypeError("ValueSet.compose.include entries must be objects")
+            system = include.get("system")
+            concepts = include.get("concept", [])
+            if concepts is None:
+                concepts = []
+            if not isinstance(concepts, list):
+                raise TypeError("ValueSet.compose.include.concept must be a list")
+            for concept in concepts:
+                if not isinstance(concept, dict):
+                    raise TypeError("ValueSet.compose.include.concept entries must be objects")
+                codes.append({
+                    "system": system,
+                    "code": concept.get("code"),
+                    "display": concept.get("display"),
+                })
+
+    return codes
 
 
 class FHIRDataLoader:
@@ -161,25 +248,9 @@ class FHIRDataLoader:
             raise TypeError(
                 f"Expected dict, got {type(resource).__name__}"
             )
-        resource_type = resource.get("resourceType")
-        if not resource_type:
-            raise ValueError(
-                "Resource must have a 'resourceType' field. "
-                f"Got keys: {sorted(resource.keys())}"
-            )
-        if not isinstance(resource_type, str):
-            raise ValueError(
-                f"'resourceType' must be a string, got {type(resource_type).__name__}: "
-                f"{resource_type!r}"
-            )
-        resource_id = resource.get("id")
-        if resource_id is not None and not isinstance(resource_id, str):
-            raise ValueError(
-                f"Resource 'id' must be a string per FHIR R4 spec, "
-                f"got {type(resource_id).__name__}: {resource_id!r}"
-            )
+        resource_type, resource_id = _validate_resource_identity(resource)
         patient_ref = self._extract_patient_ref(resource)
-        resource_json = json.dumps(resource)
+        resource_json = _serialize_resource(resource)
 
         if resource_id is not None and resource_type is not None:
             # Delete existing resource with same identity, then insert
@@ -209,6 +280,12 @@ class FHIRDataLoader:
             TypeError: If any resource is not a dict.
             ValueError: If any resource lacks a valid 'resourceType' field.
         """
+        if resources is None:
+            raise TypeError("Expected list of FHIR resource dicts, got None")
+        if not isinstance(resources, list):
+            raise TypeError(
+                f"Expected list of FHIR resource dicts, got {type(resources).__name__}"
+            )
         if not resources:
             return 0
 
@@ -219,15 +296,9 @@ class FHIRDataLoader:
         for resource in resources:
             if not isinstance(resource, dict):
                 raise TypeError(f"Expected dict, got {type(resource).__name__}")
-            resource_type = resource.get("resourceType")
-            if not resource_type or not isinstance(resource_type, str):
-                raise ValueError(
-                    f"Resource must have a string 'resourceType' field. "
-                    f"Got: {resource_type!r}"
-                )
-            resource_id = resource.get("id")
+            resource_type, resource_id = _validate_resource_identity(resource)
             patient_ref = self._extract_patient_ref(resource)
-            resource_json = json.dumps(resource)
+            resource_json = _serialize_resource(resource)
             row = (resource_id, resource_type, resource_json, patient_ref)
             if resource_id is not None:
                 key = (resource_id, resource_type)
@@ -281,11 +352,21 @@ class FHIRDataLoader:
         if bundle.get("resourceType") != "Bundle":
             raise ValueError("Expected a FHIR Bundle resource")
 
+        entries = bundle.get("entry") or []
+        if not isinstance(entries, list):
+            raise TypeError("Bundle.entry must be a list")
+
         resources = []
-        for entry in bundle.get("entry") or []:
+        for index, entry in enumerate(entries):
             if entry is None:
                 continue
+            if not isinstance(entry, dict):
+                raise TypeError(f"Bundle.entry[{index}] must be an object")
             resource = entry.get("resource")
+            if resource is None:
+                continue
+            if not isinstance(resource, dict):
+                raise TypeError(f"Bundle.entry[{index}].resource must be an object")
             if resource:
                 resources.append(resource)
 
@@ -403,6 +484,16 @@ class FHIRDataLoader:
         """
         import urllib.request
 
+        if not isinstance(url, str) or not url:
+            raise ValueError("url must be a non-empty string")
+        scheme = urlparse(url).scheme.lower()
+        if scheme not in {"http", "https"}:
+            raise ValueError(
+                f"Unsupported URL scheme {scheme!r}. Only 'http' and 'https' are allowed."
+            )
+        if headers is not None and not isinstance(headers, dict):
+            raise TypeError(f"headers must be a dict if provided, got {type(headers).__name__}")
+
         req = urllib.request.Request(url, headers=headers or {})
         with urllib.request.urlopen(req) as response:
             data = json.loads(response.read().decode())
@@ -460,6 +551,11 @@ class FHIRDataLoader:
         Returns:
             Total number of codes loaded
         """
+        if valuesets is None:
+            raise TypeError("valuesets must be a list, got None")
+        if not isinstance(valuesets, list):
+            raise TypeError(f"valuesets must be a list, got {type(valuesets).__name__}")
+
         # Create table if not exists
         self.con.execute(f"""
             CREATE TABLE IF NOT EXISTS {table_name} (
@@ -470,38 +566,99 @@ class FHIRDataLoader:
             )
         """)
 
-        # Create index for fast lookups
-        self.con.execute(f"""
-            CREATE INDEX IF NOT EXISTS idx_{table_name}_lookup
-            ON {table_name} (valueset_url, system, code)
-        """)
-
         total_codes = 0
-        for vs in valuesets:
+        valueset_urls = []
+        systems = []
+        code_values = []
+        displays = []
+        for index, vs in enumerate(valuesets):
+            if vs is None:
+                raise TypeError(f"valuesets[{index}] must be a ValueSet object or dict, got None")
             # Handle both object with .url/.codes attributes and dict with 'url'/'codes' keys
             if hasattr(vs, 'url'):
                 vs_url = vs.url
                 codes = vs.codes
-            else:
+            elif isinstance(vs, dict):
                 vs_url = vs.get("url")
-                codes = vs.get("codes", [])
+                codes = vs.get("codes")
+                if codes is None and vs.get("resourceType") == "ValueSet":
+                    codes = _extract_codes_from_valueset_resource(vs)
+                if codes is None:
+                    codes = []
+            else:
+                raise TypeError(
+                    f"valuesets[{index}] must be a ValueSet object or dict, "
+                    f"got {type(vs).__name__}"
+                )
+            if not isinstance(vs_url, str) or not vs_url:
+                raise ValueError(f"valuesets[{index}] must include a non-empty string 'url'")
+            if not isinstance(codes, list):
+                raise TypeError(f"valuesets[{index}].codes must be a list, got {type(codes).__name__}")
 
-            for code_entry in codes:
+            for code_index, code_entry in enumerate(codes):
+                if code_entry is None:
+                    raise TypeError(
+                        f"valuesets[{index}].codes[{code_index}] must be a code object or dict, got None"
+                    )
                 # Handle both object and dict for code entries
                 if hasattr(code_entry, 'system'):
                     system = code_entry.system
                     code = code_entry.code
                     display = getattr(code_entry, 'display', None)
-                else:
+                elif isinstance(code_entry, dict):
                     system = code_entry.get("system")
                     code = code_entry.get("code")
                     display = code_entry.get("display")
+                else:
+                    raise TypeError(
+                        f"valuesets[{index}].codes[{code_index}] must be a code object or dict, "
+                        f"got {type(code_entry).__name__}"
+                    )
+                if not isinstance(system, str) or not isinstance(code, str):
+                    raise ValueError(
+                        f"valuesets[{index}].codes[{code_index}] must include string "
+                        "'system' and 'code' values"
+                    )
 
-                self.con.execute(
-                    f"INSERT INTO {table_name} VALUES (?, ?, ?, ?)",
-                    [vs_url, system, code, display]
-                )
+                valueset_urls.append(vs_url)
+                systems.append(system)
+                code_values.append(code)
+                displays.append(display)
                 total_codes += 1
+
+        if valueset_urls:
+            try:
+                import pyarrow as pa
+
+                arrow_table = pa.table({
+                    "valueset_url": pa.array(valueset_urls, type=pa.string()),
+                    "system": pa.array(systems, type=pa.string()),
+                    "code": pa.array(code_values, type=pa.string()),
+                    "display": pa.array(displays, type=pa.string()),
+                })
+                temp_name = f"_{table_name}_bulk_valuesets"
+                self.con.register(temp_name, arrow_table)
+                try:
+                    self.con.execute(
+                        f"INSERT INTO {table_name} "
+                        f"SELECT valueset_url, system, code, display "
+                        f"FROM {temp_name}"
+                    )
+                finally:
+                    self.con.unregister(temp_name)
+            except ImportError:
+                rows = list(zip(valueset_urls, systems, code_values, displays))
+                self.con.executemany(
+                    f"INSERT INTO {table_name} VALUES (?, ?, ?, ?)",
+                    rows,
+                )
+
+        # Create index for fast lookups after bulk insert so fresh loads do
+        # not maintain the index one row at a time.
+        self.con.execute(f"""
+            CREATE INDEX IF NOT EXISTS idx_{table_name}_lookup
+            ON {table_name} (valueset_url, system, code)
+        """)
 
         self._refresh_in_valueset_udf(table_name)
         return total_codes
@@ -525,6 +682,8 @@ class FHIRDataLoader:
             raise ValueError(
                 f"table_name must be a valid SQL identifier, got {table_name!r}"
             )
+        if not self.valueset_table_exists(table_name):
+            return 0
         if valueset_url:
             result = self.con.execute(
                 f"SELECT COUNT(*) FROM {table_name} WHERE valueset_url = ?",
@@ -547,6 +706,8 @@ class FHIRDataLoader:
             raise ValueError(
                 f"table_name must be a valid SQL identifier, got {table_name!r}"
             )
+        if not self.valueset_table_exists(table_name):
+            return
         self.con.execute(f"DELETE FROM {table_name}")
         self._refresh_in_valueset_udf(table_name)
 
@@ -576,6 +737,9 @@ class FHIRDataLoader:
         Uses a soft import of ``duckdb_cql_py`` so that ``cql-py`` does not gain a
         hard dependency on the higher-level package.
         """
+        if self._refresh_cpp_in_valueset_cache(table_name):
+            return
+
         try:
             from fhir4ds.cql.duckdb.udf.valueset import createValuesetMembershipUdf
         except ImportError:
@@ -623,3 +787,36 @@ class FHIRDataLoader:
         except Exception as e:
             _logger.error("Unexpected error refreshing valueset UDF macros: %s", e)
             raise
+
+    def _refresh_cpp_in_valueset_cache(self, table_name: str = "valueset_codes") -> bool:
+        """Populate the native CQL valueset cache when the C++ extension exposes it."""
+        import os
+        use_native = os.environ.get("FHIR4DS_USE_CPP_VALUESET_CACHE", "").lower()
+        if use_native in ("0", "false", "no", "off"):
+            return False
+
+        try:
+            self.con.execute("SELECT cql_valueset_cache_clear()").fetchone()
+        except Exception:
+            return False
+
+        try:
+            self.con.execute(
+                f"SELECT cql_valueset_cache_add(valueset_url, system, code) "
+                f"FROM {table_name}"
+            ).fetchall()
+            # Remove stale Python macros from prior refreshes so SQL resolves to
+            # the native in_valueset function. Keep the fhirpath_* alias as a macro.
+            for macro_name in ("in_valueset", "fhirpath_in_valueset"):
+                try:
+                    self.con.execute(f"DROP MACRO IF EXISTS {macro_name}")
+                except Exception:
+                    pass
+            self.con.execute(
+                "CREATE OR REPLACE MACRO fhirpath_in_valueset(res, path, vs_url) AS "
+                "in_valueset(res, path, vs_url)"
+            )
+            return True
+        except Exception as e:
+            _logger.warning("Failed to populate C++ valueset cache; using Python UDF: %s", e)
+            return False

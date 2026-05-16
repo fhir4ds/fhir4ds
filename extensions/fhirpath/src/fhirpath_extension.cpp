@@ -20,6 +20,9 @@
 
 using namespace duckdb_yyjson; // NOLINT
 
+#include <algorithm>
+#include <cctype>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -48,6 +51,168 @@ static void CollectPathSegments(const fhirpath::ASTNode &ast, std::vector<std::s
 	}
 }
 
+struct FastPredicateTerm {
+	std::vector<std::string> path_segments;
+	std::string value;
+};
+
+struct FastPredicateClause {
+	std::vector<FastPredicateTerm> terms;
+};
+
+struct FastSourceStep {
+	std::vector<std::string> path_segments;
+	std::vector<FastPredicateClause> clauses;
+};
+
+struct FastWhereExistsPattern {
+	std::vector<FastSourceStep> source_steps;
+	std::vector<FastPredicateClause> clauses;
+};
+
+struct FastTextPattern {
+	std::vector<FastSourceStep> source_steps;
+};
+
+struct FastListPattern {
+	std::vector<FastSourceStep> source_steps;
+};
+
+static bool ExtractStringEqualityTerm(const fhirpath::ASTNode &node, FastPredicateTerm &term) {
+	if (node.type != fhirpath::NodeType::BinaryOp || node.op != "=" || node.children.size() != 2) {
+		return false;
+	}
+
+	const fhirpath::ASTNode *path_node = nullptr;
+	const fhirpath::ASTNode *literal_node = nullptr;
+	for (int pass = 0; pass < 2; pass++) {
+		const auto &left = *node.children[pass == 0 ? 0 : 1];
+		const auto &right = *node.children[pass == 0 ? 1 : 0];
+		if (IsSimplePath(left) && right.type == fhirpath::NodeType::StringLiteral) {
+			path_node = &left;
+			literal_node = &right;
+			break;
+		}
+	}
+	if (!path_node || !literal_node) {
+		return false;
+	}
+
+	CollectPathSegments(*path_node, term.path_segments);
+	term.value = fhirpath::node_value_get<std::string>(literal_node->value);
+	return !term.path_segments.empty();
+}
+
+static bool ExtractPredicateDNF(const fhirpath::ASTNode &node, std::vector<FastPredicateClause> &clauses) {
+	if (node.type == fhirpath::NodeType::BinaryOp && (node.op == "and" || node.op == "or") &&
+	    node.children.size() == 2) {
+		std::vector<FastPredicateClause> left;
+		std::vector<FastPredicateClause> right;
+		if (!ExtractPredicateDNF(*node.children[0], left) || !ExtractPredicateDNF(*node.children[1], right)) {
+			return false;
+		}
+		if (node.op == "or") {
+			clauses.insert(clauses.end(), left.begin(), left.end());
+			clauses.insert(clauses.end(), right.begin(), right.end());
+			return clauses.size() <= 64;
+		}
+
+		for (const auto &l_clause : left) {
+			for (const auto &r_clause : right) {
+				FastPredicateClause combined = l_clause;
+				combined.terms.insert(combined.terms.end(), r_clause.terms.begin(), r_clause.terms.end());
+				clauses.push_back(combined);
+				if (clauses.size() > 64) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	FastPredicateTerm term;
+	if (!ExtractStringEqualityTerm(node, term)) {
+		return false;
+	}
+	FastPredicateClause clause;
+	clause.terms.push_back(term);
+	clauses.push_back(clause);
+	return true;
+}
+
+static bool ExtractSourceSteps(const fhirpath::ASTNode &node, std::vector<FastSourceStep> &steps) {
+	if (IsSimplePath(node)) {
+		FastSourceStep step;
+		CollectPathSegments(node, step.path_segments);
+		if (step.path_segments.empty()) {
+			return false;
+		}
+		steps.push_back(step);
+		return true;
+	}
+
+	if (node.type == fhirpath::NodeType::MemberAccess && node.source) {
+		if (!ExtractSourceSteps(*node.source, steps)) {
+			return false;
+		}
+		if (steps.empty() || !steps.back().clauses.empty()) {
+			FastSourceStep step;
+			step.path_segments.push_back(node.name);
+			steps.push_back(step);
+		} else {
+			steps.back().path_segments.push_back(node.name);
+		}
+		return true;
+	}
+
+	if (node.type == fhirpath::NodeType::WhereCall && node.source && node.children.size() == 1) {
+		if (!ExtractSourceSteps(*node.source, steps)) {
+			return false;
+		}
+		FastSourceStep step;
+		if (!ExtractPredicateDNF(*node.children[0], step.clauses) || step.clauses.empty()) {
+			return false;
+		}
+		steps.push_back(step);
+		return true;
+	}
+
+	return false;
+}
+
+static bool SourceStepsHaveFilter(const std::vector<FastSourceStep> &steps) {
+	for (const auto &step : steps) {
+		if (!step.clauses.empty()) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool ExtractTextPattern(const fhirpath::ASTNode &ast, FastTextPattern &pattern) {
+	if (!ExtractSourceSteps(ast, pattern.source_steps) || pattern.source_steps.empty()) {
+		return false;
+	}
+	return SourceStepsHaveFilter(pattern.source_steps);
+}
+
+static bool ExtractListPattern(const fhirpath::ASTNode &ast, FastListPattern &pattern) {
+	return ExtractSourceSteps(ast, pattern.source_steps) && !pattern.source_steps.empty();
+}
+
+static bool ExtractWhereExistsPattern(const fhirpath::ASTNode &ast, FastWhereExistsPattern &pattern) {
+	if (ast.type != fhirpath::NodeType::ExistsCall || ast.children.size() != 0 || !ast.source ||
+	    ast.source->type != fhirpath::NodeType::WhereCall || ast.source->children.size() != 1 ||
+	    !ast.source->source) {
+		return false;
+	}
+
+	if (!ExtractSourceSteps(*ast.source->source, pattern.source_steps) || pattern.source_steps.empty()) {
+		return false;
+	}
+	return ExtractPredicateDNF(*ast.source->children[0], pattern.clauses) && !pattern.clauses.empty();
+}
+
 // Bind data: shared across all threads via FunctionData
 struct FhirpathBindData : public FunctionData {
 	std::shared_ptr<fhirpath::ExpressionCache> cache;
@@ -58,6 +223,12 @@ struct FhirpathBindData : public FunctionData {
 	std::shared_ptr<fhirpath::ASTNode> precompiled_ast;
 	bool is_simple_path = false;
 	std::vector<std::string> path_segments;
+	bool has_fast_where_exists_pattern = false;
+	FastWhereExistsPattern fast_where_exists_pattern;
+	bool has_fast_text_pattern = false;
+	FastTextPattern fast_text_pattern;
+	bool has_fast_list_pattern = false;
+	FastListPattern fast_list_pattern;
 
 	FhirpathBindData()
 	    : cache(std::make_shared<fhirpath::ExpressionCache>(1024)),
@@ -72,6 +243,12 @@ struct FhirpathBindData : public FunctionData {
 		copy->precompiled_ast = precompiled_ast;
 		copy->is_simple_path = is_simple_path;
 		copy->path_segments = path_segments;
+		copy->has_fast_where_exists_pattern = has_fast_where_exists_pattern;
+		copy->fast_where_exists_pattern = fast_where_exists_pattern;
+		copy->has_fast_text_pattern = has_fast_text_pattern;
+		copy->fast_text_pattern = fast_text_pattern;
+		copy->has_fast_list_pattern = has_fast_list_pattern;
+		copy->fast_list_pattern = fast_list_pattern;
 		return std::move(copy);
 	}
 	bool Equals(const FunctionData &other) const override {
@@ -118,6 +295,27 @@ struct FhirpathState {
 		static thread_local std::vector<std::string> empty;
 		return bind_data ? bind_data->path_segments : empty;
 	}
+	bool has_fast_where_exists_pattern() const {
+		return bind_data ? bind_data->has_fast_where_exists_pattern : false;
+	}
+	const FastWhereExistsPattern &fast_where_exists_pattern() const {
+		static thread_local FastWhereExistsPattern empty;
+		return bind_data ? bind_data->fast_where_exists_pattern : empty;
+	}
+	bool has_fast_text_pattern() const {
+		return bind_data ? bind_data->has_fast_text_pattern : false;
+	}
+	const FastTextPattern &fast_text_pattern() const {
+		static thread_local FastTextPattern empty;
+		return bind_data ? bind_data->fast_text_pattern : empty;
+	}
+	bool has_fast_list_pattern() const {
+		return bind_data ? bind_data->has_fast_list_pattern : false;
+	}
+	const FastListPattern &fast_list_pattern() const {
+		static thread_local FastListPattern empty;
+		return bind_data ? bind_data->fast_list_pattern : empty;
+	}
 };
 
 // Helper to get FhirpathState from ExpressionState
@@ -154,6 +352,15 @@ static unique_ptr<FunctionData> FhirpathBind(ClientContext &context, ScalarFunct
 						if (IsSimplePath(*ast)) {
 							data->is_simple_path = true;
 							CollectPathSegments(*ast, data->path_segments);
+						}
+						if (ExtractWhereExistsPattern(*ast, data->fast_where_exists_pattern)) {
+							data->has_fast_where_exists_pattern = true;
+						}
+						if (ExtractTextPattern(*ast, data->fast_text_pattern)) {
+							data->has_fast_text_pattern = true;
+						}
+						if (ExtractListPattern(*ast, data->fast_list_pattern)) {
+							data->has_fast_list_pattern = true;
 						}
 					}
 				}
@@ -291,6 +498,302 @@ static std::pair<bool, std::string> FastPathLookup(const char *json_data, idx_t 
 	return result;
 }
 
+static void AddFlattenedJsonValue(yyjson_val *value, std::vector<yyjson_val *> &out) {
+	if (!value || yyjson_is_null(value)) {
+		return;
+	}
+	if (yyjson_is_arr(value)) {
+		size_t idx, max;
+		yyjson_val *elem;
+		yyjson_arr_foreach(value, idx, max, elem) {
+			AddFlattenedJsonValue(elem, out);
+		}
+		return;
+	}
+	out.push_back(value);
+}
+
+static yyjson_val *FindChoiceChild(yyjson_val *obj, const std::string &field_name) {
+	if (!obj || !yyjson_is_obj(obj) || field_name.empty()) {
+		return nullptr;
+	}
+	yyjson_obj_iter iter;
+	yyjson_obj_iter_init(obj, &iter);
+	yyjson_val *key;
+	while ((key = yyjson_obj_iter_next(&iter))) {
+		const char *key_str = yyjson_get_str(key);
+		if (!key_str) {
+			continue;
+		}
+		std::string key_s(key_str);
+		if (key_s.size() > field_name.size() && key_s.substr(0, field_name.size()) == field_name &&
+		    std::isupper(static_cast<unsigned char>(key_s[field_name.size()]))) {
+			return yyjson_obj_iter_get_val(key);
+		}
+	}
+	return nullptr;
+}
+
+static void ResolveSegment(const std::vector<yyjson_val *> &input, const std::string &segment,
+                           std::vector<yyjson_val *> &output) {
+	for (auto *node : input) {
+		if (!node || yyjson_is_null(node)) {
+			continue;
+		}
+		if (yyjson_is_arr(node)) {
+			size_t idx, max;
+			yyjson_val *elem;
+			std::vector<yyjson_val *> elems;
+			yyjson_arr_foreach(node, idx, max, elem) {
+				elems.push_back(elem);
+			}
+			ResolveSegment(elems, segment, output);
+			continue;
+		}
+		if (!yyjson_is_obj(node)) {
+			continue;
+		}
+
+		yyjson_val *child = yyjson_obj_get(node, segment.c_str());
+		if (!child) {
+			child = FindChoiceChild(node, segment);
+		}
+		AddFlattenedJsonValue(child, output);
+	}
+}
+
+static std::vector<yyjson_val *> ResolveJsonPath(yyjson_val *root, const std::vector<yyjson_val *> &input,
+                                                 const std::vector<std::string> &segments,
+                                                 bool allow_resource_type_prefix) {
+	std::vector<yyjson_val *> current = input;
+	size_t seg_start = 0;
+	if (allow_resource_type_prefix && root && !input.empty() && input.size() == 1 && input[0] == root) {
+		seg_start = ComputeSegStart(root, segments);
+	}
+	for (size_t seg_idx = seg_start; seg_idx < segments.size(); seg_idx++) {
+		std::vector<yyjson_val *> next;
+		ResolveSegment(current, segments[seg_idx], next);
+		current.swap(next);
+		if (current.empty()) {
+			break;
+		}
+	}
+	return current;
+}
+
+static bool JsonScalarEquals(yyjson_val *node, const std::string &expected) {
+	if (!node || yyjson_is_null(node)) {
+		return false;
+	}
+	if (yyjson_is_str(node)) {
+		const char *s = yyjson_get_str(node);
+		return s && expected == s;
+	}
+	return false;
+}
+
+static std::string PathCacheKey(const std::vector<std::string> &segments) {
+	std::string key;
+	for (const auto &segment : segments) {
+		key += segment;
+		key += '\x1f';
+	}
+	return key;
+}
+
+static bool FastTermMatches(yyjson_val *candidate, const FastPredicateTerm &term,
+                            std::map<std::string, std::vector<yyjson_val *>> &path_cache) {
+	auto key = PathCacheKey(term.path_segments);
+	auto cached = path_cache.find(key);
+	if (cached == path_cache.end()) {
+		std::vector<yyjson_val *> start;
+		start.push_back(candidate);
+		cached = path_cache.insert(std::make_pair(
+		    key, ResolveJsonPath(candidate, start, term.path_segments, false))).first;
+	}
+	const auto &values = cached->second;
+	if (values.size() != 1) {
+		return false;
+	}
+	return JsonScalarEquals(values[0], term.value);
+}
+
+static bool FastClauseMatches(yyjson_val *candidate, const FastPredicateClause &clause,
+                              std::map<std::string, std::vector<yyjson_val *>> &path_cache) {
+	for (const auto &term : clause.terms) {
+		if (!FastTermMatches(candidate, term, path_cache)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+static bool FastCandidateMatches(yyjson_val *candidate, const std::vector<FastPredicateClause> &clauses) {
+	std::map<std::string, std::vector<yyjson_val *>> path_cache;
+	for (const auto &clause : clauses) {
+		if (FastClauseMatches(candidate, clause, path_cache)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static void ApplySourceStep(yyjson_val *root, const std::vector<yyjson_val *> &input,
+                            const FastSourceStep &step, bool allow_resource_type_prefix,
+                            std::vector<yyjson_val *> &output) {
+	std::vector<yyjson_val *> navigated;
+	if (step.path_segments.empty()) {
+		navigated = input;
+	} else {
+		navigated = ResolveJsonPath(root, input, step.path_segments, allow_resource_type_prefix);
+	}
+
+	if (step.clauses.empty()) {
+		output.swap(navigated);
+		return;
+	}
+
+	for (auto *candidate : navigated) {
+		if (FastCandidateMatches(candidate, step.clauses)) {
+			output.push_back(candidate);
+		}
+	}
+}
+
+static bool TryEvaluateWhereExistsFast(const char *json_data, idx_t json_len,
+                                       const FastWhereExistsPattern &pattern, bool &result) {
+	yyjson_doc *doc = yyjson_read(json_data, json_len, 0);
+	if (!doc) {
+		return false;
+	}
+
+	yyjson_val *root = yyjson_doc_get_root(doc);
+	std::vector<yyjson_val *> start;
+	start.push_back(root);
+	std::vector<yyjson_val *> candidates = start;
+	bool allow_resource_type_prefix = true;
+	for (const auto &step : pattern.source_steps) {
+		std::vector<yyjson_val *> next;
+		ApplySourceStep(root, candidates, step, allow_resource_type_prefix, next);
+		candidates.swap(next);
+		allow_resource_type_prefix = false;
+		if (candidates.empty()) {
+			break;
+		}
+	}
+
+	result = false;
+	for (auto *candidate : candidates) {
+		if (FastCandidateMatches(candidate, pattern.clauses)) {
+			result = true;
+			yyjson_doc_free(doc);
+			return true;
+		}
+	}
+
+	yyjson_doc_free(doc);
+	return true;
+}
+
+static bool JsonValueToOwnedString(yyjson_val *value, std::string &result) {
+	if (!value || yyjson_is_null(value)) {
+		return false;
+	}
+	if (yyjson_is_str(value)) {
+		const char *s = yyjson_get_str(value);
+		if (!s) {
+			return false;
+		}
+		result = s;
+		return true;
+	}
+	if (yyjson_is_int(value)) {
+		result = std::to_string(yyjson_get_sint(value));
+		return true;
+	}
+	if (yyjson_is_real(value)) {
+		result = std::to_string(yyjson_get_real(value));
+		return true;
+	}
+	if (yyjson_is_bool(value)) {
+		result = yyjson_get_bool(value) ? "true" : "false";
+		return true;
+	}
+
+	char *json = yyjson_val_write(value, 0, nullptr);
+	if (!json) {
+		return false;
+	}
+	result = json;
+	free(json);
+	return true;
+}
+
+static bool TryEvaluateTextFast(const char *json_data, idx_t json_len,
+                                const FastTextPattern &pattern, std::string &result, bool &found) {
+	found = false;
+	yyjson_doc *doc = yyjson_read(json_data, json_len, 0);
+	if (!doc) {
+		return true;
+	}
+
+	yyjson_val *root = yyjson_doc_get_root(doc);
+	std::vector<yyjson_val *> start;
+	start.push_back(root);
+	std::vector<yyjson_val *> candidates = start;
+	bool allow_resource_type_prefix = true;
+	for (const auto &step : pattern.source_steps) {
+		std::vector<yyjson_val *> next;
+		ApplySourceStep(root, candidates, step, allow_resource_type_prefix, next);
+		candidates.swap(next);
+		allow_resource_type_prefix = false;
+		if (candidates.empty()) {
+			break;
+		}
+	}
+
+	if (candidates.empty()) {
+		yyjson_doc_free(doc);
+		return true;
+	}
+
+	found = JsonValueToOwnedString(candidates[0], result);
+	yyjson_doc_free(doc);
+	return true;
+}
+
+static bool TryEvaluateListFast(const char *json_data, idx_t json_len,
+                                const FastListPattern &pattern, std::vector<std::string> &results) {
+	yyjson_doc *doc = yyjson_read(json_data, json_len, 0);
+	if (!doc) {
+		return true;
+	}
+
+	yyjson_val *root = yyjson_doc_get_root(doc);
+	std::vector<yyjson_val *> start;
+	start.push_back(root);
+	std::vector<yyjson_val *> candidates = start;
+	bool allow_resource_type_prefix = true;
+	for (const auto &step : pattern.source_steps) {
+		std::vector<yyjson_val *> next;
+		ApplySourceStep(root, candidates, step, allow_resource_type_prefix, next);
+		candidates.swap(next);
+		allow_resource_type_prefix = false;
+		if (candidates.empty()) {
+			break;
+		}
+	}
+
+	for (auto *candidate : candidates) {
+		std::string value;
+		if (JsonValueToOwnedString(candidate, value)) {
+			results.push_back(value);
+		}
+	}
+	yyjson_doc_free(doc);
+	return true;
+}
+
 // Helper: evaluate FHIRPath and return the collection
 // Phase 7: Accepts optional arena allocator for per-batch allocation reuse
 static fhirpath::FPCollection EvaluateFhirpath(FhirpathState &state, const char *json_data, idx_t json_len,
@@ -394,6 +897,29 @@ static void FhirpathFunction(DataChunk &args, ExpressionState &state, Vector &re
 		}
 
 		row_valid[i] = true;
+		std::vector<std::string> fast_list;
+		bool fast_list_evaluated = false;
+		if (func_state.has_fast_list_pattern()) {
+			fast_list_evaluated = TryEvaluateListFast(resources[r_idx].GetData(), resources[r_idx].GetSize(),
+			                                          func_state.fast_list_pattern(), fast_list);
+		} else if (!func_state.expression_is_constant()) {
+			auto ast = GetOrCompile(func_state, expressions[e_idx].GetString());
+			FastListPattern pattern;
+			if (ast && ExtractListPattern(*ast, pattern)) {
+				fast_list_evaluated = TryEvaluateListFast(resources[r_idx].GetData(), resources[r_idx].GetSize(),
+				                                          pattern, fast_list);
+			}
+		}
+		if (fast_list_evaluated) {
+			row_offsets[i] = total_size;
+			row_counts[i] = static_cast<idx_t>(fast_list.size());
+			for (const auto &value : fast_list) {
+				ListVector::PushBack(result, Value(value));
+			}
+			total_size += fast_list.size();
+			continue;
+		}
+
 		auto fp_results =
 		    EvaluateFhirpath(func_state, resources[r_idx].GetData(), resources[r_idx].GetSize(),
 		                     expressions[e_idx].GetString());
@@ -459,6 +985,29 @@ static void FhirpathTextFunction(DataChunk &args, ExpressionState &state, Vector
 			// Fall through to full evaluator (handles choice types, arrays, etc.)
 		}
 
+		std::string fast_text;
+		bool fast_text_evaluated = false;
+		bool fast_text_found = false;
+		if (func_state.has_fast_text_pattern()) {
+			fast_text_evaluated = TryEvaluateTextFast(resources[r_idx].GetData(), resources[r_idx].GetSize(),
+			                                          func_state.fast_text_pattern(), fast_text, fast_text_found);
+		} else if (!func_state.expression_is_constant()) {
+			auto ast = GetOrCompile(func_state, expressions[e_idx].GetString());
+			FastTextPattern pattern;
+			if (ast && ExtractTextPattern(*ast, pattern)) {
+				fast_text_evaluated = TryEvaluateTextFast(resources[r_idx].GetData(), resources[r_idx].GetSize(),
+				                                          pattern, fast_text, fast_text_found);
+			}
+		}
+		if (fast_text_evaluated) {
+			if (fast_text_found) {
+				result_data[i] = StringVector::AddString(result, fast_text);
+			} else {
+				result_mask.SetInvalid(i);
+			}
+			continue;
+		}
+
 		auto fp_results =
 		    EvaluateFhirpath(func_state, resources[r_idx].GetData(), resources[r_idx].GetSize(),
 		                     expressions[e_idx].GetString(), &arena);
@@ -500,62 +1049,49 @@ static void FhirpathNumberFunction(DataChunk &args, ExpressionState &state, Vect
 		}
 
 		// Phase 7: Simple path fast path for numeric extraction.
-		// Uses ComputeSegStart to skip resource-type prefix without allocation.
-		// W2: non-numeric terminal values fall through to the full evaluator
-		// instead of silently returning NULL (matches FhirpathTextFunction behavior).
+		// Use the flattened resolver so repeating intermediate arrays still
+		// participate in singleton enforcement before a scalar is emitted.
 		if (func_state.is_simple_path() && !func_state.path_segments().empty()) {
 			yyjson_doc *doc = yyjson_read(resources[r_idx].GetData(), resources[r_idx].GetSize(), 0);
 			if (doc) {
-				yyjson_val *current = yyjson_doc_get_root(doc);
+				yyjson_val *root = yyjson_doc_get_root(doc);
 				const auto &segments = func_state.path_segments();
-				size_t seg_start = ComputeSegStart(current, segments);
+				size_t seg_start = ComputeSegStart(root, segments);
 
 				// W3: all segments consumed by prefix — fall through
 				if (seg_start >= segments.size()) {
 					yyjson_doc_free(doc);
 					// fall through to full evaluator below
 				} else {
-					bool found = true;
-					for (size_t seg_idx = seg_start; seg_idx < segments.size(); seg_idx++) {
-						const auto &seg = segments[seg_idx];
-						if (current && yyjson_is_arr(current)) {
-							current = yyjson_arr_get_first(current);
-						}
-						if (!current || !yyjson_is_obj(current)) {
-							found = false;
-							break;
-						}
-						current = yyjson_obj_get(current, seg.c_str());
-					}
+					std::vector<yyjson_val *> start;
+					start.push_back(root);
+					auto values = ResolveJsonPath(root, start, segments, true);
 					// Extract value BEFORE freeing the document to avoid use-after-free.
 					// Copy the numeric value into a local while the yyjson doc is still alive.
-					bool is_int = found && current && yyjson_is_int(current);
-					bool is_real = found && current && yyjson_is_real(current);
+					yyjson_val *value = values.size() == 1 ? values[0] : nullptr;
+					bool is_int = value && yyjson_is_int(value);
+					bool is_real = value && yyjson_is_real(value);
 					double extracted = 0.0;
 					if (is_int) {
-						extracted = static_cast<double>(yyjson_get_sint(current));
+						extracted = static_cast<double>(yyjson_get_sint(value));
 					} else if (is_real) {
-						extracted = yyjson_get_real(current);
+						extracted = yyjson_get_real(value);
 					}
 					yyjson_doc_free(doc);
 					if (is_int || is_real) {
 						result_data[i] = extracted;
 						continue;
 					}
-					if (found && current) {
+					if (values.size() == 1 && value) {
 						// Non-numeric type (e.g. string "42"): fall through to full
 						// evaluator which applies a type gate — returns NULL for non-numeric.
-					} else if (!found) {
+					} else if (values.empty()) {
 						// Path not found in this resource: NULL
 						result_mask.SetInvalid(i);
 						continue;
 					}
-					// current==NULL (key exists but value is null): NULL
-					if (!current) {
-						result_mask.SetInvalid(i);
-						continue;
-					}
-					// fall through for non-numeric types
+					// Multiple values: let the full evaluator apply scalar singleton
+					// enforcement consistently with the Python fallback.
 				}
 			}
 		}
@@ -726,6 +1262,24 @@ static void FhirpathBoolFunction(DataChunk &args, ExpressionState &state, Vector
 			continue;
 		}
 
+		bool fast_bool = false;
+		bool fast_evaluated = false;
+		if (func_state.has_fast_where_exists_pattern()) {
+			fast_evaluated = TryEvaluateWhereExistsFast(resources[r_idx].GetData(), resources[r_idx].GetSize(),
+			                                            func_state.fast_where_exists_pattern(), fast_bool);
+		} else if (!func_state.expression_is_constant()) {
+			auto ast = GetOrCompile(func_state, expressions[e_idx].GetString());
+			FastWhereExistsPattern pattern;
+			if (ast && ExtractWhereExistsPattern(*ast, pattern)) {
+				fast_evaluated = TryEvaluateWhereExistsFast(resources[r_idx].GetData(), resources[r_idx].GetSize(),
+				                                            pattern, fast_bool);
+			}
+		}
+		if (fast_evaluated) {
+			result_data[i] = fast_bool;
+			continue;
+		}
+
 		auto fp_results =
 		    EvaluateFhirpath(func_state, resources[r_idx].GetData(), resources[r_idx].GetSize(),
 		                     expressions[e_idx].GetString());
@@ -822,7 +1376,13 @@ static void FhirpathJsonFunction(DataChunk &args, ExpressionState &state, Vector
 					json_str += val.source_text;
 				} else {
 					snprintf(buf, sizeof(buf), "%.17g", val.decimal_val);
-					json_str += buf;
+					std::string num(buf);
+					if (num.find('.') == std::string::npos &&
+					    num.find('e') == std::string::npos &&
+					    num.find('E') == std::string::npos) {
+						num += ".0";
+					}
+					json_str += num;
 				}
 			} else if (val.type == fhirpath::FPValue::Type::Boolean) {
 				json_str += val.bool_val ? "true" : "false";

@@ -18,6 +18,11 @@ from ..udf.datetime import (
     minutesBetween,
     secondsBetween,
     millisecondsBetween,
+    differenceInWeeks,
+    differenceInHours,
+    differenceInMinutes,
+    differenceInSeconds,
+    differenceInMilliseconds,
     registerDatetimeUdfs,
 )
 
@@ -70,6 +75,16 @@ def test_years_between_invalid_format():
     assert yearsBetween("not-a-date", "2020-01-01") is None
 
 
+def test_years_between_leap_day_cql_anniversary():
+    """Feb 29 anniversaries use the last valid day in non-leap years."""
+    assert yearsBetween("2012-02-29T10:18:56", "2014-02-28T19:02:34") == 2
+
+
+def test_years_between_negative_truncates_toward_zero():
+    """Negative durations count whole periods, not floor-divided periods."""
+    assert yearsBetween("2012-02-20T10:20:56", "2011-03-19T19:16:02") == 0
+
+
 # ========================================
 # monthsBetween tests
 # ========================================
@@ -108,6 +123,10 @@ def test_months_between_null_end():
     assert monthsBetween("2020-01-01", None) is None
 
 
+def test_months_between_negative_truncates_toward_zero():
+    assert monthsBetween("2013-10-15T13:07:40", "2013-10-02T10:13:59") == 0
+
+
 # ========================================
 # weeksBetween tests
 # ========================================
@@ -138,6 +157,11 @@ def test_weeks_between_null_start():
 def test_weeks_between_null_end():
     """Test weeks between with null end."""
     assert weeksBetween("2020-01-01", None) is None
+
+
+def test_difference_in_weeks_negative_truncates_toward_zero():
+    assert differenceInWeeks("2020-01-10", "2020-01-01") == -1
+    assert differenceInWeeks("2020-01-06", "2020-01-01") == 0
 
 
 # ========================================
@@ -177,6 +201,11 @@ def test_days_between_invalid_format():
     assert daysBetween("invalid", "2020-01-01") is None
 
 
+def test_days_between_respects_time_of_day():
+    assert daysBetween("2012-01-31T12:30:00", "2012-02-01T09:00:00") == 0
+    assert daysBetween("2011-12-05T05:00:00", "2011-12-04T08:45:00") == 0
+
+
 # ========================================
 # hoursBetween tests
 # ========================================
@@ -214,6 +243,18 @@ def test_hours_between_invalid_format():
     assert hoursBetween("not-datetime", "2020-01-01T00:00:00Z") is None
 
 
+def test_hours_between_negative_truncates_toward_zero():
+    assert hoursBetween("2013-10-10T12:30:00", "2013-10-10T08:40:00") == -3
+
+
+def test_hours_between_mixed_timezone_awareness_returns_null():
+    assert hoursBetween("2017-03-12T01:12:05.100-05:00", "2017-03-12T03:22:27.600") is None
+
+
+def test_hours_between_normalizes_timezone_offsets():
+    assert hoursBetween("2017-03-12T01:12:05.100-05:00", "2017-03-12T03:22:27.600-04:00") == 1
+
+
 # ========================================
 # minutesBetween tests
 # ========================================
@@ -244,6 +285,21 @@ def test_minutes_between_null_start():
 def test_minutes_between_null_end():
     """Test minutes between with null end."""
     assert minutesBetween("2020-01-01T00:00:00Z", None) is None
+
+
+def test_minutes_between_negative():
+    assert minutesBetween("2012-12-30T08:40:00", "2012-12-30T06:50:00") == -110
+
+
+def test_difference_in_time_units_truncate_toward_zero_and_handle_timezones():
+    assert differenceInHours("2013-10-10T12:30:00", "2013-10-10T08:40:00") == -3
+    assert differenceInMinutes("2013-10-10T12:30:00", "2013-10-10T12:29:30") == 0
+    assert differenceInSeconds("2013-10-10T12:30:00", "2013-10-10T12:29:59.500") == 0
+    assert differenceInMilliseconds("2013-10-10T12:30:00.000", "2013-10-10T12:29:59.999") == -1
+    assert differenceInHours(
+        "2017-03-12T01:12:05.100-05:00",
+        "2017-03-12T03:22:27.600",
+    ) is None
 
 
 # ========================================

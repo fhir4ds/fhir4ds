@@ -1,3 +1,7 @@
+---
+hide_table_of_contents: true
+---
+
 # SDC Forms
 
 Explore Structured Data Capture (SDC) forms with real-time FHIRPath evaluation and SQL-on-FHIR pre-population.

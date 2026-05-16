@@ -74,7 +74,7 @@ from .paths import get_resource_path
 
 _logger = logging.getLogger(__name__)
 
-__version__ = "0.0.4"
+__version__ = "0.0.5"
 
 
 def parse_cql(cql_text: str):
@@ -86,6 +86,10 @@ def parse_cql(cql_text: str):
     Returns:
         Parsed CQL library object.
     """
+    if not isinstance(cql_text, str):
+        raise TypeError(f"cql_text must be a string, got {type(cql_text).__name__}")
+    if not cql_text.strip():
+        raise ValueError("cql_text must be a non-empty string")
     from .parser import parse_cql as _parse_cql
     return _parse_cql(cql_text)
 
@@ -309,8 +313,7 @@ def evaluate_measure(
         include_paths: Optional list of paths to directories containing included CQL libraries.
                       Used to resolve include statements in the main library.
         audit_mode: Controls audit granularity: "none" (default), "population",
-                   or "full". Currently accepted for API compatibility; audit
-                   functionality is handled by the DQM layer.
+                   or "full".
 
     Returns:
         DuckDB relation with one row per patient and columns per output_columns.
@@ -371,6 +374,32 @@ def evaluate_measure(
     # Validate library_path
     if not library_path:
         raise ValueError("library_path must be a non-empty path to a CQL library file")
+    if audit_mode not in {"none", "population", "full"}:
+        raise ValueError(
+            "audit_mode must be one of 'none', 'population', or 'full', "
+            f"got {audit_mode!r}"
+        )
+    if patient_ids is not None:
+        if isinstance(patient_ids, str) or not isinstance(patient_ids, list):
+            raise TypeError(
+                f"patient_ids must be a list of strings if provided, got {type(patient_ids).__name__}"
+            )
+        for index, patient_id in enumerate(patient_ids):
+            if not isinstance(patient_id, str):
+                raise TypeError(
+                    f"patient_ids[{index}] must be a string, got {type(patient_id).__name__}"
+                )
+    if output_columns is not None:
+        if not isinstance(output_columns, dict):
+            raise TypeError(
+                f"output_columns must be a dict mapping output names to definitions, "
+                f"got {type(output_columns).__name__}"
+            )
+        for col_name, definition_name in output_columns.items():
+            if not isinstance(col_name, str) or not isinstance(definition_name, str):
+                raise TypeError(
+                    "output_columns must map string column names to string definition names"
+                )
 
     # Handle empty patient_ids early
     if patient_ids is not None and len(patient_ids) == 0:
@@ -397,7 +426,11 @@ def evaluate_measure(
     # first: it pollutes mutable translator state (column registries, component-code
     # maps) that causes Phase 2 of the population SQL builder to emit retrieve CTEs
     # without the precomputed property columns that property-filter WHERE clauses need.
-    translator = CQLToSQLTranslator(connection=conn)
+    translator = CQLToSQLTranslator(
+        connection=conn,
+        audit_mode=audit_mode in {"population", "full"},
+        audit_expressions=audit_mode == "full",
+    )
 
     # Set up library loader if include_paths provided
     if include_paths:
@@ -438,7 +471,10 @@ def evaluate_measure(
             result = conn.execute(sql)
         return result.fetchdf()
     except _duckdb_mod.CatalogException as exc:
-        if "resources" in str(exc).lower():
+        msg = str(exc).lower()
+        if "scalar function with name" in msg or "function with name" in msg:
+            raise
+        if "table with name resources" in msg or "table with name 'resources'" in msg:
             raise ValueError(
                 "No FHIR data loaded. The generated SQL references the 'resources' "
                 "table which does not exist. Load data first with "

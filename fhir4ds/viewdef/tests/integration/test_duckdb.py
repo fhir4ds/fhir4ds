@@ -299,6 +299,37 @@ class TestWhereClause:
         result = connection.execute(sql).fetchall()
         assert len(result) >= 1
 
+    def test_top_level_where_string_condition(self, connection, generator):
+        """Test filtering with a convenience string where clause."""
+        patients = [
+            {"resourceType": "Patient", "id": "patient-1", "gender": "male"},
+            {"resourceType": "Patient", "id": "patient-2", "gender": "female"},
+            {"resourceType": "Patient", "id": "patient-3", "gender": "male"},
+        ]
+        connection.execute("CREATE TABLE patients (resource JSON)")
+        for patient in patients:
+            connection.execute("INSERT INTO patients VALUES (?)", [json.dumps(patient)])
+
+        vd_json = json.dumps({
+            "resource": "Patient",
+            "where": "gender = 'male'",
+            "select": [{
+                "column": [
+                    {"path": "id", "name": "pid", "type": "id"},
+                    {"path": "gender", "name": "gender", "type": "string"},
+                ]
+            }]
+        })
+        vd = parse_view_definition(vd_json)
+        sql = generator.generate(vd)
+
+        result = connection.execute(sql).fetchall()
+
+        assert result == [
+            ("patient-1", "male"),
+            ("patient-3", "male"),
+        ]
+
     def test_where_with_fhirpath_function(self, connection, generator):
         """Test WHERE with FHIRPath functions."""
         patients = [
@@ -418,9 +449,9 @@ class TestUnionAll:
         vd = parse_view_definition(vd_json)
         sql = generator.generate(vd)
 
-        # Current implementation may not fully support unionAll
         result = connection.execute(sql).fetchall()
-        assert len(result) >= 1
+        assert result == [("patient-1", "Doe"), ("patient-1", "Smith")]
+        assert "UNION ALL" in sql
 
     def test_multiple_top_level_unionall_groups(self, connection, generator):
         """Sibling top-level unionAll groups should all contribute rows."""
@@ -462,6 +493,77 @@ class TestUnionAll:
 
         assert len(result) == 4
         assert {row[1] for row in result} == {"Doe", "Smith", "John", "Jane"}
+
+    def test_unionall_without_parent_context_generates_sql_union(self, connection, generator):
+        """A bare unionAll should produce separate SELECT branches."""
+        patient = {
+            "resourceType": "Patient",
+            "id": "patient-1",
+            "gender": "male",
+        }
+        connection.execute("CREATE TABLE patients (resource JSON)")
+        connection.execute("INSERT INTO patients VALUES (?)", [json.dumps(patient)])
+
+        vd_json = json.dumps({
+            "resource": "Patient",
+            "select": [{
+                "unionAll": [
+                    {"column": [{"path": "id", "name": "value"}]},
+                    {"column": [{"path": "gender", "name": "value"}]},
+                ]
+            }]
+        })
+        vd = parse_view_definition(vd_json)
+        sql = generator.generate(vd)
+
+        result = connection.execute(sql).fetchall()
+
+        assert result == [("patient-1",), ("male",)]
+        assert sql.count("SELECT") == 2
+        assert "UNION ALL" in sql
+
+
+class TestForeachParentColumns:
+    """Test parent columns combined with forEach projections."""
+
+    def test_parent_columns_repeat_for_nested_foreach(self, connection, generator):
+        patient = {
+            "resourceType": "Patient",
+            "id": "patient-1",
+            "gender": "male",
+            "telecom": [
+                {"system": "phone", "value": "555-0100"},
+                {"system": "email", "value": "a@example.test"},
+            ],
+        }
+        connection.execute("CREATE TABLE patients (resource JSON)")
+        connection.execute("INSERT INTO patients VALUES (?)", [json.dumps(patient)])
+
+        vd_json = json.dumps({
+            "resource": "Patient",
+            "select": [{
+                "column": [
+                    {"path": "id", "name": "id"},
+                    {"path": "gender", "name": "gender"},
+                ],
+                "select": [{
+                    "forEach": "telecom",
+                    "column": [
+                        {"path": "system", "name": "system"},
+                        {"path": "value", "name": "value"},
+                    ],
+                }],
+            }]
+        })
+        vd = parse_view_definition(vd_json)
+        sql = generator.generate(vd)
+
+        result = connection.execute(sql).fetchall()
+
+        assert result == [
+            ("patient-1", "male", "phone", "555-0100"),
+            ("patient-1", "male", "email", "a@example.test"),
+        ]
 
 
 class TestJoins:

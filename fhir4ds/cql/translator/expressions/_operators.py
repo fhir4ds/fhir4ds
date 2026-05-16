@@ -643,6 +643,22 @@ class OperatorsMixin:
             if isinstance(expr.left, TupleExpression) and isinstance(expr.right, TupleExpression):
                 return self._translate_tuple_comparison(expr, operator)
 
+        if operator in ("and", "or", "xor"):
+            left = self.translate(expr.left, usage=ExprUsage.BOOLEAN)
+            right = self.translate(expr.right, usage=ExprUsage.BOOLEAN)
+            if self.context.audit_mode and self.context.audit_expressions and operator in ("and", "or"):
+                left = _ensure_audit_struct(left)
+                right = _ensure_audit_struct(right)
+                if operator == "and":
+                    return SQLFunctionCall(name="audit_and", args=[left, right])
+                macro = "audit_or_all" if self.context.audit_or_strategy == "all" else "audit_or"
+                return SQLFunctionCall(name=macro, args=[left, right])
+            if operator == "xor":
+                # DuckDB doesn't support XOR keyword; use registered Xor() macro.
+                return SQLFunctionCall(name="Xor", args=[left, right])
+            sql_op = BINARY_OPERATOR_MAP.get(operator, operator.upper())
+            return SQLBinaryOp(operator=sql_op, left=left, right=right)
+
         # Parser workaround for temporal operators with precision:
         # The parser sometimes mis-parses:
         #   X on or before day of end of "MAP" and Y
@@ -727,24 +743,6 @@ class OperatorsMixin:
             return self._translate_contains_op(operator, left, right, expr, boolean_context)
         if operator == "in":
             return self._translate_in_op(operator, left, right, expr, boolean_context)
-        if operator in ("and", "or", "xor"):
-            # Logical operators - pass BOOLEAN context to operands
-            left = self.translate(expr.left, usage=ExprUsage.BOOLEAN)
-            right = self.translate(expr.right, usage=ExprUsage.BOOLEAN)
-            if self.context.audit_mode and self.context.audit_expressions and operator in ("and", "or"):
-                left = _ensure_audit_struct(left)
-                right = _ensure_audit_struct(right)
-                if operator == "and":
-                    return SQLFunctionCall(name="audit_and", args=[left, right])
-                else:
-                    macro = "audit_or_all" if self.context.audit_or_strategy == "all" else "audit_or"
-                    return SQLFunctionCall(name=macro, args=[left, right])
-            if operator == "xor":
-                # DuckDB doesn't support XOR keyword; use registered Xor() macro
-                return SQLFunctionCall(name="Xor", args=[left, right])
-            sql_op = BINARY_OPERATOR_MAP.get(operator, operator.upper())
-            return SQLBinaryOp(operator=sql_op, left=left, right=right)
-
         if operator.startswith("is"):
             # IS NULL / IS NOT NULL
             if operator == "is null" or operator == "is":
@@ -983,10 +981,10 @@ class OperatorsMixin:
                     # INTERVAL arithmetic requires TIMESTAMP — cast VARCHAR back
                     _right_ts = SQLCast(expression=_right_cast, target_type="TIMESTAMP")
                     if _direction in ("after", "on or after"):
-                        _offset_right = self._timestamp_arith_to_varchar(
+                        _offset_right = self._timestamp_arith_for_compare(
                             SQLBinaryOp(operator="+", left=_right_ts, right=_interval_lit))
                     else:
-                        _offset_right = self._timestamp_arith_to_varchar(
+                        _offset_right = self._timestamp_arith_for_compare(
                             SQLBinaryOp(operator="-", left=_right_ts, right=_interval_lit))
                     _boundary_expr = self._truncate_to_precision(
                         self._ensure_date_cast(_boundary_expr, _cast_type), _precision)
@@ -1999,7 +1997,7 @@ class OperatorsMixin:
     @staticmethod
     def _point_as_interval(point: SQLExpression) -> SQLExpression:
         """Wrap a point value as a degenerate interval [point, point].
-        
+
         Used for before/after/on-or-before/on-or-after when comparing
         non-temporal intervals (Quantity, Integer, Decimal) where SQL
         comparison operators can't handle the VARCHAR values from
@@ -2241,6 +2239,8 @@ class OperatorsMixin:
                 inner_expr = expr.right.right
                 interval_start = SQLFunctionCall(name="intervalStart", args=[left])
                 right_translated = self.translate(inner_expr, usage=ExprUsage.SCALAR)
+                if self._is_fhir_interval_expression(right_translated) or isinstance(right_translated, SQLInterval):
+                    right_translated = SQLFunctionCall(name="intervalStart", args=[right_translated])
                 left_truncated = self._truncate_to_precision(interval_start, precision_str)
                 right_truncated = self._truncate_to_precision(right_translated, precision_str)
                 return SQLBinaryOp(operator="=", left=left_truncated, right=right_truncated)
@@ -2468,6 +2468,8 @@ class OperatorsMixin:
                 inner_expr = expr.right.right
                 interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
                 right_translated = self.translate(inner_expr, usage=ExprUsage.SCALAR)
+                if self._is_fhir_interval_expression(right_translated) or isinstance(right_translated, SQLInterval):
+                    right_translated = SQLFunctionCall(name="intervalEnd", args=[right_translated])
                 left_truncated = self._truncate_to_precision(interval_end, precision_str)
                 right_truncated = self._truncate_to_precision(right_translated, precision_str)
                 return SQLBinaryOp(operator="=", left=left_truncated, right=right_truncated)
@@ -2897,10 +2899,10 @@ class OperatorsMixin:
                             # Cast right to TIMESTAMP for INTERVAL arithmetic
                             right_ts = SQLCast(expression=right, target_type="TIMESTAMP")
                             if _direction == "after":
-                                offset_right = self._timestamp_arith_to_varchar(
+                                offset_right = self._timestamp_arith_for_compare(
                                     SQLBinaryOp(operator="+", left=right_ts, right=interval_lit))
                             else:
-                                offset_right = self._timestamp_arith_to_varchar(
+                                offset_right = self._timestamp_arith_for_compare(
                                     SQLBinaryOp(operator="-", left=right_ts, right=interval_lit))
                             # Apply precision truncation via VARCHAR LEFT()
                             if _precision:
@@ -3444,4 +3446,3 @@ class OperatorsMixin:
 
         # Default: pass through
         return SQLUnaryOp(operator=operator, operand=operand, prefix=True)
-

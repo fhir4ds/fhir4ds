@@ -118,6 +118,9 @@ def create_reduce_children(ctx, exclude_primitive_extensions):
                 value = data[prop]
                 childPath = ""
 
+                if prop == "resourceType":
+                    continue
+
                 # extensions shouldn't filter through here, yet they should for descendants?
                 # unless this item is the node that is being processed (primitive extension)
                 # though if you filter it, descendants will not work too

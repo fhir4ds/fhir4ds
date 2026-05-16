@@ -20,15 +20,29 @@
         "CodeableConcept":  {"udf": "fhirpath_text",   "sql_type": "VARCHAR"},
         "Reference":        {"udf": "fhirpath_text",   "sql_type": "VARCHAR"}
     },
+    "precomputed_path_udf_overrides": {
+        "period": "fhirpath_text",
+        "effective": "fhirpath_text",
+        "performed": "fhirpath_text"
+    },
+    "default_precomputed_paths": [
+        "status",
+        "period",
+        "effective",
+        "performed"
+    ],
     "column_to_fhir_paths": {
         "onset_date":             ["onset[x]", "onsetDateTime"],
         "abatement_date":         ["abatement[x]", "abatementDateTime"],
         "abatement_end_date":     ["abatement[x]", "abatementPeriod"],
         "recorded_date":          ["recordedDate"],
+        "period":                 ["period"],
         "effective_date":         ["effective[x]", "effectiveDateTime", "effectivePeriod"],
+        "effective":              ["effective[x]"],
         "period_start":           ["period"],
         "period_end":             ["period"],
         "performed_date":         ["performed[x]", "performedDateTime"],
+        "performed":              ["performed[x]"],
         "performed_start":        ["performed[x]", "performedPeriod"],
         "performed_end":          ["performed[x]", "performedPeriod"],
         "authored_date":          ["authoredOn"],

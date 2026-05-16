@@ -67,6 +67,28 @@ def get_all_spec_tests():
     return tests
 
 
+EXPECTED_SPEC_ERROR_TYPES = (
+    SQLOnFHIRError,
+    ValidationError,
+    ParseError,
+    TypeError,
+)
+
+
+def assert_spec_error_is_raised(test_info, generator):
+    """Assert an expectError spec case fails during parse or SQL generation."""
+    test = test_info["test"]
+    view = test.get("view", {})
+
+    try:
+        vd = parse_view_definition(json.dumps(view))
+        generator.generate(vd)
+    except EXPECTED_SPEC_ERROR_TYPES:
+        return
+
+    pytest.xfail("Spec expectError case is accepted by current parser/generator")
+
+
 @pytest.fixture(scope="module")
 def duckdb_connection():
     """Create a DuckDB connection with FHIRPath extension."""
@@ -209,16 +231,9 @@ class TestSpecSQLGeneration:
         test = test_info["test"]
         view = test.get("view", {})
 
-        # Skip error tests
         if test.get("expectError"):
-            pytest.skip("Error test - SQL generation expected to fail")
-
-        # Known unsupported features that prevent SQL generation
-        test_id = f"{test_info['file']}:{test_info['test_title']}"
-        _gen_xfail = {
-        }
-        if test_id in _gen_xfail:
-            pytest.xfail(_gen_xfail[test_id])
+            assert_spec_error_is_raised(test_info, generator)
+            return
 
         vd = parse_view_definition(json.dumps(view))
         sql = generator.generate(vd)
@@ -652,9 +667,6 @@ def _execute_spec_test(con, generator, test_info):
     resources = test_info["resources"]
     expected = test.get("expect")
 
-    if test.get("expectError"):
-        pytest.skip("Error test — validated by parsing/generation tests")
-
     if expected is None:
         pytest.skip("No expected output defined")
 
@@ -717,48 +729,19 @@ class TestSpecExecution:
         self.con = duckdb_connection
         self.gen = generator
 
-    # Known unsupported FHIRPath functions — mark as xfail
-    _XFAIL_TESTS = {
-        # lowBoundary/highBoundary not implemented in fhirpath-py
-        "fn_boundary.json:datetime lowBoundary": "lowBoundary() not implemented",
-        "fn_boundary.json:datetime highBoundary": "highBoundary() not implemented",
-        "fn_boundary.json:date lowBoundary": "lowBoundary() not implemented",
-        "fn_boundary.json:date highBoundary": "highBoundary() not implemented",
-        "fn_boundary.json:time lowBoundary": "lowBoundary() not implemented",
-        "fn_boundary.json:time highBoundary": "highBoundary() not implemented",
-        # ofType() broken on FHIR choice types in fhirpath-py
-        "fn_oftype.json:select string values": "ofType() broken on choice types",
-        "fn_oftype.json:select integer values": "ofType() broken on choice types",
-        "fn_extension.json:simple extension": "ofType() broken on choice types",
-        "constant.json:boolean constant": "deceased.ofType(boolean) broken on choice types",
-        "constant_types.json:dateTime": "ofType(dateTime) broken on choice types",
-        "constant_types.json:instant": "ofType(instant) broken on choice types",
-        "constant_types.json:time": "ofType(time) broken on choice types",
-        # where with ofType(integer) — choice type resolution
-        "where.json:where path with greater than inequality": "ofType(integer) broken on choice types",
-        "where.json:where path with less than inequality": "ofType(integer) broken on choice types",
-        # Logic tests using ofType on choice types
-        "logic.json:filtering with 'and'": "ofType(boolean) broken on choice types",
-        "logic.json:filtering with 'or'": "ofType(boolean) broken on choice types",
-        # row_index with repeat — depends on repeat being implemented
-        # "row_index.json:%rowIndex with repeat": "repeat not implemented",
-    }
-
     @pytest.mark.parametrize("test_info", get_all_spec_tests(),
                              ids=lambda t: f"{t['file']}:{t['test_title']}")
     def test_execute_and_verify(self, test_info):
         """Execute generated SQL and verify results match expected output."""
-        test_id = f"{test_info['file']}:{test_info['test_title']}"
-        if test_id in self._XFAIL_TESTS:
-            pytest.xfail(self._XFAIL_TESTS[test_id])
+        if test_info["test"].get("expectError"):
+            assert_spec_error_is_raised(test_info, self.gen)
+            return
 
         try:
             actual_rows, expected = _execute_spec_test(
                 self.con, self.gen, test_info
             )
         except (SQLOnFHIRError, ValidationError, ParseError) as e:
-            if test_info["test"].get("expectError"):
-                return  # Expected error
             pytest.skip(f"Generation not yet supported: {e}")
 
         # Normalize for comparison

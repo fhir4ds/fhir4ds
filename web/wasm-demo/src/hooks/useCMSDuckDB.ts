@@ -2,10 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import type { QueryResult } from "../components/ResultsTable";
 import { isAuditCell, type AuditCell } from "../lib/narrative";
 import { getAssetBase } from "../lib/asset-base";
-
-// Vite resolves these ?url imports to same-origin localhost paths.
-import duckdbWorkerUrl from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
-import duckdbWasmUrl from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url";
+import { createDuckDBConnection } from "../lib/duckdb-wasm";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,39 +45,7 @@ export function useCMSDuckDB(wasmAppUrl?: string) {
     async function init() {
       try {
         setLoadingMessage("Loading DuckDB-WASM…");
-        const duckdb = await import("@duckdb/duckdb-wasm");
-
-        // Use local same-origin worker URL — fixes Emscripten XHR URL resolution.
-        const worker = new Worker(duckdbWorkerUrl, { type: "classic" });
-        const db = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), worker);
-        await db.instantiate(duckdbWasmUrl, null);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (db.open as any)({
-          path: ":memory:",
-          query: { castBigIntToDouble: true },
-          allowUnsignedExtensions: true,
-          autoInstallExtensions: false,
-          autoLoadExtensions: false,
-        });
-
-        const conn = await db.connect();
-
-        // ── Load C++ WASM extensions ──
-        const extBase = getAssetBase(wasmAppUrl) + "/extensions/";
-        await db.registerFileURL(
-          "fhirpath.duckdb_extension.wasm",
-          extBase + "fhirpath.duckdb_extension.wasm",
-          4 /* DuckDBDataProtocol.HTTP */,
-          false,
-        );
-        await db.registerFileURL(
-          "cql.duckdb_extension.wasm",
-          extBase + "cql.duckdb_extension.wasm",
-          4 /* DuckDBDataProtocol.HTTP */,
-          false,
-        );
-        await conn.query("LOAD 'fhirpath.duckdb_extension.wasm'");
-        await conn.query("LOAD 'cql.duckdb_extension.wasm'");
+        const { db, conn } = await createDuckDBConnection(wasmAppUrl);
         console.log("[CMSDuckDB] C++ extensions loaded");
 
         // Create the resources table

@@ -13,6 +13,7 @@ class TestCase:
     resources: List[Dict[str, Any]]  # Patient, Encounter, Observation, etc.
     expected_results: Dict[str, bool]  # definition_name -> expected value
     description: Optional[str] = None
+    measurement_period: Optional[Dict[str, str]] = None
 
 @dataclass
 class TestSuite:
@@ -45,8 +46,8 @@ def load_test_suite(measure_config: "MeasureConfig") -> TestSuite:
             test_case = _parse_test_bundle(bundle_path, measure_config)
             if test_case:
                 test_cases.append(test_case)
-                if measurement_period is None:
-                    measurement_period = _extract_measurement_period(bundle_path)
+                if measurement_period is None and test_case.measurement_period:
+                    measurement_period = test_case.measurement_period
     else:
         # Strategy B: directory-based (each subdirectory is a test case)
         for subdir in sorted(measure_config.test_dir.iterdir()):
@@ -84,6 +85,7 @@ def _parse_test_bundle(
     patient_id = None
     expected_results = {}
     description = None
+    measurement_period = None
 
     for entry in bundle.get("entry", []):
         resource = entry.get("resource", {})
@@ -101,6 +103,12 @@ def _parse_test_bundle(
 
             groups = resource.get("group", [])
             num_groups = len(groups)
+            period = resource.get("period")
+            if period and measurement_period is None:
+                measurement_period = {
+                    "start": period.get("start"),
+                    "end": period.get("end"),
+                }
 
             for group_idx, group in enumerate(groups):
                 for pop in group.get("population", []):
@@ -137,6 +145,7 @@ def _parse_test_bundle(
         resources=resources,
         expected_results=expected_results,
         description=description,
+        measurement_period=measurement_period,
     )
 
 def _population_code_to_definition(code: str) -> Optional[str]:
@@ -218,21 +227,4 @@ def _extract_measurement_period_from_dir(test_dir: Path) -> Optional[Dict[str, s
                 return {"start": period.get("start"), "end": period.get("end")}
         except Exception:
             pass
-    return None
-
-
-def _extract_measurement_period(bundle_path: Path) -> Optional[Dict[str, str]]:
-    """Extract measurement period from the first MeasureReport in a test bundle."""
-    # Test bundles have a directory per patient with MeasureReport files
-    test_dir = bundle_path.parent
-    patient_dirs = [d for d in test_dir.iterdir() if d.is_dir()]
-    for patient_dir in patient_dirs:
-        for f in patient_dir.glob("MeasureReport-*.json"):
-            try:
-                data = json.load(open(f))
-                period = data.get("period")
-                if period:
-                    return {"start": period.get("start"), "end": period.get("end")}
-            except Exception:
-                pass
     return None

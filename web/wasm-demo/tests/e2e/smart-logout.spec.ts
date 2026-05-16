@@ -19,6 +19,45 @@ test.describe("SMART Logout", () => {
     await expect(providerSelect).toBeVisible();
   });
 
+  test("disconnect removes stale callback result before reconnect", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.setItem(
+        "fhir4ds_smart_token",
+        JSON.stringify({
+          accessToken: "mock-access-token",
+          patientId: "test-patient-123",
+          scope: "launch/patient patient/*.read openid fhirUser",
+          expiresAt: Date.now() + 60 * 60 * 1000,
+        }),
+      );
+      localStorage.setItem(
+        "fhir4ds_smart_session",
+        JSON.stringify({
+          fhirBaseUrl: "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4",
+          vendor: "epic",
+          clientId: "test-client-id",
+        }),
+      );
+      localStorage.setItem("fhir4ds_smart_popup_pending", "1");
+      localStorage.setItem(
+        "fhir4ds_smart_callback_result",
+        JSON.stringify({
+          type: "FHIR4DS_SMART_TOKEN",
+          token: { accessToken: "stale" },
+        }),
+      );
+    });
+
+    await page.goto("/?scenario=smart-flow");
+    await page.getByRole("button", { name: /Disconnect/i }).click();
+
+    const remaining = await page.evaluate(() =>
+      Object.keys(localStorage).filter((key) => key.startsWith("fhir4ds_smart")),
+    );
+    expect(remaining).toEqual([]);
+  });
+
   test("disconnect button is visible when connected and returns to login", async ({ page }) => {
     // Inject a fake token to simulate connected state, then verify
     // that the disconnect handler machinery exists

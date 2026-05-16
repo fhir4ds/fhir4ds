@@ -9,15 +9,14 @@ FHIR4DS is rigorously tested against the official CMS eCQM test bundles from the
 
 ## 1. Accuracy Results
 
-FHIR4DS achieves **100% spec compliance** across all test suites — 2,821 total tests passing.
+FHIR4DS achieves **100% spec compliance** across all test suites — 2,822 total tests passing.
 
 | Metric | Result |
 |--------|-----------------|
-| **Measures Tested** | 46 (QI-Core 2025) |
 | **Spec Compliance (CQL)** | **100%** (1,706 / 1,706 tests) |
 | **Spec Compliance (FHIRPath)** | **100%** (935 / 935 tests) |
 | **Spec Compliance (SQL-on-FHIR)** | **100%** (134 / 134 tests) |
-| **DQM Measures** | **100% pass rate** (46 / 46) |
+| **eCQM Measures** | **100% pass rate** (47 / 47) |
 
 ### Known Upstream Accuracy Gaps
 4 measures have documented accuracy gaps caused by bugs in the official CMS test bundles, not by FHIR4DS implementation errors. These measures fail equally in all conformant engines.
@@ -36,12 +35,12 @@ FHIR4DS achieves **100% spec compliance** across all test suites — 2,821 total
 By leveraging a SQL-native, vectorized architecture, FHIR4DS provides a transformative performance advantage over traditional engines.
 
 ### Head-to-Head: FHIR4DS vs. Java Reference Engine
-We compared FHIR4DS against the industry-standard [Java Clinical Reasoning](https://github.com/cqframework/clinical-reasoning) engine using 10 shared measures that achieved 100% accuracy in both environments.
+We compared FHIR4DS against the industry-standard [Java Clinical Reasoning](https://github.com/cqframework/clinical-reasoning) engine using 12 shared measures that achieved 100% execution success in both environments.
 
 | Metric | Traditional Engine (Java) | FHIR4DS (SQL Native) | Speedup |
 |--------|---------------------------|----------------------|---------|
-| **Mean Execution/Patient** | ~968ms | **~13ms** | **~73×** |
-| **Median Execution/Patient** | ~839ms | **~2ms** | **~405×** |
+| **Mean Execution/Patient** | ~936ms | **~6.9ms** | **~137×** |
+| **Median Execution/Patient** | ~819ms | **~1.9ms** | **~425×** |
 
 ### Scalability
 The speedup reflects the architectural difference: traditional engines evaluate each patient sequentially, whereas FHIR4DS runs a single columnar SQL query that processes the entire population simultaneously. This results in **near-zero marginal cost** for adding additional patients to a cohort.
@@ -50,7 +49,7 @@ The speedup reflects the architectural difference: traditional engines evaluate 
 
 ## 3. Measures Tested
 
-The 46 CMS eCQMs from the QI-Core 2025 content package included in our standard benchmark suite include:
+The 47 CMS eCQMs from the QI-Core 2025 content package included in our standard benchmark suite include:
 
 - **CMS74** — Primary Caries Prevention
 - **CMS75** — Children with Dental Decay
@@ -58,7 +57,7 @@ The 46 CMS eCQMs from the QI-Core 2025 content package included in our standard 
 - **CMS130** — Colorectal Cancer Screening
 - **CMS159** — Depression Remission
 - **CMS349** — HIV Screening
-- ... and 40 additional measures.
+- ... and 41 additional measures.
 
 ---
 

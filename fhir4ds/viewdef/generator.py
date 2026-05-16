@@ -36,16 +36,28 @@ def _quote_identifier(name: str) -> str:
     if not name or not _SAFE_IDENTIFIER_RE.match(name):
         raise ValidationError(
             f"Invalid SQL identifier: {name!r}. "
-            "Column names must start with a letter or underscore and contain "
+            "SQL identifiers must start with a letter or underscore and contain "
             "only alphanumeric characters and underscores."
         )
     return f'"{name}"'
+
+
+def _quote_table_reference(name: str) -> str:
+    """Quote a table reference, allowing schema-qualified identifiers."""
+    if not isinstance(name, str) or not name:
+        raise ValidationError("Invalid SQL table reference: table name must be a non-empty string.")
+
+    parts = name.split(".")
+    if any(part == "" for part in parts):
+        raise ValidationError(f"Invalid SQL table reference: {name!r}.")
+    return ".".join(_quote_identifier(part) for part in parts)
 
 from .types import Column, ColumnType, Select, ViewDefinition
 from .errors import ValidationError
 
 from .unnest import generate_foreach_unnest, generate_foreachornull_unnest, generate_repeat_unnest
 from .constants import ConstantResolver
+from fhir4ds.fhirpath.parser import parse as parse_fhirpath
 
 
 def _load_fhir_array_elements() -> set:
@@ -179,7 +191,7 @@ class SQLGenerator:
             )
         if self._source_table is not None:
             self._current_resource_type = resource
-            return self._source_table
+            return _quote_table_reference(self._source_table)
         return pluralize_resource(resource)
 
     def _resolve_path(self, path: str) -> str:
@@ -415,6 +427,19 @@ class SQLGenerator:
                 f"Undefined constant(s) referenced: {', '.join(undefined_list)}",
                 details={"undefined_constants": undefined_list}
             )
+
+    def _validate_fhirpath_syntax(self, view_definition: ViewDefinition) -> None:
+        """Validate that ViewDefinition FHIRPath expressions parse."""
+        for path in self._collect_all_paths(view_definition):
+            if not path:
+                continue
+            try:
+                parse_fhirpath(path, strict_mode=True)
+            except Exception as exc:
+                raise ValidationError(
+                    f"Invalid FHIRPath expression: {path!r}",
+                    details={"path": path, "error": str(exc)},
+                ) from exc
 
     # Known FHIR R4 array element names (max cardinality = *).
     # Loaded from resources/fhir_array_elements.json at module init.
@@ -1058,6 +1083,7 @@ class SQLGenerator:
                 fhirpath_text(t.resource, 'gender') as gender
             FROM patients t
         """
+        self._validate_fhirpath_syntax(view_definition)
         self._validate_constants(view_definition)
         self._validate_collection_columns(view_definition)
         self._validate_unique_column_names(view_definition)

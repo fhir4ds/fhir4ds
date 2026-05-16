@@ -16,7 +16,7 @@ import {
   clearAuth, 
   getStoredSession, 
   getAccessToken, 
-  handleCallback 
+  SMART_CALLBACK_RESULT_KEY,
 } from "./lib/smart-auth";
 import {
   getScenarioFromURL,
@@ -68,6 +68,28 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forceScenario]);
 
+  useEffect(() => {
+    if (smartAuthenticated) return;
+
+    const syncStoredSmartAuth = () => {
+      if (getAccessToken()) {
+        localStorage.removeItem(SMART_CALLBACK_RESULT_KEY);
+        setSmartAuthenticated(true);
+        if (scenario === "smart-flow") {
+          setActiveTab("playground");
+        }
+      }
+    };
+
+    syncStoredSmartAuth();
+    const interval = setInterval(syncStoredSmartAuth, 500);
+    window.addEventListener("storage", syncStoredSmartAuth);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("storage", syncStoredSmartAuth);
+    };
+  }, [smartAuthenticated, scenario]);
+
   // Listen for URL changes (disabled when scenario is externally controlled)
   useEffect(() => {
     if (forceScenario) return;
@@ -117,8 +139,14 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
   // Global patient selection state for verification
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
 
-  const { ready: duckdbReady, error: duckdbError, extensionsLoaded, executeQuery, getConnection } = useDuckDB(wasmAppUrl);
-  const { ready: pyodideReady, error: pyodideError, translate } = usePyodide();
+  const duckdbRequired = scenario !== "cms-measures";
+  const pyodideRequired =
+    scenario === "workbench" ||
+    scenario === "cql-sandbox" ||
+    (scenario === "smart-flow" && smartAuthenticated);
+
+  const { ready: duckdbReady, error: duckdbError, extensionsLoaded, executeQuery, getConnection } = useDuckDB(wasmAppUrl, duckdbRequired);
+  const { ready: pyodideReady, error: pyodideError, translate } = usePyodide(pyodideRequired);
 
   // Workspace pane visibility — persists across tab switches
   const [paneVisibility, setPaneVisibility] = useState<Record<string, boolean>>({
@@ -160,13 +188,13 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
     } else if (pyodideError) {
       setStatusMessage(`Pyodide failed: ${pyodideError}`);
       setIsStatusError(true);
-    } else if (duckdbReady && pyodideReady) {
+    } else if ((!duckdbRequired || duckdbReady) && (!pyodideRequired || pyodideReady)) {
       setStatusMessage(extensionsLoaded ? "Ready — C++ UDFs active" : "Ready — SQL macro fallback");
       setIsStatusError(false);
-    } else if (!duckdbReady || !pyodideReady) {
+    } else if ((duckdbRequired && !duckdbReady) || (pyodideRequired && !pyodideReady)) {
       setStatusMessage("Loading engines…");
     }
-  }, [duckdbError, pyodideError, duckdbReady, pyodideReady, extensionsLoaded]);
+  }, [duckdbError, pyodideError, duckdbReady, pyodideReady, extensionsLoaded, duckdbRequired, pyodideRequired]);
 
   const handleSampleChange = useCallback(
     (sampleId: string) => {
@@ -241,7 +269,7 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
 
   const samples = filteredCQLSamples.map((s) => ({ id: s.id, label: s.label }));
 
-  const allReady = duckdbReady && pyodideReady;
+  const allReady = (!duckdbRequired || duckdbReady) && (!pyodideRequired || pyodideReady);
 
   const handleSmartAuth = useCallback((authenticated: boolean) => {
     setSmartAuthenticated(authenticated);

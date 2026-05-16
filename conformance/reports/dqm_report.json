@@ -7,18 +7,49 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 135,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 195584,
+    "timings_ms": {
+      "cql_parse_ms": 13.065710983937606,
+      "library_translation_ms": 914.340977993561,
+      "sql_write_ms": 5.012060981243849,
+      "sql_generation_ms": 958.1248690083157,
+      "sql_execution_ms": 768.1744089932181,
+      "result_conversion_ms": 4.304410016629845,
+      "comparison_ms": 1.6692940262146294,
+      "total_ms": 2664.6917320031207,
+      "resource_scope_ms": 1.3432680279947817,
+      "test_suite_load_ms": 353.2319549995009,
+      "measure_wall_ms": 3108.304423978552
+    }
   },
   "CMS1017": {
     "tests": [
       {
         "name": "Full Logic Accuracy",
         "result": {
-          "passed": false,
-          "error": "Accuracy: 97.6%"
+          "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 42,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 183786,
+    "timings_ms": {
+      "cql_parse_ms": 28.10281899292022,
+      "library_translation_ms": 388.0186269816477,
+      "sql_write_ms": 5.41027300641872,
+      "sql_generation_ms": 510.8047729881946,
+      "sql_execution_ms": 90.69782099686563,
+      "result_conversion_ms": 0.48964598681777716,
+      "comparison_ms": 0.6293579936027527,
+      "total_ms": 1024.1533169464674,
+      "resource_scope_ms": 0.94059799448587,
+      "test_suite_load_ms": 112.31995400157757,
+      "measure_wall_ms": 1173.8257840042934
+    }
   },
   "CMS1056": {
     "tests": [
@@ -28,7 +59,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 10,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 23123,
+    "timings_ms": {
+      "cql_parse_ms": 6.265523988986388,
+      "library_translation_ms": 323.131295008352,
+      "sql_write_ms": 3.38135301717557,
+      "sql_generation_ms": 190.03669600351714,
+      "sql_execution_ms": 46.492656983900815,
+      "result_conversion_ms": 0.3469990042503923,
+      "comparison_ms": 0.21902599837630987,
+      "total_ms": 569.8735500045586,
+      "resource_scope_ms": 0.8467670122627169,
+      "test_suite_load_ms": 37.086684023961425,
+      "measure_wall_ms": 637.9560870118439
+    }
   },
   "CMS117": {
     "tests": [
@@ -38,7 +85,49 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 10,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 369459,
+    "timings_ms": {
+      "cql_parse_ms": 50.347519980277866,
+      "library_translation_ms": 516.1326029920019,
+      "sql_write_ms": 5.428283009678125,
+      "sql_generation_ms": 635.6313079886604,
+      "sql_execution_ms": 296.4151519990992,
+      "result_conversion_ms": 0.36785201518796384,
+      "comparison_ms": 0.2557669940870255,
+      "total_ms": 1504.5784849789925,
+      "resource_scope_ms": 0.6413850060198456,
+      "test_suite_load_ms": 32.125324010849,
+      "measure_wall_ms": 1567.4487850046717
+    }
+  },
+  "CMS1218": {
+    "tests": [
+      {
+        "name": "Full Logic Accuracy",
+        "result": {
+          "passed": true
+        }
+      }
+    ],
+    "patient_count": 69,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 402888,
+    "timings_ms": {
+      "cql_parse_ms": 62.17648700112477,
+      "library_translation_ms": 631.0560329875443,
+      "sql_write_ms": 4.996592993848026,
+      "sql_generation_ms": 869.7427840088494,
+      "sql_execution_ms": 434.703035018174,
+      "result_conversion_ms": 0.5848529981449246,
+      "comparison_ms": 0.8523469732608646,
+      "total_ms": 2004.1121319809463,
+      "resource_scope_ms": 0.8106690074782819,
+      "test_suite_load_ms": 185.35696400795132,
+      "measure_wall_ms": 2220.126521977363
+    }
   },
   "CMS122": {
     "tests": [
@@ -48,7 +137,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 56,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 111105,
+    "timings_ms": {
+      "cql_parse_ms": 11.788478004746139,
+      "library_translation_ms": 632.2338379977737,
+      "sql_write_ms": 4.161752003710717,
+      "sql_generation_ms": 554.4294159917627,
+      "sql_execution_ms": 100.39771301671863,
+      "result_conversion_ms": 0.502894981764257,
+      "comparison_ms": 0.9598280012141913,
+      "total_ms": 1304.4739199976902,
+      "resource_scope_ms": 1.021425996441394,
+      "test_suite_load_ms": 179.2019710119348,
+      "measure_wall_ms": 1516.3348319765646
+    }
   },
   "CMS1244": {
     "tests": [
@@ -58,7 +163,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 65,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 50975,
+    "timings_ms": {
+      "cql_parse_ms": 21.694548020604998,
+      "library_translation_ms": 163.69737501372583,
+      "sql_write_ms": 3.6904080188833177,
+      "sql_generation_ms": 437.40851199254394,
+      "sql_execution_ms": 83.594613999594,
+      "result_conversion_ms": 0.44961701496504247,
+      "comparison_ms": 0.7439409964717925,
+      "total_ms": 711.2790150567889,
+      "resource_scope_ms": 0.9808279864955693,
+      "test_suite_load_ms": 203.18646699888632,
+      "measure_wall_ms": 948.4329830156639
+    }
   },
   "CMS124": {
     "tests": [
@@ -68,7 +189,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 33,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 49838,
+    "timings_ms": {
+      "cql_parse_ms": 7.613800000399351,
+      "library_translation_ms": 174.25685000489466,
+      "sql_write_ms": 4.419566015712917,
+      "sql_generation_ms": 86.12066399655305,
+      "sql_execution_ms": 60.36880300962366,
+      "result_conversion_ms": 0.39948499761521816,
+      "comparison_ms": 0.5111020000185817,
+      "total_ms": 333.69027002481744,
+      "resource_scope_ms": 0.9073870023712516,
+      "test_suite_load_ms": 108.23320198687725,
+      "measure_wall_ms": 471.05587300029583
+    }
   },
   "CMS125": {
     "tests": [
@@ -78,7 +215,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 66,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 128629,
+    "timings_ms": {
+      "cql_parse_ms": 11.413655010983348,
+      "library_translation_ms": 413.5193859983701,
+      "sql_write_ms": 3.813924005953595,
+      "sql_generation_ms": 328.1127640220802,
+      "sql_execution_ms": 107.06966801080853,
+      "result_conversion_ms": 0.4208509926684201,
+      "comparison_ms": 0.8788730192463845,
+      "total_ms": 865.2291210601106,
+      "resource_scope_ms": 0.7651839987374842,
+      "test_suite_load_ms": 187.55419601802714,
+      "measure_wall_ms": 1082.2364570049103
+    }
   },
   "CMS1264": {
     "tests": [
@@ -88,7 +241,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 53,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 33896,
+    "timings_ms": {
+      "cql_parse_ms": 17.910830007167533,
+      "library_translation_ms": 157.85764702013694,
+      "sql_write_ms": 3.5025499819312245,
+      "sql_generation_ms": 75.0354409974534,
+      "sql_execution_ms": 54.8897180124186,
+      "result_conversion_ms": 0.4224379954393953,
+      "comparison_ms": 0.5922559939790517,
+      "total_ms": 310.21088000852615,
+      "resource_scope_ms": 0.8136969991028309,
+      "test_suite_load_ms": 172.14198200963438,
+      "measure_wall_ms": 519.9846540053841
+    }
   },
   "CMS128": {
     "tests": [
@@ -98,7 +267,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 10,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 210188,
+    "timings_ms": {
+      "cql_parse_ms": 11.05854898924008,
+      "library_translation_ms": 311.84245500480756,
+      "sql_write_ms": 6.410396978026256,
+      "sql_generation_ms": 436.37274400680326,
+      "sql_execution_ms": 273.8138420099858,
+      "result_conversion_ms": 0.4020569904241711,
+      "comparison_ms": 0.42786900303326547,
+      "total_ms": 1040.3279129823204,
+      "resource_scope_ms": 0.845617993036285,
+      "test_suite_load_ms": 50.085615017451346,
+      "measure_wall_ms": 1131.2327290070243
+    }
   },
   "CMS130": {
     "tests": [
@@ -108,7 +293,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 64,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 122104,
+    "timings_ms": {
+      "cql_parse_ms": 8.923315996071324,
+      "library_translation_ms": 309.9246909841895,
+      "sql_write_ms": 3.621617011958733,
+      "sql_generation_ms": 208.3880070131272,
+      "sql_execution_ms": 108.69836501660757,
+      "result_conversion_ms": 0.4360619932413101,
+      "comparison_ms": 0.902859988855198,
+      "total_ms": 640.8949180040509,
+      "resource_scope_ms": 0.93346499488689,
+      "test_suite_load_ms": 181.06672100839205,
+      "measure_wall_ms": 854.1242589999456
+    }
   },
   "CMS133": {
     "tests": [
@@ -118,7 +319,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 73,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 83352,
+    "timings_ms": {
+      "cql_parse_ms": 20.802527986234054,
+      "library_translation_ms": 191.2330859922804,
+      "sql_write_ms": 3.5612600040622056,
+      "sql_generation_ms": 107.44006599998102,
+      "sql_execution_ms": 124.42697200458497,
+      "result_conversion_ms": 0.5341670184861869,
+      "comparison_ms": 1.0238229879178107,
+      "total_ms": 449.02190199354663,
+      "resource_scope_ms": 0.8404280233662575,
+      "test_suite_load_ms": 217.63703299802728,
+      "measure_wall_ms": 697.5494160142262
+    }
   },
   "CMS135": {
     "tests": [
@@ -128,7 +345,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 35,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 59657,
+    "timings_ms": {
+      "cql_parse_ms": 7.516448997193947,
+      "library_translation_ms": 261.76324900006875,
+      "sql_write_ms": 3.970652003772557,
+      "sql_generation_ms": 227.7075730089564,
+      "sql_execution_ms": 76.1162790004164,
+      "result_conversion_ms": 0.43260501115582883,
+      "comparison_ms": 0.5529089830815792,
+      "total_ms": 578.0597160046455,
+      "resource_scope_ms": 1.1283690109848976,
+      "test_suite_load_ms": 133.11746998806484,
+      "measure_wall_ms": 742.8741230105516
+    }
   },
   "CMS142": {
     "tests": [
@@ -138,7 +371,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 32,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 28252,
+    "timings_ms": {
+      "cql_parse_ms": 12.395525991450995,
+      "library_translation_ms": 133.9183939853683,
+      "sql_write_ms": 3.2594540098216385,
+      "sql_generation_ms": 57.877206010743976,
+      "sql_execution_ms": 42.60615899693221,
+      "result_conversion_ms": 0.37285900907590985,
+      "comparison_ms": 0.5253359850030392,
+      "total_ms": 250.95493398839608,
+      "resource_scope_ms": 0.9770370088517666,
+      "test_suite_load_ms": 103.14976799418218,
+      "measure_wall_ms": 383.61659200745635
+    }
   },
   "CMS143": {
     "tests": [
@@ -148,7 +397,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 31,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 20310,
+    "timings_ms": {
+      "cql_parse_ms": 8.165242994436994,
+      "library_translation_ms": 110.39432397228666,
+      "sql_write_ms": 3.9539129938930273,
+      "sql_generation_ms": 57.90678597986698,
+      "sql_execution_ms": 33.85607700329274,
+      "result_conversion_ms": 0.404853984946385,
+      "comparison_ms": 0.5435570201370865,
+      "total_ms": 215.22475394885987,
+      "resource_scope_ms": 0.8087430032901466,
+      "test_suite_load_ms": 105.08877199026756,
+      "measure_wall_ms": 351.66164801921695
+    }
   },
   "CMS144": {
     "tests": [
@@ -158,7 +423,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 39,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 86929,
+    "timings_ms": {
+      "cql_parse_ms": 14.49048801441677,
+      "library_translation_ms": 218.30975799821317,
+      "sql_write_ms": 3.441543987719342,
+      "sql_generation_ms": 116.51880701538175,
+      "sql_execution_ms": 97.58375000092201,
+      "result_conversion_ms": 0.40730598266236484,
+      "comparison_ms": 0.6474799884017557,
+      "total_ms": 451.39913298771717,
+      "resource_scope_ms": 0.8459530072286725,
+      "test_suite_load_ms": 138.0007200059481,
+      "measure_wall_ms": 619.049921981059
+    }
   },
   "CMS145": {
     "tests": [
@@ -168,7 +449,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 51,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 145317,
+    "timings_ms": {
+      "cql_parse_ms": 33.21198798948899,
+      "library_translation_ms": 248.8209240254946,
+      "sql_write_ms": 4.94211699697189,
+      "sql_generation_ms": 165.4922800080385,
+      "sql_execution_ms": 143.3389660087414,
+      "result_conversion_ms": 0.5488049937412143,
+      "comparison_ms": 1.8601579940877855,
+      "total_ms": 598.2152380165644,
+      "resource_scope_ms": 1.1423940013628453,
+      "test_suite_load_ms": 179.4740150216967,
+      "measure_wall_ms": 812.4016119982116
+    }
   },
   "CMS146": {
     "tests": [
@@ -178,7 +475,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 10,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 89205,
+    "timings_ms": {
+      "cql_parse_ms": 11.058894015150145,
+      "library_translation_ms": 406.77347901510075,
+      "sql_write_ms": 3.516519005643204,
+      "sql_generation_ms": 307.8386630222667,
+      "sql_execution_ms": 71.03103498229757,
+      "result_conversion_ms": 0.37599101779051125,
+      "comparison_ms": 0.29453999013639987,
+      "total_ms": 800.8891210483853,
+      "resource_scope_ms": 1.3695279776584357,
+      "test_suite_load_ms": 38.90965000027791,
+      "measure_wall_ms": 878.6850099859294
+    }
   },
   "CMS149": {
     "tests": [
@@ -188,7 +501,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 32,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 21992,
+    "timings_ms": {
+      "cql_parse_ms": 8.445999003015459,
+      "library_translation_ms": 105.09800098952837,
+      "sql_write_ms": 5.8163999929092824,
+      "sql_generation_ms": 71.13927998580039,
+      "sql_execution_ms": 62.15320201590657,
+      "result_conversion_ms": 0.5092209903523326,
+      "comparison_ms": 0.9807269962038845,
+      "total_ms": 254.1428299737163,
+      "resource_scope_ms": 0.9198580228257924,
+      "test_suite_load_ms": 109.74101201281883,
+      "measure_wall_ms": 393.91511501162313
+    }
   },
   "CMS155": {
     "tests": [
@@ -198,7 +527,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 10,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 44980,
+    "timings_ms": {
+      "cql_parse_ms": 10.140271013369784,
+      "library_translation_ms": 185.16275999718346,
+      "sql_write_ms": 5.3368939843494445,
+      "sql_generation_ms": 89.61814898066223,
+      "sql_execution_ms": 51.74111999804154,
+      "result_conversion_ms": 0.4416310111992061,
+      "comparison_ms": 0.6570159748662263,
+      "total_ms": 343.0978409596719,
+      "resource_scope_ms": 1.069171994458884,
+      "test_suite_load_ms": 55.726511985994875,
+      "measure_wall_ms": 445.79294900177047
+    }
   },
   "CMS157": {
     "tests": [
@@ -208,7 +553,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 10,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 24282,
+    "timings_ms": {
+      "cql_parse_ms": 8.912439981941134,
+      "library_translation_ms": 162.80231397831813,
+      "sql_write_ms": 5.163387977518141,
+      "sql_generation_ms": 424.273284006631,
+      "sql_execution_ms": 29.4353720091749,
+      "result_conversion_ms": 0.42941299034282565,
+      "comparison_ms": 0.4394040151964873,
+      "total_ms": 631.4556149591226,
+      "resource_scope_ms": 0.9478580032009631,
+      "test_suite_load_ms": 41.62748300586827,
+      "measure_wall_ms": 717.5733880139887
+    }
   },
   "CMS159": {
     "tests": [
@@ -218,7 +579,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 67,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 68687,
+    "timings_ms": {
+      "cql_parse_ms": 22.130857018055394,
+      "library_translation_ms": 358.9248779753689,
+      "sql_write_ms": 3.742336994037032,
+      "sql_generation_ms": 90.0502169970423,
+      "sql_execution_ms": 104.17623000103049,
+      "result_conversion_ms": 0.4321470041759312,
+      "comparison_ms": 0.9350370091851801,
+      "total_ms": 580.3917029988952,
+      "resource_scope_ms": 0.8787959814071655,
+      "test_suite_load_ms": 199.9916610075161,
+      "measure_wall_ms": 811.1266269988846
+    }
   },
   "CMS165": {
     "tests": [
@@ -228,7 +605,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 68,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 132153,
+    "timings_ms": {
+      "cql_parse_ms": 13.850602990714833,
+      "library_translation_ms": 351.39174401410855,
+      "sql_write_ms": 3.7841569865122437,
+      "sql_generation_ms": 309.22184098744765,
+      "sql_execution_ms": 156.10624800319783,
+      "result_conversion_ms": 1.0427449888084084,
+      "comparison_ms": 2.194170985603705,
+      "total_ms": 837.5915089563932,
+      "resource_scope_ms": 1.142260996857658,
+      "test_suite_load_ms": 185.80567699973471,
+      "measure_wall_ms": 1051.4349070144817
+    }
   },
   "CMS190": {
     "tests": [
@@ -238,7 +631,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 125,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 155563,
+    "timings_ms": {
+      "cql_parse_ms": 39.291889988817275,
+      "library_translation_ms": 507.79890999547206,
+      "sql_write_ms": 4.610852018231526,
+      "sql_generation_ms": 367.9414720099885,
+      "sql_execution_ms": 239.69837799086235,
+      "result_conversion_ms": 0.9084179764613509,
+      "comparison_ms": 1.6155189950950444,
+      "total_ms": 1161.865438974928,
+      "resource_scope_ms": 2.4444809823762625,
+      "test_suite_load_ms": 355.1053679839242,
+      "measure_wall_ms": 1551.064758998109
+    }
   },
   "CMS22": {
     "tests": [
@@ -248,7 +657,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 43,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 71901,
+    "timings_ms": {
+      "cql_parse_ms": 36.926057015080005,
+      "library_translation_ms": 207.30679901316762,
+      "sql_write_ms": 3.8685129838995636,
+      "sql_generation_ms": 110.4144639975857,
+      "sql_execution_ms": 96.29840299021453,
+      "result_conversion_ms": 0.5327980034053326,
+      "comparison_ms": 0.691930006723851,
+      "total_ms": 456.0389640100766,
+      "resource_scope_ms": 1.3464880175888538,
+      "test_suite_load_ms": 148.57044501695782,
+      "measure_wall_ms": 638.9457029872574
+    }
   },
   "CMS2": {
     "tests": [
@@ -258,7 +683,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 36,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 348363,
+    "timings_ms": {
+      "cql_parse_ms": 26.21808199910447,
+      "library_translation_ms": 661.5891219989862,
+      "sql_write_ms": 4.474319983273745,
+      "sql_generation_ms": 1210.4415810026694,
+      "sql_execution_ms": 302.72708798293024,
+      "result_conversion_ms": 0.3854770038742572,
+      "comparison_ms": 0.5603720201179385,
+      "total_ms": 2206.3960419909563,
+      "resource_scope_ms": 1.1041139950975776,
+      "test_suite_load_ms": 120.89007900794968,
+      "measure_wall_ms": 2363.3713550225366
+    }
   },
   "CMS349": {
     "tests": [
@@ -268,7 +709,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 36,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 21110,
+    "timings_ms": {
+      "cql_parse_ms": 7.378939975751564,
+      "library_translation_ms": 220.51385301165283,
+      "sql_write_ms": 3.790257003856823,
+      "sql_generation_ms": 66.66896599926986,
+      "sql_execution_ms": 38.662348000798374,
+      "result_conversion_ms": 0.3987840027548373,
+      "comparison_ms": 0.6162060017231852,
+      "total_ms": 338.02935399580747,
+      "resource_scope_ms": 1.0055239836219698,
+      "test_suite_load_ms": 115.23440998280421,
+      "measure_wall_ms": 489.6575770108029
+    }
   },
   "CMS506": {
     "tests": [
@@ -278,7 +735,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 38,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 43752,
+    "timings_ms": {
+      "cql_parse_ms": 18.244395992951468,
+      "library_translation_ms": 163.62713198759593,
+      "sql_write_ms": 6.778647977625951,
+      "sql_generation_ms": 93.6977680248674,
+      "sql_execution_ms": 65.31450399779715,
+      "result_conversion_ms": 0.4450840060599148,
+      "comparison_ms": 0.5615759873762727,
+      "total_ms": 348.6691079742741,
+      "resource_scope_ms": 0.8895030186977237,
+      "test_suite_load_ms": 141.75054201041348,
+      "measure_wall_ms": 529.3734069855418
+    }
   },
   "CMS50": {
     "tests": [
@@ -288,7 +761,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 33,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 30678,
+    "timings_ms": {
+      "cql_parse_ms": 13.720887014642358,
+      "library_translation_ms": 115.6892989820335,
+      "sql_write_ms": 4.54375401022844,
+      "sql_generation_ms": 158.0252869753167,
+      "sql_execution_ms": 38.725089019862935,
+      "result_conversion_ms": 0.3540579928085208,
+      "comparison_ms": 0.5507009918801486,
+      "total_ms": 331.6090749867726,
+      "resource_scope_ms": 0.9200260101351887,
+      "test_suite_load_ms": 116.15094300941564,
+      "measure_wall_ms": 488.4897370066028
+    }
   },
   "CMS56": {
     "tests": [
@@ -298,7 +787,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 58,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 111484,
+    "timings_ms": {
+      "cql_parse_ms": 38.549815013539046,
+      "library_translation_ms": 201.94356600404717,
+      "sql_write_ms": 7.364380988292396,
+      "sql_generation_ms": 140.0038690189831,
+      "sql_execution_ms": 134.84951900318265,
+      "result_conversion_ms": 0.4352420219220221,
+      "comparison_ms": 0.9232640150003135,
+      "total_ms": 524.0696560649667,
+      "resource_scope_ms": 0.8482470002491027,
+      "test_suite_load_ms": 251.68529400252737,
+      "measure_wall_ms": 817.7821410063189
+    }
   },
   "CMS645": {
     "tests": [
@@ -308,7 +813,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 49,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 79759,
+    "timings_ms": {
+      "cql_parse_ms": 15.012091986136511,
+      "library_translation_ms": 200.74722400750034,
+      "sql_write_ms": 5.26295299641788,
+      "sql_generation_ms": 118.4141430130694,
+      "sql_execution_ms": 71.21598697267473,
+      "result_conversion_ms": 0.4115479823667556,
+      "comparison_ms": 0.8003939874470234,
+      "total_ms": 411.86434094561264,
+      "resource_scope_ms": 1.2713809846900403,
+      "test_suite_load_ms": 169.12179099745117,
+      "measure_wall_ms": 625.6010100187268
+    }
   },
   "CMS646": {
     "tests": [
@@ -318,7 +839,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 37,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 52508,
+    "timings_ms": {
+      "cql_parse_ms": 18.90907302731648,
+      "library_translation_ms": 114.65135600883514,
+      "sql_write_ms": 6.652968993876129,
+      "sql_generation_ms": 83.58514701831155,
+      "sql_execution_ms": 61.47486000554636,
+      "result_conversion_ms": 0.40052400436252356,
+      "comparison_ms": 0.7536920020356774,
+      "total_ms": 286.42762106028385,
+      "resource_scope_ms": 1.202649000333622,
+      "test_suite_load_ms": 154.09291797550395,
+      "measure_wall_ms": 473.40376299689524
+    }
   },
   "CMS68": {
     "tests": [
@@ -328,7 +865,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 19,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 10187,
+    "timings_ms": {
+      "cql_parse_ms": 5.32539002597332,
+      "library_translation_ms": 183.19294101092964,
+      "sql_write_ms": 4.072356998221949,
+      "sql_generation_ms": 50.55407198960893,
+      "sql_execution_ms": 18.688103009480983,
+      "result_conversion_ms": 0.38387702079489827,
+      "comparison_ms": 0.4435430164448917,
+      "total_ms": 262.6602830714546,
+      "resource_scope_ms": 1.0894079750869423,
+      "test_suite_load_ms": 68.98577700485475,
+      "measure_wall_ms": 372.7756069856696
+    }
   },
   "CMS69": {
     "tests": [
@@ -338,7 +891,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 62,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 76689,
+    "timings_ms": {
+      "cql_parse_ms": 17.87435499136336,
+      "library_translation_ms": 253.87863800278865,
+      "sql_write_ms": 3.9087710028979927,
+      "sql_generation_ms": 180.7732000015676,
+      "sql_execution_ms": 76.5589729999192,
+      "result_conversion_ms": 0.42615001439116895,
+      "comparison_ms": 0.9347830200567842,
+      "total_ms": 534.3548700329848,
+      "resource_scope_ms": 0.7555519987363368,
+      "test_suite_load_ms": 219.2958149826154,
+      "measure_wall_ms": 793.2775650115218
+    }
   },
   "CMS71": {
     "tests": [
@@ -348,7 +917,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 83,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 45799,
+    "timings_ms": {
+      "cql_parse_ms": 13.940130011178553,
+      "library_translation_ms": 367.0751830213703,
+      "sql_write_ms": 3.799850004725158,
+      "sql_generation_ms": 161.11879498930648,
+      "sql_execution_ms": 70.39610799984075,
+      "result_conversion_ms": 0.5693630082532763,
+      "comparison_ms": 1.0185990249738097,
+      "total_ms": 617.9180280596483,
+      "resource_scope_ms": 0.8934250217862427,
+      "test_suite_load_ms": 262.89487301255576,
+      "measure_wall_ms": 913.5598639841191
+    }
   },
   "CMS72": {
     "tests": [
@@ -358,7 +943,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 159,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 86727,
+    "timings_ms": {
+      "cql_parse_ms": 16.402970999479294,
+      "library_translation_ms": 287.6054129737895,
+      "sql_write_ms": 7.290196983376518,
+      "sql_generation_ms": 134.77593299467117,
+      "sql_execution_ms": 129.6905459894333,
+      "result_conversion_ms": 0.91940799029544,
+      "comparison_ms": 1.8294400069862604,
+      "total_ms": 578.5139079380315,
+      "resource_scope_ms": 0.9320300014223903,
+      "test_suite_load_ms": 413.81855300278403,
+      "measure_wall_ms": 1022.0110460068099
+    }
   },
   "CMS74": {
     "tests": [
@@ -368,7 +969,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 20,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 29241,
+    "timings_ms": {
+      "cql_parse_ms": 5.555993993766606,
+      "library_translation_ms": 165.5016980075743,
+      "sql_write_ms": 3.17502100369893,
+      "sql_generation_ms": 79.80443999986164,
+      "sql_execution_ms": 37.332175008486956,
+      "result_conversion_ms": 0.3466260095592588,
+      "comparison_ms": 0.4637870006263256,
+      "total_ms": 292.179741023574,
+      "resource_scope_ms": 1.1320660123601556,
+      "test_suite_load_ms": 73.76718099112622,
+      "measure_wall_ms": 397.8351929981727
+    }
   },
   "CMS75": {
     "tests": [
@@ -378,7 +995,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 20,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 25233,
+    "timings_ms": {
+      "cql_parse_ms": 4.9835320096462965,
+      "library_translation_ms": 376.7408129933756,
+      "sql_write_ms": 3.7329379993025213,
+      "sql_generation_ms": 158.5932089947164,
+      "sql_execution_ms": 37.36735999700613,
+      "result_conversion_ms": 0.35930698504671454,
+      "comparison_ms": 0.43513497803360224,
+      "total_ms": 582.2122939571273,
+      "resource_scope_ms": 0.7476570026483387,
+      "test_suite_load_ms": 67.13442498585209,
+      "measure_wall_ms": 683.8300899835303
+    }
   },
   "CMS771": {
     "tests": [
@@ -388,7 +1021,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 31,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 45322,
+    "timings_ms": {
+      "cql_parse_ms": 17.444108001654968,
+      "library_translation_ms": 125.27439297991805,
+      "sql_write_ms": 3.2606270106043667,
+      "sql_generation_ms": 80.40776997222565,
+      "sql_execution_ms": 46.06666398467496,
+      "result_conversion_ms": 0.36728900158777833,
+      "comparison_ms": 0.5525749875232577,
+      "total_ms": 273.37342593818903,
+      "resource_scope_ms": 0.7578030053991824,
+      "test_suite_load_ms": 105.92678500688635,
+      "measure_wall_ms": 411.30072801024653
+    }
   },
   "CMS816": {
     "tests": [
@@ -398,7 +1047,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 27,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 37836,
+    "timings_ms": {
+      "cql_parse_ms": 8.377798018045723,
+      "library_translation_ms": 154.80973100056872,
+      "sql_write_ms": 6.004794995533302,
+      "sql_generation_ms": 86.12404798623174,
+      "sql_execution_ms": 60.91639699297957,
+      "result_conversion_ms": 0.3998889878857881,
+      "comparison_ms": 0.4953090101480484,
+      "total_ms": 317.1279669913929,
+      "resource_scope_ms": 0.8098779944702983,
+      "test_suite_load_ms": 99.19574300874956,
+      "measure_wall_ms": 446.3970449869521
+    }
   },
   "CMS819": {
     "tests": [
@@ -408,7 +1073,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 18,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 26127,
+    "timings_ms": {
+      "cql_parse_ms": 9.994267020374537,
+      "library_translation_ms": 235.66111299442127,
+      "sql_write_ms": 3.1556489993818104,
+      "sql_generation_ms": 60.6649830006063,
+      "sql_execution_ms": 48.18474399507977,
+      "result_conversion_ms": 0.3596199967432767,
+      "comparison_ms": 0.3476529964245856,
+      "total_ms": 358.36802900303155,
+      "resource_scope_ms": 0.872067001182586,
+      "test_suite_load_ms": 55.27627299306914,
+      "measure_wall_ms": 449.1476970142685
+    }
   },
   "CMS826": {
     "tests": [
@@ -418,7 +1099,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 9,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 55817,
+    "timings_ms": {
+      "cql_parse_ms": 12.47936298022978,
+      "library_translation_ms": 156.91326800151728,
+      "sql_write_ms": 3.313027002150193,
+      "sql_generation_ms": 95.60658800182864,
+      "sql_execution_ms": 96.2873859971296,
+      "result_conversion_ms": 0.37438501021824777,
+      "comparison_ms": 0.3174949961248785,
+      "total_ms": 365.2915119891986,
+      "resource_scope_ms": 0.7457229949068278,
+      "test_suite_load_ms": 49.98371400870383,
+      "measure_wall_ms": 446.7076029977761
+    }
   },
   "CMS832": {
     "tests": [
@@ -428,7 +1125,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 34,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 186432,
+    "timings_ms": {
+      "cql_parse_ms": 46.02714400971308,
+      "library_translation_ms": 1084.2413260252215,
+      "sql_write_ms": 5.592286994215101,
+      "sql_generation_ms": 1007.0065130130388,
+      "sql_execution_ms": 476.0648210067302,
+      "result_conversion_ms": 0.458548020105809,
+      "comparison_ms": 0.610321993008256,
+      "total_ms": 2620.0009610620327,
+      "resource_scope_ms": 0.8116250101011246,
+      "test_suite_load_ms": 112.63006500666961,
+      "measure_wall_ms": 2771.575702005066
+    }
   },
   "CMS871": {
     "tests": [
@@ -438,7 +1151,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 10,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 54030,
+    "timings_ms": {
+      "cql_parse_ms": 24.186397989979014,
+      "library_translation_ms": 178.07938597979955,
+      "sql_write_ms": 5.594548012595624,
+      "sql_generation_ms": 108.64513300475664,
+      "sql_execution_ms": 91.96195099502802,
+      "result_conversion_ms": 0.41140199755318463,
+      "comparison_ms": 0.36704400554299355,
+      "total_ms": 409.24586198525503,
+      "resource_scope_ms": 1.371672988170758,
+      "test_suite_load_ms": 40.549811004893854,
+      "measure_wall_ms": 482.00057999929413
+    }
   },
   "CMS986": {
     "tests": [
@@ -448,7 +1177,23 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 143,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 75991,
+    "timings_ms": {
+      "cql_parse_ms": 28.630490007344633,
+      "library_translation_ms": 199.47457397938706,
+      "sql_write_ms": 3.7851679953746498,
+      "sql_generation_ms": 237.85465900436975,
+      "sql_execution_ms": 27.210395986912772,
+      "result_conversion_ms": 0.5030409956816584,
+      "comparison_ms": 3.850745997624472,
+      "total_ms": 501.309073966695,
+      "resource_scope_ms": 0.9223579836543649,
+      "test_suite_load_ms": 435.5437970079947,
+      "measure_wall_ms": 980.7985110091977
+    }
   },
   "CMS996": {
     "tests": [
@@ -458,6 +1203,39 @@
           "passed": true
         }
       }
-    ]
+    ],
+    "patient_count": 112,
+    "accuracy_pct": 100.0,
+    "sql_size_bytes": 104784,
+    "timings_ms": {
+      "cql_parse_ms": 33.803875994635746,
+      "library_translation_ms": 160.41920499992557,
+      "sql_write_ms": 3.1759609992150217,
+      "sql_generation_ms": 109.8983729898464,
+      "sql_execution_ms": 150.59941200888716,
+      "result_conversion_ms": 0.7468909898307174,
+      "comparison_ms": 1.5535010024905205,
+      "total_ms": 460.1972189848311,
+      "resource_scope_ms": 0.8689039968885481,
+      "test_suite_load_ms": 335.7987539784517,
+      "measure_wall_ms": 825.0274659949355
+    }
+  },
+  "_summary": {
+    "suite": "2025",
+    "total_measures": 47,
+    "passed_measures": 47,
+    "accuracy_pct": 100.0,
+    "total_patients": 2273,
+    "library_cache_entries": 64,
+    "timings_ms": {
+      "measure_discovery_ms": 1274.7019940288737,
+      "database_init_ms": 714.857568993466,
+      "test_data_load_ms": 14377.572307013907,
+      "valueset_load_ms": 3229.6135799842887,
+      "valueset_file_count": 49,
+      "measure_run_ms": 42110.678847064264,
+      "suite_wall_ms": 61771.38589299284
+    }
   }
 }

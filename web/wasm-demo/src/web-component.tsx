@@ -189,36 +189,29 @@ if (!customElements.get("fhir4ds-demo")) {
 
 // ── Popup OAuth callback handler ──────────────────────────────────────────
 // When this script loads in a popup window that was redirected from an OAuth
-// provider (URL has ?code= and ?state=, and window.opener exists), handle the
-// token exchange and post the result back to the opener. This enables redirect
-// URIs that point to the Docusaurus docs page rather than the standalone SPA.
+// provider, handle the token exchange and broadcast the result back to the
+// opener page. COOP/COEP can sever window.opener during the EHR round trip, so
+// the smart-auth module also uses a popup-pending marker in localStorage.
 (async () => {
-  const params = new URLSearchParams(window.location.search);
-  if (
-    !params.has("code") ||
-    !params.has("state") ||
-    !window.opener ||
-    window.self !== window.top
-  ) {
+  const { isSmartPopupCallback } = await import("./lib/smart-auth");
+  if (!isSmartPopupCallback()) {
     return; // Not a popup OAuth callback
   }
 
   try {
-    const { handleCallback, getStoredSession } = await import("./lib/smart-auth");
+    const {
+      handleCallback,
+      getStoredSession,
+      publishSmartCallbackResult,
+    } = await import("./lib/smart-auth");
     const token = await handleCallback();
     const session = getStoredSession();
-    window.opener.postMessage(
-      { type: "FHIR4DS_SMART_TOKEN", token, session },
-      window.location.origin,
-    );
+    publishSmartCallbackResult({ type: "FHIR4DS_SMART_TOKEN", token, session });
     setTimeout(() => window.close(), 200);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (window.opener) {
-      window.opener.postMessage(
-        { type: "FHIR4DS_SMART_ERROR", error: msg },
-        window.location.origin,
-      );
-    }
+    const { publishSmartCallbackResult } = await import("./lib/smart-auth");
+    publishSmartCallbackResult({ type: "FHIR4DS_SMART_ERROR", error: msg });
+    setTimeout(() => window.close(), 1000);
   }
 })();

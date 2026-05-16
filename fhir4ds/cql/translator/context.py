@@ -308,6 +308,11 @@ class DefinitionMeta:
     # Transitive list of RESOURCE_ROWS CTE names this PATIENT_SCALAR non-boolean
     # definition depends on (e.g. "Lowest Systolic Reading" → Observation retrieve CTE).
     # Populated by CTEManager for non-boolean PATIENT_SCALAR definitions.
+    
+    # Global Definition Promotion metadata
+    eligible_for_promotion: bool = False
+    is_context_polluted: bool = False
+
     # Consumed by _collect_audit_evidence_exprs (Strategy 3) to propagate evidence
     # through scalar intermediaries into comparison-based boolean definitions.
     audit_target_expr: Optional[Any] = None
@@ -428,6 +433,15 @@ class SQLTranslationContext:
     # Let variables (for query-scope bindings) - maps name to SQL AST expression
     let_variables: Dict[str, Any] = field(default_factory=dict)
 
+    # Let-variable CTEs: promoted from inline to CTE when referenced many times.
+    # Maps definition_name -> {let_cte_name: SQLSelect body}.
+    # Injected into the final SQLFragment right before each definition's CTE,
+    # so they can reference earlier definition CTEs.
+    _let_variable_ctes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+
+    # Tracks the definition currently being translated (for let-variable CTE grouping).
+    _current_definition: Optional[str] = None
+
     # Expression definitions (named expressions in CQL)
     expression_definitions: Dict[str, Any] = field(default_factory=dict)
 
@@ -439,6 +453,27 @@ class SQLTranslationContext:
 
     # Definition metadata
     definition_meta: Dict[str, DefinitionMeta] = field(default_factory=dict)
+
+    # Global Definition Promotion: track which definitions should be emitted
+    # as global CTEs and referenced via subquery lookups to prevent explosion.
+    promoted_definitions: Set[str] = field(default_factory=set)
+    definition_ref_counts: Dict[str, int] = field(default_factory=dict)
+
+    # Function Promotion: detect functions called N+ times with params from same source CTE.
+    # Key: (func_name, source_cte_name) -> call count
+    function_ref_counts: Dict[Tuple[str, str], int] = field(default_factory=dict)
+    function_transitive_counts: Dict[Tuple[str, str], int] = field(default_factory=dict)
+    promoted_functions: Dict[Tuple[str, str], int] = field(default_factory=dict)
+    # Function call graph: func_name -> set of func_names it calls
+    function_call_graph: Dict[str, Set[str]] = field(default_factory=dict)
+
+    # Function promotion CTEs: (func_name, source_cte_name) -> {cte_name: SQLSelect}
+    _function_promotion_ctes: Dict[Tuple[str, str], Dict[str, Any]] = field(default_factory=dict)
+    # Successfully promoted (func_name, source_cte) pairs (CTEs that were actually built)
+    _promoted_cte_keys: Set[Tuple[str, str]] = field(default_factory=set)
+    # Post-Phase-3 dependencies: (func_name, source_cte) -> set of definition names
+    # referenced by the resolved CTE body (direct references only, not transitive)
+    _function_cte_deps: Dict[Tuple[str, str], Set[str]] = field(default_factory=dict)
 
     # Warnings
     warnings: TranslationWarnings = field(default_factory=TranslationWarnings)
@@ -951,6 +986,14 @@ class SQLTranslationContext:
         self.library_name = None
         self.library_version = None
         self.has_patient_demographics_cte = False
+        # Reset function promotion state
+        self.function_ref_counts.clear()
+        self.function_transitive_counts.clear()
+        self.promoted_functions.clear()
+        self.function_call_graph.clear()
+        self._function_promotion_ctes.clear()
+        self._promoted_cte_keys.clear()
+        self._function_cte_deps.clear()
         # Reset audit retrieve CTE names so stale names don't persist across calls
         if hasattr(self, '_audit_retrieve_cte_names'):
             self._audit_retrieve_cte_names = set()

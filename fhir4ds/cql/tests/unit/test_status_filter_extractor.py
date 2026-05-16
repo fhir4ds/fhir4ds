@@ -1,6 +1,7 @@
 """Tests for status_filter_extractor — dynamic extraction from parsed CQL ASTs."""
 
 import pytest
+from pathlib import Path
 from ...parser.ast_nodes import (
     BinaryExpression,
     FunctionDefinition,
@@ -15,6 +16,19 @@ from ...translator.status_filter_extractor import (
     extract_status_filter,
     extract_all_status_filters,
 )
+
+
+def _cql_fixture_path(filename: str):
+    root = Path(__file__).resolve().parents[4]
+    candidates = [
+        root / "tests" / "data" / "ecqm-content-qicore-2025" / "input" / "cql" / filename,
+        root / "fhir4ds" / "cql" / "resources" / "cql" / filename,
+        root / "tests" / "data" / "dqm-content-qicore-2026" / "input" / "cql" / filename,
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    pytest.skip(f"{filename} not found")
 
 
 def _make_query_with_where(where_expr):
@@ -180,17 +194,8 @@ class TestIntegrationWithStatusCql:
     def test_extracts_all_status_filters(self):
         from ...parser.parser import CQLParser
         from ...parser.lexer import Lexer
-        import os
 
-        status_path = os.path.join(
-            os.path.dirname(__file__),
-            "..", "..", "..", "..", "benchmarking", "ecqm-content-qicore-2025", "input", "cql", "Status.cql",
-        )
-        if not os.path.exists(status_path):
-            pytest.skip("Status.cql not found")
-
-        with open(status_path) as f:
-            source = f.read()
+        source = _cql_fixture_path("Status.cql").read_text()
         lexer = Lexer(source)
         tokens = lexer.tokenize()
         parser = CQLParser(tokens)

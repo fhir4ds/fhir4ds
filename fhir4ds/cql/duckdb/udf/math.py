@@ -9,6 +9,7 @@ New code should use the SQL macro versions (Abs, Round, Floor, etc.) instead.
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import math
+import re
 
 if TYPE_CHECKING:
     import duckdb
@@ -18,97 +19,145 @@ if TYPE_CHECKING:
 import logging
 
 _logger = logging.getLogger(__name__)
-def mathAbs(x: float | int | None) -> float | int | None:
+
+
+_NUMBER_RE = re.compile(r"^[+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[eE][+-]?\d+)?$")
+
+
+def _parse_math_number(value) -> float | None:
+    if value is None:
+        return None
+    text = str(value)
+    if not _NUMBER_RE.fullmatch(text):
+        return None
+    result = float(text)
+    if math.isinf(result) or math.isnan(result):
+        return None
+    return result
+
+
+def _format_math_result(value: float) -> str | None:
+    if math.isinf(value) or math.isnan(value):
+        return None
+    if value == math.floor(value) and abs(value) < 1e15:
+        return str(int(value))
+    return f"{value:.15g}"
+
+
+def mathAbs(x: str | None) -> str | None:
     """CQL Abs(x)."""
-    if x is None:
+    value = _parse_math_number(x)
+    if value is None:
         return None
-    return abs(x)
+    return _format_math_result(abs(value))
 
 
-def mathRound(x: float | None, precision: int = 0) -> float | None:
+def mathRound(x: str | None, precision: str | None = "0") -> str | None:
     """CQL Round(x, precision)."""
-    if x is None:
+    value = _parse_math_number(x)
+    if value is None:
         return None
-    return round(x, precision)
+    try:
+        prec = int(str(precision)) if precision is not None else 0
+    except ValueError:
+        prec = 0
+    multiplier = 10.0 ** prec
+    shifted = value * multiplier
+    if shifted >= 0:
+        shifted = math.floor(shifted + 0.5)
+    else:
+        shifted = math.ceil(shifted - 0.5)
+    result = shifted / multiplier
+    if prec <= 0:
+        return _format_math_result(result)
+    return f"{result:.{prec}f}"
 
 
-def mathFloor(x: float | None) -> int | None:
+def mathFloor(x: str | None) -> str | None:
     """CQL Floor(x)."""
-    if x is None:
+    value = _parse_math_number(x)
+    if value is None:
         return None
-    return math.floor(x)
+    return _format_math_result(math.floor(value))
 
 
-def mathCeiling(x: float | None) -> int | None:
+def mathCeiling(x: str | None) -> str | None:
     """CQL Ceiling(x)."""
-    if x is None:
+    value = _parse_math_number(x)
+    if value is None:
         return None
-    return math.ceil(x)
+    return _format_math_result(math.ceil(value))
 
 
-def mathSqrt(x: float | None) -> float | None:
+def mathSqrt(x: str | None) -> str | None:
     """CQL Sqrt(x)."""
-    if x is None or x < 0:
+    value = _parse_math_number(x)
+    if value is None or value < 0:
         return None
-    return math.sqrt(x)
+    return _format_math_result(math.sqrt(value))
 
 
-def mathExp(x: float | None) -> float | None:
+def mathExp(x: str | None) -> str | None:
     """CQL Exp(x) (§16.6).
 
     If the result overflows (positive infinity), raise an error.
     """
-    if x is None:
+    value = _parse_math_number(x)
+    if value is None:
         return None
-    result = math.exp(x)
-    if math.isinf(result):
-        raise ValueError(f"Exp({x}) results in overflow (positive infinity)")
-    return result
+    try:
+        result = math.exp(value)
+    except OverflowError as exc:
+        raise ValueError(f"Exp({x}) results in overflow (positive infinity)") from exc
+    return _format_math_result(result)
 
 
-def mathLn(x: float | None) -> float | None:
+def mathLn(x: str | None) -> str | None:
     """CQL Ln(x) - natural logarithm (§16.12).
 
-    Ln(0) results in negative infinity → runtime error.
-    Ln(negative) is undefined → returns null.
+    Ln(0) results in negative infinity. Negative inputs are undefined.
     """
-    if x is None:
+    value = _parse_math_number(x)
+    if value is None:
         return None
-    if x == 0 or x == -0.0:
+    if value == 0:
         raise ValueError("Ln(0) results in negative infinity")
-    if x < 0:
+    if value < 0:
         return None
-    return math.log(x)
+    return _format_math_result(math.log(value))
 
 
-def mathLog(x: float | None, base: float = 10) -> float | None:
+def mathLog(x: str | None, base: str | None = "10") -> str | None:
     """CQL Log(x, base) (§16.11).
 
     Undefined for x <= 0, base <= 0, or base == 1.
     """
-    if x is None or base is None:
+    value = _parse_math_number(x)
+    base_value = _parse_math_number(base)
+    if value is None or base_value is None or value <= 0 or base_value <= 0 or base_value == 1:
         return None
-    if x <= 0 or base <= 0 or base == 1:
-        raise ValueError(f"Log is undefined for x={x}, base={base}")
-    return math.log(x, base)
+    return _format_math_result(math.log(value, base_value))
 
 
-def mathPower(x: float | None, exponent: float) -> float | None:
+def mathPower(x: str | None, exponent: str | None) -> str | None:
     """CQL Power(x, y)."""
-    if x is None or exponent is None:
+    value = _parse_math_number(x)
+    exponent_value = _parse_math_number(exponent)
+    if value is None or exponent_value is None:
         return None
     try:
-        return math.pow(x, exponent)
+        return _format_math_result(math.pow(value, exponent_value))
     except ValueError as e:
         _logger.warning("UDF mathPower failed: %s", e)
         return None
 
 
-def mathTruncate(x: float | None) -> int | None:
+def mathTruncate(x: str | None) -> str | None:
     """CQL Truncate(x) - integer part."""
-    if x is None:
+    value = _parse_math_number(x)
+    if value is None:
         return None
-    return math.trunc(x)
+    return _format_math_result(math.trunc(value))
 
 
 def _step_value(x, direction: int) -> str | float | int | None:
@@ -436,9 +485,19 @@ def cqlPrecision(value) -> int | None:
         return None
 
 
+def _message_condition_is_true(condition) -> bool:
+    if isinstance(condition, bool):
+        return condition
+    if condition is None:
+        return False
+    if isinstance(condition, str):
+        return condition.strip().lower() == "true"
+    return bool(condition)
+
+
 def cqlMessage(source, condition, code, severity, message) -> str:
-    """CQL Message (§22.15) — raise runtime error when severity is 'Error'."""
-    if severity == 'Error':
+    """CQL Message (§22.15) — raise runtime error when condition and severity require it."""
+    if _message_condition_is_true(condition) and str(severity).lower() == 'error':
         raise ValueError(f"{code}: {message}")
     return source
 

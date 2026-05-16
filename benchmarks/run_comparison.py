@@ -5,7 +5,7 @@ Comparison benchmarking script: cql-py vs clinical-reasoning.
 Run from the benchmarking/ directory:
   python3 run_comparison.py [--runs N] [--skip-cr] [--skip-cql-py]
 
-Runs all 46 2025 QI-Core measures N times each, recording per-run
+Runs all configured 2025 QI-Core measures N times each, recording per-run
 parse_ms, translation_ms, execution_ms, and accuracy_pct for both engines.
 
 Outputs:
@@ -53,7 +53,6 @@ PERIOD_END   = "2026-12-31"
 # Known skip (hang / no data)
 SKIP = {
     "BreastCancerScreeningDQMDraft",  # DQM draft, not in official suite
-    "CMS1218",  # infinite loop (50+ min at 99% CPU)
     "CMS139",   # not present in submodule
 }
 
@@ -92,6 +91,7 @@ def run_cql_py_all(n_runs: int) -> list[dict]:
         # Load test data and valuesets (mirrors cli.py setup)
         db.load_all_test_data(configs)
         db.load_all_valuesets(_collect_vs_paths(configs))
+        library_cache = {}
 
         for i, config in enumerate(configs, 1):
             print(f"    [{i:2d}/{len(configs)}] {config.id}", end="", flush=True)
@@ -117,6 +117,7 @@ def run_cql_py_all(n_runs: int) -> list[dict]:
                     verbose=False,
                     all_columns=False,
                     audit=False,
+                    library_cache=library_cache,
                 )
                 parse_ms        = result.timings.get("cql_parse_ms", 0.0)
                 translation_ms  = result.timings.get("sql_generation_ms", 0.0)
@@ -180,6 +181,41 @@ def _normalize_cr_measure_id(raw_id: str) -> str:
     return m.group(1) if m else raw_id
 
 
+def _cr_record_from_entry(entry: dict, run_idx: int) -> dict:
+    """Convert one clinical-reasoning JSON entry into benchmark record format."""
+    raw_mid = entry.get("measure_id", "")
+    mid = _normalize_cr_measure_id(raw_mid)
+    timings = entry.get("timings", {})
+    translation = timings.get("translation_ms", 0.0)
+    execution = timings.get("total_execution_ms", timings.get("execution_ms", 0.0))
+
+    summary = entry.get("summary", {})
+    patients = entry.get("patients") or entry.get("patient_results") or []
+    total_pts = summary.get("patient_count", len(patients))
+
+    if "success_count" in summary:
+        success_pts = summary.get("success_count", 0)
+    elif patients and "status" in patients[0]:
+        success_pts = sum(1 for p in patients if p.get("status") == "success")
+    else:
+        success_pts = sum(1 for p in patients if p.get("matches_expected", False))
+
+    accuracy = _pct(success_pts, total_pts)
+
+    return {
+        "run": run_idx,
+        "measure_id": mid,
+        "patient_count": total_pts,
+        "translation_ms": round(translation, 3),
+        "execution_ms": round(execution, 3),
+        "matching_patients": success_pts,
+        "total_patients": total_pts,
+        "accuracy_pct": accuracy,
+        "status": "success" if total_pts > 0 else "error",
+        "error": entry.get("error"),
+    }
+
+
 def merge_cr_run_files(n_runs: int) -> list[dict]:
     """Merge pre-computed cr_run_N.json files into the standard record format.
 
@@ -191,6 +227,8 @@ def merge_cr_run_files(n_runs: int) -> list[dict]:
     for run_idx in range(1, n_runs + 1):
         run_file = OUTPUT_RUNS_DIR / f"cr_run_{run_idx}.json"
         if not run_file.exists():
+            run_file = OUTPUT_RUNS_DIR / f"cr_run_{run_idx}_raw.json"
+        if not run_file.exists():
             print(f"  [CR merge] Run {run_idx} file not found: {run_file}")
             continue
         try:
@@ -200,34 +238,9 @@ def merge_cr_run_files(n_runs: int) -> list[dict]:
             continue
 
         for entry in entries:
-            raw_mid = entry.get("measure_id", "")
-            mid = _normalize_cr_measure_id(raw_mid)
-            if mid in SKIP:
+            record = _cr_record_from_entry(entry, run_idx)
+            if record["measure_id"] in SKIP:
                 continue
-
-            timings     = entry.get("timings", {})
-            translation = timings.get("translation_ms", 0.0)
-            execution   = timings.get("total_execution_ms", 0.0)
-
-            patients    = entry.get("patients", [])
-            total_pts   = len(patients)
-            # In the CR benchmark, "success" means the evaluation ran without error,
-            # not that the outcome matched the expected test result.
-            success_pts = sum(1 for p in patients if p.get("status") == "success")
-            accuracy    = _pct(success_pts, total_pts)
-
-            record = {
-                "run": run_idx,
-                "measure_id": mid,
-                "patient_count": total_pts,
-                "translation_ms": round(translation, 3),
-                "execution_ms": round(execution, 3),
-                "matching_patients": success_pts,
-                "total_patients": total_pts,
-                "accuracy_pct": accuracy,
-                "status": "success" if total_pts > 0 else "error",
-                "error": None,
-            }
             records.append(record)
         print(f"  [CR merge] Run {run_idx}: {len(entries)} measures loaded")
     return records
@@ -281,31 +294,15 @@ def run_cr_all(n_runs: int) -> list[dict]:
             continue
 
         for entry in raw:
-            mid = entry.get("measure_id", "")
-            if mid in SKIP:
+            record = _cr_record_from_entry(entry, run_idx)
+            if record["measure_id"] in SKIP:
                 continue
-            timings       = entry.get("timings", {})
-            translation   = timings.get("translation_ms", 0.0)
-            execution     = timings.get("execution_ms", 0.0)
-            patients      = entry.get("patient_results", [])
-            total_pts     = len(patients)
-            matching      = sum(1 for p in patients if p.get("matches_expected", False))
-            accuracy      = _pct(matching, total_pts)
-
-            record = {
-                "run": run_idx,
-                "measure_id": mid,
-                "patient_count": total_pts,
-                "translation_ms": round(translation, 3),
-                "execution_ms": round(execution, 3),
-                "matching_patients": matching,
-                "total_patients": total_pts,
-                "accuracy_pct": accuracy,
-                "status": "success" if entry.get("status") == "success" else "error",
-                "error": entry.get("error"),
-            }
             all_records.append(record)
-            print(f"    {mid}: {execution:.0f}ms exec, {accuracy:.1f}% acc")
+            print(
+                f"    {record['measure_id']}: "
+                f"{record['execution_ms']:.0f}ms exec, "
+                f"{record['accuracy_pct']:.1f}% acc"
+            )
 
     return all_records
 
@@ -470,6 +467,23 @@ def write_report(cql_py_records: list[dict], cr_records: list[dict], stats: dict
     cr = stats["clinical_reasoning"]
     cql_100 = stats["cql_py_100pct_measures"]
     both_100 = stats["both_100pct_measures"]
+    cql_measure_count = len({
+        r["measure_id"] for r in cql_py_records if r["status"] == "success"
+    })
+    cr_measure_count = len({
+        r["measure_id"] for r in cr_records if r["status"] == "success"
+    })
+    run_count = max(
+        {r["run"] for r in cql_py_records + cr_records if r["status"] == "success"},
+        default=N_RUNS,
+    )
+    if cr_measure_count and cr_measure_count != cql_measure_count:
+        scope_sentence = (
+            f"across {cql_measure_count} cql-py and {cr_measure_count} "
+            f"clinical-reasoning 2025 QI-Core measures"
+        )
+    else:
+        scope_sentence = f"across all {cql_measure_count} 2025 QI-Core measures"
 
     report = f"""# COMPARISON.md
 *Generated {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}*
@@ -477,7 +491,7 @@ def write_report(cql_py_records: list[dict], cr_records: list[dict], stats: dict
 ## Overview
 
 This report documents performance benchmarking of **cql-py (FHIR4DS)** and **clinical-reasoning (Java)**
-across all 46 2025 QI-Core measures, each engine run **{N_RUNS} times**.
+{scope_sentence}, each engine run **{run_count} times**.
 
 Timing metrics:
 - **cql-py**: `parse_ms` (CQL parsing), `translation_ms` (CQL → SQL), `execution_ms` (SQL execution against patient data)
@@ -498,7 +512,7 @@ Timing metrics:
 ## Summary Statistics: SQL Execution Time Per Patient
 
 Execution time is divided by patient count to get per-patient cost.
-Statistics are computed over all ({N_RUNS} runs × N measures) = N measure-runs.
+Statistics are computed over all ({run_count} runs × N measures) = N measure-runs.
 
 ### cql-py
 

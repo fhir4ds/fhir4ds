@@ -12,7 +12,14 @@ struct CodeValue {
 	std::string code;
 };
 
+struct CodeExtractionResult {
+	std::vector<CodeValue> codes;
+	bool has_not_done_valueset = false;
+};
+
 std::vector<CodeValue> extract_codes(const std::string &resource_json, const std::string &path);
+CodeExtractionResult extract_codes_with_not_done_valueset(const std::string &resource_json, const std::string &path,
+                                                          const std::string &valueset_url);
 std::string extract_first_code(const std::string &resource_json, const std::string &path);
 std::string extract_first_code_system(const std::string &resource_json, const std::string &path);
 std::string extract_first_code_value(const std::string &resource_json, const std::string &path);
@@ -23,5 +30,8 @@ using ValuesetCache = std::unordered_map<std::string, std::unordered_set<std::st
 
 bool in_valueset(const std::string &code, const std::string &system, const std::string &valueset_url,
                  const ValuesetCache &cache);
+std::string normalize_system(const std::string &system);
+std::string canonicalize_url(const std::string &url);
+bool has_not_done_valueset(const std::string &resource_json, const std::string &path, const std::string &valueset_url);
 
 } // namespace cql

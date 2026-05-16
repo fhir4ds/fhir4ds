@@ -2,6 +2,7 @@
 Command-line interface for benchmarking runner.
 """
 import argparse
+import os
 from pathlib import Path
 import sys
 import json
@@ -39,9 +40,9 @@ def main():
     )
     parser.add_argument(
         "--sql-format",
-        choices=["mozilla", "default"],
-        default="mozilla",
-        help="SQL formatting style",
+        choices=["raw", "mozilla", "default"],
+        default="raw",
+        help="SQL output format. Use 'mozilla' or 'default' to pretty-print small SQL files.",
     )
     parser.add_argument(
         "--measurement-period-start",
@@ -152,6 +153,7 @@ def main():
     successful = 0
     failed = 0
     skipped = 0
+    library_cache = {}
 
     for config in configs:
         print(f"\n{'='*60}")
@@ -188,6 +190,7 @@ def main():
                 verbose=args.verbose,
                 all_columns=args.all_columns,
                 audit=args.audit,
+                library_cache=library_cache,
             )
 
             # Write outputs
@@ -354,6 +357,7 @@ def main():
                 "perfect": len(perfect),
                 "known_failures": len(known),
                 "regressions": len(regressions),
+                "library_cache_entries": len(library_cache),
                 "measures": results_summary
             }, f, indent=2)
         print(f"\nSummary written to: {summary_path}")
@@ -381,22 +385,26 @@ def _discover_measures(suite: str = "2025"):
         print(f"ERROR: Test directory not found: {tests_dir}")
         return measures
 
-    for test_dir in sorted(tests_dir.iterdir()):
-        if not test_dir.is_dir():
+    cql_files = sorted(cql_dir.glob("*.cql"))
+    cql_by_stem = {path.stem: path for path in cql_files}
+
+    for entry in sorted(os.scandir(tests_dir), key=lambda e: e.name):
+        if not entry.is_dir():
             continue
 
-        measure_name = test_dir.name
+        measure_name = entry.name
+        test_dir = Path(entry.path)
 
         # Find CQL file
-        cql_path = cql_dir / f"{measure_name}.cql"
-        if not cql_path.exists():
+        cql_path = cql_by_stem.get(measure_name)
+        if cql_path is None:
             # Try alternate naming (some measures have different CQL names)
-            for cql_file in cql_dir.glob("*.cql"):
+            for cql_file in cql_files:
                 if measure_name in cql_file.stem or cql_file.stem in measure_name:
                     cql_path = cql_file
                     break
 
-        if not cql_path.exists():
+        if cql_path is None:
             continue
 
         # Get population definitions from a MeasureReport in the test directory
@@ -470,6 +478,33 @@ def _extract_population_definitions(test_dir: Path) -> list:
     ``"Denominator 1"``, ``"Denominator 2"``).  Single-group measures
     produce plain names (``"Denominator"``).
     """
+    for patient_entry in sorted(os.scandir(test_dir), key=lambda e: e.name):
+        if not patient_entry.is_dir():
+            continue
+        patient_dir = patient_entry.path
+        with os.scandir(patient_dir) as report_iter:
+            report_entries = [
+                entry for entry in report_iter
+                if entry.is_file()
+                and entry.name.startswith("MeasureReport-")
+                and entry.name.endswith(".json")
+            ]
+        for report_entry in sorted(report_entries, key=lambda e: e.name):
+            try:
+                with open(report_entry.path) as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+            definitions = _extract_population_definitions_from_report(data)
+            if definitions:
+                return definitions
+    return []
+
+
+def _extract_population_definitions_from_report(data: dict) -> list:
+    """Extract population definitions from one representative MeasureReport."""
+    import re
+
     mapping = {
         "initial-population": "Initial Population",
         "denominator": "Denominator",
@@ -479,45 +514,21 @@ def _extract_population_definitions(test_dir: Path) -> list:
         "numerator-exclusion": "Numerator Exclusion",
     }
 
-    # First pass: determine max group count across all MeasureReports
-    max_groups = 1
-    for patient_dir in test_dir.iterdir():
-        if not patient_dir.is_dir():
-            continue
-        for report_file in patient_dir.glob("MeasureReport-*.json"):
-            try:
-                with open(report_file) as f:
-                    data = json.load(f)
-                num_groups = len(data.get("group", []))
-                if num_groups > max_groups:
-                    max_groups = num_groups
-            except Exception:
-                pass
-
-    # Second pass: collect definitions (numbered for multi-group)
+    groups = data.get("group", [])
+    max_groups = len(groups) or 1
     definitions = set()
-    for patient_dir in test_dir.iterdir():
-        if not patient_dir.is_dir():
-            continue
-        for report_file in patient_dir.glob("MeasureReport-*.json"):
-            try:
-                with open(report_file) as f:
-                    data = json.load(f)
-
-                for group_idx, group in enumerate(data.get("group", [])):
-                    for pop in group.get("population", []):
-                        coding = pop.get("code", {}).get("coding", [])
-                        if not coding:
-                            continue
-                        code = coding[0].get("code", "")
-                        base_name = mapping.get(code)
-                        if base_name:
-                            if max_groups > 1:
-                                definitions.add(f"{base_name} {group_idx + 1}")
-                            else:
-                                definitions.add(base_name)
-            except Exception:
-                pass
+    for group_idx, group in enumerate(groups):
+        for pop in group.get("population", []):
+            coding = pop.get("code", {}).get("coding", [])
+            if not coding:
+                continue
+            code = coding[0].get("code", "")
+            base_name = mapping.get(code)
+            if base_name:
+                if max_groups > 1:
+                    definitions.add(f"{base_name} {group_idx + 1}")
+                else:
+                    definitions.add(base_name)
 
     # Sort by canonical eCQM population gating order so cascaded gating
     # logic in compare_results always processes prerequisites first.

@@ -1,16 +1,18 @@
 /**
  * Lightweight OAuth2 callback handler for popup context.
  *
- * Rendered in place of the full App when:
- *   - The URL contains ?code= and ?state= (OAuth callback)
- *   - window.opener is set (we're inside a popup)
+ * Rendered in place of the full App for popup OAuth callbacks. It also handles
+ * COOP/COEP cases where window.opener is severed during the EHR round trip.
  *
- * Exchanges the authorization code for a token, posts the result to
- * the opener window, and closes the popup. DuckDB and Pyodide are
- * never initialized — the popup closes before they finish loading.
+ * Exchanges the authorization code for a token, broadcasts the result to the
+ * opener page, and closes the popup. DuckDB and Pyodide are never initialized.
  */
 import { useEffect, useState } from 'react';
-import { handleCallback, getStoredSession } from '../lib/smart-auth';
+import {
+  handleCallback,
+  getStoredSession,
+  publishSmartCallbackResult,
+} from '../lib/smart-auth';
 
 export function SmartCallbackPage() {
   const [status, setStatus] = useState<'exchanging' | 'done' | 'error'>('exchanging');
@@ -20,12 +22,7 @@ export function SmartCallbackPage() {
     handleCallback()
       .then((token) => {
         const session = getStoredSession();
-        if (window.opener) {
-          window.opener.postMessage(
-            { type: 'FHIR4DS_SMART_TOKEN', token, session },
-            window.location.origin,
-          );
-        }
+        publishSmartCallbackResult({ type: 'FHIR4DS_SMART_TOKEN', token, session });
         setStatus('done');
         // Small delay to ensure postMessage is delivered before close
         setTimeout(() => window.close(), 200);
@@ -34,12 +31,8 @@ export function SmartCallbackPage() {
         const msg = err instanceof Error ? err.message : String(err);
         setErrorMsg(msg);
         setStatus('error');
-        if (window.opener) {
-          window.opener.postMessage(
-            { type: 'FHIR4DS_SMART_ERROR', error: msg },
-            window.location.origin,
-          );
-        }
+        publishSmartCallbackResult({ type: 'FHIR4DS_SMART_ERROR', error: msg });
+        setTimeout(() => window.close(), 1000);
       });
   }, []);
 

@@ -422,7 +422,6 @@ KEYWORDS: dict[str, TokenType] = {
     "any": TokenType.ANY,
     "Code": TokenType.CODE_TYPE,
     "Concept": TokenType.CONCEPT_TYPE,
-    "concept": TokenType.CONCEPT_TYPE,
     "CodeSystem": TokenType.CODESYSTEM_TYPE,
     "ValueSet": TokenType.VALUESET_TYPE,
     # Literal Keywords

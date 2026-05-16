@@ -129,6 +129,25 @@ def _flatten_audit_tree(expr: "SQLExpression") -> "SQLExpression":
     return SQLAuditStruct(result_expr=result_ast, evidence_expr=evidence_ast)
 
 
+def generate_function_cte_name(func_name: str, cql_def_name: str) -> str:
+    """Generate a deterministic, collision-resistant CTE name for a promoted function.
+
+    Uses a short hash suffix to avoid collisions from long definition names
+    that would otherwise clash after truncation.
+
+    Args:
+        func_name: The CQL function name (without library prefix).
+        cql_def_name: The CQL definition name of the source.
+
+    Returns:
+        A deterministic CTE name like ``_fn_funcName_defName_abc123``.
+    """
+    import hashlib
+    safe_name = cql_def_name.replace(' ', '_').replace(':', '')
+    name_hash = hashlib.md5(safe_name.encode()).hexdigest()[:6]
+    return f"_fn_{func_name}_{safe_name[:32]}_{name_hash}"
+
+
 class CTEManagerMixin:
     """Mixin providing CTE management methods for CQLToSQLTranslator."""
 
@@ -1435,6 +1454,85 @@ class CTEManagerMixin:
     # ------------------------------------------------------------------
     # CTE building helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_let_cte_source(cte_body, prov_to_actual: dict):
+        """Fix the FROM clause CTE name in a let-variable CTE body.
+
+        During translation, let-variable CTEs use provisional names that embed
+        valueset URLs (e.g. "MedicationRequest: http://...").  The retrieve
+        optimizer later assigns display names (e.g. "MedicationRequest:
+        Antidepressant Medication").  This method swaps the provisional name
+        for the actual one so the generated SQL references a valid CTE.
+        """
+        from ..translator.types import SQLSelect, SQLAlias, SQLIdentifier
+        if not isinstance(cte_body, SQLSelect):
+            return cte_body
+        fc = cte_body.from_clause
+        if not isinstance(fc, SQLAlias) or not isinstance(fc.expr, SQLIdentifier):
+            return cte_body
+        provisional = fc.expr.name
+        actual = prov_to_actual.get(provisional, provisional)
+        if actual != provisional:
+            new_ident = SQLIdentifier(name=actual, quoted=True)
+            new_from = SQLAlias(expr=new_ident, alias=fc.alias)
+            return SQLSelect(
+                columns=cte_body.columns,
+                from_clause=new_from,
+                where=cte_body.where,
+                group_by=cte_body.group_by,
+                order_by=cte_body.order_by,
+                limit=cte_body.limit,
+            )
+        return cte_body
+
+    @staticmethod
+    def _generate_function_cte_name(func_name: str, cql_def_name: str) -> str:
+        """Generate a deterministic, collision-resistant CTE name for a promoted function.
+
+        Uses a short hash suffix to avoid collisions from long definition names
+        that would otherwise clash after truncation.
+
+        Args:
+            func_name: The CQL function name (without library prefix).
+            cql_def_name: The CQL definition name of the source.
+
+        Returns:
+            A deterministic CTE name like ``_fn_funcName_defName_abc123``.
+        """
+        return generate_function_cte_name(func_name, cql_def_name)
+
+    @staticmethod
+    def _resolve_function_cte_source(cte_body, definition_ctes: dict):
+        """Fix the FROM clause CTE name in a function promotion CTE body.
+
+        During translation, function promotion CTEs use the CQL definition
+        name (e.g. "Elective Inpatient Encounter") as the FROM clause target.
+        The CTE emission loop later assigns the actual quoted CTE name.
+        This method swaps the provisional name for the actual one.
+        """
+        from ..translator.types import SQLSelect, SQLAlias, SQLIdentifier
+        if not isinstance(cte_body, SQLSelect):
+            return cte_body
+        fc = cte_body.from_clause
+        if not isinstance(fc, SQLAlias) or not isinstance(fc.expr, SQLIdentifier):
+            return cte_body
+        provisional = fc.expr.name
+        entry = definition_ctes.get(provisional)
+        if entry:
+            actual = entry[0].strip('"')  # (quoted_name, has_resource)
+            if actual != provisional:
+                new_ident = SQLIdentifier(name=actual, quoted=True)
+                new_from = SQLAlias(expr=new_ident, alias=fc.alias)
+                return SQLSelect(
+                    columns=cte_body.columns,
+                    from_clause=new_from,
+                    where=cte_body.where,
+                    group_by=cte_body.group_by,
+                    order_by=cte_body.order_by,
+                    limit=cte_body.limit,
+                )
+        return cte_body
 
     def _build_definition_cte_with_patient_id(
         self,

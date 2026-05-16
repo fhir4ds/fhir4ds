@@ -7,9 +7,27 @@ qualified codesystem refs, collapse per, return all/distinct, let clause keyword
 """
 
 import pytest
+from pathlib import Path
 
 from ...parser import parse_cql
 from ...parser.lexer import Lexer, TokenType
+
+
+def _repo_root():
+    return Path(__file__).resolve().parents[4]
+
+
+def _cql_fixture_path(filename: str):
+    root = _repo_root()
+    candidates = [
+        root / "tests" / "data" / "ecqm-content-qicore-2025" / "input" / "cql" / filename,
+        root / "fhir4ds" / "cql" / "resources" / "cql" / filename,
+        root / "tests" / "data" / "dqm-content-qicore-2026" / "input" / "cql" / filename,
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    pytest.skip(f"{filename} not found")
 
 
 class TestResourceTypeInParameters:
@@ -194,30 +212,14 @@ class TestQICoreCommonParsing:
 
     def test_qicorecommon_parses(self):
         """QICoreCommon.cql should parse without errors after C1 fixes."""
-        import os
-        qicore_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "..", "..",
-            "benchmarking", "ecqm-content-qicore-2025", "input", "cql", "QICoreCommon.cql"
-        )
-        if not os.path.exists(qicore_path):
-            pytest.skip("QICoreCommon.cql not found")
-        with open(qicore_path, 'r') as f:
-            cql = f.read()
+        cql = _cql_fixture_path("QICoreCommon.cql").read_text()
         library = parse_cql(cql)
         # Should have many definitions including the `references` functions
         assert len(library.statements) > 20
 
     def test_fhirhelpers_parses(self):
         """FHIRHelpers.cql should parse without errors after & fix."""
-        import os
-        fh_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "..", "..",
-            "benchmarking", "ecqm-content-qicore-2025", "input", "cql", "FHIRHelpers.cql"
-        )
-        if not os.path.exists(fh_path):
-            pytest.skip("FHIRHelpers.cql not found")
-        with open(fh_path, 'r') as f:
-            cql = f.read()
+        cql = _cql_fixture_path("FHIRHelpers.cql").read_text()
         library = parse_cql(cql)
         assert len(library.statements) > 0
 
@@ -396,28 +398,12 @@ class TestAllCQLLibrariesParse:
 
     def test_status_cql_parses(self):
         """Status.cql should parse without errors."""
-        import os
-        path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "..", "..",
-            "benchmarking", "ecqm-content-qicore-2025", "input", "cql", "Status.cql"
-        )
-        if not os.path.exists(path):
-            pytest.skip("Status.cql not found")
-        with open(path, 'r') as f:
-            cql = f.read()
+        cql = _cql_fixture_path("Status.cql").read_text()
         library = parse_cql(cql)
         assert len(library.statements) > 10
 
     def test_cumulative_medication_duration_parses(self):
         """CumulativeMedicationDuration.cql should parse without errors."""
-        import os
-        path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "..", "..",
-            "benchmarking", "ecqm-content-qicore-2025", "input", "cql", "CumulativeMedicationDuration.cql"
-        )
-        if not os.path.exists(path):
-            pytest.skip("CumulativeMedicationDuration.cql not found")
-        with open(path, 'r') as f:
-            cql = f.read()
+        cql = _cql_fixture_path("CumulativeMedicationDuration.cql").read_text()
         library = parse_cql(cql)
         assert len(library.statements) > 10

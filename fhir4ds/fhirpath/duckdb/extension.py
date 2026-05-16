@@ -119,7 +119,25 @@ def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
         return False
 
 
-def register_fhirpath(con: duckdb.DuckDBPyConnection) -> None:
+def _function_exists(con: "duckdb.DuckDBPyConnection", name: str) -> bool:
+    """Return True when a function with *name* exists in the connection."""
+    try:
+        return con.execute(
+            "SELECT COUNT(*) FROM duckdb_functions() WHERE lower(function_name) = lower(?)",
+            [name],
+        ).fetchone()[0] > 0
+    except duckdb.Error:
+        return False
+
+
+def _is_cpp_extension_loaded(con: "duckdb.DuckDBPyConnection") -> bool:
+    """Detect the bundled FHIRPath C++ extension without attempting to load it."""
+    # fhirpath_predicate is registered by the C++ extension and not by the
+    # Python fallback, making it a reliable signal for status reporting.
+    return _function_exists(con, "fhirpath_predicate")
+
+
+def register_fhirpath(con: duckdb.DuckDBPyConnection) -> bool:
     """
     Register the fhirpath UDF with a DuckDB connection.
 
@@ -131,6 +149,10 @@ def register_fhirpath(con: duckdb.DuckDBPyConnection) -> None:
 
     Args:
         con: A DuckDB connection object.
+
+    Returns:
+        True when the bundled C++ extension is active, False when Python UDFs
+        were registered or reused.
 
     Example:
         >>> import duckdb
@@ -147,20 +169,63 @@ def register_fhirpath(con: duckdb.DuckDBPyConnection) -> None:
         The resource parameter accepts JSON strings representing FHIR resources.
         Returns a list of matching values following FHIRPath collection semantics.
     """
-    # Try the bundled C++ extension first (bundled at wheel-build time when available)
-    if _try_load_bundled_cpp_extension(con):
-        return
+    if _is_cpp_extension_loaded(con):
+        return True
 
-    # Idempotency guard: if fhirpath UDF already exists, skip registration
+    # Idempotency guard: if fhirpath UDF already exists, skip registration.
     try:
         con.execute("SELECT fhirpath(NULL, 'id')").fetchone()
-        return  # already registered
+        return _is_cpp_extension_loaded(con)
     except duckdb.Error:
         pass  # not yet registered, proceed
 
+    cpp_conflicts = [
+        name for name in (
+            "fhirpath",
+            "fhirpath_bool",
+            "fhirpath_date",
+            "fhirpath_json",
+            "fhirpath_number",
+            "fhirpath_quantity",
+            "fhirpath_repeat",
+            "fhirpath_text",
+            "fhirpath_timestamp",
+        )
+        if _function_exists(con, name)
+    ]
+
+    # Try the bundled C++ extension first, unless a user-defined function would
+    # make DuckDB's extension initialization fail with a catalog conflict.
+    if cpp_conflicts:
+        _logger.debug(
+            "Skipping bundled FHIRPath C++ extension because functions already exist: %s",
+            ", ".join(cpp_conflicts),
+        )
+    elif _try_load_bundled_cpp_extension(con):
+        return True
+
+    def _safe_create_function(name: str, function, *args, **kwargs) -> None:
+        """Register a Python UDF unless the name already exists on this connection."""
+        try:
+            con.create_function(name, function, *args, **kwargs)
+        except (
+            duckdb.CatalogException,
+            duckdb.InvalidInputException,
+            duckdb.NotImplementedException,
+        ) as exc:
+            _logger.debug("Skipping FHIRPath UDF %s registration: %s", name, exc)
+
     # Register Tier 1 SQL macros first (zero Python overhead)
     from .macros import register_all_macros
-    register_all_macros(con)
+    try:
+        register_all_macros(con)
+    except (
+        duckdb.CatalogException,
+        duckdb.InvalidInputException,
+        duckdb.NotImplementedException,
+        duckdb.BinderException,
+    ) as exc:
+        _logger.debug("Skipping FHIRPath SQL macro registration: %s", exc)
 
     from .evaluator import FHIRPathEvaluator
     from .udf import (
@@ -170,14 +235,14 @@ def register_fhirpath(con: duckdb.DuckDBPyConnection) -> None:
     )
 
     # Register the main fhirpath UDF (delegates to shared implementation in udf.py)
-    con.create_function(
+    _safe_create_function(
         "fhirpath",
         fhirpath_scalar,
         return_type="VARCHAR[]",
     )
 
     # Register validation function
-    con.create_function(
+    _safe_create_function(
         "fhirpath_is_valid",
         fhirpath_is_valid_udf,
     )
@@ -196,43 +261,43 @@ def register_fhirpath(con: duckdb.DuckDBPyConnection) -> None:
     # Register convenience UDFs with SPECIAL null handling
     # This allows the UDFs to return NULL values when appropriate
     # (e.g., when a FHIRPath doesn't match any values)
-    con.create_function(
+    _safe_create_function(
         "fhirpath_text",
         fhirpath_text_udf,
         null_handling="special",
     )
 
-    con.create_function(
+    _safe_create_function(
         "fhirpath_bool",
         fhirpath_bool_udf,
         null_handling="special",
     )
 
-    con.create_function(
+    _safe_create_function(
         "fhirpath_number",
         fhirpath_number_udf,
         null_handling="special",
     )
 
-    con.create_function(
+    _safe_create_function(
         "fhirpath_date",
         fhirpath_date_udf,
         null_handling="special",
     )
 
-    con.create_function(
+    _safe_create_function(
         "fhirpath_json",
         fhirpath_json_udf,
         null_handling="special",
     )
 
-    con.create_function(
+    _safe_create_function(
         "fhirpath_timestamp",
         fhirpath_timestamp_udf,
         null_handling="special",
     )
 
-    con.create_function(
+    _safe_create_function(
         "fhirpath_quantity",
         fhirpath_quantity_udf,
         null_handling="special",
@@ -240,9 +305,10 @@ def register_fhirpath(con: duckdb.DuckDBPyConnection) -> None:
 
     # Register repeat traversal UDF for SQL-on-FHIR v2 ``repeat`` directive
     from .udf import fhirpath_repeat_udf
-    con.create_function(
+    _safe_create_function(
         "fhirpath_repeat",
         fhirpath_repeat_udf,
         return_type="VARCHAR[]",
         null_handling="special",
     )
+    return False

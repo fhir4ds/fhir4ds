@@ -4,6 +4,7 @@
 #include <sstream>
 #include <cstring>
 #include <cfloat>
+#include <stdexcept>
 
 namespace cql {
 
@@ -64,7 +65,9 @@ Optional<std::string> math_exp(const std::string &x) {
 	double val;
 	if (!parse_double(x, val)) return NullOpt<std::string>();
 	double result = std::exp(val);
-	if (std::isinf(result)) return NullOpt<std::string>();
+	if (std::isinf(result)) {
+		throw std::runtime_error("Exp(" + x + ") results in overflow (positive infinity)");
+	}
 	return Optional<std::string>(format_result(result));
 }
 
@@ -74,7 +77,10 @@ Optional<std::string> math_exp(const std::string &x) {
 Optional<std::string> math_ln(const std::string &x) {
 	double val;
 	if (!parse_double(x, val)) return NullOpt<std::string>();
-	if (val <= 0) return NullOpt<std::string>();
+	if (val == 0) {
+		throw std::runtime_error("Ln(0) results in negative infinity");
+	}
+	if (val < 0) return NullOpt<std::string>();
 	return Optional<std::string>(format_result(std::log(val)));
 }
 

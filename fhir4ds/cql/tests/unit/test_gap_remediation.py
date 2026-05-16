@@ -18,11 +18,14 @@ from ...translator.types import (
     SQLCase,
     SQLFunctionCall,
     SQLLiteral,
+    SQLNull,
     SQLParameterRef,
+    SQLQualifiedIdentifier,
     SQLRaw,
 )
 from ...translator.cte_builder import (
     build_retrieve_cte,
+    _can_extract_period_bound_from_json,
 )
 from ...translator.fhir_schema import FHIRSchemaRegistry
 from ...translator.model_config import DEFAULT_MODEL_CONFIG
@@ -174,7 +177,7 @@ class TestGap9AgeInYearsAt:
 # ---------------------------------------------------------------------------
 # Gap 12: Equivalent (~) Operator for Code Matching
 # Acceptance Criteria:
-# - ~ with code-typed operand emits fhirpath_bool() with system and code
+# - ~ with code-typed operand emits coding_matches() with system and code
 # - Code references resolved through context's code system registry
 # ---------------------------------------------------------------------------
 
@@ -193,8 +196,8 @@ class TestGap12Equivalence:
         ctx = SQLTranslationContext()
         return ExpressionTranslator(ctx)
 
-    def test_equivalence_with_code_uses_fhirpath_bool(self, translator):
-        """AC: ~ with code-typed operand emits fhirpath_bool()."""
+    def test_equivalence_with_code_uses_coding_matches(self, translator):
+        """AC: ~ with code-typed operand emits coding_matches()."""
         expr = BinaryExpression(
             operator="~",
             left=Identifier(name="some_resource"),
@@ -203,10 +206,10 @@ class TestGap12Equivalence:
         translator.context.add_alias("some_resource", sql_expr="r.resource")
         result = translator.translate(expr)
         sql = result.to_sql()
-        assert "fhirpath_bool" in sql
+        assert "coding_matches" in sql
 
     def test_equivalence_with_code_includes_system_and_code(self, translator):
-        """AC: fhirpath_bool includes both system and code in FHIRPath expression."""
+        """AC: coding_matches includes both system and code."""
         expr = BinaryExpression(
             operator="~",
             left=Identifier(name="some_resource"),
@@ -329,6 +332,154 @@ class TestGap6ColumnContamination:
         assert "onset_date" not in col_info
         # status should be in column registry
         assert "status" in col_info
+
+    def test_period_columns_include_derived_bounds(self):
+        """Period precomputed columns also expose reusable start/end bounds."""
+        ctx = _make_context_with_schema()
+        _, cte_ast, col_info = build_retrieve_cte(
+            resource_type="Encounter",
+            valueset=None,
+            properties={"period", "status"},
+            context=ctx,
+        )
+        sql = cte_ast.to_sql()
+
+        assert "period" in col_info
+        assert "period_start" in col_info
+        assert "period_end" in col_info
+        assert "json_extract_string(r.resource, '$.period.start')" in sql
+        assert "json_extract_string(r.resource, '$.period.end')" in sql
+        assert "intervalStart" not in sql
+        assert "intervalEnd" not in sql
+
+    def test_temporal_choice_columns_include_derived_bounds(self):
+        """Temporal choice precomputed columns expose reusable start/end bounds."""
+        ctx = _make_context_with_schema()
+        _, cte_ast, col_info = build_retrieve_cte(
+            resource_type="Observation",
+            valueset=None,
+            properties={"value", "effective"},
+            context=ctx,
+        )
+        sql = cte_ast.to_sql()
+
+        assert "value" in col_info
+        assert "value_start" not in col_info
+        assert "value_end" not in col_info
+        assert "effective_start" in col_info
+        assert "effective_end" in col_info
+        assert "value_start" not in sql
+        assert "effective_start" in sql
+        assert "effective_end" in sql
+
+    def test_interval_bound_calls_use_precomputed_temporal_columns(self):
+        """intervalStart/End over temporal CTE columns serialize to bound columns."""
+        effective = SQLQualifiedIdentifier(parts=["Obs", "effective"])
+
+        assert SQLFunctionCall(name="intervalStart", args=[effective]).to_sql() == "Obs.effective_start"
+        assert SQLFunctionCall(name="intervalEnd", args=[effective]).to_sql() == "Obs.effective_end"
+
+    def test_interval_bound_calls_fold_interval_from_bounds(self):
+        """intervalStart/End over intervalFromBounds serialize to direct bounds."""
+        start = SQLQualifiedIdentifier(parts=["Obs", "effective_start"])
+        end = SQLQualifiedIdentifier(parts=["Obs", "effective_end"])
+        interval = SQLFunctionCall(
+            name="intervalFromBounds",
+            args=[
+                start,
+                end,
+                SQLLiteral(value=True),
+                SQLLiteral(value=True),
+            ],
+        )
+
+        assert SQLFunctionCall(name="intervalStart", args=[interval]).to_sql() == "Obs.effective_start"
+        assert SQLFunctionCall(name="intervalEnd", args=[interval]).to_sql() == "Obs.effective_end"
+
+    def test_interval_bound_calls_fold_case_interval_from_bounds(self):
+        """intervalStart/End over CASE intervals serialize to CASE over bounds."""
+        condition = SQLFunctionCall(name="isPeriod", args=[SQLQualifiedIdentifier(parts=["Obs", "effective"])])
+        start = SQLQualifiedIdentifier(parts=["Obs", "effective_start"])
+        end = SQLQualifiedIdentifier(parts=["Obs", "effective_end"])
+        interval = SQLFunctionCall(
+            name="intervalFromBounds",
+            args=[
+                start,
+                end,
+                SQLLiteral(value=True),
+                SQLLiteral(value=True),
+            ],
+        )
+        case = SQLCase(
+            when_clauses=[(condition, interval)],
+            else_clause=SQLNull(),
+        )
+
+        start_sql = SQLFunctionCall(name="intervalStart", args=[case]).to_sql()
+        end_sql = SQLFunctionCall(name="intervalEnd", args=[case]).to_sql()
+
+        assert "intervalStart" not in start_sql
+        assert "intervalEnd" not in end_sql
+        assert "intervalFromBounds" not in start_sql
+        assert "intervalFromBounds" not in end_sql
+        assert "THEN Obs.effective_start" in start_sql
+        assert "THEN Obs.effective_end" in end_sql
+
+    def test_simple_coding_exists_bool_uses_coding_match_udf(self):
+        """Simple coding system/code exists checks avoid full FHIRPath bool UDF."""
+        expr = SQLFunctionCall(
+            name="fhirpath_bool",
+            args=[
+                SQLQualifiedIdentifier(parts=["Obs", "resource"]),
+                SQLLiteral(
+                    value="code.coding.where(system='http://loinc.org' and code='73831-0').exists()"
+                ),
+            ],
+        )
+
+        sql = expr.to_sql()
+
+        assert "fhirpath_bool" not in sql
+        assert "coding_matches" in sql
+        assert "'code'" in sql
+        assert "'http://loinc.org'" in sql
+        assert "'73831-0'" in sql
+
+    def test_coding_match_udf_handles_resource_and_direct_code_element(self):
+        """coding_matches supports full resources and direct CodeableConcept values."""
+        from ...duckdb.udf.valueset import codingMatches
+
+        full_resource = (
+            '{"code":{"coding":[{"system":"http://loinc.org","code":"73831-0"}]}}'
+        )
+        direct_concept = (
+            '{"coding":[{"system":"http://snomed.info/sct","code":"229797004"}]}'
+        )
+
+        assert codingMatches(full_resource, "code", "http://loinc.org", "73831-0") is True
+        assert codingMatches(direct_concept, "code", "QICoreCommon.SNOMEDCT", "229797004") is True
+        assert codingMatches(direct_concept, "code", "QICoreCommon.SNOMEDCT", "229799001") is False
+
+    def test_period_json_bound_extraction_requires_scalar_path(self):
+        """Direct Period JSON extraction is only used for scalar schema paths."""
+        ctx = _make_context_with_schema()
+
+        assert _can_extract_period_bound_from_json("Encounter", "period", ctx.fhir_schema)
+        assert _can_extract_period_bound_from_json(
+            "MedicationRequest",
+            "dispenseRequest.validityPeriod",
+            ctx.fhir_schema,
+        )
+        assert _can_extract_period_bound_from_json(
+            "Procedure",
+            "performedPeriod",
+            ctx.fhir_schema,
+        )
+        assert not _can_extract_period_bound_from_json(
+            "MedicationRequest",
+            "dosageInstruction.timing.repeat.boundsPeriod",
+            ctx.fhir_schema,
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -1,3 +1,7 @@
+---
+hide_table_of_contents: true
+---
+
 # CQL Playground
 
 This live CQL sandbox allows you to write and execute Clinical Quality Language (CQL) queries directly in your browser using the FHIR4DS engine.

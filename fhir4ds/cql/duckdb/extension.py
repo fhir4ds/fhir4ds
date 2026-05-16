@@ -92,7 +92,12 @@ def _register_python_supplements(
     from .macros import register_all_macros
     try:
         register_all_macros(con)
-    except (duckdb.CatalogException, duckdb.InvalidInputException):
+    except (
+        duckdb.CatalogException,
+        duckdb.InvalidInputException,
+        duckdb.NotImplementedException,
+        duckdb.BinderException,
+    ):
         pass  # some macros may conflict with C++ functions; that's OK
 
     # When C++ is loaded, wrap the connection so create_function silently
@@ -114,6 +119,7 @@ def _register_python_supplements(
     from .udf.age import registerAgeUdfs
     from .udf.aggregate import registerAggregateUdfs
     from .udf.clinical import registerClinicalUdfs
+    from .udf.conversion import registerConversionCheckUdfs
     from .udf.datetime import registerDatetimeUdfs
     from .udf.interval import registerIntervalUdfs
     from .udf.valueset import registerValuesetUdfs
@@ -127,7 +133,8 @@ def _register_python_supplements(
 
     for fn, label in [
         (registerAgeUdfs, "age"), (registerAggregateUdfs, "aggregate"),
-        (registerClinicalUdfs, "clinical"), (registerDatetimeUdfs, "datetime"),
+        (registerClinicalUdfs, "clinical"), (registerConversionCheckUdfs, "conversion"),
+        (registerDatetimeUdfs, "datetime"),
         (registerIntervalUdfs, "interval"), (registerValuesetUdfs, "valueset"),
         (registerRatioUdfs, "ratio"), (registerQuantityUdfs, "quantity"),
         (registerListUdfs, "list"), (registerVariableUdfs, "variable"),

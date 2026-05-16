@@ -466,6 +466,29 @@ class FHIRSchemaRegistry:
             return self._type_to_udf.get(element_type, "fhirpath_text")
         return "fhirpath_text"
 
+    def get_precomputed_udf_for_element(self, resource_type: str, element_path: str) -> str:
+        """
+        Get the UDF to use when materializing a retrieve precomputed column.
+
+        Most columns use the element's FHIR type. Some precomputed columns need
+        to preserve a raw value for downstream translator helpers rather than
+        extracting a scalar, so resource/version config may override the UDF by
+        either ``Resource.path`` or bare ``path``.
+        """
+        overrides = self._type_config.get("precomputed_path_udf_overrides", {})
+        if resource_type:
+            resource_key = f"{resource_type}.{element_path}"
+            if resource_key in overrides:
+                return overrides[resource_key]
+        if element_path in overrides:
+            return overrides[element_path]
+        return self.get_udf_for_element(resource_type, element_path)
+
+    @property
+    def default_precomputed_paths(self) -> Set[str]:
+        """FHIRPath properties to consider for every retrieve when valid."""
+        return set(self._type_config.get("default_precomputed_paths", []))
+
     def get_sql_type_for_element(self, resource_type: str, element_path: str) -> str:
         """
         Get the SQL column type for a resource element.

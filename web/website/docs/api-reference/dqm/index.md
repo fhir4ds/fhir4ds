@@ -75,5 +75,5 @@ Defines how evidence is collected for `OR` operations.
 
 | Metric | Status |
 |--------|--------|
-| **CMS eCQM (QI-Core 2025)** | 42/46 Measures (100% accuracy) |
+| **CMS eCQM (QI-Core 2025)** | 47/47 Measures (100% accuracy) |
 | **Audit Coverage** | 100% expression-level traceability |

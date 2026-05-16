@@ -10,7 +10,7 @@ Implements all CQL date/time difference functions:
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
 import orjson
@@ -188,26 +188,61 @@ def _high_boundary(iso_str: str) -> datetime:
     return datetime(y, mo, d, h, mi, s, ms * 1000)
 
 
-def _compute_duration(s: datetime, e: datetime, unit: str, is_week: bool) -> int:
+def _days_in_month(year: int, month: int) -> int:
+    return calendar.monthrange(year, month)[1]
+
+
+def _add_calendar_months(value: datetime, months: int) -> datetime:
+    month_index = value.year * 12 + (value.month - 1) + months
+    year, month_zero = divmod(month_index, 12)
+    month = month_zero + 1
+    day = min(value.day, _days_in_month(year, month))
+    return value.replace(year=year, month=month, day=day)
+
+
+def _duration_in_calendar_months(s: datetime, e: datetime) -> int:
+    if e < s:
+        return -_duration_in_calendar_months(e, s)
+
+    months = (e.year - s.year) * 12 + (e.month - s.month)
+    if _add_calendar_months(s, months) > e:
+        months -= 1
+    return months
+
+
+def _duration_in_calendar_years(s: datetime, e: datetime) -> int:
+    if e < s:
+        return -_duration_in_calendar_years(e, s)
+
+    years = e.year - s.year
+    if _add_calendar_months(s, years * 12) > e:
+        years -= 1
+    return years
+
+
+def _elapsed_seconds(s: datetime, e: datetime) -> float | None:
+    """Return elapsed seconds, rejecting mixed timezone-aware/naive inputs."""
+    if (s.tzinfo is None) != (e.tzinfo is None):
+        return None
+    if s.tzinfo is not None and e.tzinfo is not None:
+        s = s.astimezone(timezone.utc)
+        e = e.astimezone(timezone.utc)
+    return (e - s).total_seconds()
+
+
+def _compute_duration(s: datetime, e: datetime, unit: str, is_week: bool) -> int | None:
     """Compute integer duration between two datetimes in the given unit.
 
     CQL §22.21: returns the number of whole calendar periods, truncated
     toward zero (not floored).
     """
     if unit in ('year', 'years'):
-        years = e.year - s.year
-        if (e.month, e.day, e.hour, e.minute, e.second, e.microsecond) < \
-           (s.month, s.day, s.hour, s.minute, s.second, s.microsecond):
-            years -= 1
-        return years
+        return _duration_in_calendar_years(s, e)
     if unit in ('month', 'months'):
-        months = (e.year - s.year) * 12 + (e.month - s.month)
-        if (e.day, e.hour, e.minute, e.second, e.microsecond) < \
-           (s.day, s.hour, s.minute, s.second, s.microsecond):
-            months -= 1
-        return months
-    diff = e - s
-    total_seconds = diff.total_seconds()
+        return _duration_in_calendar_months(s, e)
+    total_seconds = _elapsed_seconds(s, e)
+    if total_seconds is None:
+        return None
     # Use int(x / divisor) for truncation toward zero, NOT // (floor)
     if is_week or unit in ('week', 'weeks'):
         return int(total_seconds / 86400 / 7)
@@ -258,7 +293,8 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
         e = _parse_to_datetime(end_str)
         if s is None or e is None:
             return None
-        return str(_compute_duration(s, e, unit, is_week))
+        duration = _compute_duration(s, e, unit, is_week)
+        return None if duration is None else str(duration)
 
     # Uncertainty: compute min/max by using low/high boundaries
     s_low = _low_boundary(start_str)
@@ -270,6 +306,8 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
     min_val = _compute_duration(s_high, e_low, unit, is_week)
     # Max duration: start at lowest, end at highest
     max_val = _compute_duration(s_low, e_high, unit, is_week)
+    if min_val is None or max_val is None:
+        return None
 
     if min_val == max_val:
         return str(min_val)
@@ -281,41 +319,41 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
 
 
 def yearsBetween(start: str | None, end: str | None) -> int | None:
-    """CQL years between two dates (integer result for backward compat)."""
-    s, e = _parse_date(start), _parse_date(end)
+    """CQL whole calendar years between two date/time values."""
+    s, e = _parse_to_datetime(start), _parse_to_datetime(end)
     if not s or not e:
         return None
-    years = e.year - s.year
-    if (e.month, e.day) < (s.month, s.day):
-        years -= 1
-    return years
+    return _duration_in_calendar_years(s, e)
 
 
 def monthsBetween(start: str | None, end: str | None) -> int | None:
-    """CQL months between two dates (integer result)."""
-    s, e = _parse_date(start), _parse_date(end)
+    """CQL whole calendar months between two date/time values."""
+    s, e = _parse_to_datetime(start), _parse_to_datetime(end)
     if not s or not e:
         return None
-    months = (e.year - s.year) * 12 + (e.month - s.month)
-    if e.day < s.day:
-        months -= 1
-    return months
+    return _duration_in_calendar_months(s, e)
 
 
 def weeksBetween(start: str | None, end: str | None) -> int | None:
     """CQL weeks between two dates (integer result)."""
-    s, e = _parse_date(start), _parse_date(end)
+    s, e = _parse_to_datetime(start), _parse_to_datetime(end)
     if not s or not e:
         return None
-    return (e - s).days // 7
+    total_seconds = _elapsed_seconds(s, e)
+    if total_seconds is None:
+        return None
+    return int(total_seconds / 86400 / 7)
 
 
 def daysBetween(start: str | None, end: str | None) -> int | None:
-    """CQL days between two dates (integer result)."""
-    s, e = _parse_date(start), _parse_date(end)
+    """CQL whole days between two date/time values."""
+    s, e = _parse_to_datetime(start), _parse_to_datetime(end)
     if not s or not e:
         return None
-    return (e - s).days
+    total_seconds = _elapsed_seconds(s, e)
+    if total_seconds is None:
+        return None
+    return int(total_seconds / 86400)
 
 
 def hoursBetween(start: str | None, end: str | None) -> int | None:
@@ -323,7 +361,10 @@ def hoursBetween(start: str | None, end: str | None) -> int | None:
     s, e = _parse_datetime(start), _parse_datetime(end)
     if not s or not e:
         return None
-    return int((e - s).total_seconds() // 3600)
+    total_seconds = _elapsed_seconds(s, e)
+    if total_seconds is None:
+        return None
+    return int(total_seconds / 3600)
 
 
 def minutesBetween(start: str | None, end: str | None) -> int | None:
@@ -331,7 +372,10 @@ def minutesBetween(start: str | None, end: str | None) -> int | None:
     s, e = _parse_datetime(start), _parse_datetime(end)
     if not s or not e:
         return None
-    return int((e - s).total_seconds() // 60)
+    total_seconds = _elapsed_seconds(s, e)
+    if total_seconds is None:
+        return None
+    return int(total_seconds / 60)
 
 
 def secondsBetween(start: str | None, end: str | None) -> int | None:
@@ -339,7 +383,10 @@ def secondsBetween(start: str | None, end: str | None) -> int | None:
     s, e = _parse_datetime(start), _parse_datetime(end)
     if not s or not e:
         return None
-    return int((e - s).total_seconds())
+    total_seconds = _elapsed_seconds(s, e)
+    if total_seconds is None:
+        return None
+    return int(total_seconds)
 
 
 def millisecondsBetween(start: str | None, end: str | None) -> int | None:
@@ -347,7 +394,10 @@ def millisecondsBetween(start: str | None, end: str | None) -> int | None:
     s, e = _parse_datetime(start), _parse_datetime(end)
     if not s or not e:
         return None
-    return int((e - s).total_seconds() * 1000)
+    total_seconds = _elapsed_seconds(s, e)
+    if total_seconds is None:
+        return None
+    return int(total_seconds * 1000)
 
 
 # ==============================================
@@ -590,7 +640,17 @@ def differenceInWeeks(start: str | None, end: str | None) -> int | None:
     days = differenceInDays(start, end)
     if days is None:
         return None
-    return days // 7
+    return int(days / 7)
+
+
+def _parse_difference_datetime(value: str) -> datetime | None:
+    parsed = _parse_datetime(value)
+    if parsed:
+        return parsed
+    parsed_time = _parse_time(value)
+    if parsed_time:
+        return _dt_class.combine(date(2000, 1, 1), parsed_time)
+    return None
 
 
 def differenceInHours(start: str | None, end: str | None) -> int | None:
@@ -598,12 +658,14 @@ def differenceInHours(start: str | None, end: str | None) -> int | None:
     if start is None or end is None:
         return None
     try:
-        s = _parse_datetime(start) or (_dt_class.combine(date(2000, 1, 1), _parse_time(start)) if _parse_time(start) else None)
-        e = _parse_datetime(end) or (_dt_class.combine(date(2000, 1, 1), _parse_time(end)) if _parse_time(end) else None)
+        s = _parse_difference_datetime(start)
+        e = _parse_difference_datetime(end)
         if not s or not e:
             return None
-        delta = e - s
-        return int(delta.total_seconds()) // 3600
+        total_seconds = _elapsed_seconds(s, e)
+        if total_seconds is None:
+            return None
+        return int(total_seconds / 3600)
     except (ValueError, TypeError, AttributeError) as ex:
         _logger.warning("UDF differenceInHours failed: %s", ex)
         return None
@@ -614,12 +676,14 @@ def differenceInMinutes(start: str | None, end: str | None) -> int | None:
     if start is None or end is None:
         return None
     try:
-        s = _parse_datetime(start) or (_dt_class.combine(date(2000, 1, 1), _parse_time(start)) if _parse_time(start) else None)
-        e = _parse_datetime(end) or (_dt_class.combine(date(2000, 1, 1), _parse_time(end)) if _parse_time(end) else None)
+        s = _parse_difference_datetime(start)
+        e = _parse_difference_datetime(end)
         if not s or not e:
             return None
-        delta = e - s
-        return int(delta.total_seconds()) // 60
+        total_seconds = _elapsed_seconds(s, e)
+        if total_seconds is None:
+            return None
+        return int(total_seconds / 60)
     except (ValueError, TypeError, AttributeError) as ex:
         _logger.warning("UDF differenceInMinutes failed: %s", ex)
         return None
@@ -630,12 +694,14 @@ def differenceInSeconds(start: str | None, end: str | None) -> int | None:
     if start is None or end is None:
         return None
     try:
-        s = _parse_datetime(start) or (_dt_class.combine(date(2000, 1, 1), _parse_time(start)) if _parse_time(start) else None)
-        e = _parse_datetime(end) or (_dt_class.combine(date(2000, 1, 1), _parse_time(end)) if _parse_time(end) else None)
+        s = _parse_difference_datetime(start)
+        e = _parse_difference_datetime(end)
         if not s or not e:
             return None
-        delta = e - s
-        return int(delta.total_seconds())
+        total_seconds = _elapsed_seconds(s, e)
+        if total_seconds is None:
+            return None
+        return int(total_seconds)
     except (ValueError, TypeError, AttributeError) as ex:
         _logger.warning("UDF differenceInSeconds failed: %s", ex)
         return None
@@ -646,12 +712,14 @@ def differenceInMilliseconds(start: str | None, end: str | None) -> int | None:
     if start is None or end is None:
         return None
     try:
-        s = _parse_datetime(start) or (_dt_class.combine(date(2000, 1, 1), _parse_time(start)) if _parse_time(start) else None)
-        e = _parse_datetime(end) or (_dt_class.combine(date(2000, 1, 1), _parse_time(end)) if _parse_time(end) else None)
+        s = _parse_difference_datetime(start)
+        e = _parse_difference_datetime(end)
         if not s or not e:
             return None
-        delta = e - s
-        return int(delta.total_seconds() * 1000)
+        total_seconds = _elapsed_seconds(s, e)
+        if total_seconds is None:
+            return None
+        return int(total_seconds * 1000)
     except (ValueError, TypeError, AttributeError) as ex:
         _logger.warning("UDF differenceInMilliseconds failed: %s", ex)
         return None

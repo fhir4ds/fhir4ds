@@ -8,7 +8,8 @@ types for tracking translation state.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any, Dict, List, Optional, Union
 
 from .column_generation import (
@@ -16,6 +17,7 @@ from .column_generation import (
     build_column_definitions,
     get_default_property_paths,
 )
+from .temporal_fields import TEMPORAL_BOUND_COLUMN_NAMES
 
 
 # SQL reserved words that must be quoted when used as identifiers/aliases
@@ -33,6 +35,111 @@ _SQL_RESERVED_WORDS = {
     "CAST", "FILTER", "OVER", "PARTITION", "WINDOW",
     "CURRENT", "ROW", "ROWS", "RANGE", "INTERVAL",
 }
+
+_CODING_EXISTS_RE = re.compile(
+    r"^(?P<path>[A-Za-z][A-Za-z0-9_.]*)\.coding\.where\("
+    r"\s*system\s*=\s*'(?P<system>[^']+)'\s+and\s+code\s*=\s*'(?P<code>[^']+)'\s*"
+    r"\)\.exists\(\)$"
+)
+
+
+def _same_sql_expression(left: "SQLExpression", right: "SQLExpression") -> bool:
+    """Compare small AST expressions by rendered SQL for normalization guards."""
+    return left.to_sql() == right.to_sql()
+
+
+def _extract_to_interval_case_source(expr: "SQLCase") -> Optional["SQLExpression"]:
+    """Return the source column for CASE produced by fluent toInterval()."""
+    if not expr.when_clauses or not isinstance(expr.else_clause, SQLFunctionCall):
+        return None
+    if expr.else_clause.name != "intervalFromBounds" or len(expr.else_clause.args) < 2:
+        return None
+
+    source = expr.else_clause.args[0]
+    if not _same_sql_expression(source, expr.else_clause.args[1]):
+        return None
+
+    for _, result in expr.when_clauses:
+        if isinstance(result, SQLNull) or (
+            isinstance(result, SQLLiteral) and result.value is None
+        ):
+            continue
+        if not _same_sql_expression(result, source):
+            return None
+    return source
+
+
+def _is_null_expression(expr: Optional["SQLExpression"]) -> bool:
+    return isinstance(expr, SQLNull) or (
+        isinstance(expr, SQLLiteral) and expr.value is None
+    )
+
+
+def _extract_interval_bound_expression(
+    expr: "SQLExpression",
+    bound_name: str,
+) -> Optional["SQLExpression"]:
+    """Return the known bound expression for an interval-producing expression."""
+    if isinstance(expr, SQLFunctionCall) and expr.name == "intervalFromBounds" and len(expr.args) >= 2:
+        return expr.args[0] if bound_name == "intervalStart" else expr.args[1]
+    if _is_null_expression(expr):
+        return SQLNull()
+    return None
+
+
+def _fold_interval_bound_case(
+    expr: "SQLCase",
+    bound_name: str,
+) -> Optional["SQLCase"]:
+    """Fold intervalStart/End(CASE ... intervalFromBounds ... END)."""
+    folded_when_clauses = []
+    changed = False
+
+    for condition, result in expr.when_clauses:
+        folded_result = _extract_interval_bound_expression(result, bound_name)
+        if folded_result is None:
+            return None
+        changed = changed or folded_result is not result
+        folded_when_clauses.append((condition, folded_result))
+
+    folded_else = None
+    if expr.else_clause is not None:
+        folded_else = _extract_interval_bound_expression(expr.else_clause, bound_name)
+        if folded_else is None:
+            return None
+        changed = changed or folded_else is not expr.else_clause
+
+    if not changed:
+        return None
+    return SQLCase(
+        when_clauses=folded_when_clauses,
+        else_clause=folded_else,
+        operand=expr.operand,
+    )
+
+
+def _try_coding_match_call(call: "SQLFunctionCall") -> Optional["SQLExpression"]:
+    """Rewrite simple coding existence FHIRPath checks to a dedicated UDF."""
+    if call.name.lower() != "fhirpath_bool" or len(call.args) != 2:
+        return None
+    path_arg = call.args[1]
+    if not isinstance(path_arg, SQLLiteral) or not isinstance(path_arg.value, str):
+        return None
+
+    match = _CODING_EXISTS_RE.match(path_arg.value)
+    if not match:
+        return None
+
+    return SQLFunctionCall(
+        name="coding_matches",
+        args=[
+            call.args[0],
+            SQLLiteral(value=match.group("path")),
+            SQLLiteral(value=match.group("system")),
+            SQLLiteral(value=match.group("code")),
+        ],
+    )
+
 
 # Operator precedence levels (higher = binds tighter)
 PRECEDENCE = {
@@ -320,6 +427,31 @@ class SQLFunctionCall(SQLExpression):
         call ``normalize().to_sql()`` instead of ``to_sql()`` directly.
         The default ``to_sql()`` calls this internally for backward compatibility.
         """
+        coding_match_call = _try_coding_match_call(self)
+        if coding_match_call is not None:
+            return coding_match_call
+
+        # Use precomputed retrieve CTE temporal bounds when intervalStart/End
+        # receives a known temporal column such as Encounter.period or
+        # Observation.effective.
+        if self.name in ("intervalStart", "intervalEnd") and len(self.args) == 1:
+            arg = self.args[0]
+            if isinstance(arg, SQLCase):
+                folded_case = _fold_interval_bound_case(arg, self.name)
+                if folded_case is not None:
+                    return folded_case
+                arg = _extract_to_interval_case_source(arg) or arg
+            if isinstance(arg, SQLFunctionCall) and arg.name == "intervalFromBounds" and len(arg.args) >= 2:
+                return arg.args[0] if self.name == "intervalStart" else arg.args[1]
+            if isinstance(arg, SQLQualifiedIdentifier) and len(arg.parts) >= 2:
+                col_name = arg.parts[-1]
+                if (
+                    col_name in TEMPORAL_BOUND_COLUMN_NAMES
+                    and not col_name.endswith(("_start", "_end"))
+                ):
+                    suffix = "start" if self.name == "intervalStart" else "end"
+                    return SQLQualifiedIdentifier(parts=arg.parts[:-1] + [f"{col_name}_{suffix}"])
+
         # array_length on non-array arguments → CASE IS NOT NULL / CASE WHEN
         # SQLRaw used here: normalize() is called only from to_sql() (final rendering).
         if self.name.lower() == "array_length" and len(self.args) >= 1:
@@ -1319,6 +1451,275 @@ class SQLFragment:
         cte_parts = [cte.to_sql() for cte in self.ctes]
         with_clause = "WITH " + ",\n".join(cte_parts)
         return f"{with_clause}\n{self.main_query.to_sql()}"
+
+    def deduplicate_lateral_aliases(self, min_occurrences: int = 3) -> None:
+        """Deduplicate repeated scalar subqueries in CTE WHERE clauses.
+
+        Repeated correlated scalar subqueries are pulled into CROSS JOIN LATERAL
+        derived tables and the WHERE clause is rewritten to reference the lateral
+        value. This keeps the CTE's projected columns unchanged while avoiding
+        repeated serialization of the same subquery.
+        """
+        for cte_def in self.ctes:
+            self._dedup_cte(cte_def, min_occurrences)
+
+    def _dedup_cte(self, cte_def: 'CTEDefinition', min_occ: int) -> None:
+        """Apply lateral alias deduplication to a single CTE definition."""
+        query = cte_def.query
+
+        # Handle set operations: apply dedup to each operand individually
+        if isinstance(query, (SQLUnion, SQLIntersect, SQLExcept)):
+            for i, operand in enumerate(query.operands):
+                inner = operand
+                if isinstance(inner, SQLSubquery) and isinstance(inner.query, SQLSelect):
+                    self._dedup_select(inner.query, min_occ)
+                elif isinstance(inner, SQLSelect):
+                    self._dedup_select(inner, min_occ)
+            return
+
+        # Handle plain SELECT CTE
+        if isinstance(query, SQLSelect):
+            self._dedup_select(query, min_occ)
+
+    def _dedup_select(self, select: 'SQLSelect', min_occ: int) -> None:
+        """Deduplicate repeated expressions in a SELECT's projection and WHERE."""
+        self._dedup_nested_scopes(select.columns, min_occ)
+        self._dedup_nested_scopes(select.from_clause, min_occ)
+        self._dedup_nested_scopes(select.joins, min_occ)
+        self._dedup_nested_scopes(select.where, min_occ)
+
+        if select.from_clause is None:
+            return
+
+        # 1) Collect candidate expressions and their serialized forms.
+        # Lateral aliases appended to this SELECT are visible to the projection
+        # and WHERE clause, but not to earlier JOIN ON conditions.
+        candidates = {}  # sql_str -> (node, count)
+        self._collect_candidates(select.columns, candidates, min_occ)
+        self._collect_candidates(select.where, candidates, min_occ)
+
+        if not candidates:
+            return
+
+        # 2) For each repeated expression, create a lateral derived table.
+        lateral_joins = []
+        alias_map = {}  # sql_str -> SQLQualifiedIdentifier
+        for sql_str, (node, count) in sorted(
+            candidates.items(),
+            key=lambda item: -(len(item[0]) * item[1][1]),
+        ):
+            if count < min_occ:
+                continue
+            alias_name = f"_lat{len(lateral_joins)}"
+            value_name = "value"
+            alias_map[sql_str] = SQLQualifiedIdentifier(parts=[alias_name, value_name])
+            lateral_joins.append(
+                SQLJoin(
+                    join_type="CROSS JOIN LATERAL",
+                    table=SQLSelect(columns=[SQLAlias(expr=node, alias=value_name)]),
+                    alias=alias_name,
+                )
+            )
+
+        if not lateral_joins:
+            return
+
+        # 3) Replace occurrences in projection and WHERE with lateral references.
+        select.columns = self._replace_alias_value(select.columns, alias_map)
+        if select.where is not None:
+            select.where = self._replace_aliases(select.where, alias_map)
+
+        # 4) Append lateral joins after existing FROM/JOIN sources so they can
+        # reference every alias visible to the WHERE clause.
+        select.joins = list(select.joins or []) + lateral_joins
+
+    def _dedup_nested_scopes(self, value: Any, min_occ: int) -> None:
+        """Apply deduplication inside nested SELECT scopes without hoisting out."""
+        if value is None:
+            return
+
+        if isinstance(value, SQLSubquery):
+            if isinstance(value.query, SQLSelect):
+                self._dedup_select(value.query, min_occ)
+            elif isinstance(value.query, (SQLUnion, SQLIntersect, SQLExcept)):
+                for operand in value.query.operands:
+                    self._dedup_nested_scopes(operand, min_occ)
+            return
+
+        if isinstance(value, SQLExists):
+            self._dedup_nested_scopes(value.subquery, min_occ)
+            return
+
+        if isinstance(value, SQLSelect):
+            self._dedup_select(value, min_occ)
+            return
+
+        if isinstance(value, SQLJoin):
+            self._dedup_nested_scopes(value.table, min_occ)
+            self._dedup_nested_scopes(value.on_condition, min_occ)
+            return
+
+        if isinstance(value, (SQLUnion, SQLIntersect, SQLExcept)):
+            for operand in value.operands:
+                self._dedup_nested_scopes(operand, min_occ)
+            return
+
+        if isinstance(value, list):
+            for item in value:
+                self._dedup_nested_scopes(item, min_occ)
+            return
+
+        if isinstance(value, tuple):
+            for item in value:
+                self._dedup_nested_scopes(item, min_occ)
+            return
+
+        if not is_dataclass(value):
+            return
+
+        for field_info in fields(value):
+            self._dedup_nested_scopes(getattr(value, field_info.name), min_occ)
+
+    def _collect_candidates(self, node: 'SQLExpression', candidates: dict, min_occ: int) -> None:
+        """Walk the AST and collect scalar subqueries that appear multiple times."""
+        if node is None:
+            return
+
+        if isinstance(node, (list, tuple)):
+            for item in node:
+                self._collect_candidates(item, candidates, min_occ)
+            return
+
+        if isinstance(node, dict):
+            for item in node.values():
+                self._collect_candidates(item, candidates, min_occ)
+            return
+
+        if isinstance(node, SQLSubquery):
+            sql_str = node.to_sql()
+            # Only consider larger correlated subqueries. Small subqueries do not
+            # materially affect CMS1218 SQL size and are less worth the join churn.
+            if 'patient_id' in sql_str and len(sql_str) > 200:
+                count = candidates.get(sql_str, (None, 0))[1] + 1
+                candidates[sql_str] = (node, count)
+            return
+
+        if self._is_lateral_scalar_candidate(node):
+            sql_str = node.to_sql()
+            count = candidates.get(sql_str, (None, 0))[1] + 1
+            candidates[sql_str] = (node, count)
+            return
+
+        if isinstance(node, SQLExists):
+            # EXISTS owns a nested SELECT scope. Hoisting an expression found only
+            # inside that scope to the outer SELECT would be invalid.
+            return
+
+        for child in self._iter_child_expressions(node):
+            self._collect_candidates(child, candidates, min_occ)
+
+    @staticmethod
+    def _is_lateral_scalar_candidate(node: Any) -> bool:
+        """Return true for repeated pure scalar extractions worth lateralizing."""
+        if not isinstance(node, SQLFunctionCall):
+            return False
+        if not node.name or node.name.lower() not in {"fhirpath", "fhirpath_text"}:
+            return False
+        if len(node.args) < 2:
+            return False
+        # Very small direct field reads are usually cheaper than an extra lateral
+        # join. Complex first args, such as scalar subqueries, remain eligible.
+        if len(node.to_sql()) <= 80 and isinstance(
+            node.args[0], (SQLIdentifier, SQLQualifiedIdentifier)
+        ):
+            return False
+        return True
+
+    def _replace_aliases(self, node: 'SQLExpression', alias_map: dict) -> 'SQLExpression':
+        """Replace subexpressions matching alias_map keys with qualified aliases."""
+        # Check if this node itself should be replaced
+        if isinstance(node, SQLSubquery):
+            sql_str = node.to_sql()
+            if sql_str in alias_map:
+                return alias_map[sql_str]
+            return node
+
+        if self._is_lateral_scalar_candidate(node):
+            sql_str = node.to_sql()
+            if sql_str in alias_map:
+                return alias_map[sql_str]
+
+        if isinstance(node, SQLExists):
+            return node
+
+        if not is_dataclass(node):
+            return node
+
+        for field_info in fields(node):
+            value = getattr(node, field_info.name)
+            new_value = self._replace_alias_value(value, alias_map)
+            if new_value is not value:
+                setattr(node, field_info.name, new_value)
+        return node
+
+    def _iter_child_expressions(self, value: Any) -> List['SQLExpression']:
+        """Return SQLExpression children without crossing SELECT/subquery scopes."""
+        children: List[SQLExpression] = []
+
+        def visit(item: Any) -> None:
+            if isinstance(item, SQLExpression):
+                children.append(item)
+                return
+            if isinstance(item, (list, tuple)):
+                for sub_item in item:
+                    visit(sub_item)
+                return
+            if isinstance(item, dict):
+                for sub_item in item.values():
+                    visit(sub_item)
+
+        if is_dataclass(value):
+            for field_info in fields(value):
+                field_value = getattr(value, field_info.name)
+                visit(field_value)
+        return children
+
+    def _replace_alias_value(self, value: Any, alias_map: dict) -> Any:
+        """Recursively rewrite SQLExpression values inside dataclass containers."""
+        if isinstance(value, SQLExpression):
+            return self._replace_aliases(value, alias_map)
+
+        if isinstance(value, list):
+            changed = False
+            new_items = []
+            for item in value:
+                new_item = self._replace_alias_value(item, alias_map)
+                if new_item is not item:
+                    changed = True
+                new_items.append(new_item)
+            return new_items if changed else value
+
+        if isinstance(value, tuple):
+            changed = False
+            new_items = []
+            for item in value:
+                new_item = self._replace_alias_value(item, alias_map)
+                if new_item is not item:
+                    changed = True
+                new_items.append(new_item)
+            return tuple(new_items) if changed else value
+
+        if isinstance(value, dict):
+            changed = False
+            new_items = {}
+            for key, item in value.items():
+                new_item = self._replace_alias_value(item, alias_map)
+                if new_item is not item:
+                    changed = True
+                new_items[key] = new_item
+            return new_items if changed else value
+
+        return value
 
 
 @dataclass

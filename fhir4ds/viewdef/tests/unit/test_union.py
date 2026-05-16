@@ -316,14 +316,8 @@ class TestUnionAllWithForeach:
         ]
 
         gen = SQLGenerator()
-        # This should work without error
-        # Note: full forEach integration may depend on generator implementation
-        try:
-            sql = generate_union_all(union_selects, "patients t", gen, "t.resource")
-            assert "SELECT" in sql
-        except (AttributeError, TypeError):
-            # If generator doesn't have required methods, skip
-            pytest.skip("Generator missing forEach support methods")
+        sql = generate_union_all(union_selects, "patients t", gen, "t.resource")
+        assert "SELECT" in sql
 
 
 class TestMultipleUnionBranches:

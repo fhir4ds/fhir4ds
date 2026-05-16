@@ -17,12 +17,17 @@ import {
 import {
   buildAuthorizeUrl,
   isSmartCallback,
-  isPopupContext,
+  isSmartPopupCallback,
   handleCallback,
   getAccessToken,
   clearAuth,
   getStoredSession,
+  markPopupAuthPending,
+  clearPopupAuthPending,
+  SMART_AUTH_CHANNEL,
+  SMART_CALLBACK_RESULT_KEY,
   type SmartToken,
+  type SmartCallbackMessage,
 } from "../lib/smart-auth";
 import { useSMARTData } from "../hooks/useSMARTData";
 import type { FHIRResource } from "../lib/smart-data";
@@ -67,16 +72,13 @@ export function SMARTLaunch({
   const smartData = useSMARTData(getConnection);
 
   // Guard: only fire onAuthChange(true) once per authentication session.
-  // We DEFER the notification until patient data is fully loaded into DuckDB
-  // so that when the parent switches to the CQL/SDC tab the data is already
-  // available for queries.
   const notifiedRef = useRef(false);
   useEffect(() => {
-    if (authState.phase === "ready" && smartData.dataset && !notifiedRef.current) {
+    if (authState.phase === "ready" && !notifiedRef.current) {
       notifiedRef.current = true;
       onAuthChange?.(true);
     }
-  }, [authState.phase, smartData.dataset, onAuthChange]);
+  }, [authState.phase, onAuthChange]);
 
   // Sync patient name to parent for the header
   useEffect(() => {
@@ -113,7 +115,7 @@ export function SMARTLaunch({
     if (isSmartCallback()) {
       // In a popup context the WC entry-point IIFE handles the callback and
       // closes the window — don't double-process here.
-      if (isPopupContext()) return;
+      if (isSmartPopupCallback()) return;
 
       setAuthState({ phase: "authorizing" });
       handleCallback()
@@ -200,6 +202,7 @@ export function SMARTLaunch({
 
       // Open a popup for the auth flow. Popups navigate freely regardless
       // of the EHR's X-Frame-Options header.
+      markPopupAuthPending();
       const popup = window.open(
         url,
         'fhir4ds-smart-auth',
@@ -208,6 +211,7 @@ export function SMARTLaunch({
 
       if (!popup) {
         // Popup blocked — fall back to full-page redirect
+        clearPopupAuthPending();
         console.warn("[SMARTLaunch] Popup blocked, falling back to redirect");
         window.location.href = url;
         return;
@@ -215,30 +219,121 @@ export function SMARTLaunch({
 
       setAuthState({ phase: "authorizing" });
 
-      // Listen for the token posted back by SmartCallbackPage
-      const handleMessage = (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
+      let channel: BroadcastChannel | null = null;
+      let closedPoll: ReturnType<typeof setInterval> | null = null;
+      let popupClosedAt: number | null = null;
 
-        if (event.data?.type === 'FHIR4DS_SMART_TOKEN') {
-          window.removeEventListener('message', handleMessage);
-          clearInterval(closedPoll);
-          setAuthState({ phase: "ready", token: event.data.token });
-          // onAuthChange(true) fired by deferred effect once patient data loads
+      const finish = () => {
+        window.removeEventListener('message', handleMessage);
+        window.removeEventListener('storage', handleStorage);
+        channel?.close();
+        if (closedPoll) clearInterval(closedPoll);
+        if (!popup.closed) {
+          try {
+            popup.close();
+          } catch {
+            // Browser may reject close after cross-origin navigation; the
+            // callback page also attempts to close itself.
+          }
+        }
+        clearPopupAuthPending();
+        localStorage.removeItem(SMART_CALLBACK_RESULT_KEY);
+      };
+
+      const handleAuthResult = (data: SmartCallbackMessage) => {
+        if (data.type === 'FHIR4DS_SMART_TOKEN') {
+          finish();
+          setAuthState({ phase: "ready", token: data.token });
+          // onAuthChange(true) fired by the ready-state effect.
         }
 
-        if (event.data?.type === 'FHIR4DS_SMART_ERROR') {
-          window.removeEventListener('message', handleMessage);
-          clearInterval(closedPoll);
-          setAuthState({ phase: "error", message: event.data.error });
+        if (data.type === 'FHIR4DS_SMART_ERROR') {
+          finish();
+          setAuthState({ phase: "error", message: data.error });
+        }
+      };
+
+      // Listen for the token posted back by SmartCallbackPage. BroadcastChannel
+      // and storage cover COOP/COEP cases where window.opener is severed.
+      const handleMessage = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        if (
+          event.data?.type === 'FHIR4DS_SMART_TOKEN' ||
+          event.data?.type === 'FHIR4DS_SMART_ERROR'
+        ) {
+          handleAuthResult(event.data);
         }
       };
       window.addEventListener('message', handleMessage);
 
+      const handleStorage = (event: StorageEvent) => {
+        if (event.key !== SMART_CALLBACK_RESULT_KEY || !event.newValue) return;
+        try {
+          const data = JSON.parse(event.newValue) as SmartCallbackMessage;
+          if (
+            data.type === 'FHIR4DS_SMART_TOKEN' ||
+            data.type === 'FHIR4DS_SMART_ERROR'
+          ) {
+            handleAuthResult(data);
+          }
+        } catch {
+          // Ignore malformed storage events from older tabs.
+        }
+      };
+      window.addEventListener('storage', handleStorage);
+
+      const consumeStoredAuthResult = () => {
+        const storedResult = localStorage.getItem(SMART_CALLBACK_RESULT_KEY);
+        if (!storedResult) return false;
+        try {
+          const data = JSON.parse(storedResult) as SmartCallbackMessage;
+          if (
+            data.type === 'FHIR4DS_SMART_TOKEN' ||
+            data.type === 'FHIR4DS_SMART_ERROR'
+          ) {
+            handleAuthResult(data);
+            return true;
+          }
+        } catch {
+          localStorage.removeItem(SMART_CALLBACK_RESULT_KEY);
+        }
+        return false;
+      };
+
+      if ("BroadcastChannel" in window) {
+        channel = new BroadcastChannel(SMART_AUTH_CHANNEL);
+        channel.onmessage = (event) => {
+          if (
+            event.data?.type === 'FHIR4DS_SMART_TOKEN' ||
+            event.data?.type === 'FHIR4DS_SMART_ERROR'
+          ) {
+            handleAuthResult(event.data);
+          }
+        };
+      }
+
       // Detect popup closed by user without completing auth
-      const closedPoll = setInterval(() => {
+      closedPoll = setInterval(() => {
+        if (consumeStoredAuthResult()) {
+          return;
+        }
+
+        const token = getAccessToken();
+        if (token) {
+          handleAuthResult({
+            type: 'FHIR4DS_SMART_TOKEN',
+            token,
+            session: getStoredSession(),
+          });
+          return;
+        }
+
         if (popup.closed) {
-          clearInterval(closedPoll);
-          window.removeEventListener('message', handleMessage);
+          popupClosedAt ??= Date.now();
+          if (Date.now() - popupClosedAt < 5000) {
+            return;
+          }
+          finish();
           setAuthState(prev =>
             prev.phase === 'authorizing'
               ? { phase: "select" }
@@ -247,7 +342,10 @@ export function SMARTLaunch({
         }
       }, 500);
 
+      consumeStoredAuthResult();
+
     } catch (err) {
+      clearPopupAuthPending();
       setAuthState({
         phase: "error",
         message: err instanceof Error ? err.message : String(err),

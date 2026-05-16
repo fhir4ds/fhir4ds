@@ -91,7 +91,6 @@ class TestFirstLastCorrectness:
         sql = translator.translate_library(ast)
         return sql, translator._context
 
-    @pytest.mark.xfail(reason="First() shape inference not yet implemented - returns UNKNOWN")
     def test_first_shape_is_patient_scalar(self):
         """First() should produce PATIENT_SCALAR shape."""
         cql = '''

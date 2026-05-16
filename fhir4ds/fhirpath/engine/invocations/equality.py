@@ -22,6 +22,12 @@ def equality(ctx, x, y):
     if len(x) != len(y):
         return False
 
+    if len(x) > 1:
+        results = [equality(ctx, [left], [right]) for left, right in zip(x, y, strict=True)]
+        if any(result is None for result in results):
+            return None
+        return all(results)
+
     a = util.parse_value(x[0])
     b = util.parse_value(y[0])
 
@@ -135,7 +141,18 @@ def equivalence(ctx, x, y):
     y_val = util.parse_value(y[0])
 
     if isinstance(x_val, nodes.FP_Quantity) and isinstance(y_val, nodes.FP_Quantity):
-        return x_val.deep_equal(y_val)
+        if x_val.unit == y_val.unit:
+            return x_val.deep_equal(y_val)
+
+        l_base = _quantity_base(x_val)
+        r_base = _quantity_base(y_val)
+        if l_base is None or r_base is None:
+            return x_val.deep_equal(y_val)
+        l_value, l_unit = l_base
+        r_value, r_unit = r_base
+        if l_unit != r_unit:
+            return False
+        return is_equivalent(l_value, r_value)
 
     if isinstance(a, (abc.Mapping, list)) and isinstance(b, (abc.Mapping, list)):
 
@@ -158,6 +175,36 @@ def equivalence(ctx, x, y):
         return deep_equal(a, b)
 
     return x == y
+
+
+def _quantity_base(q):
+    unit = q.unit
+    if len(unit) >= 2 and unit[0] == "'" and unit[-1] == "'":
+        unit = unit[1:-1]
+
+    table = {
+        "ug": ("g", Decimal("0.000001")),
+        "mg": ("g", Decimal("0.001")),
+        "g": ("g", Decimal("1")),
+        "kg": ("g", Decimal("1000")),
+        "mm": ("m", Decimal("0.001")),
+        "cm": ("m", Decimal("0.01")),
+        "m": ("m", Decimal("1")),
+        "km": ("m", Decimal("1000")),
+        "ms": ("s", Decimal("0.001")),
+        "s": ("s", Decimal("1")),
+        "min": ("s", Decimal("60")),
+        "h": ("s", Decimal("3600")),
+        "d": ("s", Decimal("86400")),
+        "wk": ("s", Decimal("604800")),
+        "1": ("1", Decimal("1")),
+        "%": ("1", Decimal("0.01")),
+    }
+    converted = table.get(unit)
+    if not converted:
+        return None
+    base_unit, factor = converted
+    return Decimal(str(q.value)) * factor, base_unit
 
 
 def datetime_equality(ctx, x, y):
@@ -321,6 +368,8 @@ def typecheck(a, b):
 def _compare(ctx, a, b, fp_check, py_op):
     """Shared comparison logic for lt, gt, lte, gte."""
     if len(a) == 0 or len(b) == 0:
+        return []
+    if len(a) > 1 or len(b) > 1:
         return []
     if a[0] is None or b[0] is None:
         return []

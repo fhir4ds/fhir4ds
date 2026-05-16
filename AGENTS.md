@@ -82,6 +82,31 @@ python3 conformance/scripts/run_all.py
 
 Reports are generated in `conformance/reports/`.
 
+### Pytest Plugin Note
+
+`pyproject.toml` intentionally sets `-p no:benchmark` in pytest `addopts`.
+The auto-loaded `pytest-benchmark` plugin can hang pytest startup/collection in
+this workspace. Do not remove that option unless the plugin issue has been
+verified fixed; benchmark runs are handled by the scripts in `benchmarks/`.
+
+### Test Skip / XFail Policy
+
+Do not use `pytest.skip(...)` to hide translator, parser, or generator behavior
+that is expected to work. Tests for supported behavior should fail normally.
+
+Use `pytest.mark.xfail(..., raises=ExpectedError)` or an equivalent explicit
+expected-error assertion when a spec case is intentionally invalid or a known
+gap must remain visible. This keeps XPASS behavior visible when support lands.
+
+Skips are appropriate for environment or fixture availability only, such as a
+missing optional DuckDB/C++ extension build, missing external FHIR datasets, or
+benchmark/conformance fixture submodules that are not present.
+
+CMS integration tests that need include resolution should use
+`fhir4ds/cql/tests/integration/helpers.py::make_cql_library_loader` so included
+libraries such as `FHIRHelpers`, `QICoreCommon`, `Status`, `Hospice`, `SDE`,
+`AHA`, and `AdultOutpatientEncounters` are exercised instead of skipped.
+
 ---
 
 ## Development Workflow
@@ -204,6 +229,12 @@ When adding a new `fhirpath_*` UDF function with a fast path, copy this pattern 
 8. **`fhirpath_number` fast path has Use-After-Free** (CRITICAL) — `FhirpathNumberFunction` in `fhirpath_extension.cpp:517-556` called `yyjson_doc_free(doc)` and then dereferenced `current` (a `yyjson_val*` pointing into the freed document) to check types and extract values. Undefined behavior that could silently corrupt data under memory pressure. **Fix**: Extract `yyjson_is_int()`, `yyjson_is_real()`, `yyjson_get_sint()`, `yyjson_get_real()` into local stack variables (`is_int`, `is_real`, `extracted`) **before** calling `yyjson_doc_free`. This matches the pattern used by `FastPathLookup` which materializes values into owned strings before freeing.
 
 **Pattern**: This is the first memory safety bug found in the QA loop. Unlike all previous bugs (behavioral divergences found by comparing C++ vs Python output), this class of bug requires manual code archaeology of pointer lifecycles. The code "worked" because the allocator typically hadn't reused the freed memory yet, but could produce garbage under memory pressure or with alternative allocators.
+
+### FHIRPath Collection Equality and DuckDB Wrapper Resilience
+
+**Discovered in the fresh 0.0.5 release loop rerun (2026-05-15).** Multi-item equality must use ordered collection semantics, not singleton-only empty propagation. The official R4 conformance case `(1 | 1) = (1 | 2 | {})` expects `false`; same-length collections compare element-by-element. The C++ evaluator in `extensions/fhirpath/src/fhirpath/evaluator.cpp` was fixed to return boolean results for multi-item `=`/`!=` instead of empty.
+
+The Python core evaluator must remain spec-strict for execution errors such as multi-item `as(...)`, but DuckDB-facing wrapper UDFs should preserve row-level resilience by converting `FHIRPathError` to empty/NULL outside strict mode. This keeps direct conformance behavior and SQL UDF behavior intentionally distinct.
 
 ## Asset Relocation Reference
 

@@ -18,6 +18,7 @@ from pathlib import Path
 
 from ...parser import parse_cql, Library
 from ...translator import CQLToSQLTranslator, LibraryResolver
+from .helpers import make_cql_library_loader
 
 
 # Path to CMS165 measure files (from submodule ecqm-content-qicore-2025)
@@ -42,7 +43,7 @@ def cms165_library(cms165_cql_text: str) -> Library:
 @pytest.fixture
 def translator() -> CQLToSQLTranslator:
     """Create a V2 translator instance."""
-    return CQLToSQLTranslator()
+    return CQLToSQLTranslator(library_loader=make_cql_library_loader(CQL_DIR))
 
 
 @pytest.fixture
@@ -134,30 +135,19 @@ class TestCMS165IncludeResolution:
         """CMS165 include statements resolve correctly."""
         registered = library_resolver.get_library_names()
 
-        # Skip if no dependencies could be parsed
-        if not registered:
-            pytest.skip("No dependency libraries could be parsed")
-
-        # At minimum, we expect some libraries to be registered
         assert len(registered) > 0, "At least some libraries should be registered"
 
     @pytest.mark.integration
     def test_fhirhelpers_functions_available(self, library_resolver: LibraryResolver):
         """FHIRHelpers functions are available for resolution."""
-        # Check if FHIRHelpers was parsed successfully
-        if not library_resolver.is_registered("FHIRHelpers"):
-            pytest.skip("FHIRHelpers.cql could not be parsed")
-
+        assert library_resolver.is_registered("FHIRHelpers")
         functions = library_resolver.get_all_functions("FHIRHelpers")
         assert len(functions) > 0, "FHIRHelpers should have functions defined"
 
     @pytest.mark.integration
     def test_qicorecommon_functions_available(self, library_resolver: LibraryResolver):
         """QICoreCommon functions are available for resolution."""
-        # Check if QICoreCommon was parsed successfully
-        if not library_resolver.is_registered("QICoreCommon"):
-            pytest.skip("QICoreCommon.cql could not be parsed")
-
+        assert library_resolver.is_registered("QICoreCommon")
         functions = library_resolver.get_all_functions("QICoreCommon")
         # QICoreCommon may have fluent functions like verified(), prevalenceInterval()
         assert len(functions) >= 0, "QICoreCommon functions should be queryable"
@@ -219,10 +209,7 @@ class TestCMS165DefinitionTranslation:
         """Initial Population definition translates to valid SQL."""
         from ...translator.translator import TranslationError
 
-        try:
-            results = translator.translate_library(cms165_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms165_library)
 
         assert "Initial Population" in results
 
@@ -239,10 +226,7 @@ class TestCMS165DefinitionTranslation:
         """Denominator definition translates to valid SQL."""
         from ...translator.translator import TranslationError
 
-        try:
-            results = translator.translate_library(cms165_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms165_library)
 
         assert "Denominator" in results
 
@@ -259,10 +243,7 @@ class TestCMS165DefinitionTranslation:
         """Numerator definition translates to valid SQL."""
         from ...translator.translator import TranslationError
 
-        try:
-            results = translator.translate_library(cms165_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms165_library)
 
         assert "Numerator" in results
 
@@ -278,10 +259,7 @@ class TestCMS165DefinitionTranslation:
         """Definitions properly reference other definitions."""
         from ...translator.translator import TranslationError
 
-        try:
-            results = translator.translate_library(cms165_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms165_library)
 
         # Denominator should reference Initial Population
         denom_sql = results["Denominator"].to_sql()
@@ -344,10 +322,7 @@ class TestCMS165FullTranslation:
         """Full CMS165 measure translates without errors."""
         from ...translator.translator import TranslationError
 
-        try:
-            sql_definitions = translator.translate_library(cms165_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Full translation not yet supported: {e}")
+        sql_definitions = translator.translate_library(cms165_library)
 
         # Should have all population criteria
         assert "Initial Population" in sql_definitions
@@ -361,10 +336,7 @@ class TestCMS165FullTranslation:
         """All CMS165 definitions are translated."""
         from ...translator.translator import TranslationError
 
-        try:
-            sql_definitions = translator.translate_library(cms165_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Full translation not yet supported: {e}")
+        sql_definitions = translator.translate_library(cms165_library)
 
         # Expected definitions from CMS165
         expected_definitions = [
@@ -387,10 +359,7 @@ class TestCMS165FullTranslation:
         """Generated SQL is syntactically valid."""
         from ...translator.translator import TranslationError
 
-        try:
-            sql_definitions = translator.translate_library(cms165_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Full translation not yet supported: {e}")
+        sql_definitions = translator.translate_library(cms165_library)
 
         for name, sql_expr in sql_definitions.items():
             sql = sql_expr.to_sql()
@@ -506,10 +475,7 @@ class TestCMS165RetrievePatterns:
         """Condition retrieves translate to SQL queries."""
         from ...translator.translator import TranslationError
 
-        try:
-            results = translator.translate_library(cms165_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms165_library)
 
         # Essential Hypertension Diagnosis uses Condition retrieve
         assert "Essential Hypertension Diagnosis" in results
@@ -525,10 +491,7 @@ class TestCMS165RetrievePatterns:
         """Observation retrieves for blood pressure translate correctly."""
         from ...translator.translator import TranslationError
 
-        try:
-            results = translator.translate_library(cms165_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms165_library)
 
         # Qualifying Blood Pressure Reading uses USCoreBloodPressureProfile retrieve
         assert "Qualifying Systolic Blood Pressure Reading" in results
@@ -570,10 +533,7 @@ class TestCMS165WithDependencyLibraries:
                     pass
 
         # Now translate main library
-        try:
-            results = translator.translate_library(cms165_library)
-        except (TranslationError, NotImplementedError, KeyError) as e:
-            pytest.skip(f"Translation not yet supported: {e}")
+        results = translator.translate_library(cms165_library)
 
         # Should have definitions
         assert len(results) > 0

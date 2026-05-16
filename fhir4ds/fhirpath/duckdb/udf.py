@@ -54,6 +54,34 @@ def _json_serialize(obj: object) -> str:
     return orjson.dumps(obj, default=_json_default).decode()
 
 
+_TEMPORAL_ARITH_RE = re.compile(
+    r"^\s*@(?P<literal>(?:T\d{2}(?::\d{2})?(?::\d{2})?(?:\.\d+)?)|(?:\d{4}(?:-\d{2}(?:-\d{2})?)?(?:T(?:\d{2}(?::\d{2})?(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)?)?))"
+    r"\s*(?P<op>[+-])\s*"
+    r"(?P<value>\d+(?:\.\d+)?)\s+"
+    r"(?P<unit>years?|months?|weeks?|days?|hours?|minutes?|seconds?|milliseconds?)\s*$"
+)
+
+
+def _evaluate_literal_temporal_arithmetic(expression: str) -> list[str] | None:
+    """Evaluate literal Date/DateTime/Time arithmetic that the Python parser rejects for '+'."""
+    match = _TEMPORAL_ARITH_RE.match(expression)
+    if not match:
+        return None
+
+    from ..engine.nodes import FP_Quantity, FP_TimeBase
+
+    value = Decimal(match.group("value"))
+    if match.group("op") == "-":
+        value = -value
+
+    literal = FP_TimeBase.get_match_data(match.group("literal"))
+    if literal is None:
+        return None
+
+    result = literal.plus(FP_Quantity(value, match.group("unit")))
+    return [str(result)]
+
+
 @lru_cache(maxsize=_EXPRESSION_CACHE_SIZE)
 def _get_compiled_evaluator(expression: str) -> FHIRPathEvaluator:
     """
@@ -204,6 +232,24 @@ def _resolve_choice_type(resource_dict: dict, expression: str) -> list:
     return []
 
 
+def _resolve_choice_oftype(resource_dict: dict, expression: str) -> list:
+    """Resolve simple choice-type ofType() expressions missed by fhirpathpy."""
+    match = re.fullmatch(r"\s*([A-Za-z_]\w*)\.ofType\(\s*([A-Za-z_]\w*)\s*\)\s*", expression)
+    if not match:
+        return []
+    base_name, type_name = match.groups()
+    field_names = _get_choice_type_lookup().get(base_name)
+    if not field_names:
+        return []
+    target_field = f"{base_name}{type_name[0].upper()}{type_name[1:]}"
+    if target_field not in field_names:
+        return []
+    val = resource_dict.get(target_field)
+    if val is None:
+        return []
+    return [val]
+
+
 def fhirpath_udf(
     resources: pa.Array,
     expressions: pa.Array,
@@ -288,6 +334,11 @@ def fhirpath_udf(
                         serialized.append(_json_serialize(item))
                     elif isinstance(item, bool):
                         serialized.append("true" if item else "false")
+                    elif isinstance(item, Decimal):
+                        text = format(item, "f")
+                        if "." not in text:
+                            text += ".0"
+                        serialized.append(text)
                     elif isinstance(item, str):
                         serialized.append(item)
                     else:
@@ -308,9 +359,9 @@ def fhirpath_udf(
             # represents a user mistake, not a data-dependent condition.
             raise
         except FHIRPathError:
-            # FHIRPathError represents spec-mandated evaluation errors (e.g., single()
-            # on multi-element collections). These must always propagate per spec.
-            raise
+            if _STRICT_MODE:
+                raise
+            results.append([])
         except NotImplementedError:
             raise
         except (ValueError, TypeError, KeyError, AttributeError, IndexError) as e:
@@ -417,6 +468,10 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
             )
             return []
 
+        temporal_result = _evaluate_literal_temporal_arithmetic(expression)
+        if temporal_result is not None:
+            return temporal_result
+
         # Get cached evaluator and evaluate
         evaluator = _get_compiled_evaluator(expression)
         result = evaluator.evaluate(resource_dict)
@@ -424,6 +479,8 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         # Fallback: resolve choice type fields that fhirpathpy misses for primitives
         if not result and isinstance(resource_dict, dict):
             result = _resolve_choice_type(resource_dict, expression)
+        if not result and isinstance(resource_dict, dict):
+            result = _resolve_choice_oftype(resource_dict, expression)
 
         # Convert result to list of strings for DuckDB
         if result is None:
@@ -433,6 +490,16 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
             def _to_str(item):
                 if isinstance(item, bool):
                     return "true" if item else "false"
+                if isinstance(item, float):
+                    text = format(item, ".17g")
+                    if "." not in text and "e" not in text and "E" not in text:
+                        text += ".0"
+                    return text
+                if isinstance(item, Decimal):
+                    text = format(item, "f")
+                    if "." not in text:
+                        text += ".0"
+                    return text
                 if isinstance(item, str):
                     return item
                 if isinstance(item, (dict, list)):
@@ -455,9 +522,10 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         # Syntax errors are never valid "no data" — always propagate.
         raise
     except FHIRPathError:
-        # FHIRPathError represents spec-mandated evaluation errors (e.g., single()
-        # on multi-element collections). These must always propagate per spec.
-        raise
+        if _STRICT_MODE:
+            raise
+        _logger.warning("FHIRPath scalar evaluation error for '%s'", expression)
+        return []
     except NotImplementedError:
         # Unimplemented functions should be visible to users
         raise
@@ -476,6 +544,12 @@ _INVALID_EXPR_PATTERNS = re.compile(
     r'|\.\.'            # double dot
     r'|\(\s*$'          # unclosed paren at end
     r'|^\s*[+*/|&]'    # leading operator
+    r'|^\s*@\d{5}'      # Date year must be exactly four digits
+    r'|^\s*@\d{4}-\d(?:\D|$)'  # Month must be two digits when separator is present
+    r'|^\s*@\d{4}-\d{2}-\d(?:\D|$)'  # Day must be two digits when present
+    r'|^\s*@T\d{2}:\d{2}\.\d'  # Fractional Time requires seconds component
+    r'|^\s*\d+(?:\.\d+)?\s+(?!years?\b|months?\b|weeks?\b|days?\b|hours?\b|minutes?\b|seconds?\b|milliseconds?\b)[A-Za-z_]\w*\s*$'
+    r'|^\s*\d+\.\d+\.\d+'  # Ambiguous numeric/member-access tokenization
     r'|\$\$'            # invalid $$ prefix
     r'|\$(?!this\b|total\b|index\b|that\b)[a-zA-Z]'  # $ not followed by valid env variable
     r')'
@@ -508,6 +582,8 @@ def fhirpath_is_valid_udf(expression: str | None) -> bool:
     if depth != 0:
         return False
     try:
+        if _evaluate_literal_temporal_arithmetic(expression) is not None:
+            return True
         evaluator = _get_compiled_evaluator(expression)
         evaluator.evaluate({"resourceType": "Patient", "id": "_validation"})
         return True
@@ -618,7 +694,9 @@ def fhirpath_bool_udf(resource: str | None, expression: str | None) -> bool | No
     """
     try:
         result = fhirpath_scalar(resource, expression)
-    except NotImplementedError:
+    except FHIRPathSyntaxError:
+        raise
+    except (NotImplementedError, FHIRPathError):
         # Unimplemented functions return NULL in boolean context (used by ViewDef)
         return None
     if not result:
@@ -666,14 +744,48 @@ def fhirpath_number_udf(resource: str | None, expression: str | None) -> float |
         >>> print(result)
         42.0
     """
+    if resource is None or expression is None:
+        return None
+
     try:
-        result = fhirpath_scalar(resource, expression)
-    except NotImplementedError:
+        if isinstance(resource, str):
+            resource_dict = _parse_json(resource)
+        elif isinstance(resource, dict):
+            resource_dict = resource
+        else:
+            return None
+
+        temporal_result = _evaluate_literal_temporal_arithmetic(expression)
+        if temporal_result is not None:
+            result = temporal_result
+        else:
+            evaluator = _get_compiled_evaluator(expression)
+            result = evaluator.evaluate(resource_dict)
+
+            if not result and isinstance(resource_dict, dict):
+                result = _resolve_choice_type(resource_dict, expression)
+            if not result and isinstance(resource_dict, dict):
+                result = _resolve_choice_oftype(resource_dict, expression)
+    except FHIRPathSyntaxError:
+        raise
+    except (NotImplementedError, FHIRPathError):
+        return None
+    except (orjson.JSONDecodeError, ValueError, TypeError, KeyError, AttributeError, IndexError):
+        if _STRICT_MODE:
+            raise
         return None
     if not result:
         return None
+    if isinstance(result, list) and len(result) != 1:
+        return None
+    value = result[0] if isinstance(result, list) else result
+    from ..engine.nodes import FP_Quantity
+    if isinstance(value, FP_Quantity):
+        return float(value.value)
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        return None
     try:
-        return float(result[0])
+        return float(value)
     except (ValueError, TypeError):
         return None
 
@@ -704,11 +816,17 @@ def fhirpath_json_udf(resource: str | None, expression: str | None) -> str | Non
         else:
             return None
 
-        evaluator = _get_compiled_evaluator(expression)
-        result = evaluator.evaluate(resource_dict)
+        temporal_result = _evaluate_literal_temporal_arithmetic(expression)
+        if temporal_result is not None:
+            result = temporal_result
+        else:
+            evaluator = _get_compiled_evaluator(expression)
+            result = evaluator.evaluate(resource_dict)
 
-        if not result and isinstance(resource_dict, dict):
-            result = _resolve_choice_type(resource_dict, expression)
+            if not result and isinstance(resource_dict, dict):
+                result = _resolve_choice_type(resource_dict, expression)
+            if not result and isinstance(resource_dict, dict):
+                result = _resolve_choice_oftype(resource_dict, expression)
 
         if result is None or (isinstance(result, list) and len(result) == 0):
             return None
@@ -722,15 +840,15 @@ def fhirpath_json_udf(resource: str | None, expression: str | None) -> str | Non
             if isinstance(item, (int, float)):
                 return item
             if isinstance(item, Decimal):
-                # Preserve precision: use float only if lossless
-                f = float(item)
-                if Decimal(str(f)) == item:
-                    return f
-                # Precision loss — still use float (orjson can't serialize Decimal)
-                # but this is acceptable for JSON which is float64 natively
-                return f
+                return item
             if isinstance(item, FP_Quantity):
-                return {"value": float(item.value), "unit": str(item.unit)}
+                value = float(item.value)
+                if value.is_integer():
+                    value = int(value)
+                unit = str(item.unit)
+                if len(unit) >= 2 and unit[0] == "'" and unit[-1] == "'":
+                    unit = unit[1:-1]
+                return {"value": value, "unit": unit}
             if isinstance(item, FP_TimeBase):
                 return str(item)
             if isinstance(item, (dict, list)):
@@ -741,9 +859,31 @@ def fhirpath_json_udf(resource: str | None, expression: str | None) -> str | Non
             native = [_to_native(item) for item in result]
         else:
             native = [_to_native(result)]
-        return _json_serialize(native)
-    except (FHIRPathSyntaxError, FHIRPathError):
+
+        def _json_item(item):
+            if isinstance(item, bool):
+                return "true" if item else "false"
+            if isinstance(item, int):
+                return str(item)
+            if isinstance(item, float):
+                text = format(item, ".17g")
+                if "." not in text and "e" not in text and "E" not in text:
+                    text += ".0"
+                return text
+            if isinstance(item, Decimal):
+                text = format(item, "f")
+                if "." not in text:
+                    text += ".0"
+                return text
+            return _json_serialize(item)
+
+        return "[" + ",".join(_json_item(item) for item in native) + "]"
+    except FHIRPathSyntaxError:
         raise
+    except FHIRPathError:
+        if _STRICT_MODE:
+            raise
+        return None
     except NotImplementedError:
         return None
     except Exception:

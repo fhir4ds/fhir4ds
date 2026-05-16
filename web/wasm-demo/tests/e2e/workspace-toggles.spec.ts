@@ -62,4 +62,18 @@ test.describe("Workspace Toggles", () => {
     // Should have patient controls
     await expect(viewer.locator(".patient-viewer-controls")).toBeVisible();
   });
+
+  test("patient data viewer supports grouped tree browsing", async ({ page }) => {
+    const viewer = page.locator("[data-testid='patient-data-viewer']");
+    await expect(viewer).toBeVisible();
+
+    await expect(viewer.locator(".patient-resource-group").first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await viewer.locator(".patient-viewer-filter").fill("Patient");
+    await expect(viewer.locator(".patient-viewer-summary")).toContainText("Patient");
+
+    await viewer.locator(".patient-viewer-tree-toggle").click();
+    await expect(viewer.locator(".patient-resource-item").first()).not.toHaveAttribute("open", "");
+  });
 });

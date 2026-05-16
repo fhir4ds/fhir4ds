@@ -19,6 +19,7 @@ import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import styles from "./WasmDemo.module.css";
 
 const SCRIPT_ID = "fhir4ds-wc-bundle";
+const SMART_POPUP_PENDING_KEY = "fhir4ds_smart_popup_pending";
 
 function injectWcScript(scriptSrc: string): void {
   if (document.getElementById(SCRIPT_ID)) return;
@@ -27,6 +28,14 @@ function injectWcScript(scriptSrc: string): void {
   script.type = "module";
   script.src = scriptSrc;
   document.head.appendChild(script);
+}
+
+function hasPendingSmartPopup(): boolean {
+  try {
+    return window.localStorage.getItem(SMART_POPUP_PENDING_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 type Scenario =
@@ -160,11 +169,13 @@ export default function WasmDemoWC({
     new URLSearchParams(window.location.search).has("code") &&
     new URLSearchParams(window.location.search).has("state");
 
-  // Popup context: window.opener set → the WC IIFE handles token exchange
+  // Popup context: window.opener set, or COOP/COEP severed opener but the
+  // SMART launch marker is present. In both cases the WC IIFE handles token
+  // exchange and broadcasts the result back to the original page.
   const isPopupOAuthCallback =
     hasOAuthParams &&
     typeof window !== "undefined" &&
-    window.opener !== null;
+    (window.opener !== null || hasPendingSmartPopup());
 
   // Skip lazyLaunch if there are OAuth params (popup OR direct-nav fallback)
   // so the WC renders immediately and SMARTLaunch can process the callback.
