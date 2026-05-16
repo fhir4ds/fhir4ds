@@ -119,15 +119,18 @@ export function CMSMeasures({
   } = useCMSDuckDB(wasmAppUrl);
   const [runResult, setRunResult] = useState<MeasureRunResult | null>(null);
   const [executing, setExecuting] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
   const [modalCell, setModalCell] = useState<{ cell: AuditCell; columnName: string } | null>(null);
 
   const handleRun = useCallback(async () => {
     setExecuting(true);
+    setRunError(null);
     try {
       const res = await executeMeasure(selectedMeasureId, YEAR, true);
       setRunResult(res);
     } catch (e) {
       console.error(e);
+      setRunError(e instanceof Error ? e.message : String(e));
     } finally {
       setExecuting(false);
     }
@@ -248,8 +251,8 @@ export function CMSMeasures({
               )}
             </div>
             <div className="results-body" style={{ flex: 1, overflow: 'auto' }}>
-              {error && <div className="results-error">{error}</div>}
-              {!error && !runResult && !executing && (
+              {(error || runError) && <div className="results-error">{error || runError}</div>}
+              {!error && !runError && !runResult && !executing && (
                 <div className="results-message">{loadingMessage || "Run the measure to see patient results."}</div>
               )}
               {runResult && (

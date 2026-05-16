@@ -17,10 +17,25 @@ self.addEventListener("fetch", function (event) {
   if (event.request.cache === "only-if-cached" && event.request.mode !== "same-origin") {
     return;
   }
+  const requestUrl = new URL(event.request.url);
+  if (requestUrl.origin !== self.location.origin) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+  const isSmartOAuthCallback =
+    requestUrl.searchParams.has("code") &&
+    requestUrl.searchParams.has("state");
+
   event.respondWith(
     fetch(event.request)
       .then(function (response) {
         if (response.status === 0) {
+          return response;
+        }
+        // OAuth callbacks run in a popup and must retain window.opener so they
+        // can notify and close back to the original SMART page. Applying COOP
+        // here severs that relationship during the EHR redirect back.
+        if (isSmartOAuthCallback) {
           return response;
         }
         const newHeaders = new Headers(response.headers);

@@ -1,3 +1,7 @@
+---
+hide_table_of_contents: true
+---
+
 # Quality Measures
 
 Execute and audit standard CMS Quality Measures (eCQMs) directly against patient data in your browser.

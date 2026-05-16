@@ -16,7 +16,7 @@ import {
   clearAuth, 
   getStoredSession, 
   getAccessToken, 
-  handleCallback 
+  SMART_CALLBACK_RESULT_KEY,
 } from "./lib/smart-auth";
 import {
   getScenarioFromURL,
@@ -67,6 +67,28 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
     setActiveTab(SCENARIO_CONFIGS[next]?.defaultTab ?? "playground");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forceScenario]);
+
+  useEffect(() => {
+    if (smartAuthenticated) return;
+
+    const syncStoredSmartAuth = () => {
+      if (getAccessToken()) {
+        localStorage.removeItem(SMART_CALLBACK_RESULT_KEY);
+        setSmartAuthenticated(true);
+        if (scenario === "smart-flow") {
+          setActiveTab("playground");
+        }
+      }
+    };
+
+    syncStoredSmartAuth();
+    const interval = setInterval(syncStoredSmartAuth, 500);
+    window.addEventListener("storage", syncStoredSmartAuth);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("storage", syncStoredSmartAuth);
+    };
+  }, [smartAuthenticated, scenario]);
 
   // Listen for URL changes (disabled when scenario is externally controlled)
   useEffect(() => {

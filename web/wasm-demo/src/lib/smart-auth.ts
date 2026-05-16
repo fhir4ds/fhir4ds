@@ -41,6 +41,7 @@ interface SmartState {
   clientId: string;
   tokenEndpoint: string;
   redirectUri: string;
+  popupLaunch?: boolean;
 }
 
 // ── Storage keys ─────────────────────────────────────────────────────────────
@@ -48,6 +49,9 @@ interface SmartState {
 const STORAGE_KEY_STATE = "fhir4ds_smart_state";
 const STORAGE_KEY_TOKEN = "fhir4ds_smart_token";
 const STORAGE_KEY_SESSION = "fhir4ds_smart_session";
+const STORAGE_KEY_POPUP_PENDING = "fhir4ds_smart_popup_pending";
+export const SMART_CALLBACK_RESULT_KEY = "fhir4ds_smart_callback_result";
+export const SMART_AUTH_CHANNEL = "fhir4ds_smart_auth";
 
 // ── PKCE helpers ─────────────────────────────────────────────────────────────
 
@@ -184,6 +188,37 @@ export function isSmartCallback(): boolean {
   return params.has("code") && params.has("state");
 }
 
+export function markPopupAuthPending(): void {
+  localStorage.setItem(STORAGE_KEY_POPUP_PENDING, "1");
+  const stored = localStorage.getItem(STORAGE_KEY_STATE);
+  if (stored) {
+    try {
+      const smartState = JSON.parse(stored) as SmartState;
+      localStorage.setItem(
+        STORAGE_KEY_STATE,
+        JSON.stringify({ ...smartState, popupLaunch: true } satisfies SmartState),
+      );
+    } catch {
+      // Leave the marker key in place if a stale state payload cannot be parsed.
+    }
+  }
+}
+
+export function clearPopupAuthPending(): void {
+  localStorage.removeItem(STORAGE_KEY_POPUP_PENDING);
+}
+
+export function isPopupAuthPending(): boolean {
+  if (localStorage.getItem(STORAGE_KEY_POPUP_PENDING) === "1") return true;
+  const stored = localStorage.getItem(STORAGE_KEY_STATE);
+  if (!stored) return false;
+  try {
+    return Boolean((JSON.parse(stored) as SmartState).popupLaunch);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Handle the OAuth2 callback: exchange authorization code for access token.
  */
@@ -267,6 +302,38 @@ export function isPopupContext(): boolean {
 }
 
 /**
+ * Detect a callback window that should behave like an OAuth popup. COOP/COEP
+ * can sever window.opener during the cross-origin EHR round trip, so a launch
+ * marker in localStorage is the fallback signal.
+ */
+export function isSmartPopupCallback(): boolean {
+  return isSmartCallback() && (isPopupContext() || isPopupAuthPending());
+}
+
+export type SmartCallbackMessage =
+  | { type: "FHIR4DS_SMART_TOKEN"; token: SmartToken; session: SmartSessionInfo | null }
+  | { type: "FHIR4DS_SMART_ERROR"; error: string };
+
+export function publishSmartCallbackResult(message: SmartCallbackMessage): void {
+  clearPopupAuthPending();
+
+  if (window.opener) {
+    window.opener.postMessage(message, window.location.origin);
+  }
+
+  if ("BroadcastChannel" in window) {
+    const channel = new BroadcastChannel(SMART_AUTH_CHANNEL);
+    channel.postMessage(message);
+    channel.close();
+  }
+
+  localStorage.setItem(
+    SMART_CALLBACK_RESULT_KEY,
+    JSON.stringify({ ...message, at: Date.now() }),
+  );
+}
+
+/**
  * Get the stored access token, or null if not authenticated or expired.
  */
 export function getAccessToken(): SmartToken | null {
@@ -314,6 +381,8 @@ export function clearAuth(): void {
   localStorage.removeItem(STORAGE_KEY_STATE);
   localStorage.removeItem(STORAGE_KEY_TOKEN);
   localStorage.removeItem(STORAGE_KEY_SESSION);
+  localStorage.removeItem(STORAGE_KEY_POPUP_PENDING);
+  localStorage.removeItem(SMART_CALLBACK_RESULT_KEY);
 }
 
 /**

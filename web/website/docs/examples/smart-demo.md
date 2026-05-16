@@ -1,10 +1,14 @@
+---
+hide_table_of_contents: true
+---
+
 # SMART on FHIR
 
 Experience the full FHIR4DS workbench connected to live EHR data. This demo follows a step-by-step flow: authenticate with a patient portal, load clinical data into DuckDB, and run complex queries.
 
 import WasmDemoWC from '@site/src/components/WasmDemoWC';
 
-<WasmDemoWC scenario="smart-flow" height="90vh" />
+<WasmDemoWC scenario="smart-flow" height="110vh" />
 
 ## The Workflow
 1.  **Connect:** Select a sandbox (Epic or Cerner) and log in using the provided test credentials.
