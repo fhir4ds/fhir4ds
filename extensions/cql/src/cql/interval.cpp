@@ -4,6 +4,7 @@
 using namespace duckdb_yyjson; // NOLINT
 #include <cstdlib>
 #include <cmath>
+#include <limits>
 #include <sstream>
 
 namespace cql {
@@ -278,6 +279,104 @@ return Optional<BoundValue>(bv);
 return NullOpt<BoundValue>();
 }
 
+static cql::DateTimeValue AddDaysForInterval(const cql::DateTimeValue &dt, int64_t days) {
+	int64_t jdn = dt.to_julian_day() + days;
+
+	int64_t l = jdn + 68569;
+	int64_t n = (4 * l) / 146097;
+	l = l - (146097 * n + 3) / 4;
+	int64_t i = (4000 * (l + 1)) / 1461001;
+	l = l - (1461 * i) / 4 + 31;
+	int64_t j = (80 * l) / 2447;
+	int32_t day = static_cast<int32_t>(l - (2447 * j) / 80);
+	l = j / 11;
+	int32_t month = static_cast<int32_t>(j + 2 - 12 * l);
+	int32_t year = static_cast<int32_t>(100 * (n - 49) + i + l);
+
+	cql::DateTimeValue result = dt;
+	result.year = year;
+	result.month = month;
+	result.day = day;
+	return result;
+}
+
+static cql::DateTimeValue AddMillisecondsForInterval(const cql::DateTimeValue &dt, int64_t millis) {
+	static const int64_t MS_PER_SECOND = 1000;
+	static const int64_t MS_PER_MINUTE = 60 * MS_PER_SECOND;
+	static const int64_t MS_PER_HOUR = 60 * MS_PER_MINUTE;
+	static const int64_t MS_PER_DAY = 24 * MS_PER_HOUR;
+
+	int64_t epoch_ms = dt.to_epoch_millis() + millis;
+	int64_t unix_jdn = 2440588LL;
+
+	int64_t total_days = epoch_ms / MS_PER_DAY;
+	int64_t remainder_ms = epoch_ms % MS_PER_DAY;
+	if (remainder_ms < 0) {
+		total_days -= 1;
+		remainder_ms += MS_PER_DAY;
+	}
+
+	cql::DateTimeValue result = AddDaysForInterval(dt, total_days + unix_jdn - dt.to_julian_day());
+	result.hour = static_cast<int32_t>(remainder_ms / MS_PER_HOUR);
+	remainder_ms %= MS_PER_HOUR;
+	result.minute = static_cast<int32_t>(remainder_ms / MS_PER_MINUTE);
+	remainder_ms %= MS_PER_MINUTE;
+	result.second = static_cast<int32_t>(remainder_ms / MS_PER_SECOND);
+	result.millisecond = static_cast<int32_t>(remainder_ms % MS_PER_SECOND);
+	return result;
+}
+
+static Optional<BoundValue> successor_bound(const BoundValue &value) {
+	BoundValue result = value;
+	switch (value.type) {
+	case BoundType::Integer:
+		if (!value.int_val || *value.int_val == std::numeric_limits<int64_t>::max()) {
+			return NullOpt<BoundValue>();
+		}
+		result.int_val = Optional<int64_t>(*value.int_val + 1);
+		result.raw_str = std::to_string(*result.int_val);
+		return Optional<BoundValue>(result);
+	case BoundType::Decimal:
+		if (!value.dec_val) {
+			return NullOpt<BoundValue>();
+		}
+		result.dec_val = Optional<double>(*value.dec_val + 1e-8);
+		{
+			std::ostringstream oss;
+			oss << *result.dec_val;
+			result.raw_str = oss.str();
+		}
+		return Optional<BoundValue>(result);
+	case BoundType::Quantity:
+		if (!value.qty_numeric) {
+			return NullOpt<BoundValue>();
+		}
+		result.qty_numeric = Optional<double>(*value.qty_numeric + 1e-8);
+		{
+			std::ostringstream oss;
+			oss << "{\"value\":" << *result.qty_numeric << ",\"unit\":\""
+			    << escapeJsonString(value.qty_unit) << "\"}";
+			result.raw_str = oss.str();
+		}
+		return Optional<BoundValue>(result);
+	case BoundType::DateTime:
+	case BoundType::Time:
+		if (!value.dt_val) {
+			return NullOpt<BoundValue>();
+		}
+		if (!value.dt_val->has_time ||
+		    (value.dt_val->hour == 0 && value.dt_val->minute == 0 &&
+		     value.dt_val->second == 0 && value.dt_val->millisecond == 0)) {
+			result.dt_val = Optional<DateTimeValue>(AddDaysForInterval(*value.dt_val, 1));
+		} else {
+			result.dt_val = Optional<DateTimeValue>(AddMillisecondsForInterval(*value.dt_val, 1));
+		}
+		result.raw_str = result.dt_val->to_string();
+		return Optional<BoundValue>(result);
+	}
+	return NullOpt<BoundValue>();
+}
+
 // =====================================================================
 // Interval implementation
 // =====================================================================
@@ -527,7 +626,18 @@ bool Interval::meets_before(const Interval &other) const {
 if (!high || !other.low) {
 return false;
 }
-return high->compare(*other.low) == 0;
+int cmp = high->compare(*other.low);
+if (cmp == -2) {
+return false;
+}
+if (cmp == 0) {
+return high_closed || other.low_closed;
+}
+if (!high_closed || !other.low_closed) {
+return false;
+}
+auto successor = successor_bound(*high);
+return successor && successor->compare(*other.low) == 0;
 }
 
 bool Interval::meets_after(const Interval &other) const {
@@ -647,40 +757,28 @@ std::string Interval::end_string() const {
 return high ? high->to_string() : "";
 }
 
+static void append_bound_json(std::ostringstream &oss, const char *key, const Optional<BoundValue> &bound) {
+oss << "\"" << key << "\": ";
+if (!bound) {
+oss << "null";
+return;
+}
+std::string s = bound->to_string();
+if (bound->type == BoundType::Quantity && !s.empty() && s[0] == '{') {
+oss << s;
+} else {
+oss << "\"" << escapeJsonString(s) << "\"";
+}
+}
+
 std::string Interval::to_json() const {
 std::ostringstream oss;
 oss << "{";
-if (low) {
-std::string s = low->to_string();
-if (low->type == BoundType::Quantity && !s.empty() && s[0] == '{') {
-oss << "\"low\":" << s;
-} else if (low->type == BoundType::Integer && low->int_val) {
-oss << "\"low\":" << *low->int_val;
-} else if (low->type == BoundType::Decimal && low->dec_val) {
-oss << "\"low\":" << *low->dec_val;
-} else {
-oss << "\"low\":\"" << escapeJsonString(s) << "\"";
-}
-} else {
-oss << "\"low\":null";
-}
-oss << ",";
-if (high) {
-std::string s = high->to_string();
-if (high->type == BoundType::Quantity && !s.empty() && s[0] == '{') {
-oss << "\"high\":" << s;
-} else if (high->type == BoundType::Integer && high->int_val) {
-oss << "\"high\":" << *high->int_val;
-} else if (high->type == BoundType::Decimal && high->dec_val) {
-oss << "\"high\":" << *high->dec_val;
-} else {
-oss << "\"high\":\"" << escapeJsonString(s) << "\"";
-}
-} else {
-oss << "\"high\":null";
-}
-oss << ",\"lowClosed\":" << (low_closed ? "true" : "false");
-oss << ",\"highClosed\":" << (high_closed ? "true" : "false");
+append_bound_json(oss, "low", low);
+oss << ", ";
+append_bound_json(oss, "high", high);
+oss << ", \"lowClosed\": " << (low_closed ? "true" : "false");
+oss << ", \"highClosed\": " << (high_closed ? "true" : "false");
 oss << "}";
 return oss.str();
 }

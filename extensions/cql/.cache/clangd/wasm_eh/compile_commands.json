@@ -1,122 +1,122 @@
 [
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql_extension.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql_extension.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql_extension.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql_extension.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql_extension.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/datetime.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/datetime.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/datetime.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/datetime.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/datetime.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/interval.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/interval.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/interval.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/interval.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/interval.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/age.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/age.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/age.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/age.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/age.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/clinical.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/clinical.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/clinical.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/clinical.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/clinical.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/valueset.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/valueset.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/valueset.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/valueset.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/valueset.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/aggregate.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/aggregate.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/aggregate.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/aggregate.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/aggregate.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/ratio.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/ratio.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/ratio.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/ratio.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/ratio.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/quantity.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/quantity.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/quantity.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/quantity.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/quantity.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/boundary.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/boundary.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/boundary.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/boundary.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/boundary.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/math.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/math.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/math.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/math.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/math.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/logical.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/logical.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_loadable_extension.dir/src/cql/logical.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/logical.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/logical.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql_extension.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql_extension.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql_extension.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql_extension.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql_extension.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/datetime.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/datetime.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/datetime.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/datetime.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/datetime.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/interval.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/interval.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/interval.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/interval.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/interval.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/age.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/age.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/age.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/age.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/age.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/clinical.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/clinical.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/clinical.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/clinical.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/clinical.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/valueset.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/valueset.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/valueset.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/valueset.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/valueset.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/aggregate.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/aggregate.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/aggregate.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/aggregate.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/aggregate.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/ratio.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/ratio.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/ratio.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/ratio.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/ratio.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/quantity.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/quantity.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/quantity.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/quantity.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/quantity.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/boundary.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/boundary.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/boundary.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/boundary.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/boundary.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/math.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/math.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/math.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/math.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/math.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/cql/build/wasm_eh/extension/cql",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"092831e1\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/logical.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/logical.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_CQL=\\\"b670a5da\\\" @CMakeFiles/cql_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/cql_extension.dir/src/cql/logical.cpp.o -c /mnt/d/fhir4ds/extensions/cql/src/cql/logical.cpp",
   "file": "/mnt/d/fhir4ds/extensions/cql/src/cql/logical.cpp"
 },
 {

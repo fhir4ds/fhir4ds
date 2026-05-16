@@ -22,11 +22,13 @@ using namespace duckdb_yyjson; // NOLINT
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 namespace duckdb {
 
@@ -1616,6 +1618,206 @@ static void FhirpathPredicateFunction(DataChunk &args, ExpressionState &state, V
 	ListVector::SetListSize(result, total_size);
 }
 
+// fhirpath_repeat(resource JSON, paths_json VARCHAR) -> VARCHAR[]
+// SQL-on-FHIR v2 repeat support. The Python fallback treats paths as simple
+// dotted property chains, recursively collects object children in document
+// order, and returns each child as a JSON string.
+static bool IsRepeatPathSegment(const std::string &segment) {
+	if (segment.empty()) {
+		return false;
+	}
+	for (char ch : segment) {
+		unsigned char uch = static_cast<unsigned char>(ch);
+		if (!(std::isalnum(uch) || ch == '_' || ch == '-')) {
+			return false;
+		}
+	}
+	return true;
+}
+
+static bool SplitRepeatPath(const std::string &path, std::vector<std::string> &parts) {
+	parts.clear();
+	if (path.empty()) {
+		return false;
+	}
+
+	std::string current;
+	for (char ch : path) {
+		if (ch == '.') {
+			if (!IsRepeatPathSegment(current)) {
+				parts.clear();
+				return false;
+			}
+			parts.push_back(current);
+			current.clear();
+			continue;
+		}
+		current.push_back(ch);
+	}
+	if (!IsRepeatPathSegment(current)) {
+		parts.clear();
+		return false;
+	}
+	parts.push_back(current);
+	return true;
+}
+
+static bool ParseRepeatPaths(const char *paths_data, idx_t paths_len, std::vector<std::vector<std::string>> &paths) {
+	paths.clear();
+	yyjson_doc *doc = yyjson_read(paths_data, paths_len, 0);
+	if (!doc) {
+		return false;
+	}
+
+	yyjson_val *root = yyjson_doc_get_root(doc);
+	if (!yyjson_is_arr(root)) {
+		yyjson_doc_free(doc);
+		return false;
+	}
+
+	size_t idx, max;
+	yyjson_val *elem;
+	yyjson_arr_foreach(root, idx, max, elem) {
+		if (!yyjson_is_str(elem)) {
+			continue;
+		}
+		std::vector<std::string> parts;
+		if (SplitRepeatPath(yyjson_get_str(elem), parts)) {
+			paths.push_back(parts);
+		}
+	}
+
+	yyjson_doc_free(doc);
+	return !paths.empty();
+}
+
+static void NavigateRepeatPath(yyjson_val *obj, const std::vector<std::string> &parts,
+                               std::vector<yyjson_val *> &children) {
+	children.clear();
+	if (!obj || !yyjson_is_obj(obj)) {
+		return;
+	}
+
+	std::vector<yyjson_val *> candidates;
+	candidates.push_back(obj);
+
+	for (const auto &part : parts) {
+		std::vector<yyjson_val *> next_candidates;
+		for (auto *candidate : candidates) {
+			if (!candidate || !yyjson_is_obj(candidate)) {
+				continue;
+			}
+			yyjson_val *val = yyjson_obj_get(candidate, part.c_str());
+			if (!val || yyjson_is_null(val)) {
+				continue;
+			}
+			if (yyjson_is_arr(val)) {
+				size_t idx, max;
+				yyjson_val *elem;
+				yyjson_arr_foreach(val, idx, max, elem) {
+					next_candidates.push_back(elem);
+				}
+			} else {
+				next_candidates.push_back(val);
+			}
+		}
+		candidates.swap(next_candidates);
+		if (candidates.empty()) {
+			return;
+		}
+	}
+
+	for (auto *candidate : candidates) {
+		if (candidate && yyjson_is_obj(candidate)) {
+			children.push_back(candidate);
+		}
+	}
+}
+
+static void RepeatDfs(yyjson_val *current, const std::vector<std::vector<std::string>> &paths,
+                      std::vector<std::string> &results, int depth) {
+	static const int MAX_REPEAT_DEPTH = 200;
+	if (!current || !yyjson_is_obj(current) || depth >= MAX_REPEAT_DEPTH) {
+		return;
+	}
+
+	for (const auto &path : paths) {
+		std::vector<yyjson_val *> children;
+		NavigateRepeatPath(current, path, children);
+		for (auto *child : children) {
+			char *json = yyjson_val_write(child, 0, nullptr);
+			if (json) {
+				results.push_back(std::string(json));
+				free(json);
+			}
+			RepeatDfs(child, paths, results, depth + 1);
+		}
+	}
+}
+
+static std::vector<std::string> EvaluateFhirpathRepeat(const char *resource_data, idx_t resource_len,
+                                                       const char *paths_data, idx_t paths_len) {
+	std::vector<std::string> results;
+	std::vector<std::vector<std::string>> paths;
+	if (!ParseRepeatPaths(paths_data, paths_len, paths)) {
+		return results;
+	}
+
+	yyjson_doc *doc = yyjson_read(resource_data, resource_len, 0);
+	if (!doc) {
+		return results;
+	}
+
+	yyjson_val *root = yyjson_doc_get_root(doc);
+	if (root && yyjson_is_obj(root)) {
+		RepeatDfs(root, paths, results, 0);
+	}
+
+	yyjson_doc_free(doc);
+	return results;
+}
+
+static void FhirpathRepeatFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+
+	UnifiedVectorFormat resource_data, paths_data;
+	args.data[0].ToUnifiedFormat(count, resource_data);
+	args.data[1].ToUnifiedFormat(count, paths_data);
+
+	auto resources = UnifiedVectorFormat::GetData<string_t>(resource_data);
+	auto paths = UnifiedVectorFormat::GetData<string_t>(paths_data);
+
+	std::vector<idx_t> row_offsets(count);
+	std::vector<idx_t> row_counts(count);
+	idx_t total_size = 0;
+
+	for (idx_t i = 0; i < count; i++) {
+		auto r_idx = resource_data.sel->get_index(i);
+		auto p_idx = paths_data.sel->get_index(i);
+		row_offsets[i] = total_size;
+		row_counts[i] = 0;
+
+		if (!resource_data.validity.RowIsValid(r_idx) || !paths_data.validity.RowIsValid(p_idx)) {
+			continue;
+		}
+
+		auto repeat_results =
+		    EvaluateFhirpathRepeat(resources[r_idx].GetData(), resources[r_idx].GetSize(),
+		                          paths[p_idx].GetData(), paths[p_idx].GetSize());
+		row_counts[i] = repeat_results.size();
+		for (const auto &item : repeat_results) {
+			ListVector::PushBack(result, Value(item));
+			total_size += 1;
+		}
+	}
+
+	auto list_entries = ListVector::GetData(result);
+	for (idx_t i = 0; i < count; i++) {
+		list_entries[i] = {row_offsets[i], row_counts[i]};
+	}
+	ListVector::SetListSize(result, total_size);
+}
+
 // --- Registration ---
 
 static void LoadInternal(ExtensionLoader &loader) {
@@ -1684,6 +1886,12 @@ static void LoadInternal(ExtensionLoader &loader) {
 	auto predicate_func = ScalarFunction("fhirpath_predicate", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                                     LogicalType::LIST(LogicalType::VARCHAR), FhirpathPredicateFunction, FhirpathBind);
 	loader.RegisterFunction(predicate_func);
+
+	// fhirpath_repeat(JSON, VARCHAR) → VARCHAR[]
+	auto repeat_func = ScalarFunction("fhirpath_repeat", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                                  LogicalType::LIST(LogicalType::VARCHAR), FhirpathRepeatFunction);
+	repeat_func.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
+	loader.RegisterFunction(repeat_func);
 }
 
 void FhirpathExtension::Load(ExtensionLoader &loader) {

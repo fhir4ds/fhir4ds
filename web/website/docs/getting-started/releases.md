@@ -7,6 +7,25 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.6
+*May 2026*
+
+Version 0.0.6 focuses on browser runtime parity. The WASM demo can execute translated CQL through DuckDB-WASM using the compiled FHIR4DS C++ extensions without relying on Python DuckDB fallback UDFs.
+
+### Highlights
+
+- **C++ DuckDB WASM Parity**: Browser-required CQL interval, boundary, date/quantity, interval set, logical, list, valueset, and FHIRPath repeat functions are available through C++ extensions.
+- **No-Python Runtime Gate**: Added direct-extension tests that load packaged C++ extensions without registering Python fallback UDFs.
+- **WASM Assets**: Updated translator wheel to `fhir4ds_v2-0.0.6-py3-none-any.whl` and rebuilt DuckDB extension side modules.
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.6
+```
+
+---
+
 ## Version 0.0.5
 *May 2026*
 
@@ -31,7 +50,7 @@ Version 0.0.5 continues the **100% Compliance Milestone** — every conformance 
 
 - **`ReactiveEvaluator.__init__`**: Parameters changed from `(con, measure, adapter)` to `(con, measure_bundle, cql_library_path, adapter)`.
 - **Version Bump**: All `fhir4ds` packages bumped to version `0.0.5`.
-- **WASM Assets**: Updated translator wheel to `fhir4ds_v2-0.0.5-py3-none-any.whl`.
+- **WASM Assets**: Updated translator wheel for the 0.0.5 release series.
 
 ### Upgrade
 

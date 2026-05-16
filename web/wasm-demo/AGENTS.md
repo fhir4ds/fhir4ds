@@ -110,6 +110,15 @@ If CQL extension registrations are changed in `extensions/cql/src/cql_extension.
 - rebuild `web/wasm-demo`;
 - run the CMS Playwright tests, not only playground tests.
 
+### Native/WASM UDF Surface Drift
+
+Some CQL UDF registrations have historically been guarded by `__EMSCRIPTEN__`.
+That makes native extension tests insufficient unless the same browser-required
+function surface is also exercised in a direct C++-only native test or a WASM
+load test. Any function emitted into browser SQL should be present in the
+required C++/SQL-macro inventory, not merely available through Python fallback
+on native DuckDB.
+
 ### SMART OAuth Popup Callbacks
 
 Do not depend only on `window.opener` for SMART popup callbacks. The website is

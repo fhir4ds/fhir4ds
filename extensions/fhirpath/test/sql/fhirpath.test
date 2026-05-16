@@ -172,6 +172,19 @@ SELECT fhirpath('{"resourceType":"Patient","extension":[{"url":"http://example.o
 [2106-3, 1002-5]
 
 # =====================================================================
+# fhirpath_repeat — SQL-on-FHIR repeat traversal
+# =====================================================================
+query I
+SELECT array_length(fhirpath_repeat('{"resourceType":"Questionnaire","item":[{"linkId":"a","item":[{"linkId":"a.1"}]},{"linkId":"b"}]}', '["item"]'));
+----
+3
+
+query I
+SELECT list_extract(fhirpath_repeat('{"resourceType":"Questionnaire","item":[{"linkId":"a","item":[{"linkId":"a.1"}]},{"linkId":"b"}]}', '["item"]'), 2);
+----
+{"linkId":"a.1"}
+
+# =====================================================================
 # fhirpath_date — date normalization
 # =====================================================================
 query I

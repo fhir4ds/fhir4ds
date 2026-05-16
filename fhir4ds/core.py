@@ -100,11 +100,13 @@ def register_cql(
     # Step 1: register FHIRPath (C++ bundled extension or Python UDFs)
     _fhirpath_register(con)
 
-    # Step 2: Try C++ CQL extension first for maximum performance.
-    # The C++ extension now has full polymorphic interval support (datetime,
-    # integer, decimal, quantity, time) plus math, quantity arithmetic, and
-    # logical functions.
-    from fhir4ds.cql.duckdb.extension import _try_load_bundled_cpp_extension
+    # Step 2: Try C++ CQL extension first for browser-required native functions.
+    # Known conformance-sensitive interval/time/boundary conflicts are shadowed
+    # back to Python below when running through the Python registration surface.
+    from fhir4ds.cql.duckdb.extension import (
+        _PYTHON_PREFERRED_CPP_CONFLICTS,
+        _try_load_bundled_cpp_extension,
+    )
     cql_cpp = _try_load_bundled_cpp_extension(con)
 
     if cql_cpp:
@@ -116,7 +118,8 @@ def register_cql(
     # When C++ is loaded, individual create_function calls that conflict with
     # C++ functions will fail. We wrap the connection in a proxy that silently
     # skips those, allowing Python-only functions within the same registration
-    # group to still register.
+    # group to still register. Known C++ functions that remain less complete
+    # than Python are shadowed by temporary macros that call private Python UDFs.
     from fhir4ds.cql.duckdb.udf.age import registerAgeUdfs
     from fhir4ds.cql.duckdb.udf.aggregate import registerAggregateUdfs
     from fhir4ds.cql.duckdb.udf.clinical import registerClinicalUdfs
@@ -136,7 +139,73 @@ def register_cql(
         def __init__(self, real_con, logger):
             object.__setattr__(self, '_real', real_con)
             object.__setattr__(self, '_logger', logger)
+
+        def _function_exists(self, name: str) -> bool:
+            try:
+                row = self._real.execute(
+                    """
+                    SELECT 1
+                    FROM duckdb_functions()
+                    WHERE lower(function_name) = lower(?)
+                    LIMIT 1
+                    """,
+                    [name],
+                ).fetchone()
+                return row is not None
+            except _duckdb_mod.Error:
+                return False
+
+        def _parameter_count(self, fn, args, kwargs) -> int | None:
+            import inspect
+            parameters = kwargs.get("parameters")
+            if parameters is None and len(args) >= 2:
+                parameters = args[1]
+            if isinstance(parameters, (list, tuple)):
+                return len(parameters)
+            try:
+                signature = inspect.signature(fn)
+            except (TypeError, ValueError):
+                return None
+            count = 0
+            for param in signature.parameters.values():
+                if param.kind in (param.POSITIONAL_ONLY, param.POSITIONAL_OR_KEYWORD):
+                    count += 1
+                elif param.kind is param.VAR_POSITIONAL:
+                    return None
+            return count
+
+        def _register_python_shadow(self, name, *args, **kwargs):
+            if not args or not callable(args[0]):
+                return None
+            private_name = f"__fhir4ds_py_{name}"
+            try:
+                self._real.create_function(private_name, *args, **kwargs)
+            except (_duckdb_mod.CatalogException, _duckdb_mod.InvalidInputException):
+                self._logger.debug("Skipping private Python UDF %s (already registered)", private_name)
+            arity = self._parameter_count(args[0], args, kwargs)
+            if arity is None:
+                self._logger.debug("Cannot shadow %s with Python macro: unknown arity", name)
+                return None
+            params = ", ".join(f"arg{i}" for i in range(arity))
+            call_args = ", ".join(f"arg{i}" for i in range(arity))
+            quoted_name = name.replace('"', '""')
+            quoted_private = private_name.replace('"', '""')
+            try:
+                self._real.execute(
+                    f'CREATE OR REPLACE TEMP MACRO "{quoted_name}"({params}) '
+                    f'AS "{quoted_private}"({call_args})'
+                )
+                self._logger.debug("Shadowing C++ UDF %s with Python fallback macro", name)
+            except _duckdb_mod.Error as exc:
+                self._logger.warning("Failed to shadow C++ UDF %s with Python fallback: %s", name, exc)
+            return None
+
         def create_function(self, name, *args, **kwargs):
+            if cql_cpp and self._function_exists(name):
+                if name in _PYTHON_PREFERRED_CPP_CONFLICTS:
+                    return self._register_python_shadow(name, *args, **kwargs)
+                self._logger.debug("Skipping UDF %s (already registered by C++)", name)
+                return None
             try:
                 return self._real.create_function(name, *args, **kwargs)
             except (_duckdb_mod.CatalogException, _duckdb_mod.InvalidInputException,

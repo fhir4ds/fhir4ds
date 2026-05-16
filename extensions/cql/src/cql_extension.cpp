@@ -511,7 +511,7 @@ static void IntervalWidthFunc(DataChunk &args, ExpressionState &state, Vector &r
 	auto intervals = UnifiedVectorFormat::GetData<string_t>(iv_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto result_data = FlatVector::GetData<string_t>(result);
 	auto &result_mask = FlatVector::Validity(result);
 
 	for (idx_t i = 0; i < count; i++) {
@@ -525,11 +525,11 @@ static void IntervalWidthFunc(DataChunk &args, ExpressionState &state, Vector &r
 			result_mask.SetInvalid(i);
 			continue;
 		}
-		auto width = iv->width_days();
+		auto width = iv->width_string();
 		if (!width) {
 			result_mask.SetInvalid(i);
 		} else {
-			result_data[i] = *width;
+			result_data[i] = StringVector::AddString(result, *width);
 		}
 	}
 }
@@ -2080,17 +2080,7 @@ static void CollapseIntervalsFunc(DataChunk &args, ExpressionState &state, Vecto
 			auto &current = merged.back();
 			auto &next = parsed[j];
 
-			bool can_merge = false;
-			if (current.high && next.low) {
-				int cmp = current.high->compare(*next.low);
-				if (cmp >= 0) {
-					can_merge = true;
-				} else if (cmp == 0 && (current.high_closed || next.low_closed)) {
-					can_merge = true;
-				}
-			} else if (!current.high) {
-				can_merge = true;
-			}
+			bool can_merge = current.overlaps(next) || current.meets(next) || next.meets(current);
 
 			if (can_merge) {
 				// Extend current interval
@@ -2603,6 +2593,183 @@ static void JsonConcatFunc(DataChunk &args, ExpressionState &state, Vector &resu
 	ListVector::SetListSize(result, total_size);
 }
 
+static idx_t AppendStringList(Vector &result, UnifiedVectorFormat &list_data, UnifiedVectorFormat &child_data,
+                              const list_entry_t *list_entries, const string_t *child_vals, idx_t list_index) {
+	auto &entry = list_entries[list_index];
+	idx_t appended = 0;
+	for (idx_t j = 0; j < entry.length; j++) {
+		auto child_idx = child_data.sel->get_index(entry.offset + j);
+		if (child_data.validity.RowIsValid(child_idx)) {
+			ListVector::PushBack(result, Value(child_vals[child_idx].GetString()));
+			appended++;
+		}
+	}
+	return appended;
+}
+
+// jsonConcat(VARCHAR[], VARCHAR[]) → VARCHAR[]
+static void JsonConcatListListFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	auto &a_vec = args.data[0];
+	auto &b_vec = args.data[1];
+	UnifiedVectorFormat a_data, b_data;
+	a_vec.ToUnifiedFormat(count, a_data);
+	b_vec.ToUnifiedFormat(count, b_data);
+	auto a_entries = UnifiedVectorFormat::GetData<list_entry_t>(a_data);
+	auto b_entries = UnifiedVectorFormat::GetData<list_entry_t>(b_data);
+
+	auto &a_child_vec = ListVector::GetEntry(a_vec);
+	auto &b_child_vec = ListVector::GetEntry(b_vec);
+	UnifiedVectorFormat a_child_data, b_child_data;
+	a_child_vec.ToUnifiedFormat(ListVector::GetListSize(a_vec), a_child_data);
+	b_child_vec.ToUnifiedFormat(ListVector::GetListSize(b_vec), b_child_data);
+	auto a_child_vals = UnifiedVectorFormat::GetData<string_t>(a_child_data);
+	auto b_child_vals = UnifiedVectorFormat::GetData<string_t>(b_child_data);
+
+	auto &result_mask = FlatVector::Validity(result);
+	std::vector<idx_t> row_offsets(count);
+	std::vector<idx_t> row_counts(count);
+	std::vector<bool> row_null(count, false);
+	idx_t total_size = 0;
+
+	for (idx_t i = 0; i < count; i++) {
+		auto ai = a_data.sel->get_index(i);
+		auto bi = b_data.sel->get_index(i);
+		bool a_valid = a_data.validity.RowIsValid(ai);
+		bool b_valid = b_data.validity.RowIsValid(bi);
+		row_offsets[i] = total_size;
+		if (!a_valid && !b_valid) {
+			row_counts[i] = 0;
+			row_null[i] = true;
+			continue;
+		}
+		idx_t entry_count = 0;
+		if (a_valid) {
+			entry_count += AppendStringList(result, a_data, a_child_data, a_entries, a_child_vals, ai);
+		}
+		if (b_valid) {
+			entry_count += AppendStringList(result, b_data, b_child_data, b_entries, b_child_vals, bi);
+		}
+		row_counts[i] = entry_count;
+		total_size += entry_count;
+	}
+
+	auto list_entries = ListVector::GetData(result);
+	for (idx_t i = 0; i < count; i++) {
+		list_entries[i] = {row_offsets[i], row_counts[i]};
+		if (row_null[i]) {
+			result_mask.SetInvalid(i);
+		}
+	}
+	ListVector::SetListSize(result, total_size);
+}
+
+// jsonConcat(VARCHAR[], VARCHAR) → VARCHAR[]
+static void JsonConcatListScalarFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	auto &list_vec = args.data[0];
+	UnifiedVectorFormat list_data, scalar_data;
+	list_vec.ToUnifiedFormat(count, list_data);
+	args.data[1].ToUnifiedFormat(count, scalar_data);
+	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
+	auto scalar_vals = UnifiedVectorFormat::GetData<string_t>(scalar_data);
+	auto &child_vec = ListVector::GetEntry(list_vec);
+	UnifiedVectorFormat child_data;
+	child_vec.ToUnifiedFormat(ListVector::GetListSize(list_vec), child_data);
+	auto child_vals = UnifiedVectorFormat::GetData<string_t>(child_data);
+
+	auto &result_mask = FlatVector::Validity(result);
+	std::vector<idx_t> row_offsets(count);
+	std::vector<idx_t> row_counts(count);
+	std::vector<bool> row_null(count, false);
+	idx_t total_size = 0;
+
+	for (idx_t i = 0; i < count; i++) {
+		auto li = list_data.sel->get_index(i);
+		auto si = scalar_data.sel->get_index(i);
+		bool list_valid = list_data.validity.RowIsValid(li);
+		bool scalar_valid = scalar_data.validity.RowIsValid(si);
+		row_offsets[i] = total_size;
+		if (!list_valid && !scalar_valid) {
+			row_counts[i] = 0;
+			row_null[i] = true;
+			continue;
+		}
+		idx_t entry_count = 0;
+		if (list_valid) {
+			entry_count += AppendStringList(result, list_data, child_data, list_entries, child_vals, li);
+		}
+		if (scalar_valid) {
+			ListVector::PushBack(result, Value(scalar_vals[si].GetString()));
+			entry_count++;
+		}
+		row_counts[i] = entry_count;
+		total_size += entry_count;
+	}
+
+	auto result_entries = ListVector::GetData(result);
+	for (idx_t i = 0; i < count; i++) {
+		result_entries[i] = {row_offsets[i], row_counts[i]};
+		if (row_null[i]) {
+			result_mask.SetInvalid(i);
+		}
+	}
+	ListVector::SetListSize(result, total_size);
+}
+
+// jsonConcat(VARCHAR, VARCHAR[]) → VARCHAR[]
+static void JsonConcatScalarListFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat scalar_data, list_data;
+	args.data[0].ToUnifiedFormat(count, scalar_data);
+	auto &list_vec = args.data[1];
+	list_vec.ToUnifiedFormat(count, list_data);
+	auto scalar_vals = UnifiedVectorFormat::GetData<string_t>(scalar_data);
+	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
+	auto &child_vec = ListVector::GetEntry(list_vec);
+	UnifiedVectorFormat child_data;
+	child_vec.ToUnifiedFormat(ListVector::GetListSize(list_vec), child_data);
+	auto child_vals = UnifiedVectorFormat::GetData<string_t>(child_data);
+
+	auto &result_mask = FlatVector::Validity(result);
+	std::vector<idx_t> row_offsets(count);
+	std::vector<idx_t> row_counts(count);
+	std::vector<bool> row_null(count, false);
+	idx_t total_size = 0;
+
+	for (idx_t i = 0; i < count; i++) {
+		auto si = scalar_data.sel->get_index(i);
+		auto li = list_data.sel->get_index(i);
+		bool scalar_valid = scalar_data.validity.RowIsValid(si);
+		bool list_valid = list_data.validity.RowIsValid(li);
+		row_offsets[i] = total_size;
+		if (!scalar_valid && !list_valid) {
+			row_counts[i] = 0;
+			row_null[i] = true;
+			continue;
+		}
+		idx_t entry_count = 0;
+		if (scalar_valid) {
+			ListVector::PushBack(result, Value(scalar_vals[si].GetString()));
+			entry_count++;
+		}
+		if (list_valid) {
+			entry_count += AppendStringList(result, list_data, child_data, list_entries, child_vals, li);
+		}
+		row_counts[i] = entry_count;
+		total_size += entry_count;
+	}
+
+	auto result_entries = ListVector::GetData(result);
+	for (idx_t i = 0; i < count; i++) {
+		result_entries[i] = {row_offsets[i], row_counts[i]};
+		if (row_null[i]) {
+			result_mask.SetInvalid(i);
+		}
+	}
+	ListVector::SetListSize(result, total_size);
+}
+
 // =====================================================================
 // Registration helper
 // =====================================================================
@@ -3018,6 +3185,138 @@ static void LogicalAnyFalseFunc(DataChunk &args, ExpressionState &state, Vector 
 	}
 }
 
+static void LogicalAllTrueBoolListFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	auto count = args.size();
+	auto &list_vec = args.data[0];
+	UnifiedVectorFormat list_data;
+	list_vec.ToUnifiedFormat(count, list_data);
+	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
+	auto &child_vec = ListVector::GetEntry(list_vec);
+	UnifiedVectorFormat child_data;
+	child_vec.ToUnifiedFormat(ListVector::GetListSize(list_vec), child_data);
+	auto child_vals = UnifiedVectorFormat::GetData<bool>(child_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto idx = list_data.sel->get_index(i);
+		if (!list_data.validity.RowIsValid(idx)) {
+			result_data[i] = true;
+			continue;
+		}
+		auto &entry = list_entries[idx];
+		bool all_true = true;
+		for (idx_t j = 0; j < entry.length; j++) {
+			auto child_idx = child_data.sel->get_index(entry.offset + j);
+			if (child_data.validity.RowIsValid(child_idx) && !child_vals[child_idx]) {
+				all_true = false;
+				break;
+			}
+		}
+		result_data[i] = all_true;
+	}
+}
+
+static void LogicalAnyTrueBoolListFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	auto count = args.size();
+	auto &list_vec = args.data[0];
+	UnifiedVectorFormat list_data;
+	list_vec.ToUnifiedFormat(count, list_data);
+	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
+	auto &child_vec = ListVector::GetEntry(list_vec);
+	UnifiedVectorFormat child_data;
+	child_vec.ToUnifiedFormat(ListVector::GetListSize(list_vec), child_data);
+	auto child_vals = UnifiedVectorFormat::GetData<bool>(child_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto idx = list_data.sel->get_index(i);
+		if (!list_data.validity.RowIsValid(idx)) {
+			result_data[i] = false;
+			continue;
+		}
+		auto &entry = list_entries[idx];
+		bool any_true = false;
+		for (idx_t j = 0; j < entry.length; j++) {
+			auto child_idx = child_data.sel->get_index(entry.offset + j);
+			if (child_data.validity.RowIsValid(child_idx) && child_vals[child_idx]) {
+				any_true = true;
+				break;
+			}
+		}
+		result_data[i] = any_true;
+	}
+}
+
+static void LogicalAllFalseBoolListFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	auto count = args.size();
+	auto &list_vec = args.data[0];
+	UnifiedVectorFormat list_data;
+	list_vec.ToUnifiedFormat(count, list_data);
+	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
+	auto &child_vec = ListVector::GetEntry(list_vec);
+	UnifiedVectorFormat child_data;
+	child_vec.ToUnifiedFormat(ListVector::GetListSize(list_vec), child_data);
+	auto child_vals = UnifiedVectorFormat::GetData<bool>(child_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto idx = list_data.sel->get_index(i);
+		if (!list_data.validity.RowIsValid(idx)) {
+			result_data[i] = true;
+			continue;
+		}
+		auto &entry = list_entries[idx];
+		bool all_false = true;
+		for (idx_t j = 0; j < entry.length; j++) {
+			auto child_idx = child_data.sel->get_index(entry.offset + j);
+			if (child_data.validity.RowIsValid(child_idx) && child_vals[child_idx]) {
+				all_false = false;
+				break;
+			}
+		}
+		result_data[i] = all_false;
+	}
+}
+
+static void LogicalAnyFalseBoolListFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	auto count = args.size();
+	auto &list_vec = args.data[0];
+	UnifiedVectorFormat list_data;
+	list_vec.ToUnifiedFormat(count, list_data);
+	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
+	auto &child_vec = ListVector::GetEntry(list_vec);
+	UnifiedVectorFormat child_data;
+	child_vec.ToUnifiedFormat(ListVector::GetListSize(list_vec), child_data);
+	auto child_vals = UnifiedVectorFormat::GetData<bool>(child_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto idx = list_data.sel->get_index(i);
+		if (!list_data.validity.RowIsValid(idx)) {
+			result_data[i] = false;
+			continue;
+		}
+		auto &entry = list_entries[idx];
+		bool any_false = false;
+		for (idx_t j = 0; j < entry.length; j++) {
+			auto child_idx = child_data.sel->get_index(entry.offset + j);
+			if (child_data.validity.RowIsValid(child_idx) && !child_vals[child_idx]) {
+				any_false = true;
+				break;
+			}
+		}
+		result_data[i] = any_false;
+	}
+}
+
 // LogicalImplies: two nullable VARCHAR → BOOLEAN (3-valued logic)
 static void LogicalImpliesFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	auto count = args.size();
@@ -3062,6 +3361,36 @@ static void LogicalImpliesFunc(DataChunk &args, ExpressionState &state, Vector &
 	}
 }
 
+// LogicalImplies: two nullable BOOLEAN → BOOLEAN (3-valued logic)
+static void LogicalImpliesBoolFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	auto count = args.size();
+	UnifiedVectorFormat a_data, b_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	auto a_vals = UnifiedVectorFormat::GetData<bool>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<bool>(b_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto b_idx = b_data.sel->get_index(i);
+		bool a_null = !a_data.validity.RowIsValid(a_idx);
+		bool b_null = !b_data.validity.RowIsValid(b_idx);
+		bool a_val = a_null ? false : a_vals[a_idx];
+		bool b_val = b_null ? false : b_vals[b_idx];
+
+		auto res = cql::logical_implies(a_null, a_val, b_null, b_val);
+		if (!res) {
+			result_mask.SetInvalid(i);
+		} else {
+			result_data[i] = res.value();
+		}
+	}
+}
+
 // LogicalCoalesce: VARCHAR (JSON array) → VARCHAR
 DEFINE_ONE_STR_STR_UDF(LogicalCoalesceFunc, {
 	auto res = cql::logical_coalesce(a_str);
@@ -3087,14 +3416,12 @@ static void LoadInternal(ExtensionLoader &loader) {
 	RegisterSpecialScalar(loader, "AgeInDaysAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
 	                      AgeInDaysAtFunc);
 
-	// Interval UDFs (22 — includes collapse_intervals). Native Python keeps
-	// these deferred to Python fallback UDFs for full DQM conformance. Browser
-	// DuckDB-WASM cannot call those Python fallbacks, so the WASM build must
-	// expose the C++ surface.
-#ifdef __EMSCRIPTEN__
+	// Interval UDFs (22 — includes collapse_intervals). These are registered
+	// for native and WASM builds so browser-required functions are exercised by
+	// the native C++ test path instead of being hidden by Python fallback UDFs.
 	RegisterSpecialScalar(loader, "intervalStart", {LogicalType::VARCHAR}, LogicalType::VARCHAR, IntervalStartFunc);
 	RegisterSpecialScalar(loader, "intervalEnd", {LogicalType::VARCHAR}, LogicalType::VARCHAR, IntervalEndFunc);
-	RegisterSpecialScalar(loader, "intervalWidth", {LogicalType::VARCHAR}, LogicalType::BIGINT, IntervalWidthFunc);
+	RegisterSpecialScalar(loader, "intervalWidth", {LogicalType::VARCHAR}, LogicalType::VARCHAR, IntervalWidthFunc);
 	RegisterSpecialScalar(loader, "intervalContains", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, IntervalContainsFunc);
 	RegisterSpecialScalar(loader, "intervalProperlyContains", {LogicalType::VARCHAR, LogicalType::VARCHAR},
@@ -3132,11 +3459,6 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::VARCHAR, IntervalFromBoundsFunc);
 	RegisterSpecialScalar(loader, "collapse_intervals", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      CollapseIntervalsFunc);
-#else
-	// Deferred to Python on native builds: Time bounds, successor/predecessor
-	// semantics, exclusive boundaries, and quantity units are not yet fully
-	// equivalent in C++.
-#endif
 
 	// Precision-aware interval UDFs (3-arg: interval, interval/point, precision → BOOLEAN)
 	RegisterSpecialScalar(loader, "intervalOverlapsPrecise",
@@ -3200,14 +3522,12 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      DateTimeSameOrAfterFunc);
 	RegisterSpecialScalar(loader, "dateComponent", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
 	                      DateComponentFunc);
-#ifdef __EMSCRIPTEN__
 	RegisterSpecialScalar(loader, "quantityToInterval", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      QuantityToIntervalFunc);
 	RegisterSpecialScalar(loader, "dateAddQuantity", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, DateAddQuantityFunc);
 	RegisterSpecialScalar(loader, "dateSubtractQuantity", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, DateSubtractQuantityFunc);
-#endif
 
 	// Clinical UDFs (4)
 	RegisterSpecialScalar(loader, "Latest",
@@ -3298,10 +3618,16 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::VARCHAR, ElementAtFunc);
 	RegisterSpecialScalar(loader, "jsonConcat", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::LIST(LogicalType::VARCHAR), JsonConcatFunc);
+	RegisterSpecialScalar(loader, "jsonConcat",
+	                      {LogicalType::LIST(LogicalType::VARCHAR), LogicalType::LIST(LogicalType::VARCHAR)},
+	                      LogicalType::LIST(LogicalType::VARCHAR), JsonConcatListListFunc);
+	RegisterSpecialScalar(loader, "jsonConcat", {LogicalType::LIST(LogicalType::VARCHAR), LogicalType::VARCHAR},
+	                      LogicalType::LIST(LogicalType::VARCHAR), JsonConcatListScalarFunc);
+	RegisterSpecialScalar(loader, "jsonConcat", {LogicalType::VARCHAR, LogicalType::LIST(LogicalType::VARCHAR)},
+	                      LogicalType::LIST(LogicalType::VARCHAR), JsonConcatScalarListFunc);
 
-	// Boundary UDFs. These remain less complete than Python for some edge
-	// cases, but browser/WASM requires the C++ surface to be available.
-#ifdef __EMSCRIPTEN__
+	// Boundary UDFs. Browser-required functions are registered in native builds
+	// too so parity regressions are visible outside browser-only tests.
 	RegisterSpecialScalar(loader, "HighBoundary", {LogicalType::VARCHAR, LogicalType::BIGINT},
 	                      LogicalType::VARCHAR, HighBoundaryFunc2);
 	RegisterSpecialScalar(loader, "LowBoundary", {LogicalType::VARCHAR, LogicalType::BIGINT},
@@ -3310,14 +3636,12 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::VARCHAR, PredecessorOfFunc);
 	RegisterSpecialScalar(loader, "successorOf", {LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, SuccessorOfFunc);
-#endif
 	RegisterSpecialScalar(loader, "CQLPrecision", {LogicalType::VARCHAR},
 	                      LogicalType::BIGINT, CQLPrecisionFunc);
 	RegisterSpecialScalar(loader, "cqlTimezoneOffset", {LogicalType::VARCHAR},
 	                      LogicalType::DOUBLE, CQLTimezoneOffsetFunc);
 
 	// Interval set operations.
-#ifdef __EMSCRIPTEN__
 	RegisterSpecialScalar(loader, "intervalIntersect", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, IntervalIntersectFunc);
 	RegisterSpecialScalar(loader, "intervalUnion", {LogicalType::VARCHAR, LogicalType::VARCHAR},
@@ -3328,7 +3652,6 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::BOOLEAN, IntervalOnOrAfterFunc);
 	RegisterSpecialScalar(loader, "intervalOnOrBefore", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, IntervalOnOrBeforeFunc);
-#endif
 
 	// Phase 4: pointFrom
 	RegisterSpecialScalar(loader, "pointFrom", {LogicalType::VARCHAR},
@@ -3377,14 +3700,24 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// Phase 7: Logical aggregate UDFs (6)
 	RegisterSpecialScalar(loader, "logicalAllTrue", {LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, LogicalAllTrueFunc);
+	RegisterSpecialScalar(loader, "logicalAllTrue", {LogicalType::LIST(LogicalType::BOOLEAN)},
+	                      LogicalType::BOOLEAN, LogicalAllTrueBoolListFunc);
 	RegisterSpecialScalar(loader, "logicalAnyTrue", {LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, LogicalAnyTrueFunc);
+	RegisterSpecialScalar(loader, "logicalAnyTrue", {LogicalType::LIST(LogicalType::BOOLEAN)},
+	                      LogicalType::BOOLEAN, LogicalAnyTrueBoolListFunc);
 	RegisterSpecialScalar(loader, "logicalAllFalse", {LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, LogicalAllFalseFunc);
+	RegisterSpecialScalar(loader, "logicalAllFalse", {LogicalType::LIST(LogicalType::BOOLEAN)},
+	                      LogicalType::BOOLEAN, LogicalAllFalseBoolListFunc);
 	RegisterSpecialScalar(loader, "logicalAnyFalse", {LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, LogicalAnyFalseFunc);
+	RegisterSpecialScalar(loader, "logicalAnyFalse", {LogicalType::LIST(LogicalType::BOOLEAN)},
+	                      LogicalType::BOOLEAN, LogicalAnyFalseBoolListFunc);
 	RegisterSpecialScalar(loader, "logicalImplies", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, LogicalImpliesFunc);
+	RegisterSpecialScalar(loader, "logicalImplies", {LogicalType::BOOLEAN, LogicalType::BOOLEAN},
+	                      LogicalType::BOOLEAN, LogicalImpliesBoolFunc);
 	RegisterSpecialScalar(loader, "logicalCoalesce", {LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, LogicalCoalesceFunc);
 }

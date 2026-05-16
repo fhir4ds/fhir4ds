@@ -94,6 +94,14 @@ src/
 ### List Functions
 `SingletonFrom`, `ElementAt`, `jsonConcat`
 
+### Browser/WASM Registration Invariant
+
+DuckDB-WASM cannot call Python fallback UDFs. Any CQL function emitted into
+browser SQL must be registered by the compiled C++ extension or supplied as a
+pure SQL macro. Avoid leaving browser-required registrations behind
+`__EMSCRIPTEN__` without an equivalent native C++-only validation path; native
+Python fallback can otherwise hide browser-only regressions.
+
 All CamelCase functions also have snake_case aliases (e.g., `age_in_years`, `interval_contains`, `quantity_value`).
 
 ## Key Implementation Details

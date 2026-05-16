@@ -80,6 +80,13 @@ src/
 | `fhirpath_quantity` | `(JSON, VARCHAR) → VARCHAR` | First quantity value as string |
 | `fhirpath_is_valid` | `(VARCHAR) → BOOLEAN` | Whether expression parses successfully |
 
+### Browser/WASM Registration Invariant
+
+SQL-on-FHIR/ViewDefinition browser SQL must not depend on Python-only FHIRPath
+DuckDB UDFs. If generated browser SQL needs helper functions such as
+`fhirpath_repeat`, implement and test them in the C++ extension or change the
+generator so the browser path uses only C++ UDFs and SQL macros.
+
 ## Supported FHIRPath Features
 
 - **Navigation**: member access (`name.given`), indexing (`[0]`), `ofType()`
