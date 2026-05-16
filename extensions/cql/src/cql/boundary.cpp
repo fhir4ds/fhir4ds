@@ -1,11 +1,13 @@
 #include "cql/boundary.hpp"
 #include "cql/datetime.hpp"
+#include "cql/quantity.hpp"
 #include <cstdlib>
 #include <cmath>
 #include <sstream>
 #include <algorithm>
 #include <cstring>
 #include <cctype>
+#include <iomanip>
 
 namespace cql {
 
@@ -183,9 +185,16 @@ Optional<std::string> high_boundary(const std::string &value, int precision) {
 
 	if (kind == ValueKind::Time) {
 		auto tc = parse_time_components(value);
-		if (precision <= 2) return Optional<std::string>(format_time(tc.h, 59, 59, 999));
-		if (precision <= 4) return Optional<std::string>(format_time(tc.h, tc.m, 59, 999));
-		if (precision <= 6) return Optional<std::string>(format_time(tc.h, tc.m, tc.s, 999));
+		int input_precision = 2;
+		std::string ts = value;
+		if (!ts.empty() && ts[0] == 'T') ts = ts.substr(1);
+		if (ts.find(':') != std::string::npos) input_precision = 4;
+		size_t second_sep = ts.find(':', ts.find(':') == std::string::npos ? 0 : ts.find(':') + 1);
+		if (second_sep != std::string::npos) input_precision = 6;
+		if (ts.find('.') != std::string::npos) input_precision = 9;
+		if (precision <= 2 || input_precision <= 2) return Optional<std::string>(format_time(tc.h, 59, 59, 999));
+		if (precision <= 4 || input_precision <= 4) return Optional<std::string>(format_time(tc.h, tc.m, 59, 999));
+		if (precision <= 6 || input_precision <= 6) return Optional<std::string>(format_time(tc.h, tc.m, tc.s, 999));
 		return Optional<std::string>(format_time(tc.h, tc.m, tc.s, tc.ms));
 	}
 
@@ -358,6 +367,14 @@ Optional<std::string> predecessor_of(const std::string &value) {
 
 	auto kind = detect_kind(value);
 
+	if (!value.empty() && value[0] == '{') {
+		auto q = parse_quantity_json(value);
+		if (!q) return NullOpt<std::string>();
+		q->value -= 0.00000001;
+		auto formatted = format_quantity_json(*q);
+		return formatted ? formatted : NullOpt<std::string>();
+	}
+
 	if (kind == ValueKind::Time) {
 		auto tc = parse_time_components(value);
 		int total_ms = ((tc.h * 60 + tc.m) * 60 + tc.s) * 1000 + tc.ms - 1;
@@ -400,6 +417,7 @@ Optional<std::string> predecessor_of(const std::string &value) {
 				}
 			}
 		}
+		if (dt->year < 1) return NullOpt<std::string>();
 		return Optional<std::string>(dt->to_string());
 	}
 
@@ -460,6 +478,14 @@ Optional<std::string> successor_of(const std::string &value) {
 
 	auto kind = detect_kind(value);
 
+	if (!value.empty() && value[0] == '{') {
+		auto q = parse_quantity_json(value);
+		if (!q) return NullOpt<std::string>();
+		q->value += 0.00000001;
+		auto formatted = format_quantity_json(*q);
+		return formatted ? formatted : NullOpt<std::string>();
+	}
+
 	if (kind == ValueKind::Time) {
 		auto tc = parse_time_components(value);
 		int total_ms = ((tc.h * 60 + tc.m) * 60 + tc.s) * 1000 + tc.ms + 1;
@@ -501,6 +527,7 @@ Optional<std::string> successor_of(const std::string &value) {
 				}
 			}
 		}
+		if (dt->year > 9999) return NullOpt<std::string>();
 		return Optional<std::string>(dt->to_string());
 	}
 

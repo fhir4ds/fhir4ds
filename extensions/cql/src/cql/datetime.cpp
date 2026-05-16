@@ -1,5 +1,6 @@
 #include "cql/datetime.hpp"
 #include <cstdlib>
+#include <cstdio>
 #include <sstream>
 
 namespace cql {
@@ -15,9 +16,96 @@ static int days_in_month(int year, int month) {
 	return dim[month];
 }
 
+static Optional<DateTimeValue> parse_time_value(const std::string &str) {
+	DateTimeValue dt;
+	dt.year = 1;
+	dt.month = 1;
+	dt.day = 1;
+	dt.has_time = true;
+	dt.is_time = true;
+	dt.precision = DateTimeValue::Precision::Hour;
+
+	const char *s = str.c_str();
+	if (*s == 'T') {
+		s++;
+	}
+	char *end;
+	dt.hour = static_cast<int32_t>(std::strtol(s, &end, 10));
+	if (end == s || dt.hour < 0 || dt.hour > 23) {
+		return NullOpt<DateTimeValue>();
+	}
+
+	if (*end == ':') {
+		s = end + 1;
+		dt.minute = static_cast<int32_t>(std::strtol(s, &end, 10));
+		if (end == s || dt.minute < 0 || dt.minute > 59) {
+			return NullOpt<DateTimeValue>();
+		}
+		dt.precision = DateTimeValue::Precision::Minute;
+		if (*end == ':') {
+			s = end + 1;
+			dt.second = static_cast<int32_t>(std::strtol(s, &end, 10));
+			if (end == s || dt.second < 0 || dt.second > 59) {
+				return NullOpt<DateTimeValue>();
+			}
+			dt.precision = DateTimeValue::Precision::Second;
+			if (*end == '.') {
+				s = end + 1;
+				dt.millisecond = static_cast<int32_t>(std::strtol(s, &end, 10));
+				int digits = static_cast<int>(end - s);
+				if (digits <= 0) {
+					return NullOpt<DateTimeValue>();
+				}
+				if (digits == 1) {
+					dt.millisecond *= 100;
+				} else if (digits == 2) {
+					dt.millisecond *= 10;
+				} else if (digits > 3) {
+					for (int i = 3; i < digits; i++) {
+						dt.millisecond /= 10;
+					}
+				}
+				if (dt.millisecond < 0 || dt.millisecond > 999) {
+					return NullOpt<DateTimeValue>();
+				}
+				dt.precision = DateTimeValue::Precision::Millisecond;
+			}
+		}
+	}
+
+	if (*end == 'Z') {
+		dt.has_tz = true;
+		dt.tz_offset_minutes = 0;
+		end++;
+	} else if (*end == '+' || *end == '-') {
+		dt.has_tz = true;
+		int sign = (*end == '+') ? 1 : -1;
+		s = end + 1;
+		int tz_hour = static_cast<int>(std::strtol(s, &end, 10));
+		int tz_min = 0;
+		if (*end == ':') {
+			s = end + 1;
+			tz_min = static_cast<int>(std::strtol(s, &end, 10));
+		}
+		if (tz_hour < 0 || tz_hour > 23 || tz_min < 0 || tz_min > 59) {
+			return NullOpt<DateTimeValue>();
+		}
+		dt.tz_offset_minutes = sign * (tz_hour * 60 + tz_min);
+	}
+
+	if (*end != '\0') {
+		return NullOpt<DateTimeValue>();
+	}
+	return dt;
+}
+
 Optional<DateTimeValue> DateTimeValue::parse(const std::string &str) {
 	if (str.empty()) {
 		return NullOpt<DateTimeValue>();
+	}
+
+	if (str[0] == 'T' || (str.find(':') != std::string::npos && str.find('-') == std::string::npos)) {
+		return parse_time_value(str);
 	}
 
 	DateTimeValue dt;
@@ -32,6 +120,11 @@ Optional<DateTimeValue> DateTimeValue::parse(const std::string &str) {
 	dt.precision = Precision::Year;
 
 	if (*end == '\0') {
+		dt.month = 1;
+		dt.day = 1;
+		return dt;
+	}
+	if (*end == 'T' && *(end + 1) == '\0') {
 		dt.month = 1;
 		dt.day = 1;
 		return dt;
@@ -75,14 +168,23 @@ Optional<DateTimeValue> DateTimeValue::parse(const std::string &str) {
 		s = end + 1;
 
 		dt.hour = static_cast<int32_t>(std::strtol(s, &end, 10));
+		if (end == s || dt.hour < 0 || dt.hour > 23) {
+			return NullOpt<DateTimeValue>();
+		}
 		dt.precision = Precision::Hour;
 		if (*end == ':') {
 			s = end + 1;
 			dt.minute = static_cast<int32_t>(std::strtol(s, &end, 10));
+			if (end == s || dt.minute < 0 || dt.minute > 59) {
+				return NullOpt<DateTimeValue>();
+			}
 			dt.precision = Precision::Minute;
 			if (*end == ':') {
 				s = end + 1;
 				dt.second = static_cast<int32_t>(std::strtol(s, &end, 10));
+				if (end == s || dt.second < 0 || dt.second > 59) {
+					return NullOpt<DateTimeValue>();
+				}
 				dt.precision = Precision::Second;
 				if (*end == '.') {
 					s = end + 1;
@@ -90,10 +192,20 @@ Optional<DateTimeValue> DateTimeValue::parse(const std::string &str) {
 					dt.precision = Precision::Millisecond;
 					// Handle various fractional second lengths
 					int digits = static_cast<int>(end - s);
+					if (digits <= 0) {
+						return NullOpt<DateTimeValue>();
+					}
 					if (digits == 1) {
 						dt.millisecond *= 100;
 					} else if (digits == 2) {
 						dt.millisecond *= 10;
+					} else if (digits > 3) {
+						for (int i = 3; i < digits; i++) {
+							dt.millisecond /= 10;
+						}
+					}
+					if (dt.millisecond < 0 || dt.millisecond > 999) {
+						return NullOpt<DateTimeValue>();
 					}
 				}
 			}
@@ -103,6 +215,7 @@ Optional<DateTimeValue> DateTimeValue::parse(const std::string &str) {
 		if (*end == 'Z') {
 			dt.has_tz = true;
 			dt.tz_offset_minutes = 0;
+			end++;
 		} else if (*end == '+' || *end == '-') {
 			dt.has_tz = true;
 			int sign = (*end == '+') ? 1 : -1;
@@ -113,8 +226,15 @@ Optional<DateTimeValue> DateTimeValue::parse(const std::string &str) {
 				s = end + 1;
 				tz_min = static_cast<int>(std::strtol(s, &end, 10));
 			}
+			if (tz_hour < 0 || tz_hour > 23 || tz_min < 0 || tz_min > 59) {
+				return NullOpt<DateTimeValue>();
+			}
 			dt.tz_offset_minutes = sign * (tz_hour * 60 + tz_min);
 		}
+	}
+
+	if (*end != '\0') {
+		return NullOpt<DateTimeValue>();
 	}
 
 	return dt;
@@ -123,8 +243,41 @@ Optional<DateTimeValue> DateTimeValue::parse(const std::string &str) {
 std::string DateTimeValue::to_string() const {
 	std::ostringstream oss;
 	char buf[32];
+
+	if (is_time) {
+		snprintf(buf, sizeof(buf), "T%02d", hour);
+		oss << buf;
+		if (precision >= Precision::Minute) {
+			snprintf(buf, sizeof(buf), ":%02d", minute);
+			oss << buf;
+		}
+		if (precision >= Precision::Second) {
+			snprintf(buf, sizeof(buf), ":%02d", second);
+			oss << buf;
+		}
+		if (precision >= Precision::Millisecond) {
+			snprintf(buf, sizeof(buf), ".%03d", millisecond);
+			oss << buf;
+		}
+		if (has_tz) {
+			if (tz_offset_minutes == 0) {
+				oss << "Z";
+			} else {
+				int abs_offset = std::abs(tz_offset_minutes);
+				snprintf(buf, sizeof(buf), "%c%02d:%02d", tz_offset_minutes >= 0 ? '+' : '-', abs_offset / 60,
+				         abs_offset % 60);
+				oss << buf;
+			}
+		}
+		return oss.str();
+	}
+
 	snprintf(buf, sizeof(buf), "%04d", year);
 	oss << buf;
+	if (!has_time && precision == Precision::Year) {
+		oss << "T";
+		return oss.str();
+	}
 
 	if (precision >= Precision::Month) {
 		snprintf(buf, sizeof(buf), "-%02d", month);
@@ -137,7 +290,7 @@ std::string DateTimeValue::to_string() const {
 	if (has_time) {
 		snprintf(buf, sizeof(buf), "T%02d:%02d:%02d", hour, minute, second);
 		oss << buf;
-		if (millisecond > 0) {
+		if (precision >= Precision::Millisecond) {
 			snprintf(buf, sizeof(buf), ".%03d", millisecond);
 			oss << buf;
 		}

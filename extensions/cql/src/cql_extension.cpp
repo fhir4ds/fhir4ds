@@ -19,12 +19,16 @@
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include <algorithm>
+#include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
+#include <iomanip>
 #include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
+#include <vector>
 
 namespace duckdb {
 
@@ -104,6 +108,11 @@ static int64_t ToEpochMillisForElapsed(const cql::DateTimeValue &value) {
 	}
 	return millis;
 }
+
+static cql::DateTimeValue AddYears(const cql::DateTimeValue &dt, int32_t years);
+static cql::DateTimeValue AddMonths(const cql::DateTimeValue &dt, int32_t months);
+static cql::DateTimeValue AddDays(const cql::DateTimeValue &dt, int64_t days);
+static cql::DateTimeValue AddMilliseconds(const cql::DateTimeValue &dt, int64_t millis);
 
 // =====================================================================
 // Helper: get current date for age calculations
@@ -320,6 +329,95 @@ DEFINE_AGE_AT_UDF(AgeInYearsAtFunc, cql::AgeCalculator::age_in_years)
 DEFINE_AGE_AT_UDF(AgeInMonthsAtFunc, cql::AgeCalculator::age_in_months)
 DEFINE_AGE_AT_UDF(AgeInDaysAtFunc, cql::AgeCalculator::age_in_days)
 
+static cql::Optional<int64_t> AgeInWeeksValue(const cql::DateTimeValue &birth, const cql::DateTimeValue &as_of) {
+	auto days = cql::AgeCalculator::age_in_days(birth, as_of);
+	if (!days) {
+		return cql::NullOpt<int64_t>();
+	}
+	return *days / 7;
+}
+
+DEFINE_AGE_UDF(AgeInWeeksFunc, AgeInWeeksValue)
+DEFINE_AGE_AT_UDF(AgeInWeeksAtFunc, AgeInWeeksValue)
+
+#define DEFINE_CALCULATE_AGE_UDF(FuncName, method_call)                                                                \
+	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
+		idx_t count = args.size();                                                                                     \
+		UnifiedVectorFormat birth_data;                                                                                \
+		args.data[0].ToUnifiedFormat(count, birth_data);                                                               \
+		auto births = UnifiedVectorFormat::GetData<string_t>(birth_data);                                              \
+		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
+		auto result_data = FlatVector::GetData<int64_t>(result);                                                       \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
+		auto today = GetToday();                                                                                       \
+		for (idx_t i = 0; i < count; i++) {                                                                            \
+			auto b_idx = birth_data.sel->get_index(i);                                                                 \
+			if (!birth_data.validity.RowIsValid(b_idx)) {                                                              \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto birth = cql::DateTimeValue::parse(births[b_idx].GetString());                                         \
+			if (!birth) {                                                                                              \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto age = method_call(*birth, today);                                                                     \
+			if (!age || *age < 0) {                                                                                    \
+				result_mask.SetInvalid(i);                                                                             \
+			} else {                                                                                                   \
+				result_data[i] = *age;                                                                                 \
+			}                                                                                                          \
+		}                                                                                                              \
+	}
+
+#define DEFINE_CALCULATE_AGE_AT_UDF(FuncName, method_call)                                                             \
+	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
+		idx_t count = args.size();                                                                                     \
+		UnifiedVectorFormat birth_data, date_data;                                                                     \
+		args.data[0].ToUnifiedFormat(count, birth_data);                                                               \
+		args.data[1].ToUnifiedFormat(count, date_data);                                                                \
+		auto births = UnifiedVectorFormat::GetData<string_t>(birth_data);                                              \
+		auto dates = UnifiedVectorFormat::GetData<string_t>(date_data);                                                \
+		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
+		auto result_data = FlatVector::GetData<int64_t>(result);                                                       \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
+		for (idx_t i = 0; i < count; i++) {                                                                            \
+			auto b_idx = birth_data.sel->get_index(i);                                                                 \
+			auto d_idx = date_data.sel->get_index(i);                                                                  \
+			if (!birth_data.validity.RowIsValid(b_idx) || !date_data.validity.RowIsValid(d_idx)) {                     \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto birth = cql::DateTimeValue::parse(births[b_idx].GetString());                                         \
+			auto as_of = cql::DateTimeValue::parse(dates[d_idx].GetString());                                          \
+			if (!birth || !as_of) {                                                                                    \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto age = method_call(*birth, *as_of);                                                                    \
+			if (!age || *age < 0) {                                                                                    \
+				result_mask.SetInvalid(i);                                                                             \
+			} else {                                                                                                   \
+				result_data[i] = *age;                                                                                 \
+			}                                                                                                          \
+		}                                                                                                              \
+	}
+
+DEFINE_CALCULATE_AGE_UDF(CalculateAgeInYearsFunc, cql::AgeCalculator::age_in_years)
+DEFINE_CALCULATE_AGE_UDF(CalculateAgeInMonthsFunc, cql::AgeCalculator::age_in_months)
+DEFINE_CALCULATE_AGE_UDF(CalculateAgeInWeeksFunc, AgeInWeeksValue)
+DEFINE_CALCULATE_AGE_UDF(CalculateAgeInDaysFunc, cql::AgeCalculator::age_in_days)
+DEFINE_CALCULATE_AGE_UDF(CalculateAgeInHoursFunc, cql::AgeCalculator::age_in_hours)
+DEFINE_CALCULATE_AGE_UDF(CalculateAgeInMinutesFunc, cql::AgeCalculator::age_in_minutes)
+DEFINE_CALCULATE_AGE_UDF(CalculateAgeInSecondsFunc, cql::AgeCalculator::age_in_seconds)
+DEFINE_CALCULATE_AGE_AT_UDF(CalculateAgeInYearsAtFunc, cql::AgeCalculator::age_in_years)
+DEFINE_CALCULATE_AGE_AT_UDF(CalculateAgeInMonthsAtFunc, cql::AgeCalculator::age_in_months)
+DEFINE_CALCULATE_AGE_AT_UDF(CalculateAgeInWeeksAtFunc, AgeInWeeksValue)
+DEFINE_CALCULATE_AGE_AT_UDF(CalculateAgeInDaysAtFunc, cql::AgeCalculator::age_in_days)
+DEFINE_CALCULATE_AGE_AT_UDF(CalculateAgeInHoursAtFunc, cql::AgeCalculator::age_in_hours)
+DEFINE_CALCULATE_AGE_AT_UDF(CalculateAgeInMinutesAtFunc, cql::AgeCalculator::age_in_minutes)
+DEFINE_CALCULATE_AGE_AT_UDF(CalculateAgeInSecondsAtFunc, cql::AgeCalculator::age_in_seconds)
+
 // =====================================================================
 // Datetime difference UDFs
 // =====================================================================
@@ -351,29 +449,43 @@ DEFINE_TWO_STR_BIGINT_UDF(DifferenceInDaysFunc, {
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(DifferenceInHoursFunc, {
-	auto hours = cql::AgeCalculator::diff_hours(*a_dt, *b_dt);
-	if (!hours) {
+	if (a_dt->has_tz != b_dt->has_tz) {
 		result_mask.SetInvalid(i);
 	} else {
-		result_data[i] = *hours;
+		result_data[i] = (ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt)) / MS_PER_HOUR;
 	}
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(DifferenceInMinutesFunc, {
-	auto minutes = cql::AgeCalculator::diff_minutes(*a_dt, *b_dt);
-	if (!minutes) {
+	if (a_dt->has_tz != b_dt->has_tz) {
 		result_mask.SetInvalid(i);
 	} else {
-		result_data[i] = *minutes;
+		result_data[i] = (ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt)) / MS_PER_MINUTE;
 	}
 })
 
 DEFINE_TWO_STR_BIGINT_UDF(DifferenceInSecondsFunc, {
-	auto seconds = cql::AgeCalculator::diff_seconds(*a_dt, *b_dt);
-	if (!seconds) {
+	if (a_dt->has_tz != b_dt->has_tz) {
 		result_mask.SetInvalid(i);
 	} else {
-		result_data[i] = *seconds;
+		result_data[i] = (ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt)) / MS_PER_SECOND;
+	}
+})
+
+DEFINE_TWO_STR_BIGINT_UDF(DifferenceInWeeksFunc, {
+	auto days = cql::AgeCalculator::diff_days(*a_dt, *b_dt);
+	if (!days) {
+		result_mask.SetInvalid(i);
+	} else {
+		result_data[i] = *days / 7;
+	}
+})
+
+DEFINE_TWO_STR_BIGINT_UDF(DifferenceInMillisecondsFunc, {
+	if (a_dt->has_tz != b_dt->has_tz) {
+		result_mask.SetInvalid(i);
+	} else {
+		result_data[i] = ToEpochMillisForElapsed(*b_dt) - ToEpochMillisForElapsed(*a_dt);
 	}
 })
 
@@ -525,6 +637,9 @@ static void IntervalWidthFunc(DataChunk &args, ExpressionState &state, Vector &r
 			result_mask.SetInvalid(i);
 			continue;
 		}
+		if (iv->bound_type == cql::BoundType::DateTime || iv->bound_type == cql::BoundType::Time) {
+			throw InvalidInputException("Width is not defined for DateTime or Time intervals");
+		}
 		auto width = iv->width_string();
 		if (!width) {
 			result_mask.SetInvalid(i);
@@ -532,6 +647,139 @@ static void IntervalWidthFunc(DataChunk &args, ExpressionState &state, Vector &r
 			result_data[i] = StringVector::AddString(result, *width);
 		}
 	}
+}
+
+static bool LooksDateTimeLikeBound(const std::string &value) {
+	return value.find('-') != std::string::npos || value.find('T') != std::string::npos ||
+	       value.find(':') != std::string::npos;
+}
+
+static bool LooksFourDigitYear(const std::string &value) {
+	if (value.size() != 4) {
+		return false;
+	}
+	return std::all_of(value.begin(), value.end(), [](unsigned char c) { return std::isdigit(c); });
+}
+
+static cql::Optional<cql::BoundValue> DateTimeBoundFromString(const std::string &value) {
+	auto dt = cql::DateTimeValue::parse(value);
+	if (!dt) {
+		return cql::NullOpt<cql::BoundValue>();
+	}
+	cql::BoundValue bound;
+	bound.type = dt->is_time ? cql::BoundType::Time : cql::BoundType::DateTime;
+	bound.dt_val = dt;
+	bound.raw_str = value;
+	return cql::Optional<cql::BoundValue>(bound);
+}
+
+static cql::Optional<cql::BoundValue> ParseIntervalBoundWithPeer(const std::string &value, bool peer_is_datetime) {
+	if (peer_is_datetime && LooksFourDigitYear(value)) {
+		auto dt_bound = DateTimeBoundFromString(value);
+		if (dt_bound) {
+			return dt_bound;
+		}
+	}
+	return cql::BoundValue::from_string(value);
+}
+
+static cql::DateTimeValue DateTimeHighBoundary(cql::DateTimeValue value) {
+	switch (value.precision) {
+	case cql::DateTimeValue::Precision::Year:
+		value.month = 12;
+		value.day = 31;
+		value.hour = 23;
+		value.minute = 59;
+		value.second = 59;
+		value.millisecond = 999;
+		value.has_time = true;
+		break;
+	case cql::DateTimeValue::Precision::Month:
+		value.day = CqlDaysInMonth(value.year, value.month);
+		value.hour = 23;
+		value.minute = 59;
+		value.second = 59;
+		value.millisecond = 999;
+		value.has_time = true;
+		break;
+	case cql::DateTimeValue::Precision::Day:
+		value.hour = 23;
+		value.minute = 59;
+		value.second = 59;
+		value.millisecond = 999;
+		value.has_time = true;
+		break;
+	case cql::DateTimeValue::Precision::Hour:
+		value.minute = 59;
+		value.second = 59;
+		value.millisecond = 999;
+		value.has_time = true;
+		break;
+	case cql::DateTimeValue::Precision::Minute:
+		value.second = 59;
+		value.millisecond = 999;
+		value.has_time = true;
+		break;
+	case cql::DateTimeValue::Precision::Second:
+		value.millisecond = 999;
+		value.has_time = true;
+		break;
+	case cql::DateTimeValue::Precision::Millisecond:
+		break;
+	}
+	return value;
+}
+
+struct DateTimeBoundRange {
+	int64_t low_ms;
+	int64_t high_ms;
+};
+
+static cql::Optional<DateTimeBoundRange> DateTimeRangeForBound(const cql::BoundValue &bound) {
+	if (bound.type != cql::BoundType::DateTime || !bound.dt_val) {
+		return cql::NullOpt<DateTimeBoundRange>();
+	}
+	DateTimeBoundRange range;
+	range.low_ms = bound.dt_val->to_epoch_millis();
+	range.high_ms = DateTimeHighBoundary(*bound.dt_val).to_epoch_millis();
+	return cql::Optional<DateTimeBoundRange>(range);
+}
+
+enum class CqlTriBool { KnownFalse, KnownTrue, Unknown, NotApplicable };
+
+static CqlTriBool RangeLessOrEqual(const DateTimeBoundRange &left, const DateTimeBoundRange &right) {
+	if (left.high_ms <= right.low_ms) {
+		return CqlTriBool::KnownTrue;
+	}
+	if (left.low_ms > right.high_ms) {
+		return CqlTriBool::KnownFalse;
+	}
+	return CqlTriBool::Unknown;
+}
+
+static CqlTriBool DateTimeOverlapsTriState(const cql::Interval &left, const cql::Interval &right) {
+	if (!left.low || !left.high || !right.low || !right.high) {
+		return CqlTriBool::NotApplicable;
+	}
+	auto left_low = DateTimeRangeForBound(*left.low);
+	auto left_high = DateTimeRangeForBound(*left.high);
+	auto right_low = DateTimeRangeForBound(*right.low);
+	auto right_high = DateTimeRangeForBound(*right.high);
+	if (!left_low || !left_high || !right_low || !right_high) {
+		return CqlTriBool::NotApplicable;
+	}
+
+	auto left_starts_before_right_ends = RangeLessOrEqual(*left_low, *right_high);
+	auto right_starts_before_left_ends = RangeLessOrEqual(*right_low, *left_high);
+	if (left_starts_before_right_ends == CqlTriBool::KnownFalse ||
+	    right_starts_before_left_ends == CqlTriBool::KnownFalse) {
+		return CqlTriBool::KnownFalse;
+	}
+	if (left_starts_before_right_ends == CqlTriBool::KnownTrue &&
+	    right_starts_before_left_ends == CqlTriBool::KnownTrue) {
+		return CqlTriBool::KnownTrue;
+	}
+	return CqlTriBool::Unknown;
 }
 
 DEFINE_TWO_STR_BOOL_UDF(IntervalContainsFunc, {
@@ -564,11 +812,37 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalProperlyContainsFunc, {
 	}
 })
 
-DEFINE_TWO_STR_BOOL_UDF(IntervalOverlapsFunc, {
-	auto iv1 = cql::Interval::parse(a_str);
-	auto iv2 = cql::Interval::parse(b_str);
-	result_data[i] = (iv1 && iv2) ? iv1->overlaps(*iv2) : false;
-})
+static void IntervalOverlapsFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, b_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto b_idx = b_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx) || !b_data.validity.RowIsValid(b_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto iv1 = cql::Interval::parse(a_vals[a_idx].GetString());
+		auto iv2 = cql::Interval::parse(b_vals[b_idx].GetString());
+		if (!iv1 || !iv2) {
+			result_data[i] = false;
+			continue;
+		}
+		auto tri = DateTimeOverlapsTriState(*iv1, *iv2);
+		if (tri == CqlTriBool::Unknown) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = tri == CqlTriBool::NotApplicable ? iv1->overlaps(*iv2) : tri == CqlTriBool::KnownTrue;
+	}
+}
 
 DEFINE_TWO_STR_BOOL_UDF(IntervalBeforeFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
@@ -597,6 +871,16 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalIncludesFunc, {
 DEFINE_TWO_STR_BOOL_UDF(IntervalIncludedInFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
+	if (iv1 && iv2 && iv1->low && iv2->low && iv1->low->dt_val && iv2->low->dt_val &&
+	    iv1->low->compare(*iv2->low) == 0 && iv1->low->dt_val->precision != iv2->low->dt_val->precision) {
+		result_mask.SetInvalid(i);
+		continue;
+	}
+	if (iv1 && iv2 && iv1->high && iv2->high && iv1->high->dt_val && iv2->high->dt_val &&
+	    iv1->high->compare(*iv2->high) == 0 && iv1->high->dt_val->precision != iv2->high->dt_val->precision) {
+		result_mask.SetInvalid(i);
+		continue;
+	}
 	result_data[i] = (iv1 && iv2) ? iv2->includes(*iv1) : false;
 })
 
@@ -606,11 +890,36 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalProperlyIncludesFunc, {
 	result_data[i] = (iv1 && iv2) ? iv1->properly_includes(*iv2) : false;
 })
 
-DEFINE_TWO_STR_BOOL_UDF(IntervalProperlyIncludedInFunc, {
-	auto iv1 = cql::Interval::parse(a_str);
-	auto iv2 = cql::Interval::parse(b_str);
-	result_data[i] = (iv1 && iv2) ? iv2->properly_includes(*iv1) : false;
-})
+static void IntervalProperlyIncludedInFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, b_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto b_idx = b_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto iv1 = cql::Interval::parse(a_vals[a_idx].GetString());
+		if (!iv1) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		if (!b_data.validity.RowIsValid(b_idx)) {
+			result_data[i] = true;
+			continue;
+		}
+		auto iv2 = cql::Interval::parse(b_vals[b_idx].GetString());
+		result_data[i] = iv2 ? iv2->properly_includes(*iv1) : false;
+	}
+}
 
 DEFINE_TWO_STR_BOOL_UDF(IntervalOverlapsBeforeFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
@@ -687,9 +996,52 @@ DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsPreciseFunc, iv1->overlaps(*iv2, *prec)
 DEFINE_PREC_INTERVAL_UDF(IntervalBeforePreciseFunc, iv1->before(*iv2, *prec))
 DEFINE_PREC_INTERVAL_UDF(IntervalAfterPreciseFunc, iv1->after(*iv2, *prec))
 DEFINE_PREC_INTERVAL_UDF(IntervalIncludesPreciseFunc, iv1->includes(*iv2, *prec))
-DEFINE_PREC_INTERVAL_UDF(IntervalIncludedInPreciseFunc, iv2->includes(*iv1, *prec))
 DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsBeforePreciseFunc, iv1->overlaps_before(*iv2, *prec))
 DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsAfterPreciseFunc, iv1->overlaps_after(*iv2, *prec))
+
+static void IntervalIncludedInPreciseFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, b_data, p_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	args.data[2].ToUnifiedFormat(count, p_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
+	auto p_vals = UnifiedVectorFormat::GetData<string_t>(p_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto b_idx = b_data.sel->get_index(i);
+		auto p_idx = p_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx) || !b_data.validity.RowIsValid(b_idx) ||
+		    !p_data.validity.RowIsValid(p_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto prec = cql::precision_from_string(p_vals[p_idx].GetString());
+		auto iv1 = cql::Interval::parse(a_vals[a_idx].GetString());
+		auto iv2 = cql::Interval::parse(b_vals[b_idx].GetString());
+		if (!prec || !iv1 || !iv2) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		if (iv1->low && iv2->low && iv1->low->dt_val && iv2->low->dt_val &&
+		    iv1->low->compare_at_prec(*iv2->low, *prec) == 0 &&
+		    iv1->low->dt_val->precision != iv2->low->dt_val->precision) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		if (iv1->high && iv2->high && iv1->high->dt_val && iv2->high->dt_val &&
+		    iv1->high->compare_at_prec(*iv2->high, *prec) == 0 &&
+		    iv1->high->dt_val->precision != iv2->high->dt_val->precision) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = iv2->includes(*iv1, *prec);
+	}
+}
 
 // Precision-aware contains: (interval, point, precision) → BOOLEAN
 static void IntervalContainsPreciseFunc(DataChunk &args, ExpressionState &state, Vector &result) {
@@ -784,11 +1136,22 @@ static void IntervalFromBoundsFunc(DataChunk &args, ExpressionState &state, Vect
 		auto hc_idx = hc_data.sel->get_index(i);
 
 		cql::Interval iv;
-		if (low_data.validity.RowIsValid(l_idx)) {
-			iv.low = cql::BoundValue::from_string(lows[l_idx].GetString());
+		bool low_supplied = low_data.validity.RowIsValid(l_idx);
+		bool high_supplied = high_data.validity.RowIsValid(h_idx);
+		if (!low_supplied && !high_supplied) {
+			result_mask.SetInvalid(i);
+			continue;
 		}
-		if (high_data.validity.RowIsValid(h_idx)) {
-			iv.high = cql::BoundValue::from_string(highs[h_idx].GetString());
+
+		std::string low_raw = low_supplied ? lows[l_idx].GetString() : "";
+		std::string high_raw = high_supplied ? highs[h_idx].GetString() : "";
+		bool low_datetime_like = low_supplied && LooksDateTimeLikeBound(low_raw);
+		bool high_datetime_like = high_supplied && LooksDateTimeLikeBound(high_raw);
+		if (low_supplied) {
+			iv.low = ParseIntervalBoundWithPeer(low_raw, high_datetime_like);
+		}
+		if (high_supplied) {
+			iv.high = ParseIntervalBoundWithPeer(high_raw, low_datetime_like);
 		}
 		iv.low_closed = lc_data.validity.RowIsValid(lc_idx) ? lcs[lc_idx] : true;
 		iv.high_closed = hc_data.validity.RowIsValid(hc_idx) ? hcs[hc_idx] : true;
@@ -799,11 +1162,622 @@ static void IntervalFromBoundsFunc(DataChunk &args, ExpressionState &state, Vect
 		}
 
 		if (!iv.low && !iv.high) {
-			result_mask.SetInvalid(i);
-		} else {
 			result_data[i] = StringVector::AddString(result, iv.to_json());
+			continue;
+		}
+		if (iv.low && iv.high) {
+			int cmp = iv.low->compare(*iv.high);
+			if (cmp > 0 || (cmp == 0 && !(iv.low_closed && iv.high_closed))) {
+				throw InvalidInputException("Invalid CQL interval: low bound is after high bound");
+			}
+		}
+		result_data[i] = StringVector::AddString(result, iv.to_json());
+	}
+}
+
+DEFINE_ONE_STR_STR_UDF(IntervalSizeFunc, {
+	auto iv = cql::Interval::parse(a_str);
+	if (!iv || !iv->low || !iv->high) { result_mask.SetInvalid(i); continue; }
+	if (iv->bound_type == cql::BoundType::Integer && iv->low->int_val && iv->high->int_val) {
+		int64_t low = *iv->low->int_val + (iv->low_closed ? 0 : 1);
+		int64_t high = *iv->high->int_val - (iv->high_closed ? 0 : 1);
+		if (high < low) {
+			result_data[i] = StringVector::AddString(result, "0");
+		} else {
+			result_data[i] = StringVector::AddString(result, std::to_string(high - low + 1));
+		}
+		continue;
+	}
+	auto width = iv->width_string();
+	if (!width) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *width);
+})
+
+struct ExpandStep {
+	double value = 1.0;
+	std::string unit;
+	bool supplied = false;
+};
+
+struct ExpandedInterval {
+	std::string low;
+	std::string high;
+	bool quote_values = false;
+
+	ExpandedInterval() {
+	}
+	ExpandedInterval(std::string low_value, std::string high_value, bool quote)
+	    : low(std::move(low_value)), high(std::move(high_value)), quote_values(quote) {
+	}
+};
+
+static const size_t MAX_EXPAND_POINTS = 10000;
+
+static std::string LowerAscii(std::string value) {
+	std::transform(value.begin(), value.end(), value.begin(),
+	               [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+	return value;
+}
+
+static bool IsTemporalExpandUnit(const std::string &unit) {
+	std::string u = LowerAscii(unit);
+	return u == "year" || u == "years" || u == "a" || u == "month" || u == "months" || u == "mo" ||
+	       u == "week" || u == "weeks" || u == "wk" || u == "day" || u == "days" || u == "d" ||
+	       u == "hour" || u == "hours" || u == "h" || u == "minute" || u == "minutes" || u == "min" ||
+	       u == "second" || u == "seconds" || u == "s" || u == "millisecond" || u == "milliseconds" ||
+	       u == "ms";
+}
+
+static ExpandStep ParseExpandStep(const std::string &per) {
+	ExpandStep step;
+	auto quantity = cql::parse_quantity_json(per);
+	if (!quantity) {
+		return step;
+	}
+	step.value = quantity->value;
+	step.unit = quantity->code;
+	step.supplied = true;
+	return step;
+}
+
+static void AppendJsonQuoted(std::ostringstream &oss, const std::string &value) {
+	oss << "\"";
+	for (char ch : value) {
+		switch (ch) {
+		case '\\':
+			oss << "\\\\";
+			break;
+		case '"':
+			oss << "\\\"";
+			break;
+		case '\n':
+			oss << "\\n";
+			break;
+		case '\r':
+			oss << "\\r";
+			break;
+		case '\t':
+			oss << "\\t";
+			break;
+		default:
+			oss << ch;
+			break;
 		}
 	}
+	oss << "\"";
+}
+
+static void AppendJsonScalar(std::ostringstream &oss, const std::string &value, bool quote) {
+	if (quote) {
+		AppendJsonQuoted(oss, value);
+	} else {
+		oss << value;
+	}
+}
+
+static std::string FormatDecimalForJson(double value) {
+	std::ostringstream oss;
+	oss << std::fixed << std::setprecision(8) << value;
+	std::string out = oss.str();
+	while (out.size() > 2 && out.back() == '0' && out[out.size() - 2] != '.') {
+		out.pop_back();
+	}
+	if (out.find('.') == std::string::npos) {
+		out += ".0";
+	}
+	return out;
+}
+
+static std::string SerializeExpandedPoints(const std::vector<ExpandedInterval> &items) {
+	std::ostringstream oss;
+	oss << "[";
+	for (size_t idx = 0; idx < items.size(); idx++) {
+		if (idx > 0) {
+			oss << ",";
+		}
+		AppendJsonScalar(oss, items[idx].low, items[idx].quote_values);
+	}
+	oss << "]";
+	return oss.str();
+}
+
+static std::string SerializeExpandedIntervals(const std::vector<ExpandedInterval> &items) {
+	std::ostringstream oss;
+	oss << "[";
+	for (size_t idx = 0; idx < items.size(); idx++) {
+		if (idx > 0) {
+			oss << ",";
+		}
+		oss << "{\"low\":";
+		AppendJsonScalar(oss, items[idx].low, items[idx].quote_values);
+		oss << ",\"high\":";
+		AppendJsonScalar(oss, items[idx].high, items[idx].quote_values);
+		oss << ",\"lowClosed\":true,\"highClosed\":true}";
+	}
+	oss << "]";
+	return oss.str();
+}
+
+static cql::Optional<std::vector<ExpandedInterval>>
+ExpandNumericInterval(double low, double high, bool low_closed, bool high_closed, double step_value, bool integer_mode) {
+	if (step_value <= 0 || std::isnan(step_value) || std::isinf(step_value)) {
+		return cql::NullOpt<std::vector<ExpandedInterval>>();
+	}
+
+	double start = low + (low_closed ? 0.0 : (integer_mode ? 1.0 : 1e-8));
+	double end = high - (high_closed ? 0.0 : (integer_mode ? 1.0 : 1e-8));
+	std::vector<ExpandedInterval> result;
+	if (end + 1e-12 < start) {
+		return result;
+	}
+
+	if (integer_mode) {
+		int64_t current = static_cast<int64_t>(start);
+		int64_t last = static_cast<int64_t>(end);
+		int64_t step = static_cast<int64_t>(step_value);
+		if (step <= 0 || static_cast<double>(step) != step_value) {
+			return cql::NullOpt<std::vector<ExpandedInterval>>();
+		}
+		while (current <= last && result.size() < MAX_EXPAND_POINTS) {
+			int64_t interval_end = current + step - 1;
+			if (interval_end > last) {
+				break;
+			}
+			result.push_back({std::to_string(current), std::to_string(interval_end), false});
+			current += step;
+		}
+		return result;
+	}
+
+	double current = start;
+	while (current <= end + 1e-10 && result.size() < MAX_EXPAND_POINTS) {
+		std::string point = FormatDecimalForJson(current);
+		result.push_back({point, point, false});
+		current += step_value;
+	}
+	return result;
+}
+
+static cql::DateTimeValue::Precision PrecisionForExpandUnit(const std::string &unit,
+                                                            cql::DateTimeValue::Precision fallback) {
+	std::string u = LowerAscii(unit);
+	if (u == "year" || u == "years" || u == "a") {
+		return cql::DateTimeValue::Precision::Year;
+	}
+	if (u == "month" || u == "months" || u == "mo") {
+		return cql::DateTimeValue::Precision::Month;
+	}
+	if (u == "week" || u == "weeks" || u == "wk" || u == "day" || u == "days" || u == "d") {
+		return cql::DateTimeValue::Precision::Day;
+	}
+	if (u == "hour" || u == "hours" || u == "h") {
+		return cql::DateTimeValue::Precision::Hour;
+	}
+	if (u == "minute" || u == "minutes" || u == "min") {
+		return cql::DateTimeValue::Precision::Minute;
+	}
+	if (u == "second" || u == "seconds" || u == "s") {
+		return cql::DateTimeValue::Precision::Second;
+	}
+	if (u == "millisecond" || u == "milliseconds" || u == "ms") {
+		return cql::DateTimeValue::Precision::Millisecond;
+	}
+	return fallback;
+}
+
+static int ExpandPrecisionRank(cql::DateTimeValue::Precision precision) {
+	switch (precision) {
+	case cql::DateTimeValue::Precision::Year:
+		return 0;
+	case cql::DateTimeValue::Precision::Month:
+		return 1;
+	case cql::DateTimeValue::Precision::Day:
+		return 2;
+	case cql::DateTimeValue::Precision::Hour:
+		return 3;
+	case cql::DateTimeValue::Precision::Minute:
+		return 4;
+	case cql::DateTimeValue::Precision::Second:
+		return 5;
+	case cql::DateTimeValue::Precision::Millisecond:
+		return 6;
+	}
+	return 2;
+}
+
+static cql::DateTimeValue AddExpandStep(const cql::DateTimeValue &dt, double value, const std::string &unit) {
+	std::string u = LowerAscii(unit);
+	int64_t count = static_cast<int64_t>(value);
+	cql::DateTimeValue result;
+	if (u == "year" || u == "years" || u == "a") {
+		result = AddYears(dt, static_cast<int32_t>(count));
+	} else if (u == "month" || u == "months" || u == "mo") {
+		result = AddMonths(dt, static_cast<int32_t>(count));
+	} else if (u == "week" || u == "weeks" || u == "wk") {
+		result = AddDays(dt, count * 7);
+	} else if (u == "day" || u == "days" || u == "d") {
+		result = AddDays(dt, count);
+	} else {
+		int64_t millis = 0;
+		if (u == "hour" || u == "hours" || u == "h") {
+			millis = static_cast<int64_t>(value * static_cast<double>(MS_PER_HOUR));
+		} else if (u == "minute" || u == "minutes" || u == "min") {
+			millis = static_cast<int64_t>(value * static_cast<double>(MS_PER_MINUTE));
+		} else if (u == "second" || u == "seconds" || u == "s") {
+			millis = static_cast<int64_t>(value * static_cast<double>(MS_PER_SECOND));
+		} else {
+			millis = static_cast<int64_t>(value);
+		}
+		result = AddMilliseconds(dt, millis);
+		result.has_time = true;
+	}
+	result.is_time = dt.is_time;
+	result.precision = PrecisionForExpandUnit(unit, dt.precision);
+	if (ExpandPrecisionRank(result.precision) >= ExpandPrecisionRank(cql::DateTimeValue::Precision::Hour)) {
+		result.has_time = true;
+	}
+	return result;
+}
+
+static cql::DateTimeValue SubtractExpandStep(const cql::DateTimeValue &dt, double value, const std::string &unit) {
+	return AddExpandStep(dt, -value, unit);
+}
+
+static cql::DateTimeValue ExpandIntervalEndPredecessor(const cql::DateTimeValue &next,
+                                                       const cql::DateTimeValue &current,
+                                                       const std::string &unit) {
+	std::string u = LowerAscii(unit);
+	if (current.is_time || current.has_time || u == "hour" || u == "hours" || u == "h" || u == "minute" ||
+	    u == "minutes" || u == "min" || u == "second" || u == "seconds" || u == "s" ||
+	    u == "millisecond" || u == "milliseconds" || u == "ms") {
+		auto result = AddMilliseconds(next, -1);
+		result.is_time = current.is_time;
+		result.has_time = true;
+		result.precision = PrecisionForExpandUnit(unit, current.precision);
+		return result;
+	}
+	auto result = AddDays(next, -1);
+	result.precision = PrecisionForExpandUnit(unit, current.precision);
+	return result;
+}
+
+static cql::Optional<std::vector<ExpandedInterval>>
+ExpandTemporalInterval(const cql::Interval &iv, const ExpandStep &step) {
+	if (!iv.low || !iv.high || !iv.low->dt_val || !iv.high->dt_val) {
+		return cql::NullOpt<std::vector<ExpandedInterval>>();
+	}
+
+	std::string unit = step.supplied && !step.unit.empty() ? step.unit : (iv.bound_type == cql::BoundType::Time ? "hour" : "day");
+	double step_value = step.supplied ? step.value : 1.0;
+	if (step_value <= 0 || std::isnan(step_value) || std::isinf(step_value)) {
+		return cql::NullOpt<std::vector<ExpandedInterval>>();
+	}
+
+	cql::DateTimeValue start = *iv.low->dt_val;
+	cql::DateTimeValue end = *iv.high->dt_val;
+	if (!iv.low_closed) {
+		start = AddExpandStep(start, step_value, unit);
+	}
+	if (!iv.high_closed) {
+		end = SubtractExpandStep(end, step_value, unit);
+	}
+	start.precision = PrecisionForExpandUnit(unit, start.precision);
+	end.precision = PrecisionForExpandUnit(unit, end.precision);
+	if (ExpandPrecisionRank(start.precision) >= ExpandPrecisionRank(cql::DateTimeValue::Precision::Hour)) {
+		start.has_time = true;
+	}
+	if (ExpandPrecisionRank(end.precision) >= ExpandPrecisionRank(cql::DateTimeValue::Precision::Hour)) {
+		end.has_time = true;
+	}
+
+	std::vector<ExpandedInterval> result;
+	if (start > end) {
+		return result;
+	}
+
+	cql::DateTimeValue current = start;
+	while (current <= end && result.size() < MAX_EXPAND_POINTS) {
+		cql::DateTimeValue next = AddExpandStep(current, step_value, unit);
+		cql::DateTimeValue interval_end = ExpandIntervalEndPredecessor(next, current, unit);
+		if (interval_end > end) {
+			interval_end = end;
+		}
+		result.push_back({current.to_string(), interval_end.to_string(), true});
+		current = next;
+	}
+	return result;
+}
+
+static int64_t TimeMillisOfDay(const cql::DateTimeValue &value) {
+	return static_cast<int64_t>(value.hour) * MS_PER_HOUR + static_cast<int64_t>(value.minute) * MS_PER_MINUTE +
+	       static_cast<int64_t>(value.second) * MS_PER_SECOND + value.millisecond;
+}
+
+static int64_t TimeStepMillis(double value, const std::string &unit) {
+	std::string u = LowerAscii(unit);
+	if (u == "hour" || u == "hours" || u == "h") {
+		return static_cast<int64_t>(value * static_cast<double>(MS_PER_HOUR));
+	}
+	if (u == "minute" || u == "minutes" || u == "min") {
+		return static_cast<int64_t>(value * static_cast<double>(MS_PER_MINUTE));
+	}
+	if (u == "second" || u == "seconds" || u == "s") {
+		return static_cast<int64_t>(value * static_cast<double>(MS_PER_SECOND));
+	}
+	return static_cast<int64_t>(value);
+}
+
+static std::string FormatTimeMillisForRank(int64_t millis, int rank) {
+	if (millis < 0) {
+		millis = 0;
+	}
+	int64_t hour = millis / MS_PER_HOUR;
+	int64_t rem = millis % MS_PER_HOUR;
+	int64_t minute = rem / MS_PER_MINUTE;
+	rem %= MS_PER_MINUTE;
+	int64_t second = rem / MS_PER_SECOND;
+	int64_t ms = rem % MS_PER_SECOND;
+	std::ostringstream oss;
+	oss << "T" << std::setw(2) << std::setfill('0') << hour;
+	if (rank >= ExpandPrecisionRank(cql::DateTimeValue::Precision::Minute)) {
+		oss << ":" << std::setw(2) << std::setfill('0') << minute;
+	}
+	if (rank >= ExpandPrecisionRank(cql::DateTimeValue::Precision::Second)) {
+		oss << ":" << std::setw(2) << std::setfill('0') << second;
+	}
+	if (rank >= ExpandPrecisionRank(cql::DateTimeValue::Precision::Millisecond)) {
+		oss << "." << std::setw(3) << std::setfill('0') << ms;
+	}
+	return oss.str();
+}
+
+static cql::Optional<std::vector<ExpandedInterval>>
+ExpandTimeInterval(const cql::Interval &iv, const ExpandStep &step) {
+	if (!iv.low || !iv.high || !iv.low->dt_val || !iv.high->dt_val) {
+		return cql::NullOpt<std::vector<ExpandedInterval>>();
+	}
+	std::string unit = step.supplied && !step.unit.empty() ? step.unit : "hour";
+	double step_value = step.supplied ? step.value : 1.0;
+	if (step_value <= 0 || std::isnan(step_value) || std::isinf(step_value)) {
+		return cql::NullOpt<std::vector<ExpandedInterval>>();
+	}
+
+	int input_rank = ExpandPrecisionRank(iv.low->dt_val->precision);
+	int per_rank = ExpandPrecisionRank(PrecisionForExpandUnit(unit, cql::DateTimeValue::Precision::Hour));
+	if (per_rank > input_rank) {
+		return std::vector<ExpandedInterval>();
+	}
+
+	int64_t step_ms = TimeStepMillis(step_value, unit);
+	if (step_ms <= 0) {
+		return cql::NullOpt<std::vector<ExpandedInterval>>();
+	}
+	int64_t start = TimeMillisOfDay(*iv.low->dt_val);
+	int64_t end = TimeMillisOfDay(*iv.high->dt_val);
+	if (!iv.low_closed) {
+		start += 1;
+		int64_t remainder = start % step_ms;
+		if (remainder != 0) {
+			start += step_ms - remainder;
+		}
+	}
+	if (!iv.high_closed) {
+		end -= 1;
+	}
+
+	std::vector<ExpandedInterval> result;
+	if (end < start) {
+		return result;
+	}
+	while (start <= end && result.size() < MAX_EXPAND_POINTS) {
+		std::string point = FormatTimeMillisForRank(start, per_rank);
+		result.push_back({point, point, true});
+		start += step_ms;
+	}
+	return result;
+}
+
+static cql::Optional<std::vector<ExpandedInterval>>
+ExpandIntervalUnits(const cql::Interval &iv, const ExpandStep &step) {
+	if (!iv.low || !iv.high) {
+		return cql::NullOpt<std::vector<ExpandedInterval>>();
+	}
+
+	if (iv.bound_type == cql::BoundType::Integer && iv.low->int_val && iv.high->int_val) {
+		if (step.supplied && IsTemporalExpandUnit(step.unit)) {
+			return std::vector<ExpandedInterval>();
+		}
+		double step_value = step.supplied ? step.value : 1.0;
+		if (std::fabs(step_value - std::floor(step_value)) > 1e-12) {
+			double low = static_cast<double>(*iv.low->int_val) + (iv.low_closed ? 0.0 : 1.0);
+			double high = static_cast<double>(*iv.high->int_val) + (iv.high_closed ? 1.0 : 0.0) - 1e-8;
+			return ExpandNumericInterval(low, high, true, true, step_value, false);
+		}
+		return ExpandNumericInterval(static_cast<double>(*iv.low->int_val), static_cast<double>(*iv.high->int_val),
+		                             iv.low_closed, iv.high_closed, step_value, true);
+	}
+
+	if (iv.bound_type == cql::BoundType::Decimal && iv.low->dec_val && iv.high->dec_val) {
+		if (step.supplied && IsTemporalExpandUnit(step.unit)) {
+			return std::vector<ExpandedInterval>();
+		}
+		double step_value = step.supplied ? step.value : 1e-8;
+		return ExpandNumericInterval(*iv.low->dec_val, *iv.high->dec_val, iv.low_closed, iv.high_closed, step_value,
+		                             false);
+	}
+
+	if (iv.bound_type == cql::BoundType::Quantity && iv.low->qty_numeric && iv.high->qty_numeric) {
+		if (step.supplied && IsTemporalExpandUnit(step.unit)) {
+			return std::vector<ExpandedInterval>();
+		}
+		double step_value = step.supplied ? step.value : 1e-8;
+		return ExpandNumericInterval(*iv.low->qty_numeric, *iv.high->qty_numeric, iv.low_closed, iv.high_closed,
+		                             step_value, false);
+	}
+
+	if (iv.bound_type == cql::BoundType::Time) {
+		return ExpandTimeInterval(iv, step);
+	}
+
+	if (iv.bound_type == cql::BoundType::DateTime) {
+		return ExpandTemporalInterval(iv, step);
+	}
+
+	return cql::NullOpt<std::vector<ExpandedInterval>>();
+}
+
+static cql::Optional<std::string> ExpandIntervalPointsJson(const cql::Interval &iv, const ExpandStep &step) {
+	auto expanded = ExpandIntervalUnits(iv, step);
+	if (!expanded) {
+		return cql::NullOpt<std::string>();
+	}
+	return SerializeExpandedPoints(*expanded);
+}
+
+static cql::Optional<std::string> ExpandIntervalListJson(const std::vector<std::string> &intervals,
+                                                         const ExpandStep &step) {
+	std::vector<ExpandedInterval> all;
+	for (const auto &item : intervals) {
+		auto iv = cql::Interval::parse(item);
+		if (!iv) {
+			continue;
+		}
+		auto expanded = ExpandIntervalUnits(*iv, step);
+		if (!expanded) {
+			continue;
+		}
+		all.insert(all.end(), expanded->begin(), expanded->end());
+		if (all.size() > MAX_EXPAND_POINTS) {
+			return cql::NullOpt<std::string>();
+		}
+	}
+	return SerializeExpandedIntervals(all);
+}
+
+DEFINE_ONE_STR_STR_UDF(ExpandPoints1Func, {
+	auto iv = cql::Interval::parse(a_str);
+	if (!iv) { result_mask.SetInvalid(i); continue; }
+	ExpandStep step;
+	auto expanded = ExpandIntervalPointsJson(*iv, step);
+	if (!expanded) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *expanded);
+})
+
+static void ExpandPointsFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat interval_data, per_data;
+	args.data[0].ToUnifiedFormat(count, interval_data);
+	args.data[1].ToUnifiedFormat(count, per_data);
+	auto intervals = UnifiedVectorFormat::GetData<string_t>(interval_data);
+	auto pers = UnifiedVectorFormat::GetData<string_t>(per_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto interval_idx = interval_data.sel->get_index(i);
+		auto per_idx = per_data.sel->get_index(i);
+		if (!interval_data.validity.RowIsValid(interval_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto iv = cql::Interval::parse(intervals[interval_idx].GetString());
+		if (!iv) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		ExpandStep step;
+		if (per_data.validity.RowIsValid(per_idx)) {
+			step = ParseExpandStep(pers[per_idx].GetString());
+		}
+		auto expanded = ExpandIntervalPointsJson(*iv, step);
+		if (!expanded) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = StringVector::AddString(result, *expanded);
+	}
+}
+
+static void ExpandListInternal(DataChunk &args, Vector &result, bool has_per) {
+	idx_t count = args.size();
+	auto &list_vec = args.data[0];
+	UnifiedVectorFormat list_data;
+	list_vec.ToUnifiedFormat(count, list_data);
+	auto list_entries = UnifiedVectorFormat::GetData<list_entry_t>(list_data);
+	auto &child_vec = ListVector::GetEntry(list_vec);
+	UnifiedVectorFormat child_data;
+	child_vec.ToUnifiedFormat(ListVector::GetListSize(list_vec), child_data);
+	auto child_vals = UnifiedVectorFormat::GetData<string_t>(child_data);
+
+	UnifiedVectorFormat per_data;
+	const string_t *pers = nullptr;
+	if (has_per) {
+		args.data[1].ToUnifiedFormat(count, per_data);
+		pers = UnifiedVectorFormat::GetData<string_t>(per_data);
+	}
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto list_idx = list_data.sel->get_index(i);
+		if (!list_data.validity.RowIsValid(list_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		ExpandStep step;
+		if (has_per) {
+			auto per_idx = per_data.sel->get_index(i);
+			if (per_data.validity.RowIsValid(per_idx)) {
+				step = ParseExpandStep(pers[per_idx].GetString());
+			}
+		}
+		std::vector<std::string> intervals;
+		auto &entry = list_entries[list_idx];
+		for (idx_t offset = 0; offset < entry.length; offset++) {
+			auto child_idx = child_data.sel->get_index(entry.offset + offset);
+			if (child_data.validity.RowIsValid(child_idx)) {
+				intervals.push_back(child_vals[child_idx].GetString());
+			}
+		}
+		auto expanded = ExpandIntervalListJson(intervals, step);
+		if (!expanded) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = StringVector::AddString(result, *expanded);
+	}
+}
+
+static void Expand1Func(DataChunk &args, ExpressionState &state, Vector &result) {
+	ExpandListInternal(args, result, false);
+}
+
+static void ExpandFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	ExpandListInternal(args, result, true);
 }
 
 // dateTimeNow() → VARCHAR
@@ -999,6 +1973,702 @@ static void DateTimeSameOrAfterFunc(DataChunk &args, ExpressionState &state, Vec
 			}
 		}
 		result_data[i] = a_dt->compare_at_precision(*b_dt, prec) >= 0;
+	}
+}
+
+struct TemporalCompareResult {
+	int cmp;
+	bool certain;
+};
+
+static cql::Optional<cql::DateTimeValue::Precision> PrecisionFromName(const std::string &name) {
+	if (name == "year") {
+		return cql::DateTimeValue::Precision::Year;
+	}
+	if (name == "month") {
+		return cql::DateTimeValue::Precision::Month;
+	}
+	if (name == "day") {
+		return cql::DateTimeValue::Precision::Day;
+	}
+	if (name == "hour") {
+		return cql::DateTimeValue::Precision::Hour;
+	}
+	if (name == "minute") {
+		return cql::DateTimeValue::Precision::Minute;
+	}
+	if (name == "second") {
+		return cql::DateTimeValue::Precision::Second;
+	}
+	if (name == "millisecond") {
+		return cql::DateTimeValue::Precision::Millisecond;
+	}
+	return cql::NullOpt<cql::DateTimeValue::Precision>();
+}
+
+static int PrecisionRank(cql::DateTimeValue::Precision precision) {
+	switch (precision) {
+	case cql::DateTimeValue::Precision::Year:
+		return 0;
+	case cql::DateTimeValue::Precision::Month:
+		return 1;
+	case cql::DateTimeValue::Precision::Day:
+		return 2;
+	case cql::DateTimeValue::Precision::Hour:
+		return 3;
+	case cql::DateTimeValue::Precision::Minute:
+		return 4;
+	case cql::DateTimeValue::Precision::Second:
+		return 5;
+	case cql::DateTimeValue::Precision::Millisecond:
+		return 6;
+	}
+	return 6;
+}
+
+static cql::DateTimeValue::Precision PrecisionByRank(int rank) {
+	switch (rank) {
+	case 0:
+		return cql::DateTimeValue::Precision::Year;
+	case 1:
+		return cql::DateTimeValue::Precision::Month;
+	case 2:
+		return cql::DateTimeValue::Precision::Day;
+	case 3:
+		return cql::DateTimeValue::Precision::Hour;
+	case 4:
+		return cql::DateTimeValue::Precision::Minute;
+	case 5:
+		return cql::DateTimeValue::Precision::Second;
+	default:
+		return cql::DateTimeValue::Precision::Millisecond;
+	}
+}
+
+static cql::DateTimeValue DateTimeFromEpochMillis(int64_t millis, const cql::DateTimeValue &source) {
+	int64_t days = FloorDiv(millis, MS_PER_DAY);
+	int64_t ms_of_day = millis - days * MS_PER_DAY;
+	if (ms_of_day < 0) {
+		ms_of_day += MS_PER_DAY;
+		days--;
+	}
+
+	// Howard Hinnant civil_from_days algorithm, with days relative to 1970-01-01.
+	int64_t z = days + 719468;
+	int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+	uint64_t doe = static_cast<uint64_t>(z - era * 146097);
+	uint64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+	int64_t y = static_cast<int64_t>(yoe) + era * 400;
+	uint64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+	uint64_t mp = (5 * doy + 2) / 153;
+	uint64_t d = doy - (153 * mp + 2) / 5 + 1;
+	int64_t m = static_cast<int64_t>(mp) + (mp < 10 ? 3 : -9);
+	y += (m <= 2);
+
+	cql::DateTimeValue out = source;
+	out.year = static_cast<int32_t>(y);
+	out.month = static_cast<int32_t>(m);
+	out.day = static_cast<int32_t>(d);
+	out.hour = static_cast<int32_t>(ms_of_day / MS_PER_HOUR);
+	ms_of_day %= MS_PER_HOUR;
+	out.minute = static_cast<int32_t>(ms_of_day / MS_PER_MINUTE);
+	ms_of_day %= MS_PER_MINUTE;
+	out.second = static_cast<int32_t>(ms_of_day / MS_PER_SECOND);
+	out.millisecond = static_cast<int32_t>(ms_of_day % MS_PER_SECOND);
+	out.has_tz = false;
+	out.tz_offset_minutes = 0;
+	return out;
+}
+
+static cql::DateTimeValue NormalizeForTemporalCompare(const cql::DateTimeValue &value) {
+	if (!value.has_tz) {
+		return value;
+	}
+	return DateTimeFromEpochMillis(ToEpochMillisForElapsed(value), value);
+}
+
+static int CompareTemporalComponents(const cql::DateTimeValue &left, const cql::DateTimeValue &right,
+                                     cql::DateTimeValue::Precision precision) {
+	if (left.year != right.year) {
+		return left.year < right.year ? -1 : 1;
+	}
+	if (precision == cql::DateTimeValue::Precision::Year) {
+		return 0;
+	}
+	if (left.month != right.month) {
+		return left.month < right.month ? -1 : 1;
+	}
+	if (precision == cql::DateTimeValue::Precision::Month) {
+		return 0;
+	}
+	if (left.day != right.day) {
+		return left.day < right.day ? -1 : 1;
+	}
+	if (precision == cql::DateTimeValue::Precision::Day) {
+		return 0;
+	}
+	if (left.hour != right.hour) {
+		return left.hour < right.hour ? -1 : 1;
+	}
+	if (precision == cql::DateTimeValue::Precision::Hour) {
+		return 0;
+	}
+	if (left.minute != right.minute) {
+		return left.minute < right.minute ? -1 : 1;
+	}
+	if (precision == cql::DateTimeValue::Precision::Minute) {
+		return 0;
+	}
+	if (left.second != right.second) {
+		return left.second < right.second ? -1 : 1;
+	}
+	if (precision == cql::DateTimeValue::Precision::Second) {
+		return 0;
+	}
+	if (left.millisecond != right.millisecond) {
+		return left.millisecond < right.millisecond ? -1 : 1;
+	}
+	return 0;
+}
+
+static std::string ExtractTemporalOperand(const std::string &value) {
+	if (!value.empty() && value[0] == '{') {
+		auto iv = cql::Interval::parse(value);
+		if (iv && iv->low) {
+			return iv->low->to_string();
+		}
+	}
+	return value;
+}
+
+static cql::Optional<TemporalCompareResult>
+CompareTemporal(const std::string &left, const std::string &right,
+                const cql::Optional<cql::DateTimeValue::Precision> &specified_precision) {
+	auto a_dt = cql::DateTimeValue::parse(ExtractTemporalOperand(left));
+	auto b_dt = cql::DateTimeValue::parse(ExtractTemporalOperand(right));
+	if (!a_dt || !b_dt) {
+		return cql::NullOpt<TemporalCompareResult>();
+	}
+
+	cql::DateTimeValue left_dt = (*a_dt).has_tz || (*b_dt).has_tz ? NormalizeForTemporalCompare(*a_dt) : *a_dt;
+	cql::DateTimeValue right_dt = (*a_dt).has_tz || (*b_dt).has_tz ? NormalizeForTemporalCompare(*b_dt) : *b_dt;
+
+	cql::DateTimeValue::Precision target;
+	bool specified = static_cast<bool>(specified_precision);
+	if (specified) {
+		target = *specified_precision;
+	} else {
+		target = PrecisionByRank(std::min(PrecisionRank(left_dt.precision), PrecisionRank(right_dt.precision)));
+	}
+
+	int target_rank = PrecisionRank(target);
+	if (specified && (PrecisionRank(left_dt.precision) < target_rank || PrecisionRank(right_dt.precision) < target_rank)) {
+		auto usable = PrecisionByRank(std::min(std::min(PrecisionRank(left_dt.precision), PrecisionRank(right_dt.precision)),
+		                                       target_rank));
+		int cmp = CompareTemporalComponents(left_dt, right_dt, usable);
+		TemporalCompareResult res;
+		res.cmp = cmp;
+		res.certain = cmp != 0;
+		return res;
+	}
+
+	int cmp = CompareTemporalComponents(left_dt, right_dt, target);
+	bool certain = true;
+	if (!specified && cmp == 0 && PrecisionRank(left_dt.precision) != PrecisionRank(right_dt.precision)) {
+		certain = false;
+	}
+
+	TemporalCompareResult res;
+	res.cmp = cmp;
+	res.certain = certain;
+	return res;
+}
+
+enum class TemporalPredicate { SameOrBefore, SameOrAfter, Before, After, SameAs };
+
+static cql::Optional<bool> EvalTemporalPredicate(const TemporalCompareResult &cmp, TemporalPredicate predicate) {
+	switch (predicate) {
+	case TemporalPredicate::SameOrBefore:
+		if (cmp.cmp < 0) {
+			return true;
+		}
+		if (cmp.cmp > 0) {
+			return false;
+		}
+		return cmp.certain ? cql::Optional<bool>(true) : cql::NullOpt<bool>();
+	case TemporalPredicate::SameOrAfter:
+		if (cmp.cmp > 0) {
+			return true;
+		}
+		if (cmp.cmp < 0) {
+			return false;
+		}
+		return cmp.certain ? cql::Optional<bool>(true) : cql::NullOpt<bool>();
+	case TemporalPredicate::Before:
+		if (cmp.cmp < 0) {
+			return true;
+		}
+		if (cmp.cmp > 0) {
+			return false;
+		}
+		return cmp.certain ? cql::Optional<bool>(false) : cql::NullOpt<bool>();
+	case TemporalPredicate::After:
+		if (cmp.cmp > 0) {
+			return true;
+		}
+		if (cmp.cmp < 0) {
+			return false;
+		}
+		return cmp.certain ? cql::Optional<bool>(false) : cql::NullOpt<bool>();
+	case TemporalPredicate::SameAs:
+		if (cmp.cmp != 0) {
+			return false;
+		}
+		return cmp.certain ? cql::Optional<bool>(true) : cql::NullOpt<bool>();
+	}
+	return cql::NullOpt<bool>();
+}
+
+#define DEFINE_CQL_TEMPORAL_TWO_UDF(FuncName, predicate)                                                               \
+	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
+		idx_t count = args.size();                                                                                     \
+		UnifiedVectorFormat a_data, b_data;                                                                            \
+		args.data[0].ToUnifiedFormat(count, a_data);                                                                   \
+		args.data[1].ToUnifiedFormat(count, b_data);                                                                   \
+		auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);                                                  \
+		auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);                                                  \
+		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
+		auto result_data = FlatVector::GetData<bool>(result);                                                          \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
+		for (idx_t i = 0; i < count; i++) {                                                                            \
+			auto a_idx = a_data.sel->get_index(i);                                                                     \
+			auto b_idx = b_data.sel->get_index(i);                                                                     \
+			if (!a_data.validity.RowIsValid(a_idx) || !b_data.validity.RowIsValid(b_idx)) {                            \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto cmp = CompareTemporal(a_vals[a_idx].GetString(), b_vals[b_idx].GetString(),                           \
+			                           cql::NullOpt<cql::DateTimeValue::Precision>());                                \
+			if (!cmp) {                                                                                                \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto out = EvalTemporalPredicate(*cmp, predicate);                                                         \
+			if (!out) {                                                                                                \
+				result_mask.SetInvalid(i);                                                                             \
+			} else {                                                                                                   \
+				result_data[i] = *out;                                                                                 \
+			}                                                                                                          \
+		}                                                                                                              \
+	}
+
+#define DEFINE_CQL_TEMPORAL_THREE_UDF(FuncName, predicate)                                                             \
+	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                    \
+		idx_t count = args.size();                                                                                     \
+		UnifiedVectorFormat a_data, b_data, p_data;                                                                    \
+		args.data[0].ToUnifiedFormat(count, a_data);                                                                   \
+		args.data[1].ToUnifiedFormat(count, b_data);                                                                   \
+		args.data[2].ToUnifiedFormat(count, p_data);                                                                   \
+		auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);                                                  \
+		auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);                                                  \
+		auto p_vals = UnifiedVectorFormat::GetData<string_t>(p_data);                                                  \
+		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                 \
+		auto result_data = FlatVector::GetData<bool>(result);                                                          \
+		auto &result_mask = FlatVector::Validity(result);                                                              \
+		for (idx_t i = 0; i < count; i++) {                                                                            \
+			auto a_idx = a_data.sel->get_index(i);                                                                     \
+			auto b_idx = b_data.sel->get_index(i);                                                                     \
+			auto p_idx = p_data.sel->get_index(i);                                                                     \
+			if (!a_data.validity.RowIsValid(a_idx) || !b_data.validity.RowIsValid(b_idx) ||                            \
+			    !p_data.validity.RowIsValid(p_idx)) {                                                                  \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto precision = PrecisionFromName(p_vals[p_idx].GetString());                                             \
+			if (!precision) {                                                                                          \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto cmp = CompareTemporal(a_vals[a_idx].GetString(), b_vals[b_idx].GetString(), precision);               \
+			if (!cmp) {                                                                                                \
+				result_mask.SetInvalid(i);                                                                             \
+				continue;                                                                                              \
+			}                                                                                                          \
+			auto out = EvalTemporalPredicate(*cmp, predicate);                                                         \
+			if (!out) {                                                                                                \
+				result_mask.SetInvalid(i);                                                                             \
+			} else {                                                                                                   \
+				result_data[i] = *out;                                                                                 \
+			}                                                                                                          \
+		}                                                                                                              \
+	}
+
+DEFINE_CQL_TEMPORAL_TWO_UDF(CqlSameOrBeforeFunc, TemporalPredicate::SameOrBefore)
+DEFINE_CQL_TEMPORAL_TWO_UDF(CqlSameOrAfterFunc, TemporalPredicate::SameOrAfter)
+DEFINE_CQL_TEMPORAL_TWO_UDF(CqlBeforeFunc, TemporalPredicate::Before)
+DEFINE_CQL_TEMPORAL_TWO_UDF(CqlAfterFunc, TemporalPredicate::After)
+DEFINE_CQL_TEMPORAL_TWO_UDF(CqlDateTimeEqualFunc, TemporalPredicate::SameAs)
+DEFINE_CQL_TEMPORAL_THREE_UDF(CqlSameOrBeforePFunc, TemporalPredicate::SameOrBefore)
+DEFINE_CQL_TEMPORAL_THREE_UDF(CqlSameOrAfterPFunc, TemporalPredicate::SameOrAfter)
+DEFINE_CQL_TEMPORAL_THREE_UDF(CqlBeforePFunc, TemporalPredicate::Before)
+DEFINE_CQL_TEMPORAL_THREE_UDF(CqlAfterPFunc, TemporalPredicate::After)
+DEFINE_CQL_TEMPORAL_THREE_UDF(CqlSameAsPFunc, TemporalPredicate::SameAs)
+
+struct UncertainRange {
+	int64_t low;
+	int64_t high;
+	bool is_interval;
+};
+
+static std::string NormalizeUnitName(const std::string &unit) {
+	std::string u = LowerAscii(unit);
+	if (!u.empty() && u.back() == 's') {
+		u.pop_back();
+	}
+	if (u == "a") {
+		return "year";
+	}
+	if (u == "mo") {
+		return "month";
+	}
+	if (u == "wk") {
+		return "week";
+	}
+	if (u == "d") {
+		return "day";
+	}
+	if (u == "h") {
+		return "hour";
+	}
+	if (u == "min") {
+		return "minute";
+	}
+	if (u == "s") {
+		return "second";
+	}
+	if (u == "ms") {
+		return "millisecond";
+	}
+	return u;
+}
+
+static cql::DateTimeValue::Precision InferPrecisionFromText(const std::string &value) {
+	std::string s = value;
+	for (char tz : {'+', 'Z'}) {
+		auto idx = s.find(tz, 10);
+		if (idx != std::string::npos) {
+			s = s.substr(0, idx);
+			break;
+		}
+	}
+	if (s.size() > 10) {
+		for (size_t pos = s.size(); pos-- > 10;) {
+			if (s[pos] == '-') {
+				s = s.substr(0, pos);
+				break;
+			}
+		}
+	}
+	if (!s.empty() && (s[0] == 'T' || (s.find(':') != std::string::npos && s.find('-') == std::string::npos))) {
+		if (s.find('.') != std::string::npos) return cql::DateTimeValue::Precision::Millisecond;
+		size_t colons = std::count(s.begin(), s.end(), ':');
+		if (colons >= 2) return cql::DateTimeValue::Precision::Second;
+		if (colons >= 1) return cql::DateTimeValue::Precision::Minute;
+		return cql::DateTimeValue::Precision::Hour;
+	}
+	auto t_pos = s.find('T');
+	if (t_pos == std::string::npos) {
+		t_pos = s.find(' ');
+	}
+	if (t_pos != std::string::npos) {
+		std::string time_part = s.substr(t_pos + 1);
+		if (time_part.empty()) {
+			std::string date_part = s.substr(0, t_pos);
+			size_t dashes = std::count(date_part.begin(), date_part.end(), '-');
+			if (dashes >= 2) return cql::DateTimeValue::Precision::Day;
+			if (dashes == 1) return cql::DateTimeValue::Precision::Month;
+			return cql::DateTimeValue::Precision::Year;
+		}
+		if (time_part.find('.') != std::string::npos) return cql::DateTimeValue::Precision::Millisecond;
+		size_t colons = std::count(time_part.begin(), time_part.end(), ':');
+		if (colons >= 2) return cql::DateTimeValue::Precision::Second;
+		if (colons >= 1) return cql::DateTimeValue::Precision::Minute;
+		return cql::DateTimeValue::Precision::Hour;
+	}
+	size_t dashes = std::count(s.begin(), s.end(), '-');
+	if (dashes >= 2) return cql::DateTimeValue::Precision::Day;
+	if (dashes == 1) return cql::DateTimeValue::Precision::Month;
+	return cql::DateTimeValue::Precision::Year;
+}
+
+static cql::DateTimeValue HighBoundaryValue(const std::string &value) {
+	auto parsed = cql::DateTimeValue::parse(value);
+	cql::DateTimeValue out = parsed ? *parsed : cql::DateTimeValue();
+	out.precision = InferPrecisionFromText(value);
+	int rank = PrecisionRank(out.precision);
+	if (rank < PrecisionRank(cql::DateTimeValue::Precision::Millisecond)) out.millisecond = 999;
+	if (rank < PrecisionRank(cql::DateTimeValue::Precision::Second)) out.second = 59;
+	if (rank < PrecisionRank(cql::DateTimeValue::Precision::Minute)) out.minute = 59;
+	if (rank < PrecisionRank(cql::DateTimeValue::Precision::Hour)) out.hour = 23;
+	if (!out.is_time && rank < PrecisionRank(cql::DateTimeValue::Precision::Day)) {
+		out.day = CqlDaysInMonth(out.year, out.month);
+	}
+	if (!out.is_time && rank < PrecisionRank(cql::DateTimeValue::Precision::Month)) {
+		out.month = 12;
+		out.day = 31;
+	}
+	return out;
+}
+
+static cql::Optional<int64_t> ComputeDurationBetweenValue(const cql::DateTimeValue &start,
+                                                          const cql::DateTimeValue &end,
+                                                          const std::string &unit,
+                                                          bool is_week) {
+	std::string u = NormalizeUnitName(unit);
+	if (u == "year") {
+		return DurationInCalendarYears(start, end);
+	}
+	if (u == "month") {
+		return DurationInCalendarMonths(start, end);
+	}
+	if (start.has_tz != end.has_tz) {
+		return cql::NullOpt<int64_t>();
+	}
+	int64_t delta = ToEpochMillisForElapsed(end) - ToEpochMillisForElapsed(start);
+	if (is_week || u == "week") {
+		return static_cast<int64_t>(static_cast<double>(delta) / static_cast<double>(MS_PER_DAY * 7));
+	}
+	if (u == "day") {
+		return static_cast<int64_t>(static_cast<double>(delta) / static_cast<double>(MS_PER_DAY));
+	}
+	if (u == "hour") {
+		return static_cast<int64_t>(static_cast<double>(delta) / static_cast<double>(MS_PER_HOUR));
+	}
+	if (u == "minute") {
+		return static_cast<int64_t>(static_cast<double>(delta) / static_cast<double>(MS_PER_MINUTE));
+	}
+	if (u == "second") {
+		return static_cast<int64_t>(static_cast<double>(delta) / static_cast<double>(MS_PER_SECOND));
+	}
+	if (u == "millisecond") {
+		return delta;
+	}
+	return cql::NullOpt<int64_t>();
+}
+
+static cql::Optional<std::string> CqlDurationBetweenString(const std::string &start_text,
+                                                           const std::string &end_text,
+                                                           const std::string &unit_text) {
+	auto start = cql::DateTimeValue::parse(start_text);
+	auto end = cql::DateTimeValue::parse(end_text);
+	if (!start || !end) {
+		return cql::NullOpt<std::string>();
+	}
+	std::string unit = NormalizeUnitName(unit_text);
+	bool is_week = unit == "week";
+	std::string duration_unit = is_week ? "day" : unit;
+	auto unit_precision = PrecisionFromName(duration_unit);
+	int unit_rank = unit_precision ? PrecisionRank(*unit_precision) : PrecisionRank(cql::DateTimeValue::Precision::Day);
+	int start_rank = PrecisionRank(InferPrecisionFromText(start_text));
+	int end_rank = PrecisionRank(InferPrecisionFromText(end_text));
+	bool date_only = start_text.find('T') == std::string::npos && end_text.find('T') == std::string::npos &&
+	                 !start->is_time && !end->is_time;
+	bool date_unit = duration_unit == "year" || duration_unit == "month" || duration_unit == "day";
+	bool has_finer_precision = start_rank > unit_rank || end_rank > unit_rank;
+	bool date_fully_specified = date_only && date_unit &&
+	                            start_rank == PrecisionRank(cql::DateTimeValue::Precision::Day) &&
+	                            end_rank == PrecisionRank(cql::DateTimeValue::Precision::Day);
+	if (has_finer_precision || date_fully_specified) {
+		auto duration = ComputeDurationBetweenValue(*start, *end, unit_text, is_week);
+		if (!duration) return cql::NullOpt<std::string>();
+		return std::to_string(*duration);
+	}
+
+	auto start_high = HighBoundaryValue(start_text);
+	auto end_high = HighBoundaryValue(end_text);
+	auto min_val = ComputeDurationBetweenValue(start_high, *end, unit_text, is_week);
+	auto max_val = ComputeDurationBetweenValue(*start, end_high, unit_text, is_week);
+	if (!min_val || !max_val) return cql::NullOpt<std::string>();
+	if (*min_val == *max_val) {
+		return std::to_string(*min_val);
+	}
+	std::ostringstream oss;
+	oss << "{\"start\":" << *min_val << ",\"end\":" << *max_val
+	    << ",\"lowClosed\":true,\"highClosed\":true}";
+	return oss.str();
+}
+
+static cql::Optional<UncertainRange> ParseUncertainRange(const std::string &value) {
+	using namespace duckdb_yyjson; // NOLINT
+	try {
+		size_t pos = 0;
+		int64_t scalar = std::stoll(value, &pos);
+		if (pos == value.size()) {
+			return UncertainRange{scalar, scalar, false};
+		}
+	} catch (...) {
+	}
+	yyjson_doc *doc = yyjson_read(value.c_str(), value.size(), 0);
+	if (!doc) return cql::NullOpt<UncertainRange>();
+	yyjson_val *root = yyjson_doc_get_root(doc);
+	if (!root || !yyjson_is_obj(root)) {
+		yyjson_doc_free(doc);
+		return cql::NullOpt<UncertainRange>();
+	}
+	yyjson_val *low = yyjson_obj_get(root, "start");
+	if (!low) low = yyjson_obj_get(root, "low");
+	yyjson_val *high = yyjson_obj_get(root, "end");
+	if (!high) high = yyjson_obj_get(root, "high");
+	if (!low || !high || !yyjson_is_num(low) || !yyjson_is_num(high)) {
+		yyjson_doc_free(doc);
+		return cql::NullOpt<UncertainRange>();
+	}
+	UncertainRange range{static_cast<int64_t>(yyjson_get_num(low)), static_cast<int64_t>(yyjson_get_num(high)), true};
+	yyjson_doc_free(doc);
+	return range;
+}
+
+static std::string FormatUncertainRange(int64_t low, int64_t high) {
+	if (low == high) {
+		return std::to_string(low);
+	}
+	std::ostringstream oss;
+	oss << "{\"start\":" << low << ",\"end\":" << high
+	    << ",\"lowClosed\":true,\"highClosed\":true}";
+	return oss.str();
+}
+
+static void CqlDurationBetweenFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, b_data, u_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	args.data[2].ToUnifiedFormat(count, u_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
+	auto u_vals = UnifiedVectorFormat::GetData<string_t>(u_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto ai = a_data.sel->get_index(i);
+		auto bi = b_data.sel->get_index(i);
+		auto ui = u_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(ai) || !b_data.validity.RowIsValid(bi) || !u_data.validity.RowIsValid(ui)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto out = CqlDurationBetweenString(a_vals[ai].GetString(), b_vals[bi].GetString(), u_vals[ui].GetString());
+		if (!out) {
+			result_mask.SetInvalid(i);
+		} else {
+			result_data[i] = StringVector::AddString(result, *out);
+		}
+	}
+}
+
+#define DEFINE_UNCERTAIN_ARITH(FuncName, expression_low, expression_high)                                             \
+	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                   \
+		idx_t count = args.size();                                                                                    \
+		UnifiedVectorFormat a_data, b_data;                                                                           \
+		args.data[0].ToUnifiedFormat(count, a_data);                                                                  \
+		args.data[1].ToUnifiedFormat(count, b_data);                                                                  \
+		auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);                                                 \
+		auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);                                                 \
+		result.SetVectorType(VectorType::FLAT_VECTOR);                                                                \
+		auto result_data = FlatVector::GetData<string_t>(result);                                                     \
+		auto &result_mask = FlatVector::Validity(result);                                                             \
+		for (idx_t i = 0; i < count; i++) {                                                                           \
+			auto ai = a_data.sel->get_index(i);                                                                       \
+			auto bi = b_data.sel->get_index(i);                                                                       \
+			if (!a_data.validity.RowIsValid(ai) || !b_data.validity.RowIsValid(bi)) {                                  \
+				result_mask.SetInvalid(i);                                                                            \
+				continue;                                                                                             \
+			}                                                                                                         \
+			auto a = ParseUncertainRange(a_vals[ai].GetString());                                                     \
+			auto b = ParseUncertainRange(b_vals[bi].GetString());                                                     \
+			if (!a || !b) { result_mask.SetInvalid(i); continue; }                                                     \
+			int64_t low = (expression_low);                                                                           \
+			int64_t high = (expression_high);                                                                         \
+			result_data[i] = StringVector::AddString(result, FormatUncertainRange(low, high));                        \
+		}                                                                                                             \
+	}
+
+DEFINE_UNCERTAIN_ARITH(CqlUncertainAddFunc, a->low + b->low, a->high + b->high)
+DEFINE_UNCERTAIN_ARITH(CqlUncertainSubtractFunc, a->low - b->high, a->high - b->low)
+
+static void CqlUncertainMultiplyFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, b_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<string_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto ai = a_data.sel->get_index(i);
+		auto bi = b_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(ai) || !b_data.validity.RowIsValid(bi)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto a = ParseUncertainRange(a_vals[ai].GetString());
+		auto b = ParseUncertainRange(b_vals[bi].GetString());
+		if (!a || !b) { result_mask.SetInvalid(i); continue; }
+		std::vector<int64_t> products = {a->low * b->low, a->low * b->high, a->high * b->low, a->high * b->high};
+		auto mm = std::minmax_element(products.begin(), products.end());
+		result_data[i] = StringVector::AddString(result, FormatUncertainRange(*mm.first, *mm.second));
+	}
+}
+
+static void CqlUncertainCompareFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, b_data, op_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	args.data[2].ToUnifiedFormat(count, op_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
+	auto op_vals = UnifiedVectorFormat::GetData<string_t>(op_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto ai = a_data.sel->get_index(i);
+		auto bi = b_data.sel->get_index(i);
+		auto oi = op_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(ai) || !b_data.validity.RowIsValid(bi) || !op_data.validity.RowIsValid(oi)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto a = ParseUncertainRange(a_vals[ai].GetString());
+		auto b = ParseUncertainRange(b_vals[bi].GetString());
+		if (!a || !b) { result_mask.SetInvalid(i); continue; }
+		std::string op = op_vals[oi].GetString();
+		cql::Optional<bool> out = cql::NullOpt<bool>();
+		if (op == ">") {
+			if (a->low > b->high) out = true;
+			else if (a->high <= b->low) out = false;
+		} else if (op == ">=") {
+			if (a->low >= b->high) out = true;
+			else if (a->high < b->low) out = false;
+		} else if (op == "<") {
+			if (a->high < b->low) out = true;
+			else if (a->low >= b->high) out = false;
+		} else if (op == "<=") {
+			if (a->high <= b->low) out = true;
+			else if (a->low > b->high) out = false;
+		} else if (op == "=" || op == "==") {
+			if (a->low == a->high && a->low == b->low && b->low == b->high) out = true;
+			else if (a->high < b->low || a->low > b->high) out = false;
+		}
+		if (!out) {
+			result_mask.SetInvalid(i);
+		} else {
+			result_data[i] = *out;
+		}
 	}
 }
 
@@ -1928,6 +3598,90 @@ static bool IsSubDayUnit(const std::string &unit) {
 	       unit == "ms" || unit == "millisecond" || unit == "milliseconds";
 }
 
+static int UnitPrecisionRank(const std::string &unit) {
+	std::string u = NormalizeUnitName(unit);
+	if (u == "year") return 0;
+	if (u == "month") return 1;
+	if (u == "week" || u == "day") return 2;
+	if (u == "hour") return 3;
+	if (u == "minute") return 4;
+	if (u == "second") return 5;
+	if (u == "millisecond") return 6;
+	return 6;
+}
+
+static int64_t PrecisionConversionDivisor(int from_rank, int to_rank) {
+	static const int64_t conversion[] = {12, 30, 24, 60, 60, 1000};
+	int64_t divisor = 1;
+	for (int rank = from_rank; rank < to_rank && rank < 6; rank++) {
+		divisor *= conversion[rank];
+	}
+	return divisor;
+}
+
+static std::string UnitForPrecisionRank(int rank) {
+	switch (rank) {
+	case 0:
+		return "years";
+	case 1:
+		return "months";
+	case 2:
+		return "days";
+	case 3:
+		return "hours";
+	case 4:
+		return "minutes";
+	case 5:
+		return "seconds";
+	default:
+		return "milliseconds";
+	}
+}
+
+static void ValidateCqlDateTimeRange(const cql::DateTimeValue &dt) {
+	if (dt.year < 1 || dt.year > 9999) {
+		throw InvalidInputException("DateTime arithmetic overflow");
+	}
+}
+
+static cql::DateTimeValue ApplyQuantityAtInputPrecision(const cql::DateTimeValue &dt, double value,
+                                                        std::string unit) {
+	int input_rank = PrecisionRank(dt.precision);
+	int unit_rank = UnitPrecisionRank(unit);
+	double effective_value = value;
+	std::string effective_unit = LowerAscii(unit);
+	if (unit_rank > input_rank) {
+		int64_t divisor = PrecisionConversionDivisor(input_rank, unit_rank);
+		effective_value = divisor > 0 ? static_cast<int64_t>(value) / divisor : static_cast<int64_t>(value);
+		effective_unit = UnitForPrecisionRank(input_rank);
+	}
+	std::string normalized = NormalizeUnitName(effective_unit);
+	cql::DateTimeValue out;
+	int32_t int_value = static_cast<int32_t>(effective_value);
+	if (normalized == "year") {
+		out = AddYears(dt, int_value);
+	} else if (normalized == "month") {
+		out = AddMonths(dt, int_value);
+	} else if (normalized == "week") {
+		out = AddDays(dt, static_cast<int64_t>(effective_value) * 7);
+	} else if (normalized == "day") {
+		out = AddDays(dt, static_cast<int64_t>(effective_value));
+	} else if (IsSubDayUnit(effective_unit)) {
+		out = AddMilliseconds(dt, QuantityToMillis(effective_value, effective_unit));
+	} else {
+		out = AddDays(dt, QuantityToDays(effective_value, effective_unit));
+	}
+	out.precision = dt.precision;
+	out.is_time = dt.is_time;
+	if (PrecisionRank(out.precision) >= PrecisionRank(cql::DateTimeValue::Precision::Hour)) {
+		out.has_time = true;
+	} else {
+		out.has_time = dt.has_time && dt.precision == cql::DateTimeValue::Precision::Day;
+	}
+	ValidateCqlDateTimeRange(out);
+	return out;
+}
+
 // dateAddQuantity(date VARCHAR, quantity VARCHAR) → VARCHAR
 static void DateAddQuantityFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
@@ -1962,19 +3716,7 @@ static void DateAddQuantityFunc(DataChunk &args, ExpressionState &state, Vector 
 		double value = parsed.has_value() ? parsed->value : 0;
 		std::string unit = parsed.has_value() ? parsed->code : "";
 
-		cql::DateTimeValue new_dt;
-		int32_t int_value = static_cast<int32_t>(value);
-		if (unit == "a" || unit == "year" || unit == "years") {
-			new_dt = AddYears(*dt, int_value);
-		} else if (unit == "mo" || unit == "month" || unit == "months") {
-			new_dt = AddMonths(*dt, int_value);
-		} else if (IsSubDayUnit(unit)) {
-			int64_t millis = QuantityToMillis(value, unit);
-			new_dt = AddMilliseconds(*dt, millis);
-		} else {
-			int64_t days = QuantityToDays(value, unit);
-			new_dt = AddDays(*dt, days);
-		}
+		cql::DateTimeValue new_dt = ApplyQuantityAtInputPrecision(*dt, value, unit);
 		result_data[i] = StringVector::AddString(result, new_dt.to_string());
 	}
 }
@@ -2013,19 +3755,7 @@ static void DateSubtractQuantityFunc(DataChunk &args, ExpressionState &state, Ve
 		double value = parsed.has_value() ? parsed->value : 0;
 		std::string unit = parsed.has_value() ? parsed->code : "";
 
-		cql::DateTimeValue new_dt;
-		int32_t int_value = static_cast<int32_t>(value);
-		if (unit == "a" || unit == "year" || unit == "years") {
-			new_dt = AddYears(*dt, -int_value);
-		} else if (unit == "mo" || unit == "month" || unit == "months") {
-			new_dt = AddMonths(*dt, -int_value);
-		} else if (IsSubDayUnit(unit)) {
-			int64_t millis = QuantityToMillis(value, unit);
-			new_dt = AddMilliseconds(*dt, -millis);
-		} else {
-			int64_t days = QuantityToDays(value, unit);
-			new_dt = AddDays(*dt, -days);
-		}
+		cql::DateTimeValue new_dt = ApplyQuantityAtInputPrecision(*dt, -value, unit);
 		result_data[i] = StringVector::AddString(result, new_dt.to_string());
 	}
 }
@@ -2858,17 +4588,127 @@ static void LowBoundaryFunc2(DataChunk &args, ExpressionState &state, Vector &re
 	}
 }
 
+static void HighBoundaryDoubleFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, p_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, p_data);
+	auto a_vals = UnifiedVectorFormat::GetData<double>(a_data);
+	auto p_vals = UnifiedVectorFormat::GetData<int64_t>(p_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto ai = a_data.sel->get_index(i);
+		auto pi = p_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(ai) || !p_data.validity.RowIsValid(pi)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		std::ostringstream oss;
+		oss << std::setprecision(17) << a_vals[ai];
+		auto out = cql::high_boundary(oss.str(), static_cast<int>(p_vals[pi]));
+		if (!out) { result_mask.SetInvalid(i); continue; }
+		result_data[i] = std::stod(*out);
+	}
+}
+
+static void LowBoundaryDoubleFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, p_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, p_data);
+	auto a_vals = UnifiedVectorFormat::GetData<double>(a_data);
+	auto p_vals = UnifiedVectorFormat::GetData<int64_t>(p_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto ai = a_data.sel->get_index(i);
+		auto pi = p_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(ai) || !p_data.validity.RowIsValid(pi)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		std::ostringstream oss;
+		oss << std::setprecision(17) << a_vals[ai];
+		auto out = cql::low_boundary(oss.str(), static_cast<int>(p_vals[pi]));
+		if (!out) { result_mask.SetInvalid(i); continue; }
+		result_data[i] = std::stod(*out);
+	}
+}
+
 DEFINE_ONE_STR_STR_UDF(PredecessorOfFunc, {
 	auto res = cql::predecessor_of(a_str);
-	if (!res) { result_mask.SetInvalid(i); continue; }
+	if (!res) { throw InvalidInputException("predecessorOf underflow or invalid input"); }
 	result_data[i] = StringVector::AddString(result, *res);
 })
 
 DEFINE_ONE_STR_STR_UDF(SuccessorOfFunc, {
 	auto res = cql::successor_of(a_str);
-	if (!res) { result_mask.SetInvalid(i); continue; }
+	if (!res) { throw InvalidInputException("successorOf overflow or invalid input"); }
 	result_data[i] = StringVector::AddString(result, *res);
 })
+
+static void PredecessorOfBigIntFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	auto a_vals = UnifiedVectorFormat::GetData<int64_t>(a_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto ai = a_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(ai)) { result_mask.SetInvalid(i); continue; }
+		result_data[i] = a_vals[ai] - 1;
+	}
+}
+
+static void SuccessorOfBigIntFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	auto a_vals = UnifiedVectorFormat::GetData<int64_t>(a_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<int64_t>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto ai = a_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(ai)) { result_mask.SetInvalid(i); continue; }
+		result_data[i] = a_vals[ai] + 1;
+	}
+}
+
+static void PredecessorOfDoubleFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	auto a_vals = UnifiedVectorFormat::GetData<double>(a_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto ai = a_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(ai)) { result_mask.SetInvalid(i); continue; }
+		result_data[i] = a_vals[ai] - 1e-8;
+	}
+}
+
+static void SuccessorOfDoubleFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	auto a_vals = UnifiedVectorFormat::GetData<double>(a_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = FlatVector::GetData<double>(result);
+	auto &result_mask = FlatVector::Validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto ai = a_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(ai)) { result_mask.SetInvalid(i); continue; }
+		result_data[i] = a_vals[ai] + 1e-8;
+	}
+}
 
 static void CQLPrecisionFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
@@ -3402,9 +5242,10 @@ DEFINE_ONE_STR_STR_UDF(LogicalCoalesceFunc, {
 // Main registration
 // =====================================================================
 static void LoadInternal(ExtensionLoader &loader) {
-	// Age UDFs (9)
+	// Age UDFs
 	RegisterSpecialScalar(loader, "AgeInYears", {LogicalType::VARCHAR}, LogicalType::BIGINT, AgeInYearsFunc);
 	RegisterSpecialScalar(loader, "AgeInMonths", {LogicalType::VARCHAR}, LogicalType::BIGINT, AgeInMonthsFunc);
+	RegisterSpecialScalar(loader, "AgeInWeeks", {LogicalType::VARCHAR}, LogicalType::BIGINT, AgeInWeeksFunc);
 	RegisterSpecialScalar(loader, "AgeInDays", {LogicalType::VARCHAR}, LogicalType::BIGINT, AgeInDaysFunc);
 	RegisterSpecialScalar(loader, "AgeInHours", {LogicalType::VARCHAR}, LogicalType::BIGINT, AgeInHoursFunc);
 	RegisterSpecialScalar(loader, "AgeInMinutes", {LogicalType::VARCHAR}, LogicalType::BIGINT, AgeInMinutesFunc);
@@ -3413,8 +5254,38 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      AgeInYearsAtFunc);
 	RegisterSpecialScalar(loader, "AgeInMonthsAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
 	                      AgeInMonthsAtFunc);
+	RegisterSpecialScalar(loader, "AgeInWeeksAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
+	                      AgeInWeeksAtFunc);
 	RegisterSpecialScalar(loader, "AgeInDaysAt", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
 	                      AgeInDaysAtFunc);
+	RegisterSpecialScalar(loader, "CalculateAgeInYears", {LogicalType::VARCHAR}, LogicalType::BIGINT,
+	                      CalculateAgeInYearsFunc);
+	RegisterSpecialScalar(loader, "CalculateAgeInMonths", {LogicalType::VARCHAR}, LogicalType::BIGINT,
+	                      CalculateAgeInMonthsFunc);
+	RegisterSpecialScalar(loader, "CalculateAgeInWeeks", {LogicalType::VARCHAR}, LogicalType::BIGINT,
+	                      CalculateAgeInWeeksFunc);
+	RegisterSpecialScalar(loader, "CalculateAgeInDays", {LogicalType::VARCHAR}, LogicalType::BIGINT,
+	                      CalculateAgeInDaysFunc);
+	RegisterSpecialScalar(loader, "CalculateAgeInHours", {LogicalType::VARCHAR}, LogicalType::BIGINT,
+	                      CalculateAgeInHoursFunc);
+	RegisterSpecialScalar(loader, "CalculateAgeInMinutes", {LogicalType::VARCHAR}, LogicalType::BIGINT,
+	                      CalculateAgeInMinutesFunc);
+	RegisterSpecialScalar(loader, "CalculateAgeInSeconds", {LogicalType::VARCHAR}, LogicalType::BIGINT,
+	                      CalculateAgeInSecondsFunc);
+	RegisterSpecialScalar(loader, "CalculateAgeInYearsAt", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, CalculateAgeInYearsAtFunc);
+	RegisterSpecialScalar(loader, "CalculateAgeInMonthsAt", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, CalculateAgeInMonthsAtFunc);
+	RegisterSpecialScalar(loader, "CalculateAgeInWeeksAt", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, CalculateAgeInWeeksAtFunc);
+	RegisterSpecialScalar(loader, "CalculateAgeInDaysAt", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, CalculateAgeInDaysAtFunc);
+	RegisterSpecialScalar(loader, "CalculateAgeInHoursAt", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, CalculateAgeInHoursAtFunc);
+	RegisterSpecialScalar(loader, "CalculateAgeInMinutesAt", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, CalculateAgeInMinutesAtFunc);
+	RegisterSpecialScalar(loader, "CalculateAgeInSecondsAt", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, CalculateAgeInSecondsAtFunc);
 
 	// Interval UDFs (22 — includes collapse_intervals). These are registered
 	// for native and WASM builds so browser-required functions are exercised by
@@ -3457,6 +5328,14 @@ static void LoadInternal(ExtensionLoader &loader) {
 	RegisterSpecialScalar(loader, "intervalFromBounds",
 	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::BOOLEAN, LogicalType::BOOLEAN},
 	                      LogicalType::VARCHAR, IntervalFromBoundsFunc);
+	RegisterSpecialScalar(loader, "interval_size", {LogicalType::VARCHAR}, LogicalType::VARCHAR, IntervalSizeFunc);
+	RegisterSpecialScalar(loader, "expand_points1", {LogicalType::VARCHAR}, LogicalType::VARCHAR, ExpandPoints1Func);
+	RegisterSpecialScalar(loader, "expand_points", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
+	                      ExpandPointsFunc);
+	RegisterSpecialScalar(loader, "expand1", {LogicalType::LIST(LogicalType::VARCHAR)}, LogicalType::VARCHAR,
+	                      Expand1Func);
+	RegisterSpecialScalar(loader, "expand", {LogicalType::LIST(LogicalType::VARCHAR), LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, ExpandFunc);
 	RegisterSpecialScalar(loader, "collapse_intervals", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                      CollapseIntervalsFunc);
 
@@ -3489,9 +5368,23 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, TruncateIntervalFunc);
 
-	// Datetime difference UDFs — deferred to Python (Time input bugs, calculation edge cases)
-	// Python handles these with full CQL semantics.
-	// Keep: YearsBetween..SecondsBetween (working correctly for non-Time inputs)
+	// Datetime difference and duration UDFs.
+	RegisterSpecialScalar(loader, "differenceInYears", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, DifferenceInYearsFunc);
+	RegisterSpecialScalar(loader, "differenceInMonths", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, DifferenceInMonthsFunc);
+	RegisterSpecialScalar(loader, "differenceInWeeks", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, DifferenceInWeeksFunc);
+	RegisterSpecialScalar(loader, "differenceInDays", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, DifferenceInDaysFunc);
+	RegisterSpecialScalar(loader, "differenceInHours", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, DifferenceInHoursFunc);
+	RegisterSpecialScalar(loader, "differenceInMinutes", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, DifferenceInMinutesFunc);
+	RegisterSpecialScalar(loader, "differenceInSeconds", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, DifferenceInSecondsFunc);
+	RegisterSpecialScalar(loader, "differenceInMilliseconds", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BIGINT, DifferenceInMillisecondsFunc);
 	RegisterSpecialScalar(loader, "weeksBetween", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
 	                      WeeksBetweenFunc);
 	RegisterSpecialScalar(loader, "millisecondsBetween", {LogicalType::VARCHAR, LogicalType::VARCHAR},
@@ -3520,6 +5413,46 @@ static void LoadInternal(ExtensionLoader &loader) {
 	RegisterSpecialScalar(loader, "dateTimeSameOrAfter",
 	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
 	                      DateTimeSameOrAfterFunc);
+	RegisterSpecialScalar(loader, "cqlSameOrBefore", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, CqlSameOrBeforeFunc);
+	RegisterSpecialScalar(loader, "cqlSameOrAfter", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, CqlSameOrAfterFunc);
+	RegisterSpecialScalar(loader, "cqlBefore", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, CqlBeforeFunc);
+	RegisterSpecialScalar(loader, "cqlAfter", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, CqlAfterFunc);
+	RegisterSpecialScalar(loader, "cqlDateTimeEqual", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, CqlDateTimeEqualFunc);
+	RegisterSpecialScalar(loader, "cqlSameOrBeforeP",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
+	                      CqlSameOrBeforePFunc);
+	RegisterSpecialScalar(loader, "cqlSameOrAfterP",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
+	                      CqlSameOrAfterPFunc);
+	RegisterSpecialScalar(loader, "cqlBeforeP",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
+	                      CqlBeforePFunc);
+	RegisterSpecialScalar(loader, "cqlAfterP",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
+	                      CqlAfterPFunc);
+	RegisterSpecialScalar(loader, "cqlSameAsP",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
+	                      CqlSameAsPFunc);
+	RegisterSpecialScalar(loader, "cqlDurationBetween",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
+	                      CqlDurationBetweenFunc);
+	RegisterSpecialScalar(loader, "cqlUncertainAdd",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
+	                      CqlUncertainAddFunc);
+	RegisterSpecialScalar(loader, "cqlUncertainSubtract",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
+	                      CqlUncertainSubtractFunc);
+	RegisterSpecialScalar(loader, "cqlUncertainMultiply",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::VARCHAR,
+	                      CqlUncertainMultiplyFunc);
+	RegisterSpecialScalar(loader, "cqlUncertainCompare",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
+	                      CqlUncertainCompareFunc);
 	RegisterSpecialScalar(loader, "dateComponent", {LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BIGINT,
 	                      DateComponentFunc);
 	RegisterSpecialScalar(loader, "quantityToInterval", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
@@ -3630,12 +5563,24 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// too so parity regressions are visible outside browser-only tests.
 	RegisterSpecialScalar(loader, "HighBoundary", {LogicalType::VARCHAR, LogicalType::BIGINT},
 	                      LogicalType::VARCHAR, HighBoundaryFunc2);
+	RegisterSpecialScalar(loader, "HighBoundary", {LogicalType::DOUBLE, LogicalType::BIGINT},
+	                      LogicalType::DOUBLE, HighBoundaryDoubleFunc);
 	RegisterSpecialScalar(loader, "LowBoundary", {LogicalType::VARCHAR, LogicalType::BIGINT},
 	                      LogicalType::VARCHAR, LowBoundaryFunc2);
+	RegisterSpecialScalar(loader, "LowBoundary", {LogicalType::DOUBLE, LogicalType::BIGINT},
+	                      LogicalType::DOUBLE, LowBoundaryDoubleFunc);
 	RegisterSpecialScalar(loader, "predecessorOf", {LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, PredecessorOfFunc);
+	RegisterSpecialScalar(loader, "predecessorOf", {LogicalType::BIGINT},
+	                      LogicalType::BIGINT, PredecessorOfBigIntFunc);
+	RegisterSpecialScalar(loader, "predecessorOf", {LogicalType::DOUBLE},
+	                      LogicalType::DOUBLE, PredecessorOfDoubleFunc);
 	RegisterSpecialScalar(loader, "successorOf", {LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, SuccessorOfFunc);
+	RegisterSpecialScalar(loader, "successorOf", {LogicalType::BIGINT},
+	                      LogicalType::BIGINT, SuccessorOfBigIntFunc);
+	RegisterSpecialScalar(loader, "successorOf", {LogicalType::DOUBLE},
+	                      LogicalType::DOUBLE, SuccessorOfDoubleFunc);
 	RegisterSpecialScalar(loader, "CQLPrecision", {LogicalType::VARCHAR},
 	                      LogicalType::BIGINT, CQLPrecisionFunc);
 	RegisterSpecialScalar(loader, "cqlTimezoneOffset", {LogicalType::VARCHAR},

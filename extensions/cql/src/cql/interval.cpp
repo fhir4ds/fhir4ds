@@ -190,7 +190,7 @@ return Optional<BoundValue>(bv);
 auto dt = DateTimeValue::parse(str);
 if (dt) {
 BoundValue bv;
-bv.type = BoundType::DateTime;
+bv.type = dt->is_time ? BoundType::Time : BoundType::DateTime;
 bv.dt_val = dt;
 bv.raw_str = str;
 return Optional<BoundValue>(bv);
@@ -377,6 +377,84 @@ static Optional<BoundValue> successor_bound(const BoundValue &value) {
 	return NullOpt<BoundValue>();
 }
 
+static Optional<BoundValue> predecessor_bound(const BoundValue &value) {
+	BoundValue result = value;
+	switch (value.type) {
+	case BoundType::Integer:
+		if (!value.int_val || *value.int_val == std::numeric_limits<int64_t>::min()) {
+			return NullOpt<BoundValue>();
+		}
+		result.int_val = Optional<int64_t>(*value.int_val - 1);
+		result.raw_str = std::to_string(*result.int_val);
+		return Optional<BoundValue>(result);
+	case BoundType::Decimal:
+		if (!value.dec_val) {
+			return NullOpt<BoundValue>();
+		}
+		result.dec_val = Optional<double>(*value.dec_val - 1e-8);
+		{
+			std::ostringstream oss;
+			oss << *result.dec_val;
+			result.raw_str = oss.str();
+		}
+		return Optional<BoundValue>(result);
+	case BoundType::Quantity:
+		if (!value.qty_numeric) {
+			return NullOpt<BoundValue>();
+		}
+		result.qty_numeric = Optional<double>(*value.qty_numeric - 1e-8);
+		{
+			std::ostringstream oss;
+			oss << "{\"value\":" << *result.qty_numeric << ",\"unit\":\""
+			    << escapeJsonString(value.qty_unit) << "\"}";
+			result.raw_str = oss.str();
+		}
+		return Optional<BoundValue>(result);
+	case BoundType::DateTime:
+	case BoundType::Time:
+		if (!value.dt_val) {
+			return NullOpt<BoundValue>();
+		}
+		if (!value.dt_val->has_time ||
+		    (value.dt_val->hour == 0 && value.dt_val->minute == 0 &&
+		     value.dt_val->second == 0 && value.dt_val->millisecond == 0)) {
+			result.dt_val = Optional<DateTimeValue>(AddDaysForInterval(*value.dt_val, -1));
+		} else {
+			result.dt_val = Optional<DateTimeValue>(AddMillisecondsForInterval(*value.dt_val, -1));
+		}
+		if (result.dt_val->year < 1) {
+			return NullOpt<BoundValue>();
+		}
+		result.raw_str = result.dt_val->to_string();
+		return Optional<BoundValue>(result);
+	}
+	return NullOpt<BoundValue>();
+}
+
+static Optional<BoundValue> effective_start_bound(const Interval &iv) {
+	if (!iv.low) {
+		return NullOpt<BoundValue>();
+	}
+	return iv.low_closed ? iv.low : successor_bound(*iv.low);
+}
+
+static Optional<BoundValue> effective_end_bound(const Interval &iv) {
+	if (!iv.high) {
+		return NullOpt<BoundValue>();
+	}
+	return iv.high_closed ? iv.high : predecessor_bound(*iv.high);
+}
+
+static bool effective_interval_empty(const Interval &iv) {
+	auto start = effective_start_bound(iv);
+	auto end = effective_end_bound(iv);
+	if (start && end) {
+		int cmp = start->compare(*end);
+		return cmp == -2 || cmp > 0;
+	}
+	return false;
+}
+
 // =====================================================================
 // Interval implementation
 // =====================================================================
@@ -453,10 +531,6 @@ iv.high_closed = high_closed ? yyjson_get_bool(high_closed) : true;
 
 yyjson_doc_free(doc);
 
-if (!iv.low && !iv.high) {
-return NullOpt<Interval>();
-}
-
 // Set bound_type from whichever bound is present
 if (iv.low) {
 iv.bound_type = iv.low->type;
@@ -524,19 +598,25 @@ return true;
 }
 
 bool Interval::contains_interval(const Interval &other) const {
-if (!other.low && low) {
+auto this_start = effective_start_bound(*this);
+auto this_end = effective_end_bound(*this);
+auto other_start = effective_start_bound(other);
+auto other_end = effective_end_bound(other);
+if (!other_start && this_start) {
 return false;
 }
-if (other.low && !contains_point(*other.low)) {
+if (other_start && this_start) {
+int cmp = this_start->compare(*other_start);
+if (cmp == -2 || cmp > 0) return false;
+}
+if (!other_end && this_end) {
 return false;
 }
-if (!other.high && high) {
-return false;
+if (other_end && this_end) {
+int cmp = this_end->compare(*other_end);
+if (cmp == -2 || cmp < 0) return false;
 }
-if (other.high && !contains_point(*other.high)) {
-return false;
-}
-return true;
+return !effective_interval_empty(other);
 }
 
 bool Interval::properly_contains_point(const BoundValue &point) const {
@@ -573,29 +653,20 @@ return low_eq && high_eq && a.low_closed == b.low_closed && a.high_closed == b.h
 }
 
 bool Interval::overlaps(const Interval &other) const {
-if (low && other.high) {
-int cmp = other.high->compare(*low);
-if (cmp == -2) {
+if (effective_interval_empty(*this) || effective_interval_empty(other)) {
 return false;
 }
-if (cmp < 0) {
-return false;
+auto this_start = effective_start_bound(*this);
+auto this_end = effective_end_bound(*this);
+auto other_start = effective_start_bound(other);
+auto other_end = effective_end_bound(other);
+if (this_start && other_end) {
+int cmp = other_end->compare(*this_start);
+if (cmp == -2 || cmp < 0) return false;
 }
-if (cmp == 0 && (!other.high_closed || !low_closed)) {
-return false;
-}
-}
-if (high && other.low) {
-int cmp = high->compare(*other.low);
-if (cmp == -2) {
-return false;
-}
-if (cmp < 0) {
-return false;
-}
-if (cmp == 0 && (!high_closed || !other.low_closed)) {
-return false;
-}
+if (this_end && other_start) {
+int cmp = this_end->compare(*other_start);
+if (cmp == -2 || cmp < 0) return false;
 }
 return true;
 }
@@ -653,30 +724,29 @@ return properly_contains_interval(other);
 }
 
 bool Interval::overlaps_before(const Interval &other) const {
-if (!low || !other.low) {
+if (!overlaps(other)) {
 return false;
 }
-int low_cmp = low->compare(*other.low);
-if (low_cmp == -2) {
-return false;
-}
-if (!high) {
-return low_cmp < 0;
-}
-int high_cmp = high->compare(*other.low);
-if (high_cmp == -2) {
-return false;
-}
-// At boundary equality (high == other.low), both bounds must be closed
-// for a shared point to exist. If either is open, no overlap occurs.
-if (high_cmp == 0) {
-return low_cmp < 0 && high_closed && other.low_closed;
-}
-return low_cmp < 0 && high_cmp > 0;
+auto this_start = effective_start_bound(*this);
+auto other_start = effective_start_bound(other);
+if (!this_start && other_start) return true;
+if (this_start && !other_start) return false;
+if (!this_start && !other_start) return false;
+int cmp = this_start->compare(*other_start);
+return cmp != -2 && cmp < 0;
 }
 
 bool Interval::overlaps_after(const Interval &other) const {
-return other.overlaps_before(*this);
+if (!overlaps(other)) {
+return false;
+}
+auto this_end = effective_end_bound(*this);
+auto other_end = effective_end_bound(other);
+if (!this_end && other_end) return true;
+if (this_end && !other_end) return false;
+if (!this_end && !other_end) return false;
+int cmp = this_end->compare(*other_end);
+return cmp != -2 && cmp > 0;
 }
 
 bool Interval::starts_same(const Interval &other) const {
@@ -874,14 +944,9 @@ result.low_closed = a.low_closed && b.low_closed;
 }
 }
 
-if (!a.high && !b.high) {
-result.high_closed = a.high_closed && b.high_closed;
-} else if (!a.high) {
-result.high = b.high;
-result.high_closed = b.high_closed;
-} else if (!b.high) {
-result.high = a.high;
-result.high_closed = a.high_closed;
+if (!a.high || !b.high) {
+result.high = NullOpt<BoundValue>();
+result.high_closed = !a.high ? a.high_closed : b.high_closed;
 } else {
 int cmp = a.high->compare(*b.high);
 if (cmp == -2) return NullOpt<Interval>();
@@ -999,14 +1064,26 @@ result.bound_type = a.bound_type;
 if (has_left) {
 result.low = a.low;
 result.low_closed = a.low_closed;
+if (b.low_closed && b.low) {
+auto pred = predecessor_bound(*b.low);
+if (!pred) return NullOpt<Interval>();
+result.high = pred;
+} else {
 result.high = b.low;
-result.high_closed = !b.low_closed;
+}
+result.high_closed = true;
 return Optional<Interval>(result);
 }
 
 if (has_right) {
+if (b.high_closed && b.high) {
+auto succ = successor_bound(*b.high);
+if (!succ) return NullOpt<Interval>();
+result.low = succ;
+} else {
 result.low = b.high;
-result.low_closed = !b.high_closed;
+}
+result.low_closed = true;
 result.high = a.high;
 result.high_closed = a.high_closed;
 return Optional<Interval>(result);

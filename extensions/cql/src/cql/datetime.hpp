@@ -15,6 +15,7 @@ struct DateTimeValue {
 	int32_t second = 0;
 	int32_t millisecond = 0;
 	bool has_time = false;
+	bool is_time = false;
 	bool has_tz = false;
 	int32_t tz_offset_minutes = 0;
 
