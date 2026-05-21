@@ -12,6 +12,7 @@ from ...constants import (
     resolve_constant,
     resolve_constants_in_path,
     ConstantResolver,
+    extract_constant_references,
 )
 
 
@@ -66,6 +67,20 @@ class TestResolveConstant:
         result = resolve_constant(const)
 
         assert result == "null"
+
+    def test_resolve_string_constant_uses_fhirpath_escaping(self):
+        """String constants are FHIRPath literals, not SQL literals."""
+        const = Constant(name="Target", value="O'Reilly \\ lab\n", value_type="string")
+        result = resolve_constant(const)
+
+        assert result == r"'O\'Reilly \\ lab\n'"
+
+    def test_resolve_integer64_string_as_numeric_literal(self):
+        """FHIR JSON encodes integer64 as string, but FHIRPath receives a number."""
+        const = Constant(name="Large", value="1234567890123", value_type="integer64")
+        result = resolve_constant(const)
+
+        assert result == "1234567890123"
 
 
 class TestResolveCodingConstant:
@@ -182,6 +197,21 @@ class TestResolveConstantsInPath:
         result = resolve_constants_in_path("value = %UnknownConstant", constants)
 
         assert result == "value = %UnknownConstant"
+
+    def test_constant_reference_inside_string_literal_is_not_resolved(self):
+        """Percent-name text inside a FHIRPath string literal is not a constant."""
+        constants = {
+            "Code1": Constant(name="Code1", value=1, value_type="integer")
+        }
+        result = resolve_constants_in_path("'%Code1' & %Code1", constants)
+
+        assert result == "'%Code1' & 1"
+
+    def test_extract_constant_references_ignores_literals_and_comments(self):
+        """Validation uses the same lexical boundaries as substitution."""
+        path = "'%literal' & `field%name` & %Real // %comment\n and %Other"
+
+        assert extract_constant_references(path) == {"Real", "Other"}
 
     def test_constant_in_function_call(self):
         """Test resolving constant in function call."""
@@ -336,13 +366,12 @@ class TestEdgeCases:
 
         assert result == "''"
 
-    def test_value_with_special_sql_chars(self):
-        """Test value with characters that need SQL escaping."""
+    def test_value_with_special_fhirpath_chars(self):
+        """Test value with characters that need FHIRPath escaping."""
         const = Constant(name="Special", value="it's a test", value_type="string")
         result = resolve_constant(const)
 
-        # Single quote should be doubled
-        assert "it''s a test" in result
+        assert result == r"'it\'s a test'"
 
     def test_zero_integer(self):
         """Test resolving zero."""
@@ -375,3 +404,60 @@ class TestEdgeCases:
         result = resolve_constants_in_path("test = %Code1", constants)
 
         assert result == "test = 'value1'"
+
+    def test_from_dict_rejects_invalid_constant_name(self):
+        """Direct Constant.from_dict uses the same sql-name guard as the parser."""
+        with pytest.raises(ValueError, match="sql-name"):
+            Constant.from_dict({"name": "_bad", "valueString": "value"})
+
+    def test_from_dict_rejects_multiple_value_choices(self):
+        """Direct Constant.from_dict enforces value[x] exactly-one behavior."""
+        with pytest.raises(ValueError, match="exactly one"):
+            Constant.from_dict({
+                "name": "Ambiguous",
+                "valueString": "value",
+                "valueInteger": 1,
+            })
+
+    def test_from_dict_supports_canonical_and_integer64(self):
+        """Direct Constant.from_dict supports all primitive choices in this chunk."""
+        canonical = Constant.from_dict({
+            "name": "ProfileUrl",
+            "valueCanonical": "http://example.org/Profile",
+        })
+        integer64 = Constant.from_dict({
+            "name": "Large",
+            "valueInteger64": "1234567890123",
+        })
+
+        assert canonical.valueCanonical == "http://example.org/Profile"
+        assert canonical.value_type == "canonical"
+        assert integer64.valueInteger64 == "1234567890123"
+        assert integer64.value_type == "integer64"
+
+    def test_from_dict_rejects_integer64_json_number(self):
+        """FHIR JSON represents integer64 as a JSON string."""
+        with pytest.raises(ValueError, match="valueInteger64"):
+            Constant.from_dict({
+                "name": "Large",
+                "valueInteger64": 1234567890123,
+            })
+
+    def test_from_dict_rejects_non_primitive_value_choices(self):
+        """Direct Constant.from_dict uses the SQL-on-FHIR primitive value[x] allowlist."""
+        with pytest.raises(ValueError, match="Unsupported"):
+            Constant.from_dict({
+                "name": "FemaleCoding",
+                "valueCoding": {
+                    "system": "http://hl7.org/fhir/gender-identity",
+                    "code": "female",
+                },
+            })
+
+    def test_from_dict_rejects_invalid_primitive_values(self):
+        """Direct Constant.from_dict validates FHIR primitive values."""
+        with pytest.raises(ValueError, match="valuePositiveInt"):
+            Constant.from_dict({
+                "name": "BadPositive",
+                "valuePositiveInt": -1,
+            })

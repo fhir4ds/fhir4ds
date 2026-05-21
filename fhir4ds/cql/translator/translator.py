@@ -1567,7 +1567,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             _CQL_PRIMITIVE_TYPES = frozenset({
                 "Boolean", "Integer", "Decimal", "String", "DateTime", "Date",
                 "Time", "Quantity", "Code", "Concept", "Ratio", "Tuple",
-                "Interval", "Period",
+                "Interval", "Period", "ValueSet", "CodeSystem", "Vocabulary",
             })
             value_column = "value"
             if shape in (RowShape.PATIENT_SCALAR, RowShape.UNKNOWN) and cql_type not in _CQL_PRIMITIVE_TYPES:
@@ -2407,7 +2407,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         # Set up code systems
         for cs in library.codesystems:
-            self._context.add_codesystem(cs.name, cs.id)
+            self._context.add_codesystem(cs.name, cs.id, cs.version)
 
         # Set up codes and concepts
         # Note: CodeDefinition and ConceptDefinition are stored in separate lists

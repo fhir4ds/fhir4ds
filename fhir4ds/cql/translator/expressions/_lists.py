@@ -148,7 +148,10 @@ class ListsMixin:
 
     def _translate_list_expression(self, lst: ListExpression, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL list to SQL array."""
-        elements = [self.translate(e, boolean_context=False) for e in lst.elements]
+        elements = []
+        for element in lst.elements:
+            source = self._static_conversion_source_node(element)
+            elements.append(self.translate(source or element, boolean_context=False))
         return SQLArray(elements=elements)
 
     def _infer_row_shape_for_expr(self, expr: Any) -> RowShape:
@@ -730,10 +733,68 @@ class ListsMixin:
         """Translate an alias reference to SQL."""
         return SQLIdentifier(name=ref.name)
 
+    def _is_string_index_source(self, ast_expr, sql_expr: SQLExpression) -> bool:
+        if isinstance(ast_expr, Literal) and getattr(ast_expr, "type", None) == "String":
+            return True
+        if isinstance(ast_expr, Identifier):
+            meta = self.context.definition_meta.get(ast_expr.name)
+            meta_type = getattr(meta, "cql_type", None) if meta else None
+            if meta_type and str(meta_type).split(".")[-1] == "String":
+                return True
+        if isinstance(ast_expr, BinaryExpression) and ast_expr.operator == "as":
+            target = ast_expr.right
+            if isinstance(target, NamedTypeSpecifier) and target.name.split(".")[-1] == "String":
+                return True
+        if isinstance(ast_expr, FunctionRef) and ast_expr.name.lower() in {
+            "combine",
+            "replacematches",
+            "replace",
+            "tostring",
+            "substring",
+            "lower",
+            "upper",
+            "concatenate",
+        }:
+            return True
+        if isinstance(ast_expr, FunctionRef) and ast_expr.name.lower() == "last":
+            args = getattr(ast_expr, "arguments", []) or []
+            if args:
+                source = args[0]
+                if isinstance(source, FunctionRef) and source.name.lower() in {"split", "splitonmatches"}:
+                    return True
+                if isinstance(source, ListExpression) and all(
+                    isinstance(elem, Literal) and (elem.type == "String" or elem.value is None)
+                    for elem in source.elements
+                ):
+                    return True
+        if isinstance(sql_expr, SQLLiteral) and isinstance(sql_expr.value, str):
+            return True
+        if isinstance(sql_expr, SQLCast) and sql_expr.target_type.upper() in {"VARCHAR", "TEXT", "STRING"}:
+            return True
+        if isinstance(sql_expr, SQLFunctionCall) and sql_expr.name in {
+            "fhirpath_text",
+            "fhirpath_scalar",
+            "ToString",
+            "system.substring",
+            "system.upper",
+            "system.lower",
+            "Concatenate",
+            "Combine",
+            "ReplaceMatches",
+            "Replace",
+            "UPPER",
+            "LOWER",
+        }:
+            return True
+        return False
+
     def _translate_indexer_expression(self, expr: IndexerExpression, boolean_context: bool = False) -> SQLExpression:
         """Translate an indexer expression (array[i]) to SQL."""
         source = self.translate(expr.source, boolean_context=False)
         index = self.translate(expr.index, boolean_context=False)
+
+        if self._is_string_index_source(expr.source, source):
+            return SQLFunctionCall(name="Indexer", args=[source, index])
 
         # DuckDB uses 1-based indexing, CQL uses 0-based
         adjusted_index = SQLCast(
@@ -766,24 +827,16 @@ class ListsMixin:
         return SQLFunctionCall(name="LIST_EXTRACT", args=[source, adjusted_index])
 
     def _translate_skip_expression(self, node: SkipExpression, boolean_context: bool = False) -> SQLExpression:
-        """Skip first N elements: list_slice(arr, n+1, array_length(arr))."""
+        """Skip first N elements using the CQL Skip macro for null/negative count semantics."""
         source = self.translate(node.source, boolean_context=False)
         count = self.translate(node.count, boolean_context=False)
-        # DuckDB list_slice is 1-based, so skip(n) means start at n+1
-        start_idx = SQLBinaryOp(
-            operator="+",
-            left=count,
-            right=SQLLiteral(value=1),
-        )
-        length = SQLFunctionCall(name="ARRAY_LENGTH", args=[source])
-        return SQLFunctionCall(name="LIST_SLICE", args=[source, start_idx, length])
+        return SQLFunctionCall(name="Skip", args=[source, count])
 
     def _translate_take_expression(self, node: TakeExpression, boolean_context: bool = False) -> SQLExpression:
-        """Take first N elements: list_slice(arr, 1, n)."""
+        """Take first N elements using the CQL Take macro for null/non-positive counts."""
         source = self.translate(node.source, boolean_context=False)
         count = self.translate(node.count, boolean_context=False)
-        # DuckDB list_slice is 1-based, so take from 1 to n
-        return SQLFunctionCall(name="LIST_SLICE", args=[source, SQLLiteral(value=1), count])
+        return SQLFunctionCall(name="Take", args=[source, count])
 
     def _translate_first_expression(self, node: FirstExpression, boolean_context: bool = False) -> SQLExpression:
         """Get first element using ROW_NUMBER() window function.
@@ -828,6 +881,13 @@ class ListsMixin:
         if isinstance(node.source, CQLIdentifier):
             name = node.source.name
             meta = self.context.definition_meta.get(name)
+            if (
+                meta
+                and meta.shape == RowShape.PATIENT_SCALAR
+                and str(meta.cql_type).startswith("List<")
+            ):
+                source = self.translate(node.source, usage=ExprUsage.SCALAR)
+                return SQLFunctionCall(name='"Distinct"', args=[source])
             # Use 'resource' for resource CTEs, 'value' for value CTEs
             col = "value"
             if meta:
@@ -2024,23 +2084,36 @@ class ListsMixin:
 
         # For array/list expressions, use cardinality check with array_length.
         # CQL §20.30: singleton from raises a runtime error if >1 elements.
-        # For literal arrays with known element count, we can detect this at
-        # translation time and route to the error-raising UDF directly.
-        if isinstance(source, SQLArray) and len(source.elements) > 1:
-            # Known to have >1 elements — always errors at runtime
-            return SQLFunctionCall(name="SingletonFrom", args=[source])
+        # Keep the valid singleton path type-preserving by extracting directly
+        # instead of routing every value through the VARCHAR-returning public UDF.
+        length_expr = SQLFunctionCall(name="array_length", args=[source, SQLLiteral(value=1)])
         return SQLCase(
             when_clauses=[
                 (
+                    SQLUnaryOp(operator="IS NULL", operand=source, prefix=False),
+                    SQLNull(),
+                ),
+                (
                     SQLBinaryOp(
                         operator="=",
-                        left=SQLFunctionCall(name="array_length", args=[source, SQLLiteral(value=1)]),
+                        left=length_expr,
+                        right=SQLLiteral(value=0),
+                    ),
+                    SQLNull(),
+                ),
+                (
+                    SQLBinaryOp(
+                        operator="=",
+                        left=length_expr,
                         right=SQLLiteral(value=1),
                     ),
                     SQLFunctionCall(name="LIST_EXTRACT", args=[source, SQLLiteral(value=1)]),
                 )
             ],
-            else_clause=SQLNull(),
+            else_clause=SQLFunctionCall(
+                name="error",
+                args=[SQLLiteral("SingletonFrom: Expected a list with at most one element")],
+            ),
         )
 
     def _translate_singleton_expression(self, node: SingletonExpression, boolean_context: bool = False) -> SQLExpression:
@@ -2156,6 +2229,20 @@ class ListsMixin:
         if isinstance(usage, bool):
             usage = ExprUsage.BOOLEAN if usage else ExprUsage.LIST
 
+        if self._is_list_typed_ast(node.source) and not isinstance(node.source, ListExpression):
+            source = self.translate(node.source, usage=ExprUsage.SCALAR)
+            return SQLBinaryOp(
+                operator=">",
+                left=SQLFunctionCall(
+                    name="COALESCE",
+                    args=[
+                        SQLFunctionCall(name="list_count", args=[source]),
+                        SQLLiteral(value=0),
+                    ],
+                ),
+                right=SQLLiteral(value=0),
+            )
+
         # The source should be translated with EXISTS context
         # This allows nested Retrieves to register JOINs
         source = self.translate(node.source, usage=ExprUsage.EXISTS)
@@ -2267,10 +2354,10 @@ class ListsMixin:
         # Use type checking instead of to_sql() to avoid issues with placeholders
         if isinstance(source, SQLFunctionCall):
             func_name_lower = source.name.lower()
-            if func_name_lower == "jsonconcat" or func_name_lower == "list_filter":
+            if func_name_lower in ("jsonconcat", "list_filter", "cqlchildren", "cqldescendants"):
                 return SQLBinaryOp(
                     operator=">",
-                    left=SQLFunctionCall(name="array_length", args=[source]),
+                    left=SQLFunctionCall(name="list_count", args=[source]),
                     right=SQLLiteral(value=0),
                 )
 

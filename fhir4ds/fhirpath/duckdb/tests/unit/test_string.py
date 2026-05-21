@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from ...collection import FHIRPathCollection
+from ...errors import FHIRPathFunctionError
 from ...functions.string import (
     length,
     substring,
@@ -27,6 +28,7 @@ from ...functions.string import (
     replace,
     matches,
     replace_matches,
+    to_chars,
     split,
     join,
     trim,
@@ -65,6 +67,11 @@ class TestLength:
         with pytest.raises(Exception):  # FHIRPathFunctionError
             length(FHIRPathCollection(["a", "b"]))
 
+    def test_length_non_string_raises(self) -> None:
+        """Test length on non-string singleton raises error."""
+        with pytest.raises(FHIRPathFunctionError):
+            length(FHIRPathCollection([123]))
+
 
 class TestSubstring:
     """Tests for substring() function."""
@@ -87,9 +94,19 @@ class TestSubstring:
         assert result.singleton_value == "hello"
 
     def test_substring_start_at_end(self) -> None:
-        """Test substring starting at string length."""
+        """Test substring starting at string length returns empty."""
         result = substring(FHIRPathCollection(["hello"]), 5)
-        assert result.singleton_value == ""
+        assert result.is_empty
+
+    def test_substring_start_at_end_with_length(self) -> None:
+        """Test substring starting at string length with length returns empty."""
+        result = substring(FHIRPathCollection(["hello"]), 5, 1)
+        assert result.is_empty
+
+    def test_substring_non_string_raises(self) -> None:
+        """Test substring on non-string singleton raises error."""
+        with pytest.raises(FHIRPathFunctionError):
+            substring(FHIRPathCollection([123]), 0)
 
     def test_substring_beyond_length(self) -> None:
         """Test substring with start beyond string length."""
@@ -142,6 +159,11 @@ class TestStartsWith:
         result = starts_with(FHIRPathCollection([]), "he")
         assert result.is_empty
 
+    def test_starts_with_non_string_input_raises(self) -> None:
+        """Test startsWith on non-string singleton raises error."""
+        with pytest.raises(FHIRPathFunctionError):
+            starts_with(FHIRPathCollection([123]), "1")
+
 
 class TestEndsWith:
     """Tests for endsWith() function."""
@@ -172,6 +194,11 @@ class TestEndsWith:
         """Test endsWith on empty collection."""
         result = ends_with(FHIRPathCollection([]), "lo")
         assert result.is_empty
+
+    def test_ends_with_non_string_input_raises(self) -> None:
+        """Test endsWith on non-string singleton raises error."""
+        with pytest.raises(FHIRPathFunctionError):
+            ends_with(FHIRPathCollection([123]), "3")
 
 
 class TestContains:
@@ -208,6 +235,11 @@ class TestContains:
         """Test contains on empty collection."""
         result = contains(FHIRPathCollection([]), "test")
         assert result.is_empty
+
+    def test_contains_non_string_input_raises(self) -> None:
+        """Test contains on non-string singleton raises error."""
+        with pytest.raises(FHIRPathFunctionError):
+            contains(FHIRPathCollection([123]), "2")
 
 
 class TestUpper:
@@ -305,8 +337,18 @@ class TestMatches:
 
     def test_matches_digit_true(self) -> None:
         """Test regex match with digits."""
-        result = matches(FHIRPathCollection(["hello123"]), r"\d+")
+        result = matches(FHIRPathCollection(["123"]), r"\d+")
         assert result.is_singleton
+        assert result.singleton_value is True
+
+    def test_matches_partial_false(self) -> None:
+        """Test that matches requires the whole string to match."""
+        result = matches(FHIRPathCollection(["hello123"]), r"\d+")
+        assert result.singleton_value is False
+
+    def test_matches_dotall(self) -> None:
+        """Test that dot matches newline for FHIRPath single-line regex mode."""
+        result = matches(FHIRPathCollection(["a\nb"]), r"a.b")
         assert result.singleton_value is True
 
     def test_matches_digit_false(self) -> None:
@@ -335,6 +377,12 @@ class TestMatches:
         from ...errors import FHIRPathFunctionError
         with pytest.raises(FHIRPathFunctionError):
             matches(FHIRPathCollection(["test"]), r"[invalid")
+
+    def test_matches_rejects_redos_pattern(self) -> None:
+        """Test matches rejects nested quantifiers before regex evaluation."""
+        from ...errors import FHIRPathFunctionError
+        with pytest.raises(FHIRPathFunctionError):
+            matches(FHIRPathCollection(["aaaaaaaa"]), r"(a+)+")
 
 
 class TestReplaceMatches:
@@ -365,6 +413,41 @@ class TestReplaceMatches:
         """Test replaceMatches on empty collection."""
         result = replace_matches(FHIRPathCollection([]), r"\d+", "X")
         assert result.is_empty
+
+    def test_replace_matches_empty_regex_returns_input(self) -> None:
+        """Test empty regex leaves the input unchanged."""
+        result = replace_matches(FHIRPathCollection(["abc"]), "", "x")
+        assert result.singleton_value == "abc"
+
+    def test_replace_matches_rejects_redos_pattern(self) -> None:
+        """Test replaceMatches rejects quantified alternations before regex evaluation."""
+        from ...errors import FHIRPathFunctionError
+        with pytest.raises(FHIRPathFunctionError):
+            replace_matches(FHIRPathCollection(["aaaaaaaa"]), r"(a|aa)+", "x")
+
+
+class TestToChars:
+    """Tests for toChars() function."""
+
+    def test_to_chars_simple(self) -> None:
+        result = to_chars(FHIRPathCollection(["abc"]))
+        assert result.values == ["a", "b", "c"]
+
+    def test_to_chars_unicode_code_points(self) -> None:
+        result = to_chars(FHIRPathCollection(["café"]))
+        assert result.values == ["c", "a", "f", "é"]
+
+    def test_to_chars_empty_string(self) -> None:
+        result = to_chars(FHIRPathCollection([""]))
+        assert result.is_empty
+
+    def test_to_chars_empty_collection(self) -> None:
+        result = to_chars(FHIRPathCollection([]))
+        assert result.is_empty
+
+    def test_to_chars_non_string_raises(self) -> None:
+        with pytest.raises(FHIRPathFunctionError):
+            to_chars(FHIRPathCollection([123]))
 
 
 class TestSplit:

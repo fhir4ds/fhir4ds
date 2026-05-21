@@ -86,10 +86,10 @@ def test_interval_start_fhir_period_keys_default_closed():
     assert intervalStart(interval) == "2024-01-01"
 
 
-def test_interval_start_open_bound_falls_back():
-    """Test explicit open bounds preserve existing interval parsing behavior."""
+def test_interval_start_open_bound_returns_effective_start():
+    """Test explicit open bounds return the successor effective start."""
     interval = '{"low": "2024-01-01", "high": "2024-12-31", "lowClosed": false, "highClosed": true}'
-    assert intervalStart(interval) == "2024-01-01"
+    assert intervalStart(interval) == "2024-01-02"
 
 
 # ========================================
@@ -124,10 +124,10 @@ def test_interval_end_fhir_period_keys_default_closed():
     assert intervalEnd(interval) == "2024-12-31"
 
 
-def test_interval_end_open_bound_falls_back():
-    """Test explicit open bounds preserve existing interval parsing behavior."""
+def test_interval_end_open_bound_returns_effective_end():
+    """Test explicit open bounds return the predecessor effective end."""
     interval = '{"low": "2024-01-01", "high": "2024-12-31", "lowClosed": true, "highClosed": false}'
-    assert intervalEnd(interval) == "2024-12-31"
+    assert intervalEnd(interval) == "2024-12-30"
 
 
 # ========================================
@@ -263,14 +263,21 @@ def test_properly_contains_middle(closed_interval):
 
 
 def test_properly_contains_start(closed_interval):
-    """Test properly contains with start point (should be False)."""
+    """Official conformance treats boundary points as not properly contained."""
     result = intervalProperlyContains(closed_interval, "2024-01-01")
     assert result is False
 
 
 def test_properly_contains_end(closed_interval):
-    """Test properly contains with end point (should be False)."""
+    """Official conformance treats boundary points as not properly contained."""
     result = intervalProperlyContains(closed_interval, "2024-12-31")
+    assert result is False
+
+
+def test_properly_contains_unit_interval_point():
+    """A unit interval does not properly contain its only point."""
+    interval = '{"low": "2024-01-01", "high": "2024-01-01", "lowClosed": true, "highClosed": true}'
+    result = intervalProperlyContains(interval, "2024-01-01")
     assert result is False
 
 

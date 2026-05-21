@@ -123,6 +123,16 @@ class TestSkip:
         result = con.execute("SELECT Skip([1, 2, 3], 0)").fetchone()
         assert result[0] == [1, 2, 3]
 
+    def test_skip_null_count(self, con):
+        """Test Skip with NULL count returns the full list."""
+        result = con.execute("SELECT Skip([1, 2, 3], NULL)").fetchone()
+        assert result[0] == [1, 2, 3]
+
+    def test_skip_negative_count(self, con):
+        """Test Skip with negative count returns an empty list."""
+        result = con.execute("SELECT Skip([1, 2, 3], -1)").fetchone()
+        assert result[0] == []
+
     def test_skip_null_input(self, con):
         """Test Skip with NULL input."""
         # Skip(NULL, 1) should return NULL
@@ -219,6 +229,36 @@ class TestSingletonFrom:
         result = con.execute("SELECT SingletonFrom(['hello'])").fetchone()
         assert result[0] == 'hello'
 
+    def test_singleton_boolean(self, con):
+        """Test SingletonFrom with boolean element."""
+        result = con.execute("SELECT SingletonFrom([true])").fetchone()
+        assert result[0] == 'true'
+
+    def test_singleton_decimal_preserves_scale(self, con):
+        """Test SingletonFrom with decimal element."""
+        result = con.execute("SELECT SingletonFrom([1::DECIMAL(10,2)])").fetchone()
+        assert result[0] == '1.00'
+
+
+class TestDirectListSurface:
+    """Tests for public direct list helper surfaces."""
+
+    def test_element_at_boolean(self, con):
+        result = con.execute("SELECT ElementAt([true, false], 1)").fetchone()
+        assert result[0] == 'false'
+
+    def test_json_concat_numeric(self, con):
+        result = con.execute("SELECT jsonConcat([1], [2])").fetchone()
+        assert result[0] == ['1', '2']
+
+    def test_json_concat_boolean(self, con):
+        result = con.execute("SELECT jsonConcat([true], [false])").fetchone()
+        assert result[0] == ['true', 'false']
+
+    def test_json_concat_both_null_returns_null(self, con):
+        result = con.execute("SELECT jsonConcat(NULL, NULL)").fetchone()
+        assert result[0] is None
+
 
 # ========================================
 # Distinct tests
@@ -258,6 +298,86 @@ class TestDistinct:
         # "Distinct"([1,1,1]) should return [1]
         result = con.execute('SELECT "Distinct"([1, 1, 1])').fetchone()
         assert result[0] == [1] or set(result[0]) == {1}
+
+    def test_distinct_keeps_single_null(self, con):
+        """Test Distinct treats nulls as equal."""
+        result = con.execute('SELECT "Distinct"([NULL, NULL, 1, 1])').fetchone()
+        assert result[0] == [None, 1]
+
+    def test_distinct_uses_quantity_equality(self, con):
+        """Test Distinct compares equivalent Quantity values by CQL equality."""
+        result = con.execute(
+            """
+            SELECT "Distinct"([
+                parse_quantity('{"value":1,"unit":"g"}'),
+                parse_quantity('{"value":1000,"unit":"mg"}')
+            ])
+            """
+        ).fetchone()
+        assert len(result[0]) == 1
+
+
+class TestCQLListEqualityHelpers:
+    """Tests for CQL list helper macros used by translated operators."""
+
+    def test_except_removes_duplicates(self, con):
+        result = con.execute("SELECT CQLListExceptEq([1, 1, 2, 3], [2])").fetchone()
+        assert result[0] == [1, 3]
+
+    def test_intersect_keeps_single_null(self, con):
+        result = con.execute("SELECT CQLListIntersectEq([NULL, 1, 3], [NULL, 3, 5])").fetchone()
+        assert result[0] == [None, 3]
+
+    def test_contains_uses_quantity_equality(self, con):
+        result = con.execute(
+            """
+            SELECT CQLListContainsEq(
+                [parse_quantity('{"value":1,"unit":"g"}')],
+                parse_quantity('{"value":1000,"unit":"mg"}')
+            )
+            """
+        ).fetchone()
+        assert result[0] is True
+
+    def test_contains_mixed_scalar_types_is_false(self, con):
+        result = con.execute("SELECT CQLListContainsEq(['a'], 1)").fetchone()
+        assert result[0] is False
+
+    def test_list_equality_mixed_scalar_types_is_false(self, con):
+        result = con.execute("SELECT CQLListEqualEq(['a'], [1])").fetchone()
+        assert result[0] is False
+
+    def test_mixed_large_numeric_values_compare_exactly(self, con):
+        """Mixed numeric list equality must not round through DOUBLE."""
+        result = con.execute(
+            """
+            SELECT
+              CQLListElementEqual(
+                9223372036854775807::BIGINT,
+                9223372036854775806::DECIMAL(19,0)
+              ) AS element_equal,
+              CQLListContainsEq(
+                [9223372036854775807::BIGINT],
+                9223372036854775806::DECIMAL(19,0)
+              ) AS contains_equal,
+              CQLIndexOf(
+                [9223372036854775807::BIGINT],
+                9223372036854775806::DECIMAL(19,0)
+              ) AS index_equal
+            """
+        ).fetchone()
+        assert result == (False, False, -1)
+
+    def test_indexof_uses_quantity_equality(self, con):
+        result = con.execute(
+            """
+            SELECT CQLIndexOf(
+                [parse_quantity('{"value":1,"unit":"g"}')],
+                parse_quantity('{"value":1000,"unit":"mg"}')
+            )
+            """
+        ).fetchone()
+        assert result[0] == 0
 
     def test_distinct_strings(self, con):
         """Test Distinct with string elements."""

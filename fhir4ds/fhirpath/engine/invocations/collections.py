@@ -4,6 +4,7 @@ This file holds code to handle the FHIRPath collection functions.
 
 import logging
 
+from ...engine.invocations import equality as equality_invocations
 from ...engine.nodes import FP_DateTime, FP_Time, FP_Date, ResourceNode
 from ...engine.util import get_data
 from ...engine.errors import FHIRPathError
@@ -326,7 +327,7 @@ def contains_impl(ctx, a, b):
         return True
 
     for i in range(0, len(a)):
-        if a[i] == b[0]:
+        if equality_invocations.equality(ctx, [a[i]], [b[0]]) is True:
             return True
 
     return False
@@ -338,7 +339,7 @@ def contains(ctx, a, b):
     if len(a) == 0:
         return False
     if len(b) > 1:
-        return []
+        raise FHIRPathError("contains requires the right operand to contain at most one item")
 
     return contains_impl(ctx, a, b)
 
@@ -349,6 +350,6 @@ def inn(ctx, a, b):
     if len(b) == 0:
         return False
     if len(a) > 1:
-        return []
+        raise FHIRPathError("in requires the left operand to contain at most one item")
 
     return contains_impl(ctx, b, a)

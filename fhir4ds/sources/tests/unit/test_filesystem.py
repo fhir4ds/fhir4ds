@@ -142,6 +142,12 @@ class TestParquetSource:
         expr = source._build_scan_expression()
         assert "hive_partitioning" not in expr
 
+    def test_path_pattern_is_escaped_as_sql_literal(self):
+        source = FileSystemSource("/tmp/fhir'; DROP VIEW resources; --.parquet")
+        expr = source._build_scan_expression()
+        assert "read_parquet('/tmp/fhir''; DROP VIEW resources; --.parquet')" in expr
+        assert "/tmp/fhir'; DROP VIEW" not in expr
+
     def test_register_is_idempotent(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = os.path.join(tmpdir, "resources.parquet")
@@ -294,6 +300,15 @@ class TestCloudCredentials:
         creds = CloudCredentials("gcs", service_account_json="{}")
         assert creds.provider == "GCS"
 
+    def test_rejects_unsupported_provider(self):
+        with pytest.raises(ValueError, match="Unsupported cloud provider"):
+            CloudCredentials("S3); DROP TABLE resources; --", access_key_id="k")
+
+    def test_rejects_unsupported_credential_key(self):
+        creds = CloudCredentials("S3", **{"access_key_id); DROP TABLE resources; --": "k"})
+        with pytest.raises(ValueError, match="Unsupported credential option"):
+            creds.configure(type("FakeCon", (), {"execute": lambda self, sql: None})())
+
     def test_configure_generates_create_secret_sql(self, monkeypatch):
         executed = []
 
@@ -309,6 +324,24 @@ class TestCloudCredentials:
         assert "TYPE S3" in sql
         assert "access_key_id" in sql
         assert "secret_access_key" in sql
+
+    def test_configure_escapes_secret_name_and_values(self):
+        executed = []
+
+        class FakeCon:
+            def execute(self, sql):
+                executed.append(sql)
+
+        creds = CloudCredentials(
+            "S3",
+            secret_name='s"; DROP SECRET x; --',
+            access_key_id="AK'; DROP TABLE resources; --",
+        )
+        creds.configure(FakeCon())
+        sql = executed[0]
+        assert 'CREATE OR REPLACE SECRET "s""; DROP SECRET x; --"' in sql
+        assert "access_key_id 'AK''; DROP TABLE resources; --'" in sql
+        assert "access_key_id 'AK'; DROP" not in sql
 
 
 # ---------------------------------------------------------------------------

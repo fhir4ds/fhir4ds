@@ -14,6 +14,7 @@ Key FHIRPath semantics:
 from __future__ import annotations
 
 import math
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import TYPE_CHECKING, Any, Union
 
 if TYPE_CHECKING:
@@ -715,21 +716,26 @@ def round_fn(value: Any, precision: Any = None) -> list[Any]:
     if num is None:
         return []
 
-    # Default precision is 0
     prec = 0
     if precision is not None:
-        prec_num = _to_numeric(precision)
-        if prec_num is None:
+        if _is_empty(precision):
             return []
-        prec = int(prec_num)
+        if isinstance(precision, bool) or not isinstance(precision, int):
+            return []
+        if precision < 0:
+            return []
+        prec = precision
 
-    result = round(num, prec)
+    try:
+        quant = Decimal("1").scaleb(-prec)
+        result = Decimal(str(num)).quantize(quant, rounding=ROUND_HALF_UP)
+    except InvalidOperation:
+        return []
 
-    # If precision is 0, return integer
-    if prec == 0:
+    if precision is None and prec == 0:
         return [int(result)]
 
-    return [result]
+    return [float(result)]
 
 
 def sqrt(value: Any) -> list[Any]:

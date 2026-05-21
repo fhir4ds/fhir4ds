@@ -27,12 +27,13 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime, time
-from decimal import Decimal, InvalidOperation as DecimalInvalidOperation
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+from ...engine import nodes
 from ..types import FHIRPathType, infer_fhirpath_type
 
 
@@ -84,6 +85,14 @@ TIME_PATTERNS = [
     (re.compile(r'^\d{2}:\d{2}:\d{2}$'), '%H:%M:%S'),
     (re.compile(r'^\d{2}:\d{2}$'), '%H:%M'),
 ]
+
+DECIMAL_PATTERN = re.compile(r'^[+-]?\d+(\.\d+)?$')
+DATE_STRING_PATTERN = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+DATETIME_STRING_PATTERN = re.compile(
+    r'^\d{4}-\d{2}-\d{2}T\d{2}(:\d{2})?(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$'
+)
+TIME_STRING_PATTERN = re.compile(r'^\d{2}:\d{2}(:\d{2}(\.\d+)?)?$')
+QUANTITY_STRING_PATTERN = re.compile(r"^([+-]?\d+(\.\d+)?)\s*(('[^']+')|([a-zA-Z]+))?$")
 
 
 def resolve_type_name(type_name: str) -> FHIRPathType | None:
@@ -348,7 +357,6 @@ def to_integer(value: Any) -> int | None:
     FHIRPath Semantics:
         - Empty collection -> empty
         - Integer -> unchanged
-        - Decimal -> truncated (toward zero)
         - String -> parsed if valid integer representation
         - Boolean -> 1 or 0
         - Other types -> empty
@@ -360,34 +368,16 @@ def to_integer(value: Any) -> int | None:
         return 1 if value else 0
 
     if isinstance(value, int):
-        return value
-
-    if isinstance(value, float):
-        # Check for special values
-        if value != value or value == float('inf') or value == float('-inf'):
-            return None
-        # Truncate toward zero
-        return int(value)
-
-    if isinstance(value, Decimal):
-        try:
-            return int(value)
-        except (ValueError, OverflowError):
-            return None
+        return value if -2147483648 <= value <= 2147483647 else None
 
     if isinstance(value, str):
-        value = value.strip()
         if not value:
             return None
 
-        # Try parsing as integer
-        try:
-            # Handle decimal string by truncating
-            if '.' in value:
-                return int(float(value))
-            return int(value)
-        except ValueError:
+        if re.fullmatch(r"[+-]?\d+", value) is None:
             return None
+        int_value = int(value)
+        return int_value if -2147483648 <= int_value <= 2147483647 else None
 
     return None
 
@@ -415,7 +405,7 @@ def to_decimal(value: Any) -> Decimal | None:
         return None
 
     if isinstance(value, bool):
-        return Decimal('1') if value else Decimal('0')
+        return Decimal('1.0') if value else Decimal('0.0')
 
     if isinstance(value, int):
         return Decimal(value)
@@ -430,14 +420,9 @@ def to_decimal(value: Any) -> Decimal | None:
         return value
 
     if isinstance(value, str):
-        value = value.strip()
-        if not value:
+        if DECIMAL_PATTERN.fullmatch(value) is None:
             return None
-
-        try:
-            return Decimal(value)
-        except DecimalInvalidOperation:
-            return None
+        return Decimal(value)
 
     return None
 
@@ -534,38 +519,20 @@ def to_date(value: Any) -> date | None:
         return value
 
     if isinstance(value, str):
-        value = value.strip()
-        if not value:
+        if not value or value != value.strip():
             return None
 
-        # Try ISO format first
-        try:
-            # Handle datetime strings - extract date part
-            if 'T' in value:
-                iso_value = value.split('T')[0]
-            else:
-                iso_value = value
-
-            # Handle partial dates (e.g., "2024-01")
-            parts = iso_value.split('-')
-            if len(parts) >= 3:
-                return date(int(parts[0]), int(parts[1]), int(parts[2]))
-            elif len(parts) == 2:
-                # Partial date - return None per FHIRPath spec
+        if DATE_STRING_PATTERN.fullmatch(value):
+            try:
+                return datetime.strptime(value, "%Y-%m-%d").date()
+            except ValueError:
                 return None
-            elif len(parts) == 1 and len(parts[0]) == 4:
-                # Year only - return None per FHIRPath spec
-                return None
-        except (ValueError, IndexError):
-            pass
 
-        # Try explicit formats
-        for pattern, fmt in DATE_PATTERNS:
-            if pattern.match(value):
-                try:
-                    return datetime.strptime(value, fmt).date()
-                except ValueError:
-                    continue
+        if DATETIME_STRING_PATTERN.fullmatch(value):
+            date_time_value = nodes.FP_DateTime(value)
+            if date_time_value:
+                return datetime.strptime(str(date_time_value)[:10], "%Y-%m-%d").date()
+            return None
 
         return None
 
@@ -601,36 +568,26 @@ def to_time(value: Any) -> time | None:
         return value.time()
 
     if isinstance(value, str):
-        value = value.strip()
-        if not value:
+        if not value or value != value.strip():
             return None
 
-        # Try ISO format first
+        if 'T' in value:
+            if not DATETIME_STRING_PATTERN.fullmatch(value):
+                return None
+            time_part = value.split('T', 1)[1]
+        else:
+            time_part = value
+
+        if time_part.endswith('Z') or re.search(r'[+-]\d{2}:\d{2}$', time_part):
+            return None
+
+        if not TIME_STRING_PATTERN.fullmatch(time_part):
+            return None
+
         try:
-            # Handle datetime strings - extract time part
-            if 'T' in value:
-                time_part = value.split('T')[1]
-            else:
-                time_part = value
-
-            # Remove timezone for parsing
-            # Handle +HH:MM or -HH:MM or Z suffix
-            time_part = re.sub(r'[+-]\d{2}:\d{2}$', '', time_part)
-            time_part = time_part.replace('Z', '')
-
-            # Parse time
             return time.fromisoformat(time_part)
-        except (ValueError, IndexError):
-            pass
-
-        # Try explicit formats
-        for pattern, fmt in TIME_PATTERNS:
-            if pattern.match(value):
-                if fmt:
-                    try:
-                        return datetime.strptime(value, fmt).time()
-                    except ValueError:
-                        continue
+        except ValueError:
+            return None
 
         return None
 
@@ -652,8 +609,8 @@ def to_boolean(value: Any) -> bool | None:
     FHIRPath Semantics:
         - Empty collection -> empty
         - Boolean -> unchanged
-        - Integer/Decimal -> true if non-zero
-        - String -> "true"/"false" (case-insensitive) or conversion to number then check
+        - Integer/Decimal -> true for 1/1.0, false for 0/0.0
+        - String -> one of the specification-defined boolean representations
         - Other types -> empty
     """
     if value is None:
@@ -663,40 +620,84 @@ def to_boolean(value: Any) -> bool | None:
         return value
 
     if isinstance(value, (int, float, Decimal)):
-        return bool(value)
+        if value == 1 or value == Decimal("1") or value == 1.0:
+            return True
+        if value == 0 or value == Decimal("0") or value == 0.0:
+            return False
+        return None
 
     if isinstance(value, str):
-        value_lower = value.strip().lower()
+        value_lower = value.lower()
         if not value_lower:
             return None
 
-        # Check for explicit true/false
-        if value_lower == 'true':
+        if value_lower in {"true", "t", "yes", "y", "1", "1.0"}:
             return True
-        if value_lower == 'false':
-            return False
-
-        # Check for 1/0
-        if value_lower == '1':
-            return True
-        if value_lower == '0':
-            return False
-
-        # Try converting to number first
-        try:
-            num = Decimal(value_lower)
-            return bool(num)
-        except DecimalInvalidOperation:
-            pass
-
-        # Check for yes/no (common extension)
-        if value_lower == 'yes':
-            return True
-        if value_lower == 'no':
+        if value_lower in {"false", "f", "no", "n", "0", "0.0"}:
             return False
 
         return None
 
+    return None
+
+
+def _core_quantity_unit(unit: str | None) -> str:
+    if not unit:
+        return "'1'"
+    if unit.startswith("'") and unit.endswith("'"):
+        return unit
+    if nodes.FP_Quantity.timeUnitsToUCUM.get(unit):
+        return unit
+    return f"'{unit}'"
+
+
+def _quantity_value(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return float(value)
+    return value
+
+
+def _quantity_dict(quantity: nodes.FP_Quantity, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "value": _quantity_value(quantity.value),
+        "unit": quantity.unit.strip("'"),
+    }
+    if extra:
+        result.update(extra)
+    return result
+
+
+def _convert_quantity(quantity: nodes.FP_Quantity, unit: str | None) -> nodes.FP_Quantity | None:
+    if not unit:
+        return quantity
+    target_unit = _core_quantity_unit(unit)
+    if quantity.unit == target_unit:
+        return quantity
+    return nodes.FP_Quantity.conv_unit_to(quantity.unit, quantity.value, target_unit)
+
+
+def _quantity_from_string(value: str) -> nodes.FP_Quantity | None:
+    match = QUANTITY_STRING_PATTERN.fullmatch(value)
+    if not match:
+        return None
+
+    num_value = Decimal(match.group(1))
+    quoted_unit = match.group(4)
+    time_unit = match.group(5)
+
+    if quoted_unit:
+        return nodes.FP_Quantity(num_value, quoted_unit)
+    if not time_unit:
+        return nodes.FP_Quantity(num_value, "'1'")
+    if nodes.FP_Quantity.timeUnitsToUCUM.get(time_unit) and len(time_unit) > 2:
+        return nodes.FP_Quantity(num_value, time_unit)
+    if nodes.FP_Quantity.timeUnitsToUCUM.get(time_unit.lower()) and len(time_unit) > 2:
+        return nodes.FP_Quantity(num_value, time_unit.lower())
+    if time_unit.lower() not in {u.strip("'") for u in nodes.FP_Quantity.mapUCUMCodeToTimeUnits} and not (
+        nodes.FP_Quantity.timeUnitsToUCUM.get(time_unit)
+        or nodes.FP_Quantity.timeUnitsToUCUM.get(time_unit.lower())
+    ):
+        return nodes.FP_Quantity(num_value, f"'{time_unit}'")
     return None
 
 
@@ -727,34 +728,25 @@ def to_quantity(value: Any, unit: str | None = None) -> dict | None:
         return None
 
     if isinstance(value, dict):
-        # Already a Quantity-like structure
         if 'value' in value:
-            result = {
-                'value': value.get('value'),
-                'unit': value.get('unit') or value.get('code', ''),
-            }
-            # Add optional fields
-            if 'system' in value:
-                result['system'] = value['system']
-            if 'code' in value:
-                result['code'] = value['code']
-            if 'comparator' in value:
-                result['comparator'] = value['comparator']
-
-            # TODO: Implement unit conversion when unit parameter is provided
-            if unit:
-                # For now, just return the quantity as-is
-                # Unit conversion would require UCUM library
-                pass
-
-            return result
+            quantity = nodes.FP_Quantity(value.get('value'), _core_quantity_unit(value.get('unit') or value.get('code')))
+            converted = _convert_quantity(quantity, unit)
+            if not converted:
+                return None
+            extra = None
+            if not unit:
+                extra = {
+                    key: value[key]
+                    for key in ("system", "code", "comparator")
+                    if key in value
+                }
+            return _quantity_dict(converted, extra)
         return None
 
     if isinstance(value, bool):
-        return {
-            'value': 1 if value else 0,
-            'unit': unit or '',
-        }
+        quantity = nodes.FP_Quantity(1 if value else 0, "'1'")
+        converted = _convert_quantity(quantity, unit)
+        return _quantity_dict(converted) if converted else None
 
     if isinstance(value, (int, float, Decimal)):
         # Handle special float values
@@ -762,45 +754,18 @@ def to_quantity(value: Any, unit: str | None = None) -> dict | None:
             if value != value or value == float('inf') or value == float('-inf'):
                 return None
 
-        return {
-            'value': float(value) if isinstance(value, float) else int(value) if isinstance(value, int) else float(value),
-            'unit': unit or '',
-        }
+        quantity = nodes.FP_Quantity(value, "'1'")
+        converted = _convert_quantity(quantity, unit)
+        return _quantity_dict(converted) if converted else None
 
     if isinstance(value, str):
-        value = value.strip()
-        if not value:
+        if not value or value != value.strip():
             return None
 
-        # Try parsing as "value 'unit'" format
-        # Pattern: number followed by optional unit in quotes or just unit
-        match = re.match(
-            r'^([+-]?\d+(?:\.\d+)?)\s*(?:\'([^\']+)\'|"([^"]+)"|(\S+))?$',
-            value
-        )
-        if match:
-            num_str = match.group(1)
-            unit_str = match.group(2) or match.group(3) or match.group(4) or ''
-
-            try:
-                num_value = float(num_str)
-                return {
-                    'value': num_value,
-                    'unit': unit or unit_str,
-                }
-            except ValueError:
-                pass
-
-        # Try parsing as just a number
-        try:
-            num_value = float(value)
-            return {
-                'value': num_value,
-                'unit': unit or '',
-            }
-        except ValueError:
-            pass
-
-        return None
+        quantity = _quantity_from_string(value)
+        if not quantity:
+            return None
+        converted = _convert_quantity(quantity, unit)
+        return _quantity_dict(converted) if converted else None
 
     return None

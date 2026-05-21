@@ -3,6 +3,7 @@
 #include "ast.hpp"
 #include "arena_allocator.hpp"
 #include "duckdb/common/types/value.hpp"
+#include <ctime>
 #include <functional>
 #include <map>
 #include <set>
@@ -30,7 +31,8 @@ struct FPValue {
 		Date,
 		DateTime,
 		Time,
-		Quantity
+		Quantity,
+		Null
 	};
 	Type type;
 
@@ -74,6 +76,11 @@ struct FPValue {
 		FPValue v;
 		v.type = Type::Boolean;
 		v.bool_val = b;
+		return v;
+	}
+	static FPValue FromNull() {
+		FPValue v;
+		v.type = Type::Null;
 		return v;
 	}
 };
@@ -185,7 +192,7 @@ private:
 	FPCollection fn_convertsToDate(const FPCollection &input);
 	FPCollection fn_convertsToDateTime(const FPCollection &input);
 	FPCollection fn_convertsToTime(const FPCollection &input);
-	FPCollection fn_convertsToQuantity(const FPCollection &input);
+	FPCollection fn_convertsToQuantity(const FPCollection &input, const std::string &to_unit = "");
 	FPCollection fn_lowBoundary(const FPCollection &input, const FPCollection *precision_arg);
 	FPCollection fn_highBoundary(const FPCollection &input, const FPCollection *precision_arg);
 	FPCollection fn_precision(const FPCollection &input);
@@ -200,6 +207,7 @@ private:
 	FPCollection fn_subsetOf(const FPCollection &input, const FPCollection &other);
 	FPCollection fn_dateArith(const FPValue &date_val, const FPValue &qty_val, bool subtract);
 	FPCollection evalFactoryMethod(const ASTNode &node, yyjson_doc *doc);
+	time_t currentTime();
 
 	// Binary operators
 	FPCollection evalBinaryOp(const ASTNode &node, const FPCollection &input, yyjson_doc *doc);
@@ -207,6 +215,7 @@ private:
 
 	// Helpers
 	bool isTruthy(const FPCollection &collection) const;
+	bool isCriteriaTrue(const FPCollection &collection, const std::string &function_name) const;
 	FPCollection jsonValToCollection(yyjson_val *val) const;
 	std::string jsonValToString(yyjson_val *val) const;
 
@@ -227,6 +236,8 @@ private:
 	int64_t index_context_ = -1;
 	std::map<std::string, FPCollection> defined_variables_;
 	std::set<std::string> chain_defined_vars_; // Track redefinition in same chain
+	bool current_time_cached_ = false;
+	time_t current_time_ = 0;
 
 	// Phase 7: Arena allocator (optional, set per-batch)
 	ArenaAllocator *arena_ = nullptr;

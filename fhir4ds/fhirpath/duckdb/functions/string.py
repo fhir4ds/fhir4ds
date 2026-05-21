@@ -13,6 +13,7 @@ Reference: https://hl7.org/fhirpath/#string-manipulation
 
 from __future__ import annotations
 
+from functools import lru_cache
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +22,30 @@ from ..errors import FHIRPathFunctionError
 
 if TYPE_CHECKING:
     pass
+
+_MAX_REGEX_LENGTH = 1000
+_REDOS_PATTERNS = re.compile(
+    r"(\((?:[^()]*[+*])[^()]*\)[+*])"
+    r"|(\([^()]*\|[^()]*\)[+*])"
+)
+
+
+def _validate_regex(pattern: str, func_name: str) -> None:
+    if len(pattern) > _MAX_REGEX_LENGTH:
+        raise FHIRPathFunctionError(
+            func_name,
+            f"Regex pattern too long ({len(pattern)} chars, max {_MAX_REGEX_LENGTH})"
+        )
+    if _REDOS_PATTERNS.search(pattern):
+        raise FHIRPathFunctionError(
+            func_name,
+            "Regex pattern contains nested quantifiers or quantified alternations"
+        )
+
+
+@lru_cache(maxsize=256)
+def _compile_regex(pattern: str, flags: int = 0) -> re.Pattern[str]:
+    return re.compile(pattern, flags)
 
 
 def _get_singleton_string(collection: FHIRPathCollection, func_name: str) -> str | None:
@@ -48,8 +73,10 @@ def _get_singleton_string(collection: FHIRPathCollection, func_name: str) -> str
     if value is None:
         return None
     if not isinstance(value, str):
-        # Convert non-string to string
-        value = str(value)
+        raise FHIRPathFunctionError(
+            func_name,
+            f"Expected string value, got {type(value).__name__}"
+        )
     return value
 
 
@@ -152,7 +179,7 @@ def substring(
         return FHIRPathCollection([])
 
     # Validate start index
-    if start < 0 or start > len(value):
+    if start < 0 or start >= len(value):
         return FHIRPathCollection([])
 
     if length_val is None:
@@ -331,9 +358,6 @@ def matches(collection: FHIRPathCollection, regex: str) -> FHIRPathCollection:
     """
     Returns true if the string matches the given regular expression.
 
-    FHIRPath uses partial matching semantics - the regex matches if any
-    part of the string matches.
-
     FHIRPath: matches(regex : string) : boolean
 
     Args:
@@ -344,17 +368,17 @@ def matches(collection: FHIRPathCollection, regex: str) -> FHIRPathCollection:
         Collection containing true or false, or empty if input is empty
 
     Example:
-        >>> matches(FHIRPathCollection(['hello123']), r'\\d+')
+        >>> matches(FHIRPathCollection(['123']), r'\\d+')
         FHIRPathCollection([True])
-        >>> matches(FHIRPathCollection(['hello']), r'\\d+')
+        >>> matches(FHIRPathCollection(['hello123']), r'\\d+')
         FHIRPathCollection([False])
     """
     value = _get_singleton_string(collection, "matches")
     if value is None:
         return FHIRPathCollection([])
+    _validate_regex(regex, "matches")
     try:
-        # FHIRPath uses partial matching (search), not full matching
-        result = bool(re.search(regex, value))
+        result = _compile_regex(regex, re.DOTALL).fullmatch(value) is not None
         return _bool_result(result)
     except re.error as e:
         raise FHIRPathFunctionError("matches", f"Invalid regular expression: {e}")
@@ -385,11 +409,26 @@ def replace_matches(
     value = _get_singleton_string(collection, "replaceMatches")
     if value is None:
         return FHIRPathCollection([])
+    if regex == "":
+        return _string_result(value)
+    _validate_regex(regex, "replaceMatches")
     try:
-        result = re.sub(regex, replacement, value)
+        result = _compile_regex(regex).sub(replacement, value)
         return _string_result(result)
     except re.error as e:
         raise FHIRPathFunctionError("replaceMatches", f"Invalid regular expression: {e}")
+
+
+def to_chars(collection: FHIRPathCollection) -> FHIRPathCollection:
+    """
+    Returns the list of characters in the input string.
+
+    FHIRPath: toChars() : collection
+    """
+    value = _get_singleton_string(collection, "toChars")
+    if value is None:
+        return FHIRPathCollection([])
+    return FHIRPathCollection(list(value))
 
 
 # =============================================================================
@@ -541,6 +580,7 @@ STRING_FUNCTIONS = {
     "upper": lambda col: upper(col),
     "lower": lambda col: lower(col),
     "trim": lambda col: trim(col),
+    "toChars": lambda col: to_chars(col),
 
     # Single-argument functions
     "startsWith": lambda col, arg: starts_with(col, arg),

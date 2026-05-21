@@ -40,7 +40,11 @@ def mode(values: List[Any]) -> Any:
     counter = Counter([v for v in values if v is not None])
     if not counter:
         return None
-    return counter.most_common(1)[0][0]
+    max_count = max(counter.values())
+    modes = [value for value, count in counter.items() if count == max_count]
+    if len(modes) != 1:
+        return None
+    return modes[0]
 
 
 def stddev(values: List[Any]) -> float | None:

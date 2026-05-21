@@ -12,15 +12,21 @@ if TYPE_CHECKING:
 
 _RESOLVE_MACRO_SQL = """\
 CREATE OR REPLACE MACRO resolve(ref) AS (
-    SELECT r.resource FROM resources r
-    WHERE ref IS NOT NULL
-    AND r.id = split_part(
-        CASE WHEN ref LIKE '{%' THEN json_extract_string(ref::VARCHAR, '$.reference') ELSE ref END,
-        '/', -1
+    WITH _ref AS (
+        SELECT CASE
+            WHEN ref IS NULL THEN NULL
+            WHEN LTRIM(ref::VARCHAR) LIKE '{%' THEN json_extract_string(ref::VARCHAR, '$.reference')
+            ELSE TRIM(BOTH '"' FROM ref::VARCHAR)
+        END AS raw_ref
     )
-    AND r.resourceType = split_part(
-        CASE WHEN ref LIKE '{%' THEN json_extract_string(ref::VARCHAR, '$.reference') ELSE ref END,
-        '/', 1
+    SELECT r.resource FROM resources r
+    CROSS JOIN _ref
+    WHERE ref IS NOT NULL
+    AND raw_ref IS NOT NULL
+    AND r.id = regexp_replace(split_part(raw_ref, '/', -1), '^urn:uuid:', '')
+    AND (
+        split_part(raw_ref, '/', -2) = ''
+        OR r.resourceType = split_part(raw_ref, '/', -2)
     )
     LIMIT 1
 )

@@ -1234,8 +1234,17 @@ class Lexer:
         # Check for Long suffix (before has_decimal check)
         if not has_decimal and (self._current() == 'L' or self._current() == 'l'):
             self._advance()  # consume L
+            if self._current() and (self._current().isalnum() or self._current() == "_"):
+                raise LexerError(
+                    f"Invalid numeric literal suffix at line {start_line}, column {start_col}"
+                )
             self.tokens.append(Token(TokenType.LONG, value, start_line, start_col))
             return
+
+        if self._current() and (self._current().isalnum() or self._current() == "_"):
+            raise LexerError(
+                f"Invalid numeric literal suffix at line {start_line}, column {start_col}"
+            )
 
         if has_decimal:
             self.tokens.append(Token(TokenType.DECIMAL, value, start_line, start_col))

@@ -11,6 +11,8 @@ from .types import (
     PopulationEntry,
     PopulationMap,
     SupportingEvidenceDef,
+    StratifierComponent,
+    StratifierEntry,
 )
 
 _logger = logging.getLogger(__name__)
@@ -105,8 +107,17 @@ class MeasureParser:
             for pop in group.get("population", [])
             if isinstance(pop, dict) and (entry := self._parse_population(pop, group_id)) is not None
         ]
+        stratifiers = [
+            entry
+            for i, stratifier in enumerate(group.get("stratifier", []))
+            if isinstance(stratifier, dict)
+            and (entry := self._parse_stratifier(stratifier, group_id, i)) is not None
+        ]
         return GroupMap(
-            group_id=group_id, population_basis=pop_basis, populations=populations
+            group_id=group_id,
+            population_basis=pop_basis,
+            populations=populations,
+            stratifiers=stratifiers,
         )
 
     def _parse_population(
@@ -156,6 +167,64 @@ class MeasureParser:
         """Extract the CQL expression name from criteria."""
         criteria = pop.get("criteria", {})
         return criteria.get("expression", "")
+
+    def _parse_stratifier(
+        self, stratifier: dict, group_id: str, index: int
+    ) -> StratifierEntry | None:
+        """Parse a Measure stratifier or composite stratifier."""
+        stratifier_id = stratifier.get("id") or f"stratifier-{index + 1}"
+        code_text = self._extract_code_text(stratifier.get("code", {}))
+        cql_expr = self._extract_cql_expression(stratifier) or None
+
+        components: list[StratifierComponent] = []
+        for comp_index, component in enumerate(stratifier.get("component", [])):
+            if not isinstance(component, dict):
+                continue
+            comp_expr = self._extract_cql_expression(component)
+            if not comp_expr:
+                _logger.warning(
+                    "Dropping stratifier component %d in group '%s': empty CQL expression",
+                    comp_index + 1,
+                    group_id,
+                )
+                continue
+            components.append(
+                StratifierComponent(
+                    component_id=component.get("id") or f"{stratifier_id}-component-{comp_index + 1}",
+                    code_text=self._extract_code_text(component.get("code", {})),
+                    cql_expression=comp_expr,
+                )
+            )
+
+        if cql_expr is None and not components:
+            _logger.warning(
+                "Dropping stratifier '%s' in group '%s': empty CQL expression",
+                stratifier_id,
+                group_id,
+            )
+            return None
+
+        return StratifierEntry(
+            stratifier_id=stratifier_id,
+            code_text=code_text,
+            cql_expression=cql_expr,
+            components=components,
+        )
+
+    def _extract_code_text(self, code_obj: dict) -> str | None:
+        """Extract display text from a FHIR CodeableConcept-like code object."""
+        if not isinstance(code_obj, dict):
+            return None
+        if code_obj.get("text"):
+            return code_obj["text"]
+        for coding in code_obj.get("coding", []):
+            if not isinstance(coding, dict):
+                continue
+            if coding.get("display"):
+                return coding["display"]
+            if coding.get("code"):
+                return coding["code"]
+        return None
 
     def _extract_supporting_evidence(self, pop: dict) -> list[SupportingEvidenceDef]:
         """Extract cqf-supportingEvidenceDefinition extensions."""

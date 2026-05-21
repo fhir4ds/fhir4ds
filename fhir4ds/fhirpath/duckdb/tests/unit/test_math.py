@@ -421,26 +421,35 @@ class TestRound:
     def test_round_default_precision(self):
         """Round with default precision (0)"""
         assert round_fn(3.4) == [3]
-        assert round_fn(3.5) == [4]  # Python round() rounds to even
+        assert round_fn(2.5) == [3]
+        assert round_fn(3.5) == [4]
         assert round_fn(3.6) == [4]
+        assert round_fn(-2.5) == [-3]
         assert round_fn(-3.5) == [-4]
 
     def test_round_with_precision(self):
         """Round with specified precision"""
         assert round_fn(3.456, 2) == [3.46]
         assert round_fn(3.456, 1) == [3.5]
-        assert round_fn(3.456, 0) == [3]
+        assert round_fn(2.55, 1) == [2.6]
+        assert round_fn(3.456, 0) == [3.0]
 
     def test_round_empty(self):
         """Round of empty returns empty"""
         assert round_fn([]) == []
 
     def test_round_negative_precision(self):
-        """Round with negative precision"""
-        # Python round(123, -1) = 120
-        result = round_fn(123, -1)
-        assert len(result) == 1
-        assert result[0] == 120
+        """Round rejects negative precision"""
+        assert round_fn(123, -1) == []
+
+    def test_round_non_integer_precision(self):
+        """Round rejects non-Integer precision"""
+        assert round_fn(2.5, 1.5) == []
+        assert round_fn(2.5, True) == []
+
+    def test_round_unrepresentable_precision(self):
+        """Round returns empty when precision cannot be represented"""
+        assert round_fn(1.23, 100) == []
 
 
 class TestSqrt:

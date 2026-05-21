@@ -25,6 +25,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable
 
 from ..collection import FHIRPathCollection, EMPTY, EmptyCollectionSentinel
+from ..errors import FHIRPathError
 
 if TYPE_CHECKING:
     pass
@@ -88,31 +89,44 @@ def where(
         return EMPTY
 
     if callable(criteria):
-        # Use predicate directly
-        return FHIRPathCollection([v for v in collection.values if criteria(v)])
+        results = []
+        for item in collection.values:
+            if _criteria_result_is_true(criteria(item)):
+                results.append(item)
+        return FHIRPathCollection(results)
     elif evaluator is not None and isinstance(criteria, str):
         # Evaluate expression against each element
         results = []
         for item in collection.values:
             try:
                 eval_result = evaluator(criteria, item)
-                # FHIRPath: true if result is true (singleton) or non-empty collection
-                if isinstance(eval_result, bool) and eval_result:
+                if _criteria_result_is_true(eval_result):
                     results.append(item)
-                elif isinstance(eval_result, list) and len(eval_result) > 0:
-                    # Check if first element is true
-                    if eval_result[0] is True:
-                        results.append(item)
-                elif isinstance(eval_result, FHIRPathCollection) and not eval_result.is_empty:
-                    if eval_result.is_singleton and eval_result.singleton_value is True:
-                        results.append(item)
             except (ValueError, TypeError, KeyError, AttributeError) as e:
-                _logger.warning("where() expression evaluation failed for '%s': %s", criteria, e)
-                # Error in evaluation - skip this item
-                continue
+                raise FHIRPathError(f"where() expression evaluation failed for '{criteria}': {e}") from e
         return FHIRPathCollection(results)
     else:
         raise ValueError("criteria must be callable or evaluator must be provided for string criteria")
+
+
+def _criteria_result_is_true(result: Any) -> bool:
+    """Return whether a where() criterion is the singleton Boolean true."""
+    if result is None or isinstance(result, EmptyCollectionSentinel):
+        return False
+    if isinstance(result, FHIRPathCollection):
+        if result.is_empty:
+            return False
+        values = result.values
+    elif isinstance(result, list):
+        values = result
+    else:
+        values = [result]
+
+    if len(values) == 0:
+        return False
+    if len(values) != 1 or not isinstance(values[0], bool):
+        raise FHIRPathError("where() criteria must evaluate to a singleton Boolean")
+    return values[0]
 
 
 def select(
@@ -156,9 +170,7 @@ def select(
                 result = evaluator(projection, item)
                 _flatten_result(results, result)
             except (ValueError, TypeError, KeyError, AttributeError) as e:
-                _logger.warning("select() projection evaluation failed for '%s': %s", projection, e)
-                # Error in evaluation - skip this item
-                continue
+                raise FHIRPathError(f"select() projection evaluation failed for '{projection}': {e}") from e
     else:
         raise ValueError("projection must be callable or evaluator must be provided for string projection")
 
@@ -194,9 +206,9 @@ def repeat(
     FHIRPath semantics:
     - Empty collection returns empty: {}.repeat(X) -> {}
     - Expression is applied to each element
-    - Results are added to the working collection
+    - New projection results are added to the working collection
     - Process repeats until no new results
-    - Final result includes all discovered elements
+    - Final result includes discovered projection results, not the input seeds
 
     Args:
         collection: The starting collection.
@@ -205,7 +217,7 @@ def repeat(
         max_iterations: Safety limit to prevent infinite loops.
 
     Returns:
-        Collection of all discovered elements or EMPTY if input is empty.
+        Collection of discovered projection results or EMPTY if input is empty.
 
     Example:
         >>> # Get all descendant nodes
@@ -216,22 +228,13 @@ def repeat(
     if collection.is_empty:
         return EMPTY
 
-    # Track all unique results (using repr for unhashable types)
     all_results: list[Any] = []
-    seen_reprs: set[str] = set()
-
-    # Initialize with input collection
     current_items = list(collection.values)
 
-    # Add initial items to results
-    for item in current_items:
-        item_repr = _stable_repr(item)
-        if item_repr not in seen_reprs:
-            seen_reprs.add(item_repr)
-            all_results.append(item)
-
     iteration = 0
-    while current_items and iteration < max_iterations:
+    while current_items:
+        if iteration >= max_iterations:
+            raise FHIRPathError("repeat() maximum iteration limit exceeded")
         iteration += 1
         new_items = []
 
@@ -256,29 +259,27 @@ def repeat(
                 else:
                     result_items = []
 
-                # Add new unique items
                 for new_item in result_items:
-                    new_repr = _stable_repr(new_item)
-                    if new_repr not in seen_reprs:
-                        seen_reprs.add(new_repr)
+                    if not _contains_equal(all_results, new_item) and not _contains_equal(new_items, new_item):
                         all_results.append(new_item)
                         new_items.append(new_item)
 
             except (ValueError, TypeError, KeyError, AttributeError) as e:
-                _logger.warning("repeat() expression evaluation failed: %s", e)
-                continue
+                raise FHIRPathError(f"repeat() expression evaluation failed: {e}") from e
 
         current_items = new_items
 
     return FHIRPathCollection(all_results)
 
 
-def _stable_repr(obj: Any) -> str:
-    """Generate a stable repr for unhashable types."""
-    if isinstance(obj, dict):
-        # Sort keys for stable repr
-        return repr(sorted(obj.items(), key=lambda x: str(x[0])))
-    return repr(obj)
+def _contains_equal(items: list[Any], candidate: Any) -> bool:
+    """Check membership using FHIRPath `=` semantics."""
+    from ...engine.invocations import equality as equality_invocations
+
+    for item in items:
+        if equality_invocations.equality({}, [item], [candidate]) is True:
+            return True
+    return False
 
 
 def first(collection: FHIRPathCollection) -> Any:
@@ -457,28 +458,19 @@ def of_type(collection: FHIRPathCollection, type_name: str) -> FHIRPathCollectio
     if collection.is_empty:
         return FHIRPathCollection([])
 
-    # Get Python type for FHIR type
     expected_type = FHIR_TYPE_MAP.get(type_name)
-
-    if expected_type is None:
-        # Unknown type - return empty
-        return FHIRPathCollection([])
 
     results = []
 
     for item in collection.values:
-        # Special handling for dict types
-        if expected_type is dict:
+        if isinstance(item, dict) and "resourceType" in item:
+            if _is_fhir_subtype(item["resourceType"], type_name):
+                results.append(item)
+        elif expected_type is dict:
             if isinstance(item, dict):
-                # Check if it's a specific FHIR type with resourceType
-                if type_name == "Resource":
-                    # Any dict can be a resource
+                if _is_fhir_complex_type(item, type_name):
                     results.append(item)
-                elif item.get("resourceType") == type_name:
-                    results.append(item)
-                elif _is_fhir_complex_type(item, type_name):
-                    results.append(item)
-        elif isinstance(item, expected_type):
+        elif expected_type is not None and isinstance(item, expected_type):
             # Handle bool/int overlap (bool is subclass of int)
             if expected_type is int and isinstance(item, bool):
                 continue
@@ -487,6 +479,24 @@ def of_type(collection: FHIRPathCollection, type_name: str) -> FHIRPathCollectio
             results.append(item)
 
     return FHIRPathCollection(results)
+
+
+def _is_fhir_subtype(actual_type: str, requested_type: str) -> bool:
+    if actual_type == requested_type:
+        return True
+    try:
+        from ..fhir_model import get_fhir_model
+
+        type2parent = get_fhir_model().get("type2Parent", {})
+    except Exception:
+        type2parent = {}
+
+    parent = type2parent.get(actual_type)
+    while parent:
+        if parent == requested_type:
+            return True
+        parent = type2parent.get(parent)
+    return False
 
 
 def _is_fhir_complex_type(item: dict, type_name: str) -> bool:

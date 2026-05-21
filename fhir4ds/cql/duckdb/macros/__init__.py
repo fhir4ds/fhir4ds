@@ -47,7 +47,7 @@ def register_all_macros(con: "duckdb.DuckDBPyConnection") -> None:
     - String: Length, Upper, Lower, Concat, Substring, IndexOf, StartsWith, EndsWith, etc.
     - DateTime: Year, Month, Day, Hour, Minute, Second, Now, Today, DateBetween, etc.
     - Aggregate: Count, Sum, Min, Max, Avg, Median, Mode, StdDev, Variance, etc.
-    - Logical: And, Or, Not, Xor, Implies, Coalesce, etc.
+    - Logical: And, Or, Not, Xor, Implies, null predicates, etc.
     - Conversion: ToString, ToInteger, ToDecimal, ToBoolean, ToDate, ToDateTime, ToTime
     - List: First, Last, Skip, Take, Distinct
 
@@ -57,8 +57,8 @@ def register_all_macros(con: "duckdb.DuckDBPyConnection") -> None:
     registerMathMacros(con)
     registerStringMacros(con)
     registerDateTimeMacros(con)
-    registerAggregateMacros(con)
     registerLogicalMacros(con)
     registerConversionMacros(con)
     registerListMacros(con)
+    registerAggregateMacros(con)
     register_audit_macros(con)

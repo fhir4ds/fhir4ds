@@ -20,7 +20,7 @@ def iif_macro(ctx, data, cond, ok, fail=None):
     if len(data) > 1:
         raise FHIRPathError("iif() can only be called on an empty or singleton collection")
 
-    if util.is_true(cond(data)):
+    if util.is_true(cond(data), singleton_non_boolean=not ctx.get("strict_mode")):
         return ok(data)
     elif fail:
         return fail(data)
@@ -28,15 +28,67 @@ def iif_macro(ctx, data, cond, ok, fail=None):
         return []
 
 
-def trace_fn(ctx, x, label=""):
+def trace_fn(ctx, x, label="", projection=None):
+    trace_value = x
+    if projection is not None:
+        sentinel = object()
+        saved_this = ctx.get("$this", sentinel)
+        try:
+            trace_value = projection(x)
+        finally:
+            if saved_this is sentinel:
+                ctx.pop("$this", None)
+            else:
+                ctx["$this"] = saved_this
+
     # Check if a custom trace callback is provided in the context
     if "traceFn" in ctx and callable(ctx["traceFn"]):
-        ctx["traceFn"](label, x)
+        ctx["traceFn"](label, trace_value)
     else:
         # Extract underlying FHIR data from ResourceNode wrappers
-        display = [util.get_data(item) for item in x] if isinstance(x, list) else x
+        display = [util.get_data(item) for item in trace_value] if isinstance(trace_value, list) else trace_value
         print("TRACE:[" + label + "]", str(display))
     return x
+
+
+_SYSTEM_VARIABLES = frozenset({
+    "context",
+    "resource",
+    "rootResource",
+    "ucum",
+    "sct",
+    "loinc",
+    "vs-administrative-gender",
+    "ext-patient-birthTime",
+})
+
+
+def define_variable(ctx, coll, name, value_expr=None):
+    """Define a transient environment variable for the current invocation chain."""
+    if not isinstance(name, str):
+        raise FHIRPathError("defineVariable() variable name must be a string")
+
+    if name in _SYSTEM_VARIABLES:
+        raise FHIRPathError(f"Cannot overwrite system variable %{name}")
+
+    chain_vars = ctx.setdefault("_chain_defined_vars", set())
+    if name in chain_vars:
+        raise FHIRPathError(f"Variable %{name} is already defined in this scope")
+    chain_vars.add(name)
+
+    value = coll
+    if value_expr is not None:
+        saved_vars = dict(ctx.get("vars", {}))
+        saved_chain = set(chain_vars)
+        ctx["_chain_defined_vars"] = set()
+        try:
+            value = value_expr(coll)
+        finally:
+            ctx["vars"] = saved_vars
+            ctx["_chain_defined_vars"] = saved_chain
+
+    ctx["vars"][name] = value
+    return coll
 
 
 def to_integer(ctx, coll):
@@ -45,18 +97,16 @@ def to_integer(ctx, coll):
 
     value = util.get_data(coll[0])
 
-    if value == False:
+    if value is False:
         return 0
 
-    if value == True:
+    if value is True:
         return 1
 
-    if util.is_number(value):
-        if int(value) == value:
-            int_val = int(value)
-            # FHIRPath Integer is 32-bit signed
-            if -2147483648 <= int_val <= 2147483647:
-                return int_val
+    if isinstance(value, int) and not isinstance(value, bool):
+        # FHIRPath Integer is 32-bit signed
+        if -2147483648 <= value <= 2147483647:
+            return value
         return []
 
     if isinstance(value, str):
@@ -266,6 +316,12 @@ def create_converts_to_fn(to_function, _type):
         return isinstance(to_function(ctx, coll), _type)
 
     return in_function
+
+
+def converts_to_quantity(ctx, coll, to_unit=None):
+    if len(coll) != 1:
+        return []
+    return isinstance(to_quantity(ctx, coll, to_unit), nodes.FP_Quantity)
 
 
 def to_boolean(ctx, coll):

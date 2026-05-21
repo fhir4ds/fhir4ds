@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import re
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -34,6 +35,79 @@ if TYPE_CHECKING:
 FHIRPATH_BUILTIN_VARIABLES = {"rowIndex", "context", "resource", "rootResource", "ucum"}
 
 _logger = logging.getLogger(__name__)
+
+
+_FHIRPATH_IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _skip_quoted_region(path: str, start: int, quote: str) -> int:
+    """Return the index after a FHIRPath quoted string or identifier."""
+    i = start + 1
+    while i < len(path):
+        if path[i] == "\\":
+            i += 2
+            continue
+        if path[i] == quote:
+            return i + 1
+        i += 1
+    return len(path)
+
+
+def iter_constant_references(path: str):
+    """Yield ``(start, end, name)`` for external constants outside literals.
+
+    FHIRPath treats string literals, delimited identifiers, comments, and
+    external constants as distinct lexical regions. Regex-only replacement is
+    not safe because text such as ``'%name'`` is a string literal, not a
+    constant reference.
+    """
+    i = 0
+    while i < len(path):
+        char = path[i]
+
+        if char == "'":
+            i = _skip_quoted_region(path, i, "'")
+            continue
+        if char == "`":
+            i = _skip_quoted_region(path, i, "`")
+            continue
+        if path.startswith("//", i):
+            newline = path.find("\n", i + 2)
+            i = len(path) if newline == -1 else newline + 1
+            continue
+        if path.startswith("/*", i):
+            end_comment = path.find("*/", i + 2)
+            i = len(path) if end_comment == -1 else end_comment + 2
+            continue
+
+        if char == "%":
+            match = _FHIRPATH_IDENTIFIER_RE.match(path, i + 1)
+            if match is not None:
+                yield i, match.end(), match.group(0)
+                i = match.end()
+                continue
+
+        i += 1
+
+
+def extract_constant_references(path: str) -> set[str]:
+    """Return FHIRPath external constant names referenced outside literals."""
+    return {name for _, _, name in iter_constant_references(path)}
+
+
+def _fhirpath_string_literal(value: str) -> str:
+    """Serialize a Python string as a FHIRPath single-quoted string literal."""
+    escaped = (
+        value.replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace('"', '\\"')
+        .replace("`", "\\`")
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
+        .replace("\f", "\\f")
+    )
+    return f"'{escaped}'"
 
 
 def resolve_constant(constant: Constant) -> str:
@@ -111,12 +185,12 @@ def _resolve_simple_value(value: Any, value_type: str | None) -> str:
         )
     if isinstance(value, bool):
         return "true" if value else "false"
-    elif isinstance(value, (int, float)):
+    elif isinstance(value, (int, float, Decimal)):
+        return str(value)
+    elif value_type == "integer64":
         return str(value)
     else:
-        # String/code value - escape single quotes using SQL standard (double the quote)
-        escaped = str(value).replace("'", "''")
-        return f"'{escaped}'"
+        return _fhirpath_string_literal(str(value))
 
 
 def _resolve_coding(coding: dict[str, Any]) -> str:
@@ -241,28 +315,32 @@ def resolve_constants_in_path(path: str, constants: dict[str, Constant]) -> str:
         >>> resolve_constants_in_path("gender = %Female", constants)
         "gender = 'female'"
     """
-    # Pattern to match %ConstantName
-    # Constant names must start with a letter or underscore and can contain
-    # letters, digits, and underscores
-    pattern = r'%([a-zA-Z_][a-zA-Z0-9_]*)'
+    resolved_parts: list[str] = []
+    last_end = 0
 
-    def replace_match(match: re.Match) -> str:
-        const_name = match.group(1)
+    for start, end, const_name in iter_constant_references(path):
+        resolved_parts.append(path[last_end:start])
         if const_name in constants:
-            return resolve_constant(constants[const_name])
+            resolved_parts.append(resolve_constant(constants[const_name]))
+            last_end = end
+            continue
         # Spec-compliant FHIRPath context variables (%context, %resource, etc.)
         # should pass through unchanged — they are resolved at evaluation time.
         # However, undefined user constants should raise an error.
         if const_name in FHIRPATH_BUILTIN_VARIABLES:
-            return match.group(0)
+            resolved_parts.append(path[start:end])
+            last_end = end
+            continue
         _logger.warning(
             "Undefined constant reference '%%%s' in FHIRPath expression. "
             "This may cause evaluation errors.",
             const_name,
         )
-        return match.group(0)
+        resolved_parts.append(path[start:end])
+        last_end = end
 
-    return re.sub(pattern, replace_match, path)
+    resolved_parts.append(path[last_end:])
+    return "".join(resolved_parts)
 
 
 class ConstantResolver:

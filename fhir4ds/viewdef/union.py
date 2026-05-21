@@ -6,7 +6,8 @@ that combine results from multiple select branches.
 """
 
 import logging
-from typing import List, TYPE_CHECKING
+import re
+from typing import List, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .parser import Select
@@ -14,11 +15,65 @@ if TYPE_CHECKING:
 from .parser import Column
 
 _logger = logging.getLogger(__name__)
+_SAFE_IDENTIFIER_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 
 
 class UnionGeneratorError(Exception):
     """Raised when UNION ALL generation fails."""
     pass
+
+
+def _quote_identifier(name: str) -> str:
+    if not isinstance(name, str) or not name or not _SAFE_IDENTIFIER_RE.fullmatch(name):
+        raise UnionGeneratorError(
+            f"Invalid SQL identifier in unionAll base query: {name!r}"
+        )
+    return f'"{name}"'
+
+
+def _quote_table_reference(name: str) -> str:
+    if not isinstance(name, str) or not name:
+        raise UnionGeneratorError("unionAll base query table must be a non-empty string")
+    parts = name.split(".")
+    if any(part == "" for part in parts):
+        raise UnionGeneratorError(f"Invalid SQL table reference in unionAll base query: {name!r}")
+    return ".".join(_quote_identifier(part) for part in parts)
+
+
+def _normalize_base_query(base_query: str) -> str:
+    """Return a quoted table reference plus optional safe alias.
+
+    The legacy helper historically accepted a raw ``FROM`` fragment such as
+    ``"patients t"``. Keep that compatibility shape, but treat it as structured
+    ``table [AS] alias`` input instead of executable SQL.
+    """
+    if not isinstance(base_query, str) or not base_query.strip():
+        raise UnionGeneratorError("unionAll base query must be a non-empty string")
+
+    tokens = base_query.strip().split()
+    if len(tokens) == 1:
+        table_name = tokens[0]
+        alias = None
+        use_as = False
+    elif len(tokens) == 2:
+        table_name, alias = tokens
+        use_as = False
+    elif len(tokens) == 3 and tokens[1].lower() == "as":
+        table_name, alias = tokens[0], tokens[2]
+        use_as = True
+    else:
+        raise UnionGeneratorError(
+            "unionAll base query must be a table reference with an optional alias"
+        )
+
+    quoted_table = _quote_table_reference(table_name)
+    if alias is None:
+        return quoted_table
+    if not _SAFE_IDENTIFIER_RE.fullmatch(alias):
+        raise UnionGeneratorError(
+            f"Invalid SQL alias in unionAll base query: {alias!r}"
+        )
+    return f"{quoted_table} AS {alias}" if use_as else f"{quoted_table} {alias}"
 
 
 def generate_union_all(
@@ -47,26 +102,49 @@ def generate_union_all(
     if not union_selects:
         raise UnionGeneratorError("unionAll requires at least one select branch")
 
-    # Generate SQL for each branch
+    safe_base_query = _normalize_base_query(base_query)
     branch_sqls = []
-    column_names = None
+    reference_schema = None
 
     for i, select in enumerate(union_selects):
-        branch_sql, branch_columns = _generate_union_branch(
-            select, base_query, generator, resource_var
+        branch_sql, branch_schema = _generate_union_branch(
+            select, safe_base_query, generator, resource_var
         )
         branch_sqls.append(branch_sql)
 
-        # Verify column names match across branches
-        if column_names is None:
-            column_names = branch_columns
-        elif column_names != branch_columns:
+        if reference_schema is None:
+            reference_schema = branch_schema
+        elif reference_schema != branch_schema:
             raise UnionGeneratorError(
-                f"UNION ALL branch {i} has mismatched column names. "
-                f"Expected: {column_names}, Got: {branch_columns}"
+                f"UNION ALL branch {i} has mismatched column schema. "
+                f"Expected: {reference_schema}, Got: {branch_schema}"
             )
 
     return "\nUNION ALL\n".join(branch_sqls)
+
+
+def _build_select_query(
+    selects: List['Select'],
+    base_query: str,
+    generator: 'SQLGenerator',
+    resource_var: str,
+) -> str:
+    """Build a SELECT query for one expanded union branch."""
+    column_exprs, join_clauses, where_conditions = generator._process_selects(
+        selects,
+        resource_var,
+        root_resource_var=resource_var,
+    )
+
+    if not column_exprs:
+        return "SELECT NULL WHERE FALSE"
+
+    sql = "SELECT\n    " + ",\n    ".join(column_exprs) + f"\nFROM {base_query}"
+    if join_clauses:
+        sql += "\n" + "\n".join(join_clauses)
+    if where_conditions:
+        sql += "\nWHERE " + "\n  AND ".join(where_conditions)
+    return sql
 
 
 def _generate_union_branch(
@@ -74,7 +152,7 @@ def _generate_union_branch(
     base_query: str,
     generator: 'SQLGenerator',
     resource_var: str
-) -> tuple[str, List[str]]:
+) -> tuple[str, List[Tuple[str, str | None, bool]]]:
     """Generate SQL for a single UNION branch.
 
     Handles both simple column selects and nested unionAll structures.
@@ -86,33 +164,22 @@ def _generate_union_branch(
         resource_var: Variable name for the resource
 
     Returns:
-        Tuple of (SQL string, list of column names)
+        Tuple of (SQL string, effective output schema)
     """
-    # Check if this branch itself contains a nested unionAll
-    if select.unionAll:
-        # Recursively handle nested unionAll
-        nested_sql = generate_union_all(
-            select.unionAll, base_query, generator, resource_var
-        )
-        # Extract column names from the first nested branch
-        column_names = _extract_column_names(select.unionAll[0])
-        return nested_sql, column_names
+    schema = _extract_column_schema(select, generator)
+    branch_sqls = [
+        _build_select_query(expanded, base_query, generator, resource_var)
+        for expanded in generator._expand_select_unions(select)
+    ]
+    return "\nUNION ALL\n".join(branch_sqls), schema
 
-    # Generate column expressions
-    column_exprs = []
-    column_names = []
 
-    for col in select.column:
-        expr = generator.generate_column_expr(col, resource_var)
-        column_exprs.append(expr)
-        column_names.append(col.name)
-
-    # Build SELECT statement
-    columns_sql = ",\n    ".join(column_exprs)
-
-    sql = f"SELECT\n    {columns_sql}\nFROM {base_query}"
-
-    return sql, column_names
+def _extract_column_schema(
+    select: 'Select',
+    generator: 'SQLGenerator',
+) -> List[Tuple[str, str | None, bool]]:
+    """Extract the effective output schema from a Select structure."""
+    return generator._collect_branch_column_schema(select)
 
 
 def _extract_column_names(select: 'Select') -> List[str]:
@@ -126,9 +193,12 @@ def _extract_column_names(select: 'Select') -> List[str]:
     Returns:
         List of column names
     """
+    names = [col.name for col in select.column]
+    for nested in select.select:
+        names.extend(_extract_column_names(nested))
     if select.unionAll:
-        return _extract_column_names(select.unionAll[0])
-    return [col.name for col in select.column]
+        names.extend(_extract_column_names(select.unionAll[0]))
+    return names
 
 
 class UnionGenerator:
@@ -169,7 +239,7 @@ class UnionGenerator:
         )
 
     def validate_union_columns(self, union_selects: List['Select']) -> List[str]:
-        """Validate that all union branches have matching column names.
+        """Validate that all union branches have matching output schemas.
 
         Args:
             union_selects: List of Select structures to validate
@@ -183,17 +253,15 @@ class UnionGenerator:
             warnings.append("unionAll requires at least one select branch")
             return warnings
 
-        # Get column names from first branch
-        first_columns = _extract_column_names(union_selects[0])
+        first_schema = _extract_column_schema(union_selects[0], self.generator)
 
-        # Compare with all other branches
         for i, select in enumerate(union_selects[1:], start=1):
-            branch_columns = _extract_column_names(select)
+            branch_schema = _extract_column_schema(select, self.generator)
 
-            if branch_columns != first_columns:
+            if branch_schema != first_schema:
                 warnings.append(
-                    f"UNION ALL branch {i} has mismatched column names. "
-                    f"Expected: {first_columns}, Got: {branch_columns}"
+                    f"UNION ALL branch {i} has mismatched column schema. "
+                    f"Expected: {first_schema}, Got: {branch_schema}"
                 )
 
         return warnings

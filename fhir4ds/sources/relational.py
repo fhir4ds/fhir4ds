@@ -14,7 +14,12 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fhir4ds.sources.base import SchemaValidationError, quote_identifier, validate_schema
+from fhir4ds.sources.base import (
+    SchemaValidationError,
+    quote_identifier,
+    quote_sql_literal,
+    validate_schema,
+)
 
 
 # Name used for the DuckDB Postgres attachment.
@@ -160,8 +165,6 @@ class PostgresSource:
                 "PostgresSource requires at least one PostgresTableMapping. "
                 "Provide a mapping for each Postgres table to include."
             )
-        # connection_string is passed to DuckDB's ATTACH, not interpolated into SQL.
-        # DuckDB handles quoting internally for ATTACH connection strings.
         self._connection_string = connection_string
         self._mappings = table_mappings
         self._attached: bool = False
@@ -187,7 +190,7 @@ class PostgresSource:
 
         att = quote_identifier(_POSTGRES_ATTACHMENT_NAME)
         con.execute(f"""
-            ATTACH IF NOT EXISTS '{self._connection_string}'
+            ATTACH IF NOT EXISTS {quote_sql_literal(self._connection_string)}
             AS {att} (TYPE POSTGRES, READ_ONLY)
         """)
         self._attached = True

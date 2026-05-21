@@ -33,6 +33,15 @@ Generates optimized SQL from a validated ViewDefinition AST.
 - **`generate(view_definition) -> str`**: Main entry point. Generates DuckDB SQL from a ViewDefinition object.
 - **`generate_from_json(json_str) -> str`**: Convenience method that parses JSON and generates SQL in one step.
 
+### `parse_view_definition`
+Parses the SQL-on-FHIR JSON representation. FHIR CanonicalResource metadata
+used by the ViewDefinition logical model, including `resourceType`, `id`,
+`meta`, `url`, `version`, `name`, `status`, `title`, and `description`, is
+retained on the parsed object and round-trips through `ViewDefinition.to_dict()`.
+
+XML ViewDefinition input is currently unsupported. Convert XML ViewDefinitions
+to the JSON representation before calling `parse_view_definition`.
+
 ---
 
 ## 3. Configuration & Logic

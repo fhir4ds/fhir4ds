@@ -8,6 +8,8 @@ import pytest
 
 from ...parser import parse_view_definition
 from ...generator import SQLGenerator
+from ...errors import ParseError, ValidationError
+from ...types import Column, Select, ViewDefinition
 
 
 class TestWhereClauseGeneration:
@@ -277,3 +279,126 @@ class TestWherePathEscaping:
         ''')
 
         assert "identifier.where" in vd.where[0]["path"]
+
+    def test_where_description_is_retained(self):
+        """where.description is human-readable metadata and is preserved."""
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+            "where": [{"path": "active", "description": "Only active patients"}],
+        })
+
+        assert vd.where == [
+            {"path": "active", "description": "Only active patients"}
+        ]
+
+
+class TestWhereValidation:
+    """Tests that malformed WHERE predicates fail instead of widening rows."""
+
+    @pytest.mark.parametrize(
+        "where",
+        [
+            [{"notPath": "active = true"}],
+            [{"path": ""}],
+            [{"path": 5}],
+        ],
+    )
+    def test_root_where_requires_non_empty_path(self, where):
+        view = {
+            "resource": "Patient",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+            "where": where,
+        }
+
+        with pytest.raises(ParseError, match="path"):
+            parse_view_definition(view)
+
+    @pytest.mark.parametrize(
+        "where",
+        [
+            [{"notPath": "active = true"}],
+            [{"path": ""}],
+            [{"path": 5}],
+        ],
+    )
+    def test_select_where_requires_non_empty_path(self, where):
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "column": [{"path": "id", "name": "id"}],
+                "where": where,
+            }],
+        }
+
+        with pytest.raises(ParseError, match="path"):
+            parse_view_definition(view)
+
+    def test_direct_dataclass_where_requires_path(self):
+        view_definition = ViewDefinition(
+            resource="Patient",
+            select=[
+                Select(
+                    column=[Column(path="id", name="id")],
+                    where=[{"notPath": "active = true"}],
+                )
+            ],
+        )
+
+        with pytest.raises(ValidationError, match="path"):
+            SQLGenerator().generate(view_definition)
+
+    @pytest.mark.parametrize(
+        "description",
+        [5, None],
+    )
+    def test_root_where_description_must_be_markdown_string(self, description):
+        view = {
+            "resource": "Patient",
+            "select": [{"column": [{"path": "id", "name": "id"}]}],
+            "where": [{"path": "active", "description": description}],
+        }
+
+        with pytest.raises(ParseError, match="description"):
+            parse_view_definition(view)
+
+    @pytest.mark.parametrize(
+        "description",
+        [5, None],
+    )
+    def test_select_where_description_must_be_markdown_string(self, description):
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "column": [{"path": "id", "name": "id"}],
+                "where": [{"path": "active", "description": description}],
+            }],
+        }
+
+        with pytest.raises(ParseError, match="description"):
+            parse_view_definition(view)
+
+    def test_direct_dataclass_where_description_must_be_markdown_string(self):
+        view_definition = ViewDefinition(
+            resource="Patient",
+            select=[
+                Select(
+                    column=[Column(path="id", name="id")],
+                    where=[{"path": "active", "description": 5}],
+                )
+            ],
+        )
+
+        with pytest.raises(ValidationError, match="description"):
+            SQLGenerator().generate(view_definition)
+
+    def test_where_sql_uses_exact_boolean_result(self):
+        view_definition = parse_view_definition({
+            "resource": "Observation",
+            "select": [{"column": [{"path": "id", "name": "id", "type": "id"}]}],
+            "where": [{"path": "valueInteger"}],
+        })
+
+        sql = SQLGenerator(source_table="resources").generate(view_definition)
+
+        assert "fhirpath_json(t.resource, 'valueInteger') = '[true]'" in sql

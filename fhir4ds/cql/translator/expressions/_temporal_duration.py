@@ -163,28 +163,26 @@ class DurationMixin:
             trailing_comparison = (actual_right.operator, actual_right.right)
             actual_right = actual_right.left
 
-        precision_map = {
-            'year': 'differenceInYears',
-            'month': 'differenceInMonths',
-            'week': 'differenceInWeeks',
-            'day': 'differenceInDays',
-            'hour': 'differenceInHours',
-            'minute': 'differenceInMinutes',
-            'second': 'differenceInSeconds',
-            'millisecond': 'differenceInMilliseconds',
-        }
         left = self.translate(node.operand_left, usage=ExprUsage.SCALAR)
         right = self.translate(actual_right, usage=ExprUsage.SCALAR)
-        func_name = precision_map.get(node.precision.lower(), 'differenceInDays')
         left = SQLCast(expression=left, target_type="VARCHAR")
         right = SQLCast(expression=right, target_type="VARCHAR")
-        diff_expr = SQLFunctionCall(name=func_name, args=[left, right])
+        diff_expr = SQLFunctionCall(
+            name="cqlDifferenceBetween",
+            args=[left, right, SQLLiteral(value=node.precision.lower())],
+        )
 
         if trailing_comparison is not None:
             cmp_op, cmp_right_node = trailing_comparison
             cmp_right = self.translate(cmp_right_node, usage=ExprUsage.SCALAR)
-            sql_cmp_op = {"<": "<", "<=": "<=", ">": ">", ">=": ">=", "=": "=", "!=": "!="}.get(cmp_op, cmp_op)
-            return SQLBinaryOp(operator=sql_cmp_op, left=diff_expr, right=cmp_right)
+            return SQLFunctionCall(
+                name="cqlUncertainCompare",
+                args=[
+                    diff_expr,
+                    SQLCast(expression=cmp_right, target_type="VARCHAR"),
+                    SQLLiteral(value=cmp_op),
+                ],
+            )
 
         return diff_expr
 

@@ -249,12 +249,15 @@ class SQLLiteral(SQLExpression):
 
     value: Union[str, int, float, bool, None]
     sql_type: Optional[str] = None  # 'string', 'integer', 'decimal', 'boolean', 'null'
+    raw_sql: Optional[str] = None
     precedence: int = field(default=PRECEDENCE["PRIMARY"], init=False)
 
     def __post_init__(self):
         self.precedence = PRECEDENCE["PRIMARY"]
 
     def to_sql(self, parent_precedence: int = 0) -> str:
+        if self.raw_sql is not None:
+            return self.raw_sql
         if self.value is None:
             return "NULL"
         elif isinstance(self.value, bool):
@@ -490,6 +493,40 @@ class SQLFunctionCall(SQLExpression):
                     name=self.name,
                     args=[SQLCast(expression=arg, target_type="DOUBLE", try_cast=True)],
                     distinct=self.distinct,
+                )
+
+        # DuckDB list_sum/list_avg require numeric element types. Duration and
+        # difference helpers now return scalar-or-interval VARCHAR, so cast list
+        # elements at the list boundary for scalar aggregate use.
+        if self.name.lower() in ("list_sum", "list_avg") and len(self.args) == 1:
+            arg = self.args[0]
+            already_cast = (
+                isinstance(arg, SQLFunctionCall)
+                and arg.name.lower() == "list_transform"
+                and len(arg.args) >= 2
+                and isinstance(arg.args[1], SQLLambda)
+                and isinstance(arg.args[1].body, SQLCast)
+                and arg.args[1].body.target_type == "DOUBLE"
+            )
+            if not already_cast:
+                return SQLFunctionCall(
+                    name=self.name,
+                    args=[
+                        SQLFunctionCall(
+                            name="list_transform",
+                            args=[
+                                arg,
+                                SQLLambda(
+                                    param="_v",
+                                    body=SQLCast(
+                                        expression=SQLIdentifier(name="_v"),
+                                        target_type="DOUBLE",
+                                        try_cast=True,
+                                    ),
+                                ),
+                            ],
+                        )
+                    ],
                 )
 
         # intervalFromBounds: cast first two args to VARCHAR

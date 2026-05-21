@@ -102,7 +102,7 @@ def substring(ctx, coll, start, length=None):
         # FHIRPath §5.6.3: "If start lies outside the length of the string,
         # the function returns an empty collection."
         return []
-    if start > len(string):
+    if start >= len(string):
         return []
 
     if length is None or length == []:

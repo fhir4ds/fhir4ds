@@ -18,7 +18,7 @@ Example:
     ''').fetchall()
 """
 
-__version__ = "0.1.0"
+__version__ = "0.0.6"
 __author__ = "DuckDB FHIRPath Team"
 
 from .extension import register_fhirpath, set_debug_logging, is_debug_logging

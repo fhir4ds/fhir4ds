@@ -22,6 +22,13 @@ def _connection() -> duckdb.DuckDBPyConnection:
     return con
 
 
+def _python_fallback_connection(monkeypatch) -> duckdb.DuckDBPyConnection:
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    con = duckdb.connect(config={"allow_unsigned_extensions": True})
+    assert register_fhirpath(con) is False
+    return con
+
+
 def test_collection_operators_match_cpp() -> None:
     resource = json.dumps(
         {
@@ -66,3 +73,202 @@ def test_collection_operators_match_cpp() -> None:
             assert cpp == py
     finally:
         con.close()
+
+
+def test_subsetting_integer_arguments_reject_non_integers_in_both_backends(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "a": ["zero", "one", "two"],
+        }
+    )
+    invalid_expressions = [
+        "a['1']",
+        "a[true]",
+        "a[1.0]",
+        "a[1.9]",
+        "a.skip('1')",
+        "a.skip(true)",
+        "a.skip(1.9)",
+        "a.take('1')",
+        "a.take(true)",
+        "a.take(1.9)",
+    ]
+
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        assert cpp.execute("SELECT fhirpath(?::JSON, ?)", [resource, "a[1]"]).fetchone() == (["one"],)
+        assert py.execute("SELECT fhirpath(?::JSON, ?)", [resource, "a[1]"]).fetchone() == (["one"],)
+        for expression in invalid_expressions:
+            assert cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression],
+            ).fetchone() == ([], None), expression
+            assert py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression],
+            ).fetchone() == ([], None), expression
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_membership_singleton_errors_are_resilient_in_public_duckdb_udfs(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "a": [1, 2],
+            "one": 1,
+        }
+    )
+    invalid_expressions = [
+        "a in one",
+        "one contains a",
+    ]
+
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in invalid_expressions:
+            assert cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone() == ([], None, None)
+            assert py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone() == ([], None, None)
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_intersect_uses_fhirpath_equality_for_quantities_in_both_backends(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Observation"})
+    expression = "(1 'cm').intersect(10 'mm').count()"
+
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        assert cpp.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+            [resource, expression, resource, expression],
+        ).fetchone() == (["1"], "[1]")
+        assert py.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+            [resource, expression, resource, expression],
+        ).fetchone() == (["1"], "[1]")
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_set_operators_use_numeric_equality_for_json_ints_and_reals(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "int": [1],
+            "real": [1.0],
+        }
+    )
+    expectations = {
+        "int = real": (["true"], "[true]"),
+        "int.union(real).count()": (["1"], "[1]"),
+        "int.intersect(real).count()": (["1"], "[1]"),
+        "int.exclude(real).count()": (["0"], "[0]"),
+    }
+
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expectations.items():
+            assert cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression],
+            ).fetchone() == expected
+            assert py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression],
+            ).fetchone() == expected
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_membership_and_contains_use_temporal_equality_in_both_backends(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Observation"})
+    expectations = {
+        "@2012 in @2012": (["true"], "[true]", True),
+        "@2012 contains @2012": (["true"], "[true]", True),
+        "@T10:30:31.0 in @T10:30:31": (["true"], "[true]", True),
+        "@T10:30:31 contains @T10:30:31.0": (["true"], "[true]", True),
+        "@2012-01-01T10:30:00+00:00 in @2012-01-01T10:30:00Z": (["true"], "[true]", True),
+        "@2012-01-01T10:30:00Z contains @2012-01-01T10:30:00+00:00": (["true"], "[true]", True),
+        "@2012 in (@2012 | @2013)": (["true"], "[true]", True),
+        "(@2012 | @2013) contains @2012": (["true"], "[true]", True),
+    }
+
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expectations.items():
+            assert cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone() == expected
+            assert py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone() == expected
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_collection_operators_use_quantity_equality_for_fhir_quantity_paths(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "valueQuantity": {
+                "value": 1,
+                "system": "http://unitsofmeasure.org",
+                "code": "cm",
+            },
+            "component": [
+                {
+                    "valueQuantity": {
+                        "value": 10,
+                        "system": "http://unitsofmeasure.org",
+                        "code": "mm",
+                    }
+                }
+            ],
+        }
+    )
+    expectations = {
+        "value = component.value": (["true"], "[true]", True),
+        "value in component.value": (["true"], "[true]", True),
+        "component.value contains value": (["true"], "[true]", True),
+        "value.union(component.value).count()": (["1"], "[1]", True),
+        "(value | component.value).count()": (["1"], "[1]", True),
+        "1 'cm' in component.value": (["true"], "[true]", True),
+        "component.value contains 1 'cm'": (["true"], "[true]", True),
+        "component.value.union(1 'cm').count()": (["1"], "[1]", True),
+    }
+
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expectations.items():
+            assert cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone() == expected
+            assert py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone() == expected
+    finally:
+        cpp.close()
+        py.close()

@@ -179,26 +179,30 @@ class FHIRDataLoader:
         """Register the CQL resolve() macro that follows FHIR references.
 
         The macro performs a correlated subquery against the resources table
-        to look up the referenced resource by ``ResourceType/id`` or by a
-        JSON Reference object ``{"reference": "ResourceType/id"}``.
+        to look up the referenced resource by ``ResourceType/id``, a full URL
+        ending in ``ResourceType/id``, a bare resource id, or a JSON Reference
+        object containing any of those reference forms.
         """
         tbl = self.table_name
         try:
             self.con.execute(f"""
                 CREATE OR REPLACE MACRO resolve(ref) AS (
-                    SELECT r.resource FROM {tbl} r
-                    WHERE ref IS NOT NULL
-                    AND r.id = split_part(
-                        CASE WHEN ref LIKE '{{%'
-                             THEN json_extract_string(ref::VARCHAR, '$.reference')
-                             ELSE ref
-                        END, '/', -1
+                    WITH _ref AS (
+                        SELECT CASE
+                            WHEN ref IS NULL THEN NULL
+                            WHEN LTRIM(ref::VARCHAR) LIKE '{{%'
+                                THEN json_extract_string(ref::VARCHAR, '$.reference')
+                            ELSE TRIM(BOTH '"' FROM ref::VARCHAR)
+                        END AS raw_ref
                     )
-                    AND r.resourceType = split_part(
-                        CASE WHEN ref LIKE '{{%'
-                             THEN json_extract_string(ref::VARCHAR, '$.reference')
-                             ELSE ref
-                        END, '/', 1
+                    SELECT r.resource FROM {tbl} r
+                    CROSS JOIN _ref
+                    WHERE ref IS NOT NULL
+                    AND raw_ref IS NOT NULL
+                    AND r.id = regexp_replace(split_part(raw_ref, '/', -1), '^urn:uuid:', '')
+                    AND (
+                        split_part(raw_ref, '/', -2) = ''
+                        OR r.resourceType = split_part(raw_ref, '/', -2)
                     )
                     LIMIT 1
                 )
@@ -415,7 +419,7 @@ class FHIRDataLoader:
                 line = line.strip()
                 if line:
                     try:
-                        resources.append(json.loads(line))
+                        resource = json.loads(line)
                     except json.JSONDecodeError as e:
                         if strict:
                             raise ValueError(
@@ -425,9 +429,24 @@ class FHIRDataLoader:
                             "Skipping malformed JSON at line %d in %s: %s",
                             line_num, path, e,
                         )
-        for resource in resources:
-            self.load_resource(resource)
-        return len(resources)
+                        continue
+                    if not strict:
+                        try:
+                            if not isinstance(resource, dict):
+                                raise TypeError(
+                                    f"Expected dict, got {type(resource).__name__}"
+                                )
+                            _validate_resource_identity(resource)
+                            _serialize_resource(resource)
+                        except (TypeError, ValueError) as e:
+                            _logger.warning(
+                                "Skipping invalid FHIR resource at line %d in %s: %s",
+                                line_num, path, e,
+                            )
+                            continue
+                    resources.append(resource)
+
+        return self.load_resources(resources)
 
     def load_directory(
         self,

@@ -323,10 +323,14 @@ class TestAggregateMacros:
         assert result == 3.0
 
     def test_median(self, con):
-        result = con.execute("SELECT Median(x) FROM (SELECT unnest([1, 2, 3, 4, 5]) AS x)").fetchone()[0]
+        result = con.execute("SELECT Median([1, 2, 3, 4, 5])").fetchone()[0]
         assert result == 3.0
 
     def test_stddev(self, con):
-        result = con.execute("SELECT StdDev(x) FROM (SELECT unnest([1, 2, 3, 4, 5]) AS x)").fetchone()[0]
+        result = con.execute("SELECT StdDev([1, 2, 3, 4, 5])").fetchone()[0]
         import math
         assert math.isclose(result, 1.5811388300841898, rel_tol=0.001)
+
+    def test_mode_tie(self, con):
+        result = con.execute("SELECT Mode([1, 1, 2, 2])").fetchone()[0]
+        assert result is None

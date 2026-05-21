@@ -110,6 +110,87 @@ define "Initial Population":
         assert "patient_id" in df.columns
         assert len(df) >= 1
 
+    def test_evaluate_simple_stratified_measure(self, conn, tmp_path):
+        """Stratifier expressions should flow through evaluation and reporting."""
+        from fhir4ds.cql import FHIRDataLoader
+        loader = FHIRDataLoader(conn)
+        loader.load_resource({
+            "resourceType": "Patient",
+            "id": "p1",
+            "gender": "male",
+            "birthDate": "1990-01-01",
+        })
+        loader.load_resource({
+            "resourceType": "Patient",
+            "id": "p2",
+            "gender": "female",
+            "birthDate": "1990-01-01",
+        })
+
+        measure_json = {
+            "resourceType": "Measure",
+            "id": "test-stratified",
+            "library": ["http://example.com/Library/TestStratified"],
+            "group": [{
+                "population": [
+                    {
+                        "code": {"coding": [{"code": "initial-population"}]},
+                        "criteria": {"expression": "Initial Population"},
+                    },
+                    {
+                        "code": {"coding": [{"code": "denominator"}]},
+                        "criteria": {"expression": "Denominator"},
+                    },
+                    {
+                        "code": {"coding": [{"code": "numerator"}]},
+                        "criteria": {"expression": "Numerator"},
+                    },
+                ],
+                "stratifier": [{
+                    "id": "payer-line",
+                    "code": {"text": "Payer Line"},
+                    "criteria": {"expression": "Payer Line"},
+                }],
+            }],
+        }
+        cql_text = '''library TestStratified
+using FHIR version '4.0.1'
+context Patient
+define "Initial Population":
+    true
+define "Denominator":
+    true
+define "Numerator":
+    Patient.gender = 'male'
+define "Payer Line":
+    if Patient.gender = 'male' then 'Medicare' else 'Medicaid'
+'''
+        cql_path = tmp_path / "test_stratified.cql"
+        cql_path.write_text(cql_text)
+
+        evaluator = MeasureEvaluator(conn)
+        result = evaluator.evaluate(
+            measure_bundle=measure_json,
+            cql_library_path=str(cql_path),
+        )
+        assert "stratifier_1" in result.dataframe.columns
+
+        summary = evaluator.summary_report(result)
+        strata = {
+            stratum["text"]: stratum["population"]
+            for stratum in summary["stratifiers"][0]["strata"]
+        }
+        assert strata["Medicare"]["initial-population"] == 1
+        assert strata["Medicaid"]["initial-population"] == 1
+        assert sum(
+            counts["initial-population"] for counts in strata.values()
+        ) == summary["initial_population"]
+
+        report = evaluator.to_measure_report(
+            result, period_start="2026-01-01", period_end="2026-12-31"
+        )
+        assert report["group"][0]["stratifier"][0]["id"] == "payer-line"
+
     def test_generate_narratives_true_requires_audit(self, conn):
         evaluator = MeasureEvaluator(conn)
         with pytest.raises(ValueError, match="Narratives require audit=True"):

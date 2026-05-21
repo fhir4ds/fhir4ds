@@ -1,17 +1,42 @@
 """
 CQL Logical Function UDFs
 
-DEPRECATED: These UDFs are superseded by Tier 1/2 SQL macros in macros/logical.py
-which provide zero Python overhead. These are retained for backward compatibility
-with code that references the logicalCoalesce/logicalImplies/etc. function names.
-New code should use the SQL macro versions (Coalesce, Implies, etc.) instead.
+Most logical operators are implemented as SQL macros in macros/logical.py for
+zero Python overhead. Coalesce is kept here because CQL exposes variadic and
+single-list overloads that cannot be represented by one type-preserving DuckDB
+macro.
 """
 from __future__ import annotations
 import json
+from datetime import datetime
 from typing import TYPE_CHECKING, List, Any
+
+from duckdb import sqltypes
 
 if TYPE_CHECKING:
     import duckdb
+
+
+_COALESCE_RETURN_TYPE = getattr(sqltypes, "VARIANT", "VARCHAR")
+
+
+def _coalesce_return_value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+def Coalesce(*args: Any) -> Any:
+    """CQL Coalesce(a, b, ...) and Coalesce(List<T>) - first non-null value."""
+    if len(args) == 1 and isinstance(args[0], list):
+        for value in args[0]:
+            if value is not None:
+                return _coalesce_return_value(value)
+        return None
+    for arg in args:
+        if arg is not None:
+            return _coalesce_return_value(arg)
+    return None
 
 
 def logicalCoalesce(*args: Any) -> Any:
@@ -26,6 +51,8 @@ def logicalCoalesce(*args: Any) -> Any:
                         if value is not None:
                             if isinstance(value, bool):
                                 return "true" if value else "false"
+                            if isinstance(value, (dict, list)):
+                                return json.dumps(value, separators=(",", ":"))
                             return str(value)
                     return None
             except (TypeError, ValueError):
@@ -139,7 +166,11 @@ def logicalAnyFalse(values: List[bool | None] | None) -> bool | None:
 
 def registerLogicalUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     """Register all logical UDFs."""
-    # logicalCoalesce needs explicit type due to variadic args
+    # Coalesce is variadic and type-preserving on DuckDB versions that expose
+    # VARIANT. Older unsupported DuckDB fallback probes lack VARIANT, so use
+    # VARCHAR there to keep registration and representative fallback UDFs alive.
+    con.create_function("Coalesce", Coalesce, return_type=_COALESCE_RETURN_TYPE, null_handling="special")
+    # logicalCoalesce is the legacy string-returning JSON-list helper.
     con.create_function("logicalCoalesce", logicalCoalesce, return_type="VARCHAR", null_handling="special")
     con.create_function("logicalImplies", logicalImplies, null_handling="special")
     # These list-returning functions need explicit types
@@ -150,7 +181,7 @@ def registerLogicalUdfs(con: "duckdb.DuckDBPyConnection") -> None:
 
 
 __all__ = [
-    "logicalCoalesce", "logicalImplies",
+    "Coalesce", "logicalCoalesce", "logicalImplies",
     "logicalAllTrue", "logicalAnyTrue",
     "logicalAllFalse", "logicalAnyFalse",
     "registerLogicalUdfs",

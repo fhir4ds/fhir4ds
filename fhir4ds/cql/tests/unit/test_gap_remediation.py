@@ -9,14 +9,17 @@ from ...parser.ast_nodes import (
     BinaryExpression,
     Identifier,
     Literal,
+    Property,
     UnaryExpression,
 )
+from ...translator.function_inliner import ParameterPlaceholder
 from ...translator.context import SQLTranslationContext
 from ...translator.expressions import ExpressionTranslator
 from ...translator.types import (
     SQLBinaryOp,
     SQLCase,
     SQLFunctionCall,
+    SQLIdentifier,
     SQLLiteral,
     SQLNull,
     SQLParameterRef,
@@ -40,6 +43,26 @@ def _make_context_with_schema():
     ctx.column_mappings = schema.column_mappings
     ctx.choice_type_prefixes = schema.choice_type_prefixes
     return ctx
+
+
+def test_parameter_placeholder_sqlcase_property_uses_case_as_fhirpath_source():
+    """Choice-type `as` casts lower to SQL CASE and still support property navigation."""
+    translator = ExpressionTranslator(SQLTranslationContext(resource_type="Patient"))
+    source_sql = SQLCase(
+        when_clauses=[(SQLLiteral(True), SQLIdentifier("choice_resource"))],
+        else_clause=SQLNull(),
+    )
+    prop = Property(
+        source=ParameterPlaceholder(name="choice", sql_expr=source_sql),
+        path="performed",
+    )
+
+    result = translator.translate(prop)
+
+    assert result.to_sql() == (
+        "fhirpath_text(CASE WHEN TRUE THEN choice_resource ELSE NULL END, "
+        "'performed')"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +167,7 @@ class TestGap9AgeInYearsAt:
         ctx.has_patient_demographics_cte = True
         return ExpressionTranslator(ctx)
 
-    def test_age_in_years_no_simple_date_diff(self, translator):
+    def test_age_in_years_routes_to_helper_not_simple_date_diff(self, translator):
         """AC: Birthday-aware calculation, not simple date_diff('year', ...)."""
         # Simulate AgeInYearsAt with demographics CTE available
         as_of_date = SQLRaw(raw_sql="DATE '2026-01-01'")
@@ -152,26 +175,25 @@ class TestGap9AgeInYearsAt:
         sql = result.to_sql()
         # Should NOT use simple date_diff for year precision
         assert "date_diff" not in sql.lower() or "year" not in sql.lower()
-        # Should use EXTRACT-based birthday-aware calculation
-        assert "EXTRACT" in sql
+        # Should route through the public helper so native and Python fallback stay aligned.
+        assert "CalculateAgeInYearsAt" in sql
 
-    def test_age_in_years_has_birthday_adjustment(self, translator):
-        """AC: Birthday adjustment with CASE WHEN for birthday not yet reached."""
+    def test_age_in_years_uses_patient_demographics_birth_date(self, translator):
+        """AC: Birthday-aware helper is fed the demographics birth-date source."""
         as_of_date = SQLRaw(raw_sql="DATE '2026-01-01'")
         result = translator._translate_age_at_function("AgeInYearsAt", [as_of_date])
         sql = result.to_sql()
-        # Should have CASE expression for birthday adjustment
-        assert "CASE" in sql
-        assert "WHEN" in sql
-        assert "MONTH" in sql
-        assert "DAY" in sql
+        assert "_patient_demographics" in sql
+        assert "_pd.birth_date" in sql
+        assert "DATE '2026-01-01'" in sql
 
-    def test_age_in_months_still_uses_date_diff(self, translator):
-        """For month precision, date_diff is acceptable."""
+    def test_age_in_months_routes_to_helper(self, translator):
+        """For month precision, use the same helper boundary as other age variants."""
         as_of_date = SQLRaw(raw_sql="DATE '2026-01-01'")
         result = translator._translate_age_at_function("AgeInMonthsAt", [as_of_date])
         sql = result.to_sql()
-        assert "date_diff" in sql.lower()
+        assert "CalculateAgeInMonthsAt" in sql
+        assert "date_diff" not in sql.lower()
 
 
 # ---------------------------------------------------------------------------

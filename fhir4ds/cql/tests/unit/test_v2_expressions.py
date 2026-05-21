@@ -46,6 +46,7 @@ from ...translator.types import (
     SQLArray,
     SQLBinaryOp,
     SQLCase,
+    SQLCast,
     SQLFunctionCall,
     SQLIdentifier,
     SQLInterval,
@@ -327,14 +328,21 @@ class TestArithmeticOperators:
         assert "%" in sql_str or "MOD" in sql_str.upper() or "mod" in sql_str
 
     def test_power(self, translator: ExpressionTranslator):
-        """Test power: 2 ^ 10 -> POW(2, 10)."""
+        """Test power: 2 ^ 10 -> TRY_CAST(mathPower(2, 10) AS DOUBLE)."""
         result = translator.translate(
             BinaryExpression(operator="^", left=Literal(value=2), right=Literal(value=10))
         )
-        assert isinstance(result, SQLFunctionCall)
-        assert result.name == "POW"
-        assert result.args[0].value == 2
-        assert result.args[1].value == 10
+        assert isinstance(result, SQLCast)
+        assert result.target_type == "DOUBLE"
+        assert result.try_cast
+        assert isinstance(result.expression, SQLFunctionCall)
+        assert result.expression.name == "mathPower"
+        assert isinstance(result.expression.args[0], SQLCast)
+        assert isinstance(result.expression.args[1], SQLCast)
+        assert result.expression.args[0].target_type == "VARCHAR"
+        assert result.expression.args[1].target_type == "VARCHAR"
+        assert result.expression.args[0].expression.value == 2
+        assert result.expression.args[1].expression.value == 10
 
 
 class TestComparisonOperators:
@@ -771,9 +779,8 @@ class TestAgeAtFunctions:
         assert len(result.args) == 2
 
     def test_age_in_years_at_single_arg(self, translator: ExpressionTranslator):
-        """Test AgeInYearsAt with single arg is inlined as date arithmetic."""
+        """Test AgeInYearsAt with single arg routes through demographics helper."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLBinaryOp
         result = translator.translate(
             FunctionRef(
                 name="AgeInYearsAt",
@@ -782,13 +789,14 @@ class TestAgeAtFunctions:
                 ]
             )
         )
-        # AgeInYearsAt is now inlined as EXTRACT-based date arithmetic
-        assert isinstance(result, SQLBinaryOp)
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "CalculateAgeInYearsAt"
+        assert len(result.args) == 2
+        assert translator.context._needs_demographics is True
 
     def test_age_in_years_at_population_context(self):
-        """Test AgeInYearsAt in population context is inlined as date arithmetic."""
+        """Test AgeInYearsAt in population context uses patient demographics."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLBinaryOp
         # Create context with patient_alias set (population context)
         context = SQLTranslationContext()
         context.patient_alias = "_pt"  # Simulate "FROM patients p" context
@@ -802,8 +810,11 @@ class TestAgeAtFunctions:
                 ]
             )
         )
-        # AgeInYearsAt is now inlined as EXTRACT-based date arithmetic
-        assert isinstance(result, SQLBinaryOp)
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "CalculateAgeInYearsAt"
+        sql = result.to_sql()
+        assert "_patient_demographics" in sql
+        assert "_pt.patient_id" in sql
 
 
 class TestIntervalOperations:
@@ -1063,7 +1074,7 @@ class TestDifferenceBetween:
         return ExpressionTranslator(context)
 
     def test_difference_between_years(self, translator: ExpressionTranslator):
-        """Test difference in years: difference in years between A and B -> differenceInYears(...)."""
+        """Test difference in years lowers to the uncertainty-aware public helper."""
         result = translator.translate(
             DifferenceBetween(
                 precision="year",
@@ -1072,11 +1083,11 @@ class TestDifferenceBetween:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "differenceInYears"
-        assert len(result.args) == 2
+        assert result.name == "cqlDifferenceBetween"
+        assert len(result.args) == 3
 
     def test_difference_between_months(self, translator: ExpressionTranslator):
-        """Test difference in months: difference in months between A and B -> differenceInMonths(...)."""
+        """Test difference in months lowers to the uncertainty-aware public helper."""
         result = translator.translate(
             DifferenceBetween(
                 precision="month",
@@ -1085,11 +1096,11 @@ class TestDifferenceBetween:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "differenceInMonths"
-        assert len(result.args) == 2
+        assert result.name == "cqlDifferenceBetween"
+        assert len(result.args) == 3
 
     def test_difference_between_days(self, translator: ExpressionTranslator):
-        """Test difference in days: difference in days between A and B -> differenceInDays(...)."""
+        """Test difference in days lowers to the uncertainty-aware public helper."""
         result = translator.translate(
             DifferenceBetween(
                 precision="day",
@@ -1098,11 +1109,11 @@ class TestDifferenceBetween:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "differenceInDays"
-        assert len(result.args) == 2
+        assert result.name == "cqlDifferenceBetween"
+        assert len(result.args) == 3
 
     def test_difference_between_unknown_precision(self, translator: ExpressionTranslator):
-        """Test unknown precision defaults to differenceInDays."""
+        """Test unknown precision is passed to the public helper."""
         result = translator.translate(
             DifferenceBetween(
                 precision="unknown",
@@ -1111,7 +1122,8 @@ class TestDifferenceBetween:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "differenceInDays"
+        assert result.name == "cqlDifferenceBetween"
+        assert len(result.args) == 3
 
 
 class TestTypeConversion:
@@ -1124,50 +1136,44 @@ class TestTypeConversion:
         return ExpressionTranslator(context)
 
     def test_to_decimal(self, translator: ExpressionTranslator):
-        """Test ToDecimal function: ToDecimal('3.14') -> CAST('3.14' AS DOUBLE)."""
+        """Test ToDecimal function: ToDecimal('3.14') -> ToDecimal('3.14')."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
         result = translator.translate(
             FunctionRef(name="ToDecimal", arguments=[Literal(value="3.14")])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "DOUBLE"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToDecimal"
         sql = result.to_sql()
-        assert "CAST" in sql
-        assert "DOUBLE" in sql
+        assert "ToDecimal" in sql
 
     def test_to_decimal_from_integer(self, translator: ExpressionTranslator):
-        """Test ToDecimal from integer: ToDecimal(42) -> CAST(42 AS DOUBLE)."""
+        """Test ToDecimal from integer: ToDecimal(42) -> ToDecimal(42)."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
         result = translator.translate(
             FunctionRef(name="ToDecimal", arguments=[Literal(value=42)])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "DOUBLE"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToDecimal"
 
     def test_to_integer(self, translator: ExpressionTranslator):
-        """Test ToInteger function: ToInteger('42') -> CAST('42' AS INTEGER)."""
+        """Test ToInteger function: ToInteger('42') -> ToInteger('42')."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
         result = translator.translate(
             FunctionRef(name="ToInteger", arguments=[Literal(value="42")])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "INTEGER"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToInteger"
         sql = result.to_sql()
-        assert "CAST" in sql
-        assert "INTEGER" in sql
+        assert "ToInteger" in sql
 
     def test_to_integer_from_decimal(self, translator: ExpressionTranslator):
-        """Test ToInteger from decimal: ToInteger(3.14) -> CAST(3.14 AS INTEGER)."""
+        """Test ToInteger from decimal: ToInteger(3.14) -> ToInteger(3.14)."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
         result = translator.translate(
             FunctionRef(name="ToInteger", arguments=[Literal(value=3.14)])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "INTEGER"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToInteger"
 
     def test_to_string(self, translator: ExpressionTranslator):
         """Test ToString function: ToString(42) -> CAST(42 AS VARCHAR)."""
@@ -1193,67 +1199,60 @@ class TestTypeConversion:
         assert result.target_type == "VARCHAR"
 
     def test_to_boolean(self, translator: ExpressionTranslator):
-        """Test ToBoolean function: ToBoolean('true') -> CAST('true' AS BOOLEAN)."""
+        """Test ToBoolean function: ToBoolean('true') -> ToBoolean('true')."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
         result = translator.translate(
             FunctionRef(name="ToBoolean", arguments=[Literal(value="true")])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "BOOLEAN"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToBoolean"
         sql = result.to_sql()
-        assert "CAST" in sql
-        assert "BOOLEAN" in sql
+        assert "ToBoolean" in sql
 
     def test_to_boolean_from_integer(self, translator: ExpressionTranslator):
-        """Test ToBoolean from integer: ToBoolean(1) -> CAST(1 AS BOOLEAN)."""
+        """Test ToBoolean from integer: ToBoolean(1) -> ToBoolean(1)."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
         result = translator.translate(
             FunctionRef(name="ToBoolean", arguments=[Literal(value=1)])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "BOOLEAN"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToBoolean"
 
     def test_to_datetime(self, translator: ExpressionTranslator):
-        """Test ToDateTime function: ToDateTime('2024-01-15') -> SQLRaw with CASE WHEN."""
+        """Test ToDateTime function routes to spec-aware macro."""
         from ...parser.ast_nodes import FunctionRef
         result = translator.translate(
             FunctionRef(name="ToDateTime", arguments=[Literal(value="2024-01-15")])
         )
-        assert isinstance(result, SQLRaw)
-        sql = result.to_sql()
-        assert "CASE WHEN" in sql
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToDateTime"
 
     def test_to_datetime_from_string(self, translator: ExpressionTranslator):
-        """Test ToDateTime with time: ToDateTime('2024-01-15T10:30:00') -> SQLRaw with CASE WHEN."""
+        """Test ToDateTime with time routes to spec-aware macro."""
         from ...parser.ast_nodes import FunctionRef
         result = translator.translate(
             FunctionRef(name="ToDateTime", arguments=[Literal(value="2024-01-15T10:30:00")])
         )
-        assert isinstance(result, SQLRaw)
-        sql = result.to_sql()
-        assert "CASE WHEN" in sql
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToDateTime"
 
     def test_to_date(self, translator: ExpressionTranslator):
-        """Test ToDate function: ToDate('2024-01-15') -> SQLRaw with CASE WHEN."""
+        """Test ToDate function routes to spec-aware macro."""
         from ...parser.ast_nodes import FunctionRef
         result = translator.translate(
             FunctionRef(name="ToDate", arguments=[Literal(value="2024-01-15")])
         )
-        assert isinstance(result, SQLRaw)
-        sql = result.to_sql()
-        assert "CASE WHEN" in sql
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToDate"
 
     def test_to_date_from_datetime(self, translator: ExpressionTranslator):
-        """Test ToDate from datetime string: ToDate('2024-01-15T10:30:00') -> SQLRaw with CASE WHEN."""
+        """Test ToDate from datetime string routes to spec-aware macro."""
         from ...parser.ast_nodes import FunctionRef
         result = translator.translate(
             FunctionRef(name="ToDate", arguments=[Literal(value="2024-01-15T10:30:00")])
         )
-        assert isinstance(result, SQLRaw)
-        sql = result.to_sql()
-        assert "CASE WHEN" in sql
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToDate"
 
     def test_to_time(self, translator: ExpressionTranslator):
         """Test ToTime function: ToTime('10:30:00') -> ToTime(...)."""
@@ -1274,29 +1273,27 @@ class TestTypeConversion:
         assert result.name == "ToTime"
 
     def test_type_conversion_with_identifier(self, translator: ExpressionTranslator):
-        """Test type conversion with identifier: ToInteger(someVar) -> CAST(someVar AS INTEGER)."""
+        """Test type conversion with identifier: ToInteger(someVar) -> ToInteger(someVar)."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
         result = translator.translate(
             FunctionRef(name="ToInteger", arguments=[Identifier(name="someVar")])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "INTEGER"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToInteger"
         sql = result.to_sql()
         assert "someVar" in sql
 
     def test_type_conversion_case_insensitive(self, translator: ExpressionTranslator):
         """Test type conversion is case-insensitive: todecimal, ToDecimal, TODECIMAL all work."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
 
         # Test various casings
         for name in ["todecimal", "ToDecimal", "TODECIMAL", "toDecimal"]:
             result = translator.translate(
                 FunctionRef(name=name, arguments=[Literal(value="3.14")])
             )
-            assert isinstance(result, SQLCast), f"Failed for name: {name}"
-            assert result.target_type == "DOUBLE", f"Failed for name: {name}"
+            assert isinstance(result, SQLFunctionCall), f"Failed for name: {name}"
+            assert result.name == "ToDecimal", f"Failed for name: {name}"
 
 
 class TestQueryOperators:
@@ -1309,7 +1306,7 @@ class TestQueryOperators:
         return ExpressionTranslator(context)
 
     def test_skip_expression(self, translator: ExpressionTranslator):
-        """Test skip expression: skip 2 elements -> list_slice(arr, 3, length)."""
+        """Test skip expression: route through CQL Skip macro semantics."""
         from ...parser.ast_nodes import ListExpression
         result = translator.translate(
             SkipExpression(
@@ -1318,13 +1315,13 @@ class TestQueryOperators:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "LIST_SLICE"
-        assert len(result.args) == 3
+        assert result.name == "Skip"
+        assert len(result.args) == 2
         sql = result.to_sql()
-        assert "LIST_SLICE" in sql
+        assert "Skip" in sql
 
     def test_take_expression(self, translator: ExpressionTranslator):
-        """Test take expression: take 2 elements -> list_slice(arr, 1, 2)."""
+        """Test take expression: route through CQL Take macro semantics."""
         from ...parser.ast_nodes import ListExpression
         result = translator.translate(
             TakeExpression(
@@ -1333,10 +1330,10 @@ class TestQueryOperators:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "LIST_SLICE"
-        assert len(result.args) == 3
+        assert result.name == "Take"
+        assert len(result.args) == 2
         sql = result.to_sql()
-        assert "LIST_SLICE" in sql
+        assert "Take" in sql
 
     def test_first_expression(self, translator: ExpressionTranslator):
         """Test first expression: first element -> list_extract(arr, 1)."""
@@ -1511,7 +1508,7 @@ class TestStatisticalFunctions:
         assert len(result.args) == 2
 
     def test_mode_function(self, translator: ExpressionTranslator):
-        """Test Mode function: Mode(values) -> list_aggregate(values, 'mode')."""
+        """Test Mode function: Mode(values) -> CQLListMode(values)."""
         from ...parser.ast_nodes import FunctionRef, ListExpression
         result = translator.translate(
             FunctionRef(
@@ -1522,8 +1519,8 @@ class TestStatisticalFunctions:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "list_aggregate"
-        assert len(result.args) == 2
+        assert result.name == "CQLListMode"
+        assert len(result.args) == 1
 
     def test_variance_function(self, translator: ExpressionTranslator):
         """Test Variance function: Variance(values) -> list_aggregate(..., 'var_samp')."""

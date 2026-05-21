@@ -1,7 +1,12 @@
 #include "cql/ratio.hpp"
+#include "cql/quantity.hpp"
 #include "yyjson.hpp"
 
 using namespace duckdb_yyjson; // NOLINT
+
+#include <cmath>
+#include <iomanip>
+#include <sstream>
 
 namespace cql {
 
@@ -49,6 +54,46 @@ static Optional<std::string> get_component_unit(yyjson_val *component) {
 		return std::string(yyjson_get_str(code));
 	}
 	return NullOpt<std::string>();
+}
+
+static Optional<ParsedQuantity> get_component_quantity(yyjson_val *component) {
+	if (!component || !yyjson_is_obj(component)) {
+		return NullOpt<ParsedQuantity>();
+	}
+	auto value = get_component_value(component);
+	if (!value.has_value() || !std::isfinite(value.value())) {
+		return NullOpt<ParsedQuantity>();
+	}
+	std::string unit = "1";
+	auto component_unit = get_component_unit(component);
+	if (component_unit.has_value()) {
+		unit = component_unit.value();
+	}
+	if (!is_valid_quantity_unit(unit)) {
+		return NullOpt<ParsedQuantity>();
+	}
+	std::string system = "http://unitsofmeasure.org";
+	yyjson_val *system_val = yyjson_obj_get(component, "system");
+	if (system_val && yyjson_is_str(system_val)) {
+		system = yyjson_get_str(system_val);
+	}
+	return ParsedQuantity{value.value(), unit, system, 0};
+}
+
+static std::string format_decimal_for_cql(double value) {
+	std::ostringstream out;
+	out << std::setprecision(15) << value;
+	std::string text = out.str();
+	if (text.find('.') == std::string::npos &&
+	    text.find('e') == std::string::npos &&
+	    text.find('E') == std::string::npos) {
+		text += ".0";
+	}
+	return text;
+}
+
+static std::string format_quantity_text(const ParsedQuantity &quantity) {
+	return format_decimal_for_cql(quantity.value) + " '" + quantity.code + "'";
 }
 
 Optional<double> ratio_numerator_value(const std::string &ratio_json) {
@@ -104,6 +149,21 @@ Optional<std::string> ratio_denominator_unit(const std::string &ratio_json) {
 	auto result = get_component_unit(get_ratio_component(doc, "denominator"));
 	yyjson_doc_free(doc);
 	return result;
+}
+
+Optional<std::string> ratio_to_string(const std::string &ratio_json) {
+	yyjson_doc *doc = yyjson_read(ratio_json.c_str(), ratio_json.size(), 0);
+	if (!doc) {
+		return NullOpt<std::string>();
+	}
+	auto numerator = get_component_quantity(get_ratio_component(doc, "numerator"));
+	auto denominator = get_component_quantity(get_ratio_component(doc, "denominator"));
+	yyjson_doc_free(doc);
+
+	if (!numerator.has_value() || !denominator.has_value()) {
+		return NullOpt<std::string>();
+	}
+	return format_quantity_text(numerator.value()) + ":" + format_quantity_text(denominator.value());
 }
 
 } // namespace cql

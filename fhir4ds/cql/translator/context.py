@@ -373,6 +373,7 @@ class SQLTranslationContext:
     _unresolved_includes: Set[str] = field(default_factory=set)
     valuesets: Dict[str, str] = field(default_factory=dict)
     codesystems: Dict[str, str] = field(default_factory=dict)
+    codesystem_versions: Dict[str, str] = field(default_factory=dict)
     codes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     # Function definitions in current library
@@ -759,17 +760,27 @@ class SQLTranslationContext:
         """
         self.valuesets[name] = url
 
-    def add_codesystem(self, name: str, url: str) -> None:
+    def add_codesystem(self, name: str, url: str, version: Optional[str] = None) -> None:
         """
         Add a codesystem definition.
 
         Args:
             name: The codesystem name.
             url: The codesystem URL.
+            version: Optional code system version.
         """
         self.codesystems[name] = url
+        if version is not None:
+            self.codesystem_versions[name] = version
 
-    def add_code(self, name: str, codesystem: str, code: str, display: Optional[str] = None) -> None:
+    def add_code(
+        self,
+        name: str,
+        codesystem: str,
+        code: str,
+        display: Optional[str] = None,
+        version: Optional[str] = None,
+    ) -> None:
         """
         Add a code definition.
 
@@ -778,12 +789,16 @@ class SQLTranslationContext:
             codesystem: The codesystem name.
             code: The code value.
             display: Optional display string.
+            version: Optional code system version.
         """
-        self.codes[name] = {
+        code_info = {
             "codesystem": codesystem,
             "code": code,
             "display": display,
         }
+        if version is not None:
+            code_info["version"] = version
+        self.codes[name] = code_info
 
     def add_definition(self, name: str, sql_expr: Optional[str] = None, ast_expr: Optional[Any] = None) -> None:
         """
@@ -948,6 +963,7 @@ class SQLTranslationContext:
         self._function_overloads.clear()
         self.valuesets.clear()
         self.codesystems.clear()
+        self.codesystem_versions.clear()
         self.codes.clear()
         self._ctes.clear()
         self._patient_context = PatientContext()

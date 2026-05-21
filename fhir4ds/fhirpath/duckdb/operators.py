@@ -610,7 +610,7 @@ def contains(
 
 def _values_equal(left: Any, right: Any) -> bool:
     """
-    Check if two values are equal for membership purposes.
+    Check if two values are equal according to FHIRPath `=` semantics.
 
     Args:
         left: Left value.
@@ -619,20 +619,9 @@ def _values_equal(left: Any, right: Any) -> bool:
     Returns:
         True if values are equal.
     """
-    if type(left) != type(right):
-        return False
+    from ..engine.invocations import equality as equality_invocations
 
-    if isinstance(left, dict):
-        if set(left.keys()) != set(right.keys()):
-            return False
-        return all(_values_equal(left[k], right.get(k)) for k in left)
-
-    if isinstance(left, list):
-        if len(left) != len(right):
-            return False
-        return all(_values_equal(l, r) for l, r in zip(left, right))
-
-    return left == right
+    return equality_invocations.equality({}, [left], [right]) is True
 
 
 # =============================================================================

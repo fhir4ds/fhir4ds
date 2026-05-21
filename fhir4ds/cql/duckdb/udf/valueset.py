@@ -602,6 +602,41 @@ def registerValuesetUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("extractFirstCodeValue", extractFirstCodeValue, null_handling="special")
     con.create_function("coding_matches", codingMatches, null_handling="special")
     con.create_function("resolveProfileUrl", resolveProfileUrl, null_handling="special")
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS valueset_codes (
+            valueset_url VARCHAR,
+            system VARCHAR,
+            code VARCHAR,
+            display VARCHAR
+        )
+        """
+    )
+    con.execute(
+        """
+        CREATE OR REPLACE MACRO ExpandValueSet(vs) AS (
+            CASE
+              WHEN vs IS NULL THEN NULL
+              ELSE (
+                SELECT list(
+                    CAST(
+                      CASE
+                        WHEN display IS NULL THEN json_object('system', system, 'code', code)
+                        ELSE json_object('system', system, 'code', code, 'display', display)
+                      END
+                      AS VARCHAR
+                    )
+                )
+                FROM valueset_codes
+                WHERE valueset_url = COALESCE(
+                    json_extract_string(TRY_CAST(vs AS JSON), '$.id'),
+                    CAST(vs AS VARCHAR)
+                )
+              )
+            END
+        )
+        """
+    )
 
 
 __all__ = [

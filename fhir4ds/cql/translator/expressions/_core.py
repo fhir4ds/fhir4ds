@@ -111,6 +111,81 @@ class CoreMixin:
         """Convert CamelCase to snake_case."""
         return _camel_to_snake_cached(name)
 
+    def _clinical_code_literal(
+        self,
+        code: str,
+        system: Optional[str] = None,
+        display: Optional[str] = None,
+        version: Optional[str] = None,
+    ) -> SQLLiteral:
+        """Build a JSON-shaped CQL Code literal."""
+        code_obj: Dict[str, Any] = {"code": code}
+        if system:
+            code_obj["system"] = self.context.codesystems.get(system, system)
+            if version is None:
+                version = self.context.codesystem_versions.get(system)
+                if version is None:
+                    for cs_name, cs_url in self.context.codesystems.items():
+                        if cs_url == system:
+                            version = self.context.codesystem_versions.get(cs_name)
+                            break
+        if version:
+            code_obj["version"] = version
+        if display:
+            code_obj["display"] = display
+        return SQLLiteral(value=json.dumps(code_obj, separators=(",", ":")))
+
+    @staticmethod
+    def _split_terminology_ref(ref: str) -> tuple[str, Optional[str]]:
+        """Split the context's compact ``id|version`` terminology reference."""
+        if "|" not in ref:
+            return ref, None
+        identifier, version = ref.rsplit("|", 1)
+        return identifier, version or None
+
+    def _clinical_valueset_literal(self, name: str, ref: str) -> SQLLiteral:
+        """Build a JSON-shaped CQL ValueSet reference."""
+        identifier, version = self._split_terminology_ref(ref)
+        valueset_obj: Dict[str, Any] = {"id": identifier, "name": name}
+        if version:
+            valueset_obj["version"] = version
+        return SQLLiteral(value=json.dumps(valueset_obj, separators=(",", ":")))
+
+    def _clinical_codesystem_literal(self, name: str, ref: str) -> SQLLiteral:
+        """Build a JSON-shaped CQL CodeSystem reference."""
+        codesystem_obj: Dict[str, Any] = {"id": ref, "name": name}
+        version = self.context.codesystem_versions.get(name)
+        if version:
+            codesystem_obj["version"] = version
+        return SQLLiteral(value=json.dumps(codesystem_obj, separators=(",", ":")))
+
+    def _clinical_concept_literal(self, concept_info: Dict[str, Any]) -> SQLLiteral:
+        """Build a JSON-shaped CQL Concept literal from context metadata."""
+        codes = []
+        for code_info in concept_info.get("codes", []) or []:
+            if not isinstance(code_info, dict):
+                continue
+            code_value = code_info.get("code")
+            if not code_value:
+                continue
+            code_obj: Dict[str, Any] = {"code": code_value}
+            system = code_info.get("codesystem", code_info.get("system"))
+            if system:
+                code_obj["system"] = self.context.codesystems.get(system, system)
+            version = code_info.get("version")
+            if version:
+                code_obj["version"] = version
+            display = code_info.get("display")
+            if display:
+                code_obj["display"] = display
+            codes.append(code_obj)
+
+        concept_obj: Dict[str, Any] = {"codes": codes}
+        display = concept_info.get("display")
+        if display:
+            concept_obj["display"] = display
+        return SQLLiteral(value=json.dumps(concept_obj, separators=(",", ":")))
+
     def _translate_literal(self, lit: Literal, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL literal to SQL."""
         value = lit.value
@@ -125,12 +200,19 @@ class CoreMixin:
             return SQLLiteral(value=value)
 
         if isinstance(value, (int, float)):
+            if getattr(lit, 'type', None) == "Decimal" and getattr(lit, 'raw_str', None):
+                return SQLLiteral(value=value, raw_sql=lit.raw_str)
             # CQL §2.2: Integer is 32-bit signed [-2^31, 2^31-1]
             if isinstance(value, int) and not isinstance(value, bool):
                 if getattr(lit, 'type', None) == "Integer" and (value > 2147483647 or value < -2147483648):
                     raise ValueError(
                         f"Integer literal {value} out of range for CQL Integer type "
                         f"[-2147483648, 2147483647]"
+                    )
+                if getattr(lit, 'type', None) == "Long" and (value > 9223372036854775807 or value < -9223372036854775808):
+                    raise ValueError(
+                        f"Long literal {value} out of range for CQL Long type "
+                        f"[-9223372036854775808, 9223372036854775807]"
                     )
             # Handle special numeric values
             if isinstance(value, float):
@@ -164,6 +246,8 @@ class CoreMixin:
         # Time-only literal (T-prefixed) — validate components
         if value.startswith("T") or value.startswith("t"):
             time_str = value[1:]
+            if time_str.endswith("Z") or any(ch in time_str[1:] for ch in ("+", "-")):
+                raise ValueError("Invalid time literal: timezone suffix is not supported")
             parts = time_str.split(':')
             if len(parts) >= 1:
                 h = int(parts[0])
@@ -258,10 +342,9 @@ class CoreMixin:
 
         Code selectors (e.g., Code '73211009' from "SNOMED-CT") resolve
         the system name through codesystem definitions and produce a
-        system|code literal string.
+        JSON-shaped CQL Code value.
         """
-        system_url = self.context.codesystems.get(cs.system, cs.system)
-        return SQLLiteral(value=f"{system_url}|{cs.code}")
+        return self._clinical_code_literal(cs.code, cs.system, cs.display)
 
     def _build_promoted_definition_lookup(self, name: str, usage: ExprUsage) -> SQLExpression:
         """Build a correlated subquery lookup for a promoted global definition.
@@ -629,11 +712,21 @@ class CoreMixin:
         # Check if this is a code reference
         if hasattr(self.context, 'codes') and name in self.context.codes:
             code_info = self.context.codes[name]
-            # Return the code value for use in comparisons
+            if code_info.get("is_concept"):
+                return self._clinical_concept_literal(code_info)
+
             system = code_info.get("codesystem", code_info.get("system", ""))
             code = code_info.get("code", "")
-            # Return as a formatted string that can be used in comparisons
-            return SQLLiteral(value=f"{system}|{code}")
+            display = code_info.get("display")
+            version = code_info.get("version")
+            return self._clinical_code_literal(code, system, display, version)
+
+        # CQL ValueSet and CodeSystem references are structured clinical values,
+        # not SQL identifiers and not FHIR resources.
+        if name in self.context.valuesets:
+            return self._clinical_valueset_literal(name, self.context.valuesets[name])
+        if name in self.context.codesystems:
+            return self._clinical_codesystem_literal(name, self.context.codesystems[name])
 
         # Check if this is a definition reference (not in symbol table but defined in context)
         definition = self.context.get_definition(name)
@@ -1006,15 +1099,15 @@ class CoreMixin:
 
         # Check if this is a valueset reference
         if first in self.context.valuesets and len(parts) == 1:
-            return SQLLiteral(value=self.context.valuesets[first])
+            return self._clinical_valueset_literal(first, self.context.valuesets[first])
 
         # Check if this is a codesystem reference
         if first in self.context.codesystems:
             cs_url = self.context.codesystems[first]
             if len(parts) > 1:
-                # Code from codesystem: codesystem|code
-                return SQLLiteral(value=f"{cs_url}|{parts[1]}")
-            return SQLLiteral(value=cs_url)
+                # Code from codesystem: JSON-shaped CQL Code value
+                return self._clinical_code_literal(parts[1], cs_url)
+            return self._clinical_codesystem_literal(first, cs_url)
 
         # Default: qualified identifier
         return SQLQualifiedIdentifier(parts=parts)

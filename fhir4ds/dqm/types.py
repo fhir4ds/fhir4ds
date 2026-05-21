@@ -36,6 +36,25 @@ class SupportingEvidenceDef:
 
 
 @dataclass
+class StratifierComponent:
+    """One component of a composite Measure stratifier."""
+
+    component_id: str
+    code_text: str | None
+    cql_expression: str
+
+
+@dataclass
+class StratifierEntry:
+    """A Measure group stratifier expression."""
+
+    stratifier_id: str
+    code_text: str | None
+    cql_expression: str | None = None
+    components: list[StratifierComponent] = field(default_factory=list)
+
+
+@dataclass
 class PopulationEntry:
     """A single population within a Measure group."""
 
@@ -53,6 +72,7 @@ class GroupMap:
     group_id: str
     population_basis: str  # "boolean" or resource type like "Encounter"
     populations: list[PopulationEntry] = field(default_factory=list)
+    stratifiers: list[StratifierEntry] = field(default_factory=list)
 
 
 @dataclass

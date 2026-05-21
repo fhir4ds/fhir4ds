@@ -15,10 +15,7 @@ from ...engine.errors import FHIRPathError
 
 def check_macro_expr(expr, x):
     result = expr(x)
-    if len(result) > 0:
-        return expr(x)[0]
-
-    return False
+    return util.is_true(result)
 
 
 def where_macro(ctx, data, expr):
@@ -26,11 +23,29 @@ def where_macro(ctx, data, expr):
         return []
 
     result = []
+    missing = object()
+    old_index = ctx.get("$index", missing)
+    saved_vars = dict(ctx.get("vars", {}))
+    old_chain = ctx.get("_chain_defined_vars", missing)
 
-    for i, x in enumerate(data):
-        ctx["$index"] = i
-        if check_macro_expr(expr, x):
-            result.append(x)
+    try:
+        for i, x in enumerate(data):
+            ctx["$index"] = i
+            ctx["vars"] = dict(saved_vars)
+            if old_chain is not missing:
+                ctx["_chain_defined_vars"] = set(old_chain)
+            if check_macro_expr(expr, x):
+                result.append(x)
+    finally:
+        ctx["vars"] = saved_vars
+        if old_chain is missing:
+            ctx.pop("_chain_defined_vars", None)
+        else:
+            ctx["_chain_defined_vars"] = old_chain
+        if old_index is missing:
+            ctx.pop("$index", None)
+        else:
+            ctx["$index"] = old_index
 
     return util.flatten(result)
 
@@ -40,10 +55,28 @@ def select_macro(ctx, data, expr):
         return []
 
     result = []
+    missing = object()
+    old_index = ctx.get("$index", missing)
+    saved_vars = dict(ctx.get("vars", {}))
+    old_chain = ctx.get("_chain_defined_vars", missing)
 
-    for i, x in enumerate(data):
-        ctx["$index"] = i
-        result.append(expr(x))
+    try:
+        for i, x in enumerate(data):
+            ctx["$index"] = i
+            ctx["vars"] = dict(saved_vars)
+            if old_chain is not missing:
+                ctx["_chain_defined_vars"] = set(old_chain)
+            result.append(expr(x))
+    finally:
+        ctx["vars"] = saved_vars
+        if old_chain is missing:
+            ctx.pop("_chain_defined_vars", None)
+        else:
+            ctx["_chain_defined_vars"] = old_chain
+        if old_index is missing:
+            ctx.pop("$index", None)
+        else:
+            ctx["$index"] = old_index
 
     return util.flatten(result)
 
@@ -58,19 +91,50 @@ def repeat_macro(ctx, data, expr):
     next = None
     lres = None
 
-    uniq = set()
+    missing = object()
+    old_index = ctx.get("$index", missing)
+    saved_vars = dict(ctx.get("vars", {}))
+    old_chain = ctx.get("_chain_defined_vars", missing)
+    idx = 0
 
-    while len(items) != 0:
-        next = items[0]
-        items = items[1:]
-        lres = [l for l in expr(next) if l not in uniq]
-        if len(lres) > 0:
-            for l in lres:
-                uniq.add(l)
-            res = res + lres
-            items = items + lres
+    try:
+        while len(items) != 0:
+            next = items[0]
+            items = items[1:]
+            ctx["$index"] = idx
+            ctx["vars"] = dict(saved_vars)
+            if old_chain is not missing:
+                ctx["_chain_defined_vars"] = set(old_chain)
+            lres = []
+            for l in expr(next):
+                if not _contains_equal(ctx, res, l) and not _contains_equal(ctx, lres, l):
+                    lres.append(l)
+            if len(lres) > 0:
+                res = res + lres
+                items = items + lres
+            idx += 1
+    finally:
+        ctx["vars"] = saved_vars
+        if old_chain is missing:
+            ctx.pop("_chain_defined_vars", None)
+        else:
+            ctx["_chain_defined_vars"] = old_chain
+        if old_index is missing:
+            ctx.pop("$index", None)
+        else:
+            ctx["$index"] = old_index
 
     return res
+
+
+def _contains_equal(ctx, items, candidate):
+    # FHIRPath repeat() de-duplicates using the same semantic equality as `=`.
+    from . import equality as equality_invocations
+
+    for item in items:
+        if equality_invocations.equality(ctx, [item], [candidate]) is True:
+            return True
+    return False
 
 
 # TODO: behavior on object?
@@ -118,8 +182,25 @@ def skip_fn(ctx, x, n):
 
 
 def of_type_fn(ctx, coll, tp):
-    # ofType() requires exact type match (no subtype matching)
-    return [value for value in coll if nodes.TypeInfo.from_value(value).is_exact_type(tp)]
+    result = []
+    for value in coll:
+        value_type = nodes.TypeInfo.from_value(value)
+        if value_type.is_exact_type(tp):
+            result.append(value)
+            continue
+        # FHIRPath ofType() includes subclasses, but official R4 tests keep
+        # primitive FHIR types such as code distinct from string here.
+        if (
+            value_type.namespace == nodes.TypeInfo.FHIR
+            and tp.namespace in (nodes.TypeInfo.FHIR, None)
+            and value_type.name
+            and tp.name
+            and value_type.name[0].isupper()
+            and tp.name[0].isupper()
+            and value_type.is_(tp)
+        ):
+            result.append(value)
+    return result
 
 
 def extension(ctx, data, url=None):

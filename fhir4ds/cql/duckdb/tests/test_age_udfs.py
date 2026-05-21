@@ -21,6 +21,8 @@ from ..udf.age import (
     ageInYearsAt,
     ageInMonthsAt,
     ageInDaysAt,
+    calculateAgeInYearsAt,
+    calculateAgeInMonthsAt,
     registerAgeUdfs,
 )
 
@@ -213,6 +215,15 @@ def test_age_in_years_at_datetime_format(patient_resource):
     assert result == 30
 
 
+def test_age_in_years_at_leap_day_anniversary_non_leap_year():
+    """Feb 29 birthdays use Feb 28 as the anniversary in non-leap years."""
+    patient = '{"resourceType": "Patient", "birthDate": "2020-02-29"}'
+    assert ageInYearsAt(patient, "2021-02-27") == 0
+    assert ageInYearsAt(patient, "2021-02-28") == 1
+    assert ageInYearsAt(patient, "2021-03-01") == 1
+    assert calculateAgeInYearsAt("2000-02-29", "2021-02-28") == 21
+
+
 # ========================================
 # ageInMonthsAt tests
 # ========================================
@@ -229,6 +240,14 @@ def test_age_in_months_at_before_birthday(patient_resource):
     # Born 1990-05-15, as of 2020-05-14 should be 359 months
     result = ageInMonthsAt(patient_resource, "2020-05-14")
     assert result == 359
+
+
+def test_age_in_months_at_leap_day_anniversary_non_leap_year():
+    """Complete month age applies last-day adjustment for Feb 29 birthdays."""
+    patient = '{"resourceType": "Patient", "birthDate": "2020-02-29"}'
+    assert ageInMonthsAt(patient, "2021-02-27") == 11
+    assert ageInMonthsAt(patient, "2021-02-28") == 12
+    assert calculateAgeInMonthsAt("2020-02-29", "2021-02-28") == 12
 
 
 def test_age_in_months_at_null_resource():

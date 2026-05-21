@@ -97,6 +97,18 @@ def quote_identifier(name: str) -> str:
     return f'"{escaped}"'
 
 
+def quote_sql_literal(value: str) -> str:
+    """
+    Safely quotes a string literal for DuckDB SQL.
+
+    Escapes internal single quotes by doubling them, then wraps the result in
+    single quotes. Use this only for SQL literal positions; identifiers must go
+    through :func:`quote_identifier`.
+    """
+    escaped = value.replace("'", "''")
+    return f"'{escaped}'"
+
+
 @runtime_checkable
 class SourceAdapter(Protocol):
     """

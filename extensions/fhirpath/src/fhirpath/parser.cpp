@@ -184,17 +184,14 @@ ASTNodePtr Parser::parseTypeExpression() {
 	if (check(TokenType::Is) || check(TokenType::As)) {
 		std::string op = current().text;
 		advance();
-		std::string type_name;
-		if (check(TokenType::Identifier)) {
-			type_name = current().text;
+		Token type_token = consume(TokenType::Identifier, "Expected type specifier after '" + op + "'");
+		std::string type_name = type_token.text;
+		// Handle qualified type names like FHIR.Patient
+		while (check(TokenType::Dot) && pos_ + 1 < tokens_.size() &&
+		       tokens_[pos_ + 1].type == TokenType::Identifier) {
+			advance(); // skip dot
+			type_name += "." + current().text;
 			advance();
-			// Handle qualified type names like FHIR.Patient
-			while (check(TokenType::Dot) && pos_ + 1 < tokens_.size() &&
-			       tokens_[pos_ + 1].type == TokenType::Identifier) {
-				advance(); // skip dot
-				type_name += "." + current().text;
-				advance();
-			}
 		}
 		auto node = std::make_shared<ASTNode>();
 		node->type = NodeType::TypeExpression;

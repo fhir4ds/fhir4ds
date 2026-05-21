@@ -19,6 +19,7 @@ import pytest
 from ...evaluator import FHIRPathEvaluator, evaluate_fhirpath
 from ...context import EvaluationContext, create_context
 from ...collection import FHIRPathCollection
+from ...errors import FHIRPathError
 
 
 # Load test fixtures
@@ -114,8 +115,9 @@ class TestEvaluationContext:
         """Test iteration variables."""
         ctx = create_context(patient_resource)
 
-        # Initially, iteration variables are undefined
-        assert ctx.get_variable('this') == []
+        # $this initially references the current context; $index/$total are
+        # only defined inside explicit iteration.
+        assert ctx.get_variable('this') == patient_resource
         assert ctx.get_variable('index') == []
         assert ctx.get_variable('total') == []
 
@@ -349,9 +351,14 @@ class TestIterationVariables:
     """Tests for iteration variables ($this, $index, $total)."""
 
     def test_this_outside_iteration(self, evaluator: FHIRPathEvaluator, patient_resource: dict) -> None:
-        """Test $this returns empty outside iteration."""
+        """Test $this returns the current context outside explicit iteration."""
         result = evaluator.evaluate_expression(patient_resource, '$this')
-        assert result == []
+        assert result == [patient_resource]
+
+    def test_this_path_outside_iteration(self, evaluator: FHIRPathEvaluator, patient_resource: dict) -> None:
+        """Test $this can be used as an explicit current-focus prefix."""
+        result = evaluator.evaluate_expression(patient_resource, '$this.id')
+        assert result == [patient_resource["id"]]
 
     def test_index_outside_iteration(self, evaluator: FHIRPathEvaluator, patient_resource: dict) -> None:
         """Test $index returns empty outside iteration."""
@@ -404,12 +411,12 @@ class TestEnvironmentVariables:
         assert result == ['custom-value']
 
     def test_undefined_environment_variable(self, evaluator: FHIRPathEvaluator, patient_resource: dict) -> None:
-        """Test undefined environment variable returns empty."""
-        result = evaluator.evaluate_expression(
-            patient_resource,
-            "%`undefined`"
-        )
-        assert result == []
+        """Test undefined environment variable raises at the evaluator layer."""
+        with pytest.raises(FHIRPathError):
+            evaluator.evaluate_expression(
+                patient_resource,
+                "%`undefined`"
+            )
 
     def test_sct_context(self, evaluator: FHIRPathEvaluator, patient_resource: dict) -> None:
         """Test %sct terminology context."""

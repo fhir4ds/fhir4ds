@@ -10,12 +10,35 @@ from __future__ import annotations
 import warnings
 from typing import Any, Optional
 
-from fhir4ds.sources.base import validate_schema
+from fhir4ds.sources.base import quote_identifier, quote_sql_literal, validate_schema
 
 
 _CLOUD_PREFIXES = ("s3://", "az://", "abfs://", "gs://", "gcs://")
 
 _SUPPORTED_FORMATS = ("parquet", "ndjson", "json", "iceberg")
+
+_ALLOWED_SECRET_OPTIONS = {
+    "S3": {
+        "access_key_id",
+        "secret_access_key",
+        "session_token",
+        "region",
+        "endpoint_url",
+        "url_style",
+        "use_ssl",
+    },
+    "AZURE": {
+        "connection_string",
+        "account_name",
+        "account_key",
+        "tenant_id",
+        "client_id",
+        "client_secret",
+    },
+    "GCS": {
+        "service_account_json",
+    },
+}
 
 
 class CloudCredentials:
@@ -54,15 +77,32 @@ class CloudCredentials:
         **kwargs: Any,
     ) -> None:
         self.provider = provider.upper()
+        if self.provider not in _ALLOWED_SECRET_OPTIONS:
+            raise ValueError(
+                f"Unsupported cloud provider '{provider}'. "
+                f"Supported providers: {tuple(_ALLOWED_SECRET_OPTIONS)}"
+            )
         self.secret_name = secret_name or f"fhir4ds_{self.provider.lower()}_secret"
         self.kwargs = kwargs
 
     def configure(self, con: Any) -> None:
         """Registers a DuckDB secret for this provider on *con*."""
-        kv_pairs = " ".join(f"{k} '{v}'" for k, v in self.kwargs.items())
+        allowed = _ALLOWED_SECRET_OPTIONS[self.provider]
+        invalid = sorted(set(self.kwargs) - allowed)
+        if invalid:
+            raise ValueError(
+                f"Unsupported credential option(s) for {self.provider}: {invalid}. "
+                f"Supported options: {sorted(allowed)}"
+            )
+
+        kv_pairs = ",\n                ".join(
+            f"{key} {quote_sql_literal(str(value))}"
+            for key, value in self.kwargs.items()
+        )
+        separator = "," if kv_pairs else ""
         con.execute(f"""
-            CREATE OR REPLACE SECRET {self.secret_name} (
-                TYPE {self.provider},
+            CREATE OR REPLACE SECRET {quote_identifier(self.secret_name)} (
+                TYPE {self.provider}{separator}
                 {kv_pairs}
             )
         """)
@@ -157,16 +197,17 @@ class FileSystemSource:
         """Builds the DuckDB scan expression for the configured format."""
         # Path is passed to DuckDB's own parser — do not quote as identifier.
         # DuckDB handles glob patterns natively in these functions.
+        path_literal = quote_sql_literal(self._path_pattern)
         if self._format == "parquet":
             options = []
             if self._hive_partitioning:
                 options.append("hive_partitioning=true")
             opts = f", {', '.join(options)}" if options else ""
-            return f"read_parquet('{self._path_pattern}'{opts})"
+            return f"read_parquet({path_literal}{opts})"
         elif self._format in ("ndjson", "json"):
-            return f"read_json_auto('{self._path_pattern}')"
+            return f"read_json_auto({path_literal})"
         elif self._format == "iceberg":
-            return f"iceberg_scan('{self._path_pattern}')"
+            return f"iceberg_scan({path_literal})"
         else:
             raise ValueError(f"Unsupported format: {self._format}")
 
@@ -347,9 +388,11 @@ class FileSystemSource:
             return []
 
         if self._format == "parquet":
-            scan = f"read_parquet({changed_files!r})"
+            paths = ", ".join(quote_sql_literal(path) for path in changed_files)
+            scan = f"read_parquet([{paths}])"
         else:
-            scan = f"read_json_auto({changed_files!r})"
+            paths = ", ".join(quote_sql_literal(path) for path in changed_files)
+            scan = f"read_json_auto([{paths}])"
 
         rows = self._con.execute(f"""
             SELECT DISTINCT patient_ref FROM {scan}

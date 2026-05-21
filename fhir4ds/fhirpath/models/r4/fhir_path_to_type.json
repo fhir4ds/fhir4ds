@@ -91,6 +91,7 @@
   ".name": "string",
   ".title": "string",
   ".description": "string",
+  ".contentType": "code",
   ".language": "code",
   ".gender": "code",
   ".active": "boolean",

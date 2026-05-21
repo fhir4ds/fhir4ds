@@ -5,13 +5,28 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from ...parser.ast_nodes import (
     BinaryExpression,
+    ChoiceTypeSpecifier,
     CodeSelector,
+    DateTimeLiteral,
+    FunctionRef,
     Identifier,
+    InstanceExpression,
+    Interval,
+    IntervalTypeSpecifier,
+    ListExpression,
+    ListTypeSpecifier,
+    Literal,
     MethodInvocation,
+    NamedTypeSpecifier,
     Property,
+    Quantity,
     Query,
     QuerySource,
     Retrieve,
+    TimeLiteral,
+    TupleExpression,
+    TupleTypeSpecifier,
+    UnaryExpression,
 )
 from ...translator.context import ExprUsage, RowShape
 from ...translator.function_inliner import ParameterPlaceholder
@@ -369,6 +384,491 @@ def _wrap_as_json_array_agg(sql: SQLExpression) -> SQLExpression:
 
 class QueryMixin:
     """Query translation methods."""
+
+    _CLINICAL_CQL_TYPES = {
+        "code": "Code",
+        "concept": "Concept",
+        "valueset": "ValueSet",
+        "codesystem": "CodeSystem",
+        "vocabulary": "Vocabulary",
+    }
+    _VOCABULARY_SUBTYPES = {"ValueSet", "CodeSystem"}
+
+    def _static_clinical_type(self, node: Any) -> Optional[str]:
+        """Return a statically known CQL clinical type for terminology values."""
+        from ...parser.ast_nodes import InstanceExpression as _InstExpr
+        from ...parser.ast_nodes import QualifiedIdentifier as _QualifiedIdentifier
+
+        if isinstance(node, CodeSelector):
+            return "Code"
+
+        if isinstance(node, UnaryExpression) and node.operator == "singleton from":
+            return self._static_clinical_type(node.operand)
+
+        if isinstance(node, Query) and node.return_clause is not None:
+            returned = node.return_clause.expression
+            if isinstance(returned, Identifier):
+                for let_clause in node.let_clauses:
+                    if let_clause.alias == returned.name:
+                        return self._static_clinical_type(let_clause.expression)
+            return self._static_clinical_type(returned)
+
+        if isinstance(node, _InstExpr):
+            bare = self._bare_cql_type_name(node.type)
+            return self._CLINICAL_CQL_TYPES.get((bare or "").lower())
+
+        if isinstance(node, Identifier):
+            meta = self.context.definition_meta.get(node.name)
+            if meta and meta.cql_type:
+                bare = self._bare_cql_type_name(meta.cql_type)
+                clinical_type = self._CLINICAL_CQL_TYPES.get((bare or "").lower())
+                if clinical_type is not None:
+                    return clinical_type
+            if node.name in self.context.valuesets:
+                return "ValueSet"
+            if node.name in self.context.codesystems:
+                return "CodeSystem"
+            code_info = self.context.codes.get(node.name)
+            if code_info:
+                return "Concept" if code_info.get("is_concept") else "Code"
+
+        if isinstance(node, _QualifiedIdentifier) and node.parts:
+            if node.parts[0] in self.context.codesystems and len(node.parts) > 1:
+                return "Code"
+            code_info = self.context.codes.get(node.parts[-1])
+            if code_info:
+                return "Concept" if code_info.get("is_concept") else "Code"
+
+        if isinstance(node, Property):
+            if isinstance(node.source, Identifier) and node.source.name in self.context.includes:
+                code_info = self.context.codes.get(node.path)
+                if code_info:
+                    return "Concept" if code_info.get("is_concept") else "Code"
+
+        if isinstance(node, ParameterPlaceholder):
+            return self._static_clinical_type_from_sql(node.sql_expr)
+
+        return None
+
+    def _static_clinical_type_from_sql(self, expr: SQLExpression) -> Optional[str]:
+        """Infer clinical type from a pre-translated literal placeholder."""
+        import json as _json
+
+        if not isinstance(expr, SQLLiteral) or not isinstance(expr.value, str):
+            return None
+        text = expr.value.strip()
+        if "|" in text and not text.startswith("{"):
+            return "Code"
+        if not text.startswith("{"):
+            return None
+        try:
+            data = _json.loads(text)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        if isinstance(data.get("codes"), list):
+            return "Concept"
+        resource_type = data.get("resourceType")
+        if resource_type in ("ValueSet", "CodeSystem"):
+            return resource_type
+        if "id" in data and "code" not in data:
+            return "Vocabulary"
+        if "code" in data:
+            return "Code"
+        return None
+
+    def _clinical_type_matches(self, actual_type: str, target_type: str) -> bool:
+        """Return true when actual CQL clinical type conforms to target type."""
+        actual = self._CLINICAL_CQL_TYPES.get(actual_type.lower(), actual_type)
+        target = self._CLINICAL_CQL_TYPES.get(target_type.lower(), target_type)
+        if target == "Vocabulary":
+            return actual in self._VOCABULARY_SUBTYPES
+        return actual == target
+
+    @staticmethod
+    def _split_top_level_type_args(text: str) -> list[str]:
+        """Split comma-separated type arguments without splitting nested types."""
+        parts: list[str] = []
+        start = 0
+        angle_depth = 0
+        brace_depth = 0
+        for idx, char in enumerate(text):
+            if char == "<":
+                angle_depth += 1
+            elif char == ">":
+                angle_depth = max(0, angle_depth - 1)
+            elif char == "{":
+                brace_depth += 1
+            elif char == "}":
+                brace_depth = max(0, brace_depth - 1)
+            elif char == "," and angle_depth == 0 and brace_depth == 0:
+                part = text[start:idx].strip()
+                if part:
+                    parts.append(part)
+                start = idx + 1
+        tail = text[start:].strip()
+        if tail:
+            parts.append(tail)
+        return parts
+
+    @staticmethod
+    def _split_top_level_field(text: str) -> tuple[str, str] | None:
+        """Split ``name: Type`` for tuple type fields at the top-level colon."""
+        angle_depth = 0
+        brace_depth = 0
+        for idx, char in enumerate(text):
+            if char == "<":
+                angle_depth += 1
+            elif char == ">":
+                angle_depth = max(0, angle_depth - 1)
+            elif char == "{":
+                brace_depth += 1
+            elif char == "}":
+                brace_depth = max(0, brace_depth - 1)
+            elif char == ":" and angle_depth == 0 and brace_depth == 0:
+                name = text[:idx].strip()
+                value = text[idx + 1:].strip()
+                if name and value:
+                    return name, value
+                return None
+        return None
+
+    def _normalize_structural_type_name(self, type_name: str) -> str:
+        """Normalize namespaces inside structural type names for comparison."""
+        name = str(type_name).strip()
+        if name.startswith("List<") and name.endswith(">"):
+            inner = self._normalize_structural_type_name(name[len("List<"):-1])
+            return f"List<{inner}>"
+        if name.startswith("Interval<") and name.endswith(">"):
+            inner = self._normalize_structural_type_name(name[len("Interval<"):-1])
+            return f"Interval<{inner}>"
+        if name.startswith("Choice<") and name.endswith(">"):
+            choices = [
+                self._normalize_structural_type_name(part)
+                for part in self._split_top_level_type_args(name[len("Choice<"):-1])
+            ]
+            return f"Choice<{', '.join(choices)}>"
+        if name.startswith("Tuple {") and name.endswith("}"):
+            inner = name[len("Tuple {"):-1].strip()
+            fields = []
+            for part in self._split_top_level_type_args(inner):
+                field = self._split_top_level_field(part)
+                if field is None:
+                    continue
+                field_name, field_type = field
+                fields.append(
+                    f"{field_name}: {self._normalize_structural_type_name(field_type)}"
+                )
+            return f"Tuple {{ {', '.join(fields)} }}"
+        return self._bare_cql_type_name(name) or name
+
+    def _tuple_type_elements_from_name(self, type_name: str) -> dict[str, str] | None:
+        name = self._normalize_structural_type_name(type_name)
+        if not (name.startswith("Tuple {") and name.endswith("}")):
+            return None
+        inner = name[len("Tuple {"):-1].strip()
+        result: dict[str, str] = {}
+        if not inner:
+            return result
+        for part in self._split_top_level_type_args(inner):
+            field = self._split_top_level_field(part)
+            if field is None:
+                return None
+            field_name, field_type = field
+            result[field_name] = field_type
+        return result
+
+    def _type_specifier_name(self, specifier: Any) -> str:
+        """Return a stable CQL type name for supported structural specifiers."""
+        if isinstance(specifier, NamedTypeSpecifier):
+            return specifier.name
+        if isinstance(specifier, ListTypeSpecifier):
+            return f"List<{self._type_specifier_name(specifier.element_type)}>"
+        if isinstance(specifier, IntervalTypeSpecifier):
+            return f"Interval<{self._type_specifier_name(specifier.point_type)}>"
+        if isinstance(specifier, ChoiceTypeSpecifier):
+            choices = ", ".join(
+                self._type_specifier_name(choice)
+                for choice in specifier.choices
+            )
+            return f"Choice<{choices}>"
+        if isinstance(specifier, TupleTypeSpecifier):
+            elements = ", ".join(
+                f"{element.name}: {self._type_specifier_name(element.type)}"
+                for element in specifier.elements
+            )
+            return f"Tuple {{ {elements} }}"
+        return str(specifier)
+
+    def _ensure_known_type_specifier_target(self, specifier: Any, operator: str) -> None:
+        """Validate named leaves inside composite CQL type specifiers."""
+        if isinstance(specifier, NamedTypeSpecifier):
+            self._ensure_known_named_type_target(specifier.name, operator)
+            return
+        if isinstance(specifier, ListTypeSpecifier):
+            self._ensure_known_type_specifier_target(specifier.element_type, operator)
+            return
+        if isinstance(specifier, IntervalTypeSpecifier):
+            self._ensure_known_type_specifier_target(specifier.point_type, operator)
+            return
+        if isinstance(specifier, ChoiceTypeSpecifier):
+            for choice in specifier.choices:
+                self._ensure_known_type_specifier_target(choice, operator)
+            return
+        if isinstance(specifier, TupleTypeSpecifier):
+            for element in specifier.elements:
+                self._ensure_known_type_specifier_target(element.type, operator)
+            return
+
+    def _static_structural_type_name(self, node: Any) -> Optional[str]:
+        """Infer exact CQL structural type when it is known before SQL execution."""
+        if isinstance(node, DateTimeLiteral):
+            if node.value.startswith("T"):
+                return "Time"
+            return "DateTime" if "T" in node.value else "Date"
+        if isinstance(node, TimeLiteral):
+            return "Time"
+        if isinstance(node, Quantity):
+            return "Quantity"
+        if isinstance(node, InstanceExpression):
+            bare = self._bare_cql_type_name(node.type)
+            return bare
+        if isinstance(node, TupleExpression):
+            elements = []
+            for element in node.elements:
+                element_type = self._static_structural_type_name(element.type) or "Any"
+                elements.append(f"{element.name}: {element_type}")
+            return f"Tuple {{ {', '.join(elements)} }}"
+        if isinstance(node, CodeSelector):
+            return "Code"
+        if isinstance(node, Literal):
+            if node.value is None:
+                return None
+            literal_type = getattr(node, "type", None)
+            if literal_type:
+                return literal_type
+            if isinstance(node.value, bool):
+                return "Boolean"
+            if isinstance(node.value, int):
+                return "Integer"
+            if isinstance(node.value, float):
+                return "Decimal"
+            if isinstance(node.value, str):
+                return "String"
+        if isinstance(node, ListExpression):
+            element_types = [
+                self._static_structural_type_name(element)
+                for element in node.elements
+            ]
+            known = [item for item in element_types if item is not None]
+            if not known:
+                return "List<Any>"
+            first = known[0]
+            if all(item == first for item in known):
+                return f"List<{first}>"
+            return "List<Any>"
+        if isinstance(node, Interval):
+            point_types = []
+            if node.low is not None:
+                point_types.append(self._static_structural_type_name(node.low))
+            if node.high is not None:
+                point_types.append(self._static_structural_type_name(node.high))
+            known = [item for item in point_types if item is not None]
+            if not known:
+                return "Interval<Any>"
+            first = known[0]
+            if all(item == first for item in known):
+                return f"Interval<{first}>"
+            return "Interval<Any>"
+        if isinstance(node, FunctionRef):
+            return {
+                "toboolean": "Boolean",
+                "tointeger": "Integer",
+                "tolong": "Long",
+                "todecimal": "Decimal",
+                "tostring": "String",
+                "todate": "Date",
+                "todatetime": "DateTime",
+                "totime": "Time",
+                "toquantity": "Quantity",
+                "toratio": "Ratio",
+                "toconcept": "Concept",
+                "date": "Date",
+                "datetime": "DateTime",
+                "time": "Time",
+                "today": "Date",
+                "now": "DateTime",
+                "timeofday": "Time",
+            }.get(node.name.lower())
+        if isinstance(node, Identifier):
+            if node.name in self.context.valuesets:
+                return "ValueSet"
+            if node.name in self.context.codesystems:
+                return "CodeSystem"
+            code_info = self.context.codes.get(node.name)
+            if code_info:
+                return "Concept" if code_info.get("is_concept") else "Code"
+            meta = self.context.definition_meta.get(node.name)
+            if meta and meta.cql_type and meta.cql_type != "Any":
+                return meta.cql_type
+            ast_defs = getattr(self.context, "_definition_cql_asts", {})
+            ast_def = ast_defs.get(node.name)
+            if ast_def is not None and ast_def is not node:
+                return self._static_structural_type_name(ast_def)
+        return None
+
+    def _is_static_non_null_structural_value(self, node: Any) -> bool:
+        """Return true for AST values whose non-nullness is compile-time known."""
+        if isinstance(node, (Quantity, DateTimeLiteral, TimeLiteral, ListExpression, Interval, InstanceExpression, TupleExpression, CodeSelector)):
+            return True
+        if isinstance(node, Literal):
+            return node.value is not None
+        if isinstance(node, Identifier):
+            if (
+                node.name in self.context.valuesets
+                or node.name in self.context.codesystems
+                or node.name in self.context.codes
+            ):
+                return True
+            ast_defs = getattr(self.context, "_definition_cql_asts", {})
+            ast_def = ast_defs.get(node.name)
+            if ast_def is not None and ast_def is not node:
+                return self._is_static_non_null_structural_value(ast_def)
+        return False
+
+    def _definition_ast_for_identifier(self, node: Any) -> Optional[Any]:
+        if isinstance(node, Identifier):
+            ast_defs = getattr(self.context, "_definition_cql_asts", {})
+            ast_def = ast_defs.get(node.name)
+            if ast_def is not None and ast_def is not node:
+                return ast_def
+        return None
+
+    def _static_conversion_source_node(self, node: Any) -> Optional[Any]:
+        """Return the definition body for conversion operands that are safe to inline.
+
+        Expression-level translation commonly turns definition references into
+        patient-correlated CTE lookups. That is correct for data-dependent
+        definitions, but literal/static aliases used by conversion operators
+        should retain their scalar expression shape.
+        """
+        source = self._definition_ast_for_identifier(node)
+        if source is not None and self._is_static_conversion_inline_candidate(source):
+            return source
+        return None
+
+    def _is_static_conversion_inline_candidate(self, node: Any, depth: int = 0) -> bool:
+        """True when *node* is a scalar expression with no retrieve/query dependency."""
+        if depth > 8:
+            return False
+        if isinstance(node, (Literal, Quantity, DateTimeLiteral, TimeLiteral, CodeSelector)):
+            return True
+        if isinstance(node, InstanceExpression):
+            return True
+        if isinstance(node, Identifier):
+            if (
+                node.name in self.context.valuesets
+                or node.name in self.context.codesystems
+                or node.name in self.context.codes
+            ):
+                return True
+            source = self._definition_ast_for_identifier(node)
+            return (
+                source is not None
+                and self._is_static_conversion_inline_candidate(source, depth + 1)
+            )
+        if isinstance(node, FunctionRef):
+            static_functions = {
+                "date",
+                "datetime",
+                "time",
+                "toboolean",
+                "toconcept",
+                "todate",
+                "todatetime",
+                "todecimal",
+                "tointeger",
+                "tolong",
+                "toquantity",
+                "toratio",
+                "tostring",
+                "totime",
+            }
+            if node.name.lower() not in static_functions:
+                return False
+            return all(
+                self._is_static_conversion_inline_candidate(arg, depth + 1)
+                for arg in (node.arguments or [])
+            )
+        if isinstance(node, BinaryExpression):
+            operator = node.operator.lower() if isinstance(node.operator, str) else node.operator
+            if operator in {"as", "convert"}:
+                return self._is_static_conversion_inline_candidate(node.left, depth + 1)
+            return (
+                self._is_static_conversion_inline_candidate(node.left, depth + 1)
+                and self._is_static_conversion_inline_candidate(node.right, depth + 1)
+            )
+        if isinstance(node, UnaryExpression):
+            return self._is_static_conversion_inline_candidate(node.operand, depth + 1)
+        if isinstance(node, ListExpression):
+            return all(
+                self._is_static_conversion_inline_candidate(item, depth + 1)
+                for item in node.elements
+            )
+        if isinstance(node, Interval):
+            return all(
+                item is None or self._is_static_conversion_inline_candidate(item, depth + 1)
+                for item in (node.low, node.high)
+            )
+        if isinstance(node, TupleExpression):
+            return all(
+                self._is_static_conversion_inline_candidate(element.type, depth + 1)
+                for element in node.elements
+            )
+        return False
+
+    def _structural_type_conforms(self, actual_type: str, target_type: str) -> bool:
+        """Return true when a statically known CQL type conforms to a target."""
+        actual = self._normalize_structural_type_name(actual_type)
+        target = self._normalize_structural_type_name(target_type)
+        if target in ("Any", "any"):
+            return True
+        if target == "Vocabulary" and actual in self._VOCABULARY_SUBTYPES:
+            return True
+        if actual.startswith("Choice<") and actual.endswith(">") and target.startswith("Choice<") and target.endswith(">"):
+            actual_choices = self._split_top_level_type_args(actual[len("Choice<"):-1])
+            target_choices = self._split_top_level_type_args(target[len("Choice<"):-1])
+            return all(
+                any(self._structural_type_conforms(actual_choice, target_choice) for target_choice in target_choices)
+                for actual_choice in actual_choices
+            )
+        if target.startswith("Choice<") and target.endswith(">"):
+            choices = self._split_top_level_type_args(target[len("Choice<"):-1])
+            return any(self._structural_type_conforms(actual, choice) for choice in choices)
+        if actual.startswith("Choice<") and actual.endswith(">"):
+            return False
+        if actual == target:
+            return True
+        if actual.startswith("List<") and target.startswith("List<"):
+            actual_inner = actual[len("List<"):-1]
+            target_inner = target[len("List<"):-1]
+            return self._structural_type_conforms(actual_inner, target_inner)
+        if actual.startswith("Interval<") and target.startswith("Interval<"):
+            actual_inner = actual[len("Interval<"):-1]
+            target_inner = target[len("Interval<"):-1]
+            return self._structural_type_conforms(actual_inner, target_inner)
+        actual_tuple = self._tuple_type_elements_from_name(actual)
+        target_tuple = self._tuple_type_elements_from_name(target)
+        if actual_tuple is not None and target_tuple is not None:
+            for field_name, target_field_type in target_tuple.items():
+                actual_field_type = actual_tuple.get(field_name)
+                if actual_field_type is None:
+                    return False
+                if not self._structural_type_conforms(actual_field_type, target_field_type):
+                    return False
+            return True
+        return False
 
     def _translate_retrieve(self, node, boolean_context: bool = False, list_context: bool = True) -> SQLExpression:
         """
@@ -1576,6 +2076,346 @@ class QueryMixin:
 
         return None
 
+    def _extract_fhirpath_value_call(
+        self,
+        expr: SQLExpression,
+    ) -> Optional[tuple[SQLExpression, str]]:
+        """Return ``(resource, path)`` for direct FHIRPath scalar UDF calls."""
+        if not isinstance(expr, SQLFunctionCall):
+            return None
+        if expr.name not in {
+            "fhirpath_text",
+            "fhirpath_number",
+            "fhirpath_bool",
+            "fhirpath_date",
+            "fhirpath_timestamp",
+            "fhirpath_json",
+        }:
+            return None
+        if len(expr.args) < 2:
+            return None
+        path_arg = expr.args[1]
+        if not isinstance(path_arg, SQLLiteral) or not isinstance(path_arg.value, str):
+            return None
+        return expr.args[0], path_arg.value
+
+    def _is_cql_structural_list_expr(self, expr: SQLExpression) -> bool:
+        """Return true when SQL produces a Children()/Descendants() list."""
+        if isinstance(expr, SQLCast):
+            return self._is_cql_structural_list_expr(expr.expression)
+        if isinstance(expr, SQLCase):
+            branch_values = [result for _, result in expr.when_clauses]
+            if expr.else_clause is not None:
+                branch_values.append(expr.else_clause)
+            return any(self._is_cql_structural_list_expr(item) for item in branch_values)
+        if isinstance(expr, SQLFunctionCall):
+            name = expr.name.lower()
+            if name in {"cqlchildren", "cqldescendants"}:
+                return True
+        return False
+
+    def _is_cql_structural_item_expr(self, expr: SQLExpression) -> bool:
+        """Return true when SQL produces one item from Children()/Descendants()."""
+        if isinstance(expr, SQLCast):
+            return self._is_cql_structural_item_expr(expr.expression)
+        if isinstance(expr, SQLCase):
+            branch_values = [result for _, result in expr.when_clauses]
+            if expr.else_clause is not None:
+                branch_values.append(expr.else_clause)
+            return any(self._is_cql_structural_item_expr(item) for item in branch_values)
+        if isinstance(expr, SQLFunctionCall):
+            name = expr.name.lower()
+            if name in {"list_extract", "array_extract", "elementat", "singletonfrom"} and expr.args:
+                return self._is_cql_structural_list_expr(expr.args[0])
+        return False
+
+    @staticmethod
+    def _cql_typed_value_expected_tags(bare_type: str) -> tuple[str, ...]:
+        return {
+            "boolean": ("Boolean",),
+            "integer": ("Integer",),
+            "long": ("Long",),
+            "decimal": ("Decimal",),
+            "string": ("String",),
+            "date": ("Date",),
+            "datetime": ("DateTime",),
+            "time": ("Time",),
+        }.get(bare_type.lower(), ())
+
+    def _cql_typed_value_tag_condition(self, text_value: SQLExpression) -> SQLExpression:
+        return SQLFunctionCall(
+            name="starts_with",
+            args=[
+                SQLFunctionCall(name="LTRIM", args=[text_value]),
+                SQLLiteral(value='{"__fhir4ds_cql_type"'),
+            ],
+        )
+
+    def _cql_typed_value_type_check(
+        self,
+        expr: SQLExpression,
+        bare_type: str,
+    ) -> Optional[SQLExpression]:
+        """Build a type check for one item emitted by Children()/Descendants()."""
+        if not self._is_cql_structural_item_expr(expr):
+            return None
+        expected_tags = self._cql_typed_value_expected_tags(bare_type)
+        if not expected_tags:
+            return None
+        text_value = SQLCast(expression=expr, target_type="VARCHAR")
+        tag_type = SQLFunctionCall(
+            name="json_extract_string",
+            args=[text_value, SQLLiteral(value="$.__fhir4ds_cql_type")],
+        )
+        type_match: Optional[SQLExpression] = None
+        for expected in expected_tags:
+            check = SQLBinaryOp(
+                operator="=",
+                left=tag_type,
+                right=SQLLiteral(value=expected),
+            )
+            type_match = check if type_match is None else SQLBinaryOp(operator="OR", left=type_match, right=check)
+        if type_match is None:
+            return None
+        return SQLBinaryOp(
+            operator="AND",
+            left=self._cql_typed_value_tag_condition(text_value),
+            right=type_match,
+        )
+
+    def _cql_typed_value_as_value(
+        self,
+        expr: SQLExpression,
+        bare_type: str,
+    ) -> Optional[SQLExpression]:
+        """Return a typed SQL value for one Children()/Descendants() item."""
+        type_check = self._cql_typed_value_type_check(expr, bare_type)
+        if type_check is None:
+            return None
+        text_value = SQLCast(expression=expr, target_type="VARCHAR")
+        raw_value = SQLFunctionCall(
+            name="json_extract_string",
+            args=[text_value, SQLLiteral(value="$.value")],
+        )
+        lower_type = bare_type.lower()
+        if lower_type == "boolean":
+            typed_value: SQLExpression = SQLCast(expression=raw_value, target_type="BOOLEAN", try_cast=True)
+        elif lower_type == "integer":
+            typed_value = SQLCast(expression=raw_value, target_type="INTEGER", try_cast=True)
+        elif lower_type == "long":
+            typed_value = SQLCast(expression=raw_value, target_type="BIGINT", try_cast=True)
+        elif lower_type == "decimal":
+            typed_value = SQLCast(expression=raw_value, target_type="DOUBLE", try_cast=True)
+        elif lower_type == "string":
+            typed_value = raw_value
+        elif lower_type in {"date", "datetime", "time"}:
+            typed_value = raw_value
+        else:
+            return None
+        return SQLCase(when_clauses=[(type_check, typed_value)], else_clause=SQLNull())
+
+    def _clinical_json_type_check(
+        self,
+        expr: SQLExpression,
+        bare_type: str,
+    ) -> Optional[SQLExpression]:
+        """Build a runtime Code/Concept shape check for JSON clinical values."""
+        target = self._CLINICAL_CQL_TYPES.get(bare_type.lower())
+        if target not in {"Code", "Concept"}:
+            return None
+        text_value = SQLCast(expression=expr, target_type="VARCHAR")
+        is_json = SQLFunctionCall(
+            name="starts_with",
+            args=[
+                SQLFunctionCall(name="LTRIM", args=[text_value]),
+                SQLLiteral(value="{"),
+            ],
+        )
+        has_code = SQLBinaryOp(
+            operator="IS NOT",
+            left=SQLFunctionCall(
+                name="json_extract_string",
+                args=[text_value, SQLLiteral(value="$.code")],
+            ),
+            right=SQLNull(),
+        )
+        has_quantity_value = SQLBinaryOp(
+            operator="IS NOT",
+            left=SQLFunctionCall(
+                name="json_extract_string",
+                args=[text_value, SQLLiteral(value="$.value")],
+            ),
+            right=SQLNull(),
+        )
+        not_quantity = SQLUnaryOp(operator="NOT", operand=has_quantity_value)
+        code_match = SQLBinaryOp(operator="AND", left=has_code, right=not_quantity)
+
+        has_cql_concept_code = SQLBinaryOp(
+            operator="IS NOT",
+            left=SQLFunctionCall(
+                name="json_extract_string",
+                args=[text_value, SQLLiteral(value="$.codes[0].code")],
+            ),
+            right=SQLNull(),
+        )
+        has_fhir_codeable_concept_code = SQLBinaryOp(
+            operator="IS NOT",
+            left=SQLFunctionCall(
+                name="json_extract_string",
+                args=[text_value, SQLLiteral(value="$.coding[0].code")],
+            ),
+            right=SQLNull(),
+        )
+        concept_match = SQLBinaryOp(
+            operator="OR",
+            left=has_cql_concept_code,
+            right=has_fhir_codeable_concept_code,
+        )
+        match = code_match if target == "Code" else concept_match
+        return SQLCase(
+            when_clauses=[(is_json, match)],
+            else_clause=SQLLiteral(value=False),
+        )
+
+    def _cql_structural_list_type_check(
+        self,
+        expr: SQLExpression,
+        type_name: str,
+    ) -> Optional[SQLExpression]:
+        """Build a List<T> type check for Children()/Descendants() results."""
+        if not self._is_cql_structural_list_expr(expr):
+            return None
+        normalized = self._normalize_structural_type_name(type_name)
+        if not (normalized.startswith("List<") and normalized.endswith(">")):
+            return None
+
+        not_null = SQLBinaryOp(operator="IS NOT", left=expr, right=SQLNull())
+        inner_type = normalized[len("List<"):-1]
+        if inner_type in ("Any", "any"):
+            return not_null
+
+        expected_tags = self._cql_typed_value_expected_tags(inner_type)
+        if not expected_tags:
+            return None
+
+        item = SQLIdentifier(name="_cql_item")
+        text_value = SQLCast(expression=item, target_type="VARCHAR")
+        tag_type = SQLFunctionCall(
+            name="json_extract_string",
+            args=[text_value, SQLLiteral(value="$.__fhir4ds_cql_type")],
+        )
+        type_match: Optional[SQLExpression] = None
+        for expected in expected_tags:
+            check = SQLBinaryOp(
+                operator="=",
+                left=tag_type,
+                right=SQLLiteral(value=expected),
+            )
+            type_match = check if type_match is None else SQLBinaryOp(operator="OR", left=type_match, right=check)
+        if type_match is None:
+            return None
+
+        item_matches = SQLCase(
+            when_clauses=[(self._cql_typed_value_tag_condition(text_value), type_match)],
+            else_clause=SQLLiteral(value=False),
+        )
+        invalid_item = SQLBinaryOp(
+            operator="AND",
+            left=SQLBinaryOp(operator="IS NOT", left=item, right=SQLNull()),
+            right=SQLUnaryOp(operator="NOT", operand=item_matches),
+        )
+        invalid_items = SQLFunctionCall(
+            name="list_filter",
+            args=[expr, SQLLambda(param="_cql_item", body=invalid_item)],
+        )
+        no_invalid_items = SQLBinaryOp(
+            operator="=",
+            left=SQLFunctionCall(
+                name="array_length",
+                args=[invalid_items, SQLLiteral(value=1)],
+            ),
+            right=SQLLiteral(value=0),
+        )
+        return SQLCase(
+            when_clauses=[(not_null, no_invalid_items)],
+            else_clause=SQLLiteral(value=False),
+        )
+
+    def _fhirpath_primitive_type_check(
+        self,
+        expr: SQLExpression,
+        bare_type: str,
+    ) -> Optional[SQLExpression]:
+        """Build a runtime primitive type check for direct FHIRPath values."""
+        extracted = self._extract_fhirpath_value_call(expr)
+        if extracted is None:
+            return None
+        resource_expr, path = extracted
+        expected_names = {
+            "boolean": ("boolean",),
+            "integer": ("integer",),
+            "long": ("long", "integer64"),
+            "decimal": ("decimal",),
+            "string": ("string",),
+            "date": ("date",),
+            "datetime": ("datetime",),
+            "instant": ("instant",),
+            "time": ("time",),
+        }.get(bare_type.lower())
+        if not expected_names:
+            return None
+
+        type_name = SQLFunctionCall(
+            name="fhirpath_text",
+            args=[resource_expr, SQLLiteral(value=f"({path}).type().name")],
+        )
+        lowered = SQLFunctionCall(
+            name="LOWER",
+            args=[SQLCast(expression=type_name, target_type="VARCHAR")],
+        )
+        match: Optional[SQLExpression] = None
+        for expected in expected_names:
+            check = SQLBinaryOp(
+                operator="=",
+                left=lowered,
+                right=SQLLiteral(value=expected),
+            )
+            match = check if match is None else SQLBinaryOp(operator="OR", left=match, right=check)
+        if match is None:
+            return None
+        not_null = SQLBinaryOp(operator="IS NOT", left=type_name, right=SQLNull())
+        return SQLBinaryOp(operator="AND", left=not_null, right=match)
+
+    def _fhirpath_primitive_as_value(
+        self,
+        expr: SQLExpression,
+        bare_type: str,
+    ) -> Optional[SQLExpression]:
+        """Return the typed SQL value for a direct FHIRPath primitive `as`."""
+        extracted = self._extract_fhirpath_value_call(expr)
+        if extracted is None:
+            return None
+        resource_expr, path = extracted
+        text_value = SQLFunctionCall(
+            name="fhirpath_text",
+            args=[resource_expr, SQLLiteral(value=path)],
+        )
+        lower_type = bare_type.lower()
+        if lower_type == "boolean":
+            return SQLFunctionCall(
+                name="fhirpath_bool",
+                args=[resource_expr, SQLLiteral(value=path)],
+            )
+        if lower_type == "integer":
+            return SQLCast(expression=text_value, target_type="INTEGER", try_cast=True)
+        if lower_type == "long":
+            return SQLCast(expression=text_value, target_type="BIGINT", try_cast=True)
+        if lower_type == "decimal":
+            return SQLCast(expression=text_value, target_type="DOUBLE", try_cast=True)
+        if lower_type == "string":
+            return text_value
+        return None
+
     def _translate_is_type_check(self, expr: BinaryExpression) -> SQLExpression:
         """Translate CQL `is` type-check operator to SQL.
 
@@ -1592,27 +2432,86 @@ class QueryMixin:
         3. Named profiles — check meta.profile array.
         4. FHIR resource types — check $.resourceType field.
         """
-        from ...parser.ast_nodes import IntervalTypeSpecifier as _ITS
-        if isinstance(expr.right, _ITS):
-            type_name = f"Interval<{expr.right.point_type.name}>"
+        if isinstance(expr.right, IntervalTypeSpecifier):
+            type_name = self._type_specifier_name(expr.right)
+            self._ensure_known_type_specifier_target(expr.right, "is")
+        elif isinstance(expr.right, ListTypeSpecifier):
+            type_name = self._type_specifier_name(expr.right)
+            self._ensure_known_type_specifier_target(expr.right, "is")
+        elif isinstance(expr.right, (ChoiceTypeSpecifier, TupleTypeSpecifier)):
+            type_name = self._type_specifier_name(expr.right)
+            self._ensure_known_type_specifier_target(expr.right, "is")
         else:
             type_name = expr.right.name
+            self._ensure_known_named_type_target(type_name, "is")
 
         # Strip FHIR/CQL namespace prefix for type matching
         bare_type = type_name.split(".")[-1] if "." in type_name else type_name
 
-        # --- Strategy 0: Compile-time type resolution for InstanceExpression ---
-        # When the left operand is an InstanceExpression with a known type,
-        # resolve the `is` check at compile time.  CQL §2.1: Vocabulary is a
-        # supertype of ValueSet and CodeSystem.
-        from ...parser.ast_nodes import InstanceExpression as _InstExpr
-        if isinstance(expr.left, _InstExpr):
-            instance_type = expr.left.type.split(".")[-1] if "." in expr.left.type else expr.left.type
-            _VOCABULARY_TYPES = {"ValueSet", "CodeSystem"}
-            if bare_type == "Vocabulary" and instance_type in _VOCABULARY_TYPES:
-                return SQLLiteral(value=True)
-            if instance_type == bare_type:
-                return SQLLiteral(value=True)
+        if bare_type in ("Any", "any"):
+            left = self.translate(expr.left, usage=ExprUsage.SCALAR)
+            return SQLBinaryOp(
+                operator="IS NOT",
+                left=left,
+                right=SQLNull(),
+            )
+
+        static_type = self._static_structural_type_name(expr.left)
+        if static_type:
+            normalized_static_type = self._normalize_structural_type_name(static_type)
+            normalized_target_type = self._normalize_structural_type_name(type_name)
+            choice_needs_runtime_check = (
+                normalized_static_type.startswith("Choice<")
+                and not normalized_target_type.startswith("Choice<")
+            )
+            if not choice_needs_runtime_check:
+                if self._structural_type_conforms(static_type, type_name):
+                    if self._is_static_non_null_structural_value(expr.left):
+                        return SQLLiteral(value=True)
+                    source_node = self._definition_ast_for_identifier(expr.left) or expr.left
+                    left = self.translate(source_node, usage=ExprUsage.SCALAR)
+                    return SQLBinaryOp(operator="IS NOT", left=left, right=SQLNull())
+                return SQLLiteral(value=False)
+
+        if isinstance(expr.right, ChoiceTypeSpecifier):
+            combined: Optional[SQLExpression] = None
+            for choice in expr.right.choices:
+                check = self._translate_is_type_check(
+                    BinaryExpression(operator="is", left=expr.left, right=choice)
+                )
+                combined = check if combined is None else SQLBinaryOp(operator="OR", left=combined, right=check)
+            return combined if combined is not None else SQLLiteral(value=False)
+
+        _PRIMITIVE_TYPES = {
+            "DateTime", "dateTime", "Date", "date", "Time", "time",
+            "String", "string", "Boolean", "boolean", "Integer", "integer",
+            "Long", "long", "Decimal", "decimal", "instant",
+        }
+        if bare_type in _PRIMITIVE_TYPES and isinstance(expr.left, Identifier):
+            meta = self.context.definition_meta.get(expr.left.name)
+            meta_type = self._bare_cql_type_name(getattr(meta, "cql_type", None)) if meta else None
+            if meta_type in _PRIMITIVE_TYPES:
+                left = self.translate(expr.left, usage=ExprUsage.SCALAR)
+                if meta_type.lower() == bare_type.lower():
+                    return SQLBinaryOp(operator="IS NOT", left=left, right=SQLNull())
+                return SQLLiteral(value=False)
+
+        if isinstance(expr.left, Quantity):
+            return SQLLiteral(value=bare_type in ("Quantity", "quantity"))
+
+        if isinstance(expr.left, Literal) and bare_type not in _PRIMITIVE_TYPES:
+            return SQLLiteral(value=False)
+
+        # --- Strategy 0: Compile-time clinical type resolution ---
+        # CQL clinical values (Code, Concept, ValueSet, CodeSystem) often lower
+        # to JSON/VARCHAR literals. Resolve their type identity before generic
+        # FHIR resourceType probing, which only applies to FHIR resources.
+        clinical_target = self._CLINICAL_CQL_TYPES.get(bare_type.lower())
+        clinical_source = self._static_clinical_type(expr.left)
+        if clinical_target is not None and clinical_source is not None:
+            return SQLLiteral(
+                value=self._clinical_type_matches(clinical_source, clinical_target)
+            )
 
         static_resource_check = self._static_resource_type_check_result(expr.left, type_name)
         if static_resource_check is not None:
@@ -1632,15 +2531,18 @@ class QueryMixin:
             if symbol and getattr(symbol, 'table_alias', None):
                 resource_expr = _SQLQId(parts=[alias_name, "resource"])
 
+        cql_structural_list_check = self._cql_structural_list_type_check(resource_expr, type_name)
+        if cql_structural_list_check is not None:
+            return cql_structural_list_check
+
+        clinical_runtime_check = self._clinical_json_type_check(resource_expr, bare_type)
+        if clinical_runtime_check is not None:
+            return clinical_runtime_check
+
         # Strip FHIR/CQL namespace prefix for type matching
         bare_type = type_name.split(".")[-1] if "." in type_name else type_name
 
         # --- Strategy 1: CQL primitive types (bare string values) ---
-        _PRIMITIVE_TYPES = {
-            "DateTime", "dateTime", "Date", "date", "Time", "time",
-            "String", "string", "Boolean", "boolean", "Integer", "integer",
-            "Long", "long", "Decimal", "decimal", "instant",
-        }
         if bare_type in _PRIMITIVE_TYPES:
             # Quick check: if the left operand is a CQL literal with a known type
             # that doesn't match the target, return false immediately.
@@ -1653,24 +2555,34 @@ class QueryMixin:
                     _bare_lower = bare_type.lower()
                     _LIT_TYPE_MAP = {
                         'string': {'string'},
-                        'integer': {'integer', 'long'},
-                        'long': {'integer', 'long'},
+                        'integer': {'integer'},
+                        'long': {'long'},
                         'decimal': {'decimal'},
                         'boolean': {'boolean'},
                     }
                     _lit_types = _LIT_TYPE_MAP.get(_lit_type_lower)
                     if _lit_types is not None and _bare_lower not in _lit_types:
                         return SQLLiteral(value=False)
+                    if _lit_types is not None and _bare_lower in _lit_types:
+                        return SQLLiteral(value=True)
+
+            fhirpath_type_check = self._fhirpath_primitive_type_check(resource_expr, bare_type)
+            if fhirpath_type_check is not None:
+                return fhirpath_type_check
+
+            cql_typed_value_check = self._cql_typed_value_type_check(resource_expr, bare_type)
+            if cql_typed_value_check is not None:
+                return cql_typed_value_check
 
             # CQL `is` checks the *type* of the value, not just its format.
             # When the SQL value has a concrete type (INTEGER, DOUBLE, BOOLEAN, DATE, TIMESTAMP),
             # check typeof() against the expected CQL type. When the value is VARCHAR (FHIR JSON
             # extraction), fall back to the not-JSON-object format check.
             _CQL_TYPE_TO_SQL_TYPES = {
-                "Integer": ("INTEGER", "BIGINT", "SMALLINT", "TINYINT", "HUGEINT"),
-                "integer": ("INTEGER", "BIGINT", "SMALLINT", "TINYINT", "HUGEINT"),
-                "Long": ("INTEGER", "BIGINT", "SMALLINT", "TINYINT", "HUGEINT"),
-                "long": ("INTEGER", "BIGINT", "SMALLINT", "TINYINT", "HUGEINT"),
+                "Integer": ("INTEGER", "SMALLINT", "TINYINT"),
+                "integer": ("INTEGER", "SMALLINT", "TINYINT"),
+                "Long": ("BIGINT",),
+                "long": ("BIGINT",),
                 "Decimal": ("DOUBLE", "FLOAT", "DECIMAL"),
                 "decimal": ("DOUBLE", "FLOAT", "DECIMAL"),
                 "Boolean": ("BOOLEAN",),
@@ -1723,6 +2635,8 @@ class QueryMixin:
                 type_match = type_checks[0]
                 for tc in type_checks[1:]:
                     type_match = SQLBinaryOp(operator="OR", left=type_match, right=tc)
+                if bare_type in ("Integer", "integer", "Long", "long", "Decimal", "decimal", "Boolean", "boolean"):
+                    return SQLBinaryOp(operator="AND", left=not_null, right=type_match)
                 # For VARCHAR values (FHIR polymorphic), use the not-JSON heuristic
                 is_varchar = SQLBinaryOp(
                     operator="=",
@@ -1753,7 +2667,8 @@ class QueryMixin:
             elif _inner_bare in ("Quantity", "quantity"):
                 _interval_type = "quantity"
         if _interval_type == "datetime":
-            # Period JSON: {"start": "...", "end": "..."}
+            # Period JSON: {"start": "...", "end": "..."} or internal CQL
+            # interval JSON: {"low": "...", "high": "..."}.
             # Use CASE WHEN to guard json_extract_string — DuckDB doesn't
             # short-circuit AND, so bare strings would crash json_extract.
             is_json = SQLFunctionCall(
@@ -1782,8 +2697,30 @@ class QueryMixin:
                     right=SQLNull(),
                 ),
             )
+            has_low_or_high = SQLBinaryOp(
+                operator="OR",
+                left=SQLBinaryOp(
+                    operator="IS NOT",
+                    left=SQLFunctionCall(
+                        name="json_extract_string",
+                        args=[resource_expr, SQLLiteral(value="$.low")],
+                    ),
+                    right=SQLNull(),
+                ),
+                right=SQLBinaryOp(
+                    operator="IS NOT",
+                    left=SQLFunctionCall(
+                        name="json_extract_string",
+                        args=[resource_expr, SQLLiteral(value="$.high")],
+                    ),
+                    right=SQLNull(),
+                ),
+            )
             return SQLCase(
-                when_clauses=[(is_json, has_start_or_end)],
+                when_clauses=[(
+                    is_json,
+                    SQLBinaryOp(operator="OR", left=has_start_or_end, right=has_low_or_high),
+                )],
                 else_clause=SQLLiteral(value=False),
             )
         if _interval_type == "quantity":
@@ -1904,6 +2841,38 @@ class QueryMixin:
                     ),
                     right=SQLNull(),
                 ))],
+                else_clause=SQLLiteral(value=False),
+            )
+
+        if bare_type in ("Ratio", "ratio"):
+            is_json = SQLFunctionCall(
+                name="starts_with",
+                args=[
+                    SQLFunctionCall(name="LTRIM", args=[resource_expr]),
+                    SQLLiteral(value="{"),
+                ],
+            )
+            has_numerator_denominator = SQLBinaryOp(
+                operator="AND",
+                left=SQLBinaryOp(
+                    operator="IS NOT",
+                    left=SQLFunctionCall(
+                        name="json_extract",
+                        args=[resource_expr, SQLLiteral(value="$.numerator")],
+                    ),
+                    right=SQLNull(),
+                ),
+                right=SQLBinaryOp(
+                    operator="IS NOT",
+                    left=SQLFunctionCall(
+                        name="json_extract",
+                        args=[resource_expr, SQLLiteral(value="$.denominator")],
+                    ),
+                    right=SQLNull(),
+                ),
+            )
+            return SQLCase(
+                when_clauses=[(is_json, has_numerator_denominator)],
                 else_clause=SQLLiteral(value=False),
             )
 
@@ -3616,33 +4585,46 @@ class QueryMixin:
                 )
             else:
                 # ── Single-source aggregate ───────────────────────────────
-                # Detect "null as List<T>" starting value.
+                # Detect typed-list starting values.
                 # DuckDB's list_reduce requires the lambda body return type to
                 # match the element type (VARCHAR), but a list accumulator body
                 # returns VARCHAR[] — a type mismatch that causes a runtime
                 # error.  Route these through the same recursive-CTE fold used
-                # for multi-source aggregates so the accumulator is typed as
-                # VARCHAR[] from the outset.  (CQL §19.27)
+                # for multi-source aggregates so the accumulator is typed as a
+                # list from the outset.  (CQL §19.27)
                 from ...parser.ast_nodes import (
+                    ListExpression as _ListExpression,
                     ListTypeSpecifier as _ListTypeSpec,
                     Literal as _ASTLiteral,
                 )
-                _starting_is_null_list = (
+                _starting_is_typed_list = (
                     agg.starting is not None
                     and isinstance(agg.starting, BinaryExpression)
                     and agg.starting.operator == 'as'
                     and isinstance(agg.starting.right, _ListTypeSpec)
-                    and isinstance(agg.starting.left, _ASTLiteral)
-                    and agg.starting.left.value is None
+                    and (
+                        (
+                            isinstance(agg.starting.left, _ASTLiteral)
+                            and agg.starting.left.value is None
+                        )
+                        or (
+                            isinstance(agg.starting.left, _ListExpression)
+                            and not agg.starting.left.elements
+                        )
+                    )
                 )
 
-                if _starting_is_null_list and alias:
+                if _starting_is_typed_list and alias:
                     # ── Single-source list-accumulator aggregate: recursive CTE fold ──
                     # source_list is the array expression (SQLArray or SQLFunctionCall).
                     if isinstance(source_list, SQLArray):
                         _arr_sql = source_list.to_sql()
                     elif isinstance(source_list, SQLFunctionCall) and source_list.name == "unnest":
                         _arr_sql = source_list.args[0].to_sql()
+                    elif isinstance(source_list, SQLCast) and source_list.target_type.endswith("[]"):
+                        _arr_sql = source_list.to_sql()
+                    elif _is_list_returning_sql(source_list):
+                        _arr_sql = source_list.to_sql()
                     else:
                         _arr_sql = f"[{source_list.to_sql()}]"
 
@@ -3663,6 +4645,11 @@ class QueryMixin:
                         self.context.pop_scope()
 
                     _body_sql = agg_body.to_sql()
+                    _start_sql = (
+                        "CAST(NULL AS VARCHAR[])"
+                        if isinstance(agg.starting.left, _ASTLiteral)
+                        else "CAST([] AS VARCHAR[])"
+                    )
                     result = SQLRaw(
                         f"(WITH RECURSIVE __xj AS ("
                         f"SELECT {_distinct_kw}{alias} FROM "
@@ -3670,12 +4657,13 @@ class QueryMixin:
                         f"), __xjn AS ("
                         f"SELECT ROW_NUMBER() OVER () AS __rn, * FROM __xj"
                         f"), __fold(__acc, __rn) AS ("
-                        f"SELECT CAST(NULL AS VARCHAR[]), CAST(0 AS BIGINT) "
+                        f"SELECT {_start_sql}, CAST(0 AS BIGINT) "
                         f"UNION ALL "
                         f"SELECT {_body_sql}, __xjn.__rn "
                         f"FROM __fold JOIN __xjn ON __xjn.__rn = __fold.__rn + 1"
                         f") SELECT __acc FROM __fold ORDER BY __rn DESC LIMIT 1)"
                     )
+                    result.result_type = "List<Any>"
                 else:
                     # ── Single-source scalar aggregate: list_reduce pattern ──────────
                     # Apply distinct/all modifiers

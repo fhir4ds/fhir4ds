@@ -98,6 +98,7 @@ private:
 
 	Token nextToken();
 	Token readString();
+	Token readDelimitedIdentifier();
 	Token readNumber();
 	Token readIdentifierOrKeyword();
 	Token readDateLiteral();

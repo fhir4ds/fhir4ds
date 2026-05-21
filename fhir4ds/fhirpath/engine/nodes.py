@@ -199,7 +199,95 @@ class FP_Quantity(FP_Type):
     }
     _m_cm_mm_conversion_factor = {"'m'": Decimal("1"), "'cm'": Decimal("0.01"), "'mm'": Decimal("0.001")}
     _lbs_kg_conversion_factor = {"'kg'": Decimal("1"), "'[lb_av]'": Decimal("0.453592")}
-    _g_mg_conversion_factor = {"'g'": Decimal("1"), "'mg'": Decimal("0.001")}
+    _g_mg_conversion_factor = {
+        "'kg'": Decimal("1000"),
+        "'g'": Decimal("1"),
+        "'mg'": Decimal("0.001"),
+    }
+    _ucum_base_conversion_factor = {
+        "ms": ("'s'", Decimal("0.001")),
+        "'ms'": ("'s'", Decimal("0.001")),
+        "millisecond": ("'s'", Decimal("0.001")),
+        "milliseconds": ("'s'", Decimal("0.001")),
+        "s": ("'s'", Decimal("1")),
+        "'s'": ("'s'", Decimal("1")),
+        "second": ("'s'", Decimal("1")),
+        "seconds": ("'s'", Decimal("1")),
+        "min": ("'s'", Decimal("60")),
+        "'min'": ("'s'", Decimal("60")),
+        "minute": ("'s'", Decimal("60")),
+        "minutes": ("'s'", Decimal("60")),
+        "h": ("'s'", Decimal("3600")),
+        "'h'": ("'s'", Decimal("3600")),
+        "hour": ("'s'", Decimal("3600")),
+        "hours": ("'s'", Decimal("3600")),
+        "d": ("'s'", Decimal("86400")),
+        "'d'": ("'s'", Decimal("86400")),
+        "day": ("'s'", Decimal("86400")),
+        "days": ("'s'", Decimal("86400")),
+        "wk": ("'s'", Decimal("604800")),
+        "'wk'": ("'s'", Decimal("604800")),
+        "week": ("'s'", Decimal("604800")),
+        "weeks": ("'s'", Decimal("604800")),
+        "mo": ("'s'", Decimal("2629746")),
+        "month": ("'s'", Decimal("2629746")),
+        "months": ("'s'", Decimal("2629746")),
+        "a": ("'s'", Decimal("31556952")),
+        "year": ("'s'", Decimal("31556952")),
+        "years": ("'s'", Decimal("31556952")),
+        "mm": ("'m'", Decimal("0.001")),
+        "'mm'": ("'m'", Decimal("0.001")),
+        "cm": ("'m'", Decimal("0.01")),
+        "'cm'": ("'m'", Decimal("0.01")),
+        "m": ("'m'", Decimal("1")),
+        "'m'": ("'m'", Decimal("1")),
+        "km": ("'m'", Decimal("1000")),
+        "'km'": ("'m'", Decimal("1000")),
+        "[in_i]": ("'m'", Decimal("0.0254")),
+        "'[in_i]'": ("'m'", Decimal("0.0254")),
+        "in": ("'m'", Decimal("0.0254")),
+        "inch": ("'m'", Decimal("0.0254")),
+        "[ft_i]": ("'m'", Decimal("0.3048")),
+        "'[ft_i]'": ("'m'", Decimal("0.3048")),
+        "ft": ("'m'", Decimal("0.3048")),
+        "foot": ("'m'", Decimal("0.3048")),
+        "m2": ("'m2'", Decimal("1")),
+        "'m2'": ("'m2'", Decimal("1")),
+        "cm2": ("'m2'", Decimal("0.0001")),
+        "'cm2'": ("'m2'", Decimal("0.0001")),
+        "ug": ("'g'", Decimal("0.000001")),
+        "'ug'": ("'g'", Decimal("0.000001")),
+        "mg": ("'g'", Decimal("0.001")),
+        "'mg'": ("'g'", Decimal("0.001")),
+        "g": ("'g'", Decimal("1")),
+        "'g'": ("'g'", Decimal("1")),
+        "kg": ("'g'", Decimal("1000")),
+        "'kg'": ("'g'", Decimal("1000")),
+        "[lb_av]": ("'g'", Decimal("453.59237")),
+        "'[lb_av]'": ("'g'", Decimal("453.59237")),
+        "lb": ("'g'", Decimal("453.59237")),
+        "[oz_av]": ("'g'", Decimal("28.349523")),
+        "'[oz_av]'": ("'g'", Decimal("28.349523")),
+        "oz": ("'g'", Decimal("28.349523")),
+        "uL": ("'L'", Decimal("0.000001")),
+        "mL": ("'L'", Decimal("0.001")),
+        "dL": ("'L'", Decimal("0.1")),
+        "L": ("'L'", Decimal("1")),
+        "Pa": ("'Pa'", Decimal("1")),
+        "kPa": ("'Pa'", Decimal("1000")),
+        "mm[Hg]": ("'Pa'", Decimal("133.322")),
+        "mmHg": ("'Pa'", Decimal("133.322")),
+        "cm[H2O]": ("'Pa'", Decimal("98.0665")),
+        "cmH2O": ("'Pa'", Decimal("98.0665")),
+        "Cel": ("'Cel'", Decimal("1")),
+        "mg/dL": ("'mg/dL'", Decimal("1")),
+        "g/dL": ("'mg/dL'", Decimal("1000")),
+        "mmol/L": ("'mmol/L'", Decimal("1")),
+        "ug/mL": ("'ug/mL'", Decimal("1")),
+        "/min": ("'/min'", Decimal("1")),
+        "1": ("'1'", Decimal("1")),
+        "%": ("'1'", Decimal("0.01")),
+    }
 
     datetime_multipliers = {
         **{key: Decimal("604800") for key in ["'wk'", "week", "weeks"]},
@@ -263,22 +351,39 @@ class FP_Quantity(FP_Type):
             return unit[1:-1]
         return unit
 
+    @staticmethod
+    def _normalize_quantity_value(value):
+        if isinstance(value, Decimal):
+            if value == value.to_integral_value():
+                return value.quantize(Decimal("1"))
+            return value.normalize()
+        return value
+
+    @staticmethod
+    def conv_unit_to_base(unit, value):
+        clean_unit = FP_Quantity._strip_unit_quotes(unit)
+        conversion = FP_Quantity._ucum_base_conversion_factor.get(unit)
+        if conversion is None:
+            conversion = FP_Quantity._ucum_base_conversion_factor.get(clean_unit)
+        if conversion is None:
+            return FP_Quantity(value, unit)
+
+        base_unit, factor = conversion
+        converted_value = Decimal(str(value)) * factor
+        return FP_Quantity(FP_Quantity._normalize_quantity_value(converted_value), base_unit)
+
     def __mul__(self, other):
         """Multiply quantity by a number or another quantity."""
         if isinstance(other, (int, float, Decimal)):
             return FP_Quantity(self.value * other, self.unit)
         if isinstance(other, FP_Quantity):
-            # Try to normalize to the same dimension first
-            converted = FP_Quantity.conv_unit_to(self.unit, self.value, other.unit)
-            if converted is not None:
-                # Same dimension: normalize, multiply, produce squared unit
-                new_value = converted.value * other.value
-                bare = FP_Quantity._strip_unit_quotes(other.unit)
-                return FP_Quantity(new_value, f"'{bare}2'")
-            # Different dimensions: multiply values, compound unit
-            new_value = self.value * other.value
-            bare_self = FP_Quantity._strip_unit_quotes(self.unit)
-            bare_other = FP_Quantity._strip_unit_quotes(other.unit)
+            self_base = FP_Quantity.conv_unit_to_base(self.unit, self.value)
+            other_base = FP_Quantity.conv_unit_to_base(other.unit, other.value)
+            new_value = FP_Quantity._normalize_quantity_value(self_base.value * other_base.value)
+            bare_self = FP_Quantity._strip_unit_quotes(self_base.unit)
+            bare_other = FP_Quantity._strip_unit_quotes(other_base.unit)
+            if self_base.unit == other_base.unit:
+                return FP_Quantity(new_value, f"'{bare_self}2'")
             return FP_Quantity(new_value, f"'{bare_self}.{bare_other}'")
         return NotImplemented
 
@@ -297,12 +402,15 @@ class FP_Quantity(FP_Type):
         if isinstance(other, FP_Quantity):
             if other.value == 0:
                 return []
-            new_value = self.value / other.value
-            if self.unit == other.unit:
+            self_base = FP_Quantity.conv_unit_to_base(self.unit, self.value)
+            other_base = FP_Quantity.conv_unit_to_base(other.unit, other.value)
+            if other_base.value == 0:
+                return []
+            new_value = FP_Quantity._normalize_quantity_value(self_base.value / other_base.value)
+            if self_base.unit == other_base.unit:
                 return FP_Quantity(new_value, "'1'")
-            # Produce proper UCUM compound unit
-            bare_self = FP_Quantity._strip_unit_quotes(self.unit)
-            bare_other = FP_Quantity._strip_unit_quotes(other.unit)
+            bare_self = FP_Quantity._strip_unit_quotes(self_base.unit)
+            bare_other = FP_Quantity._strip_unit_quotes(other_base.unit)
             return FP_Quantity(new_value, f"'{bare_self}/{bare_other}'")
         return NotImplemented
 
@@ -643,6 +751,7 @@ class FP_TimeBase(FP_Type):
         ("second", "hour"): 3600,
         ("second", "minute"): 60,
         ("second", "day"): 86400,
+        ("millisecond", "second"): 1_000,
         ("millisecond", "hour"): 3_600_000,
         ("millisecond", "minute"): 60_000,
         ("millisecond", "day"): 86_400_000,
@@ -732,17 +841,29 @@ class FP_TimeBase(FP_Type):
             else:
                 result = date_obj + relativedelta(days=value)
         else:
-            # Time-based units on Date: convert to days
-            result = date_obj + relativedelta(
-                days=trunc(value, divs[(time_unit, "day")])
+            raise ValueError(
+                "For date arithmetic, the unit of the quantity must be years, months, weeks, or days"
             )
         return self._extractDateByPrecision(result, precision)
 
     def _plus_time(self, value, time_unit, dt_list, time_quantity):
         precision = self._calculateTimePrecision(dt_list)
         date_obj = self._convertTime(dt_list)
+        if time_unit not in ("hour", "minute", "second", "millisecond"):
+            raise ValueError(
+                "For time arithmetic, the unit of the quantity must be hours, minutes, seconds, or milliseconds"
+            )
 
-        if precision == 2:
+        if precision == 1:
+            if time_unit == "hour":
+                result = date_obj + relativedelta(hours=value)
+            else:
+                trunc = FP_TimeBase._truncate_toward_zero
+                divs = FP_TimeBase._UNIT_DIVISORS
+                result = date_obj + relativedelta(
+                    hours=trunc(value, divs[(time_unit, "hour")])
+                )
+        elif precision == 2:
             if time_unit == "hour":
                 result = date_obj + relativedelta(minutes=value * 60)
             elif time_unit == "minute":
@@ -753,7 +874,22 @@ class FP_TimeBase(FP_Type):
                 result = date_obj + relativedelta(
                     minutes=trunc(value, divs[(time_unit, "minute")])
                 )
-        elif precision in (3, 4):
+        elif precision == 3:
+            if time_unit == "hour":
+                result = date_obj + relativedelta(minutes=value * 60)
+            elif time_unit == "minute":
+                result = date_obj + relativedelta(minutes=value)
+            elif time_unit == "second":
+                result = date_obj + relativedelta(seconds=value)
+            elif time_unit == "millisecond":
+                trunc = FP_TimeBase._truncate_toward_zero
+                divs = FP_TimeBase._UNIT_DIVISORS
+                result = date_obj + relativedelta(
+                    seconds=trunc(value, divs[(time_unit, "second")])
+                )
+            else:
+                result = date_obj
+        elif precision == 4:
             if time_unit == "hour":
                 result = date_obj + relativedelta(minutes=value * 60)
             elif time_unit == "minute":
@@ -768,7 +904,7 @@ class FP_TimeBase(FP_Type):
         else:
             result = date_obj
         return (
-            self._extractTimeByPrecision(result, precision if precision < 3 else 4) + (dt_list[4] or "")
+            self._extractTimeByPrecision(result, precision) + (dt_list[4] or "")
         )
 
     @staticmethod
@@ -978,7 +1114,7 @@ class FP_Time(FP_TimeBase):
                     value += f".{fraction}"
                 return value
             if minute is not None:
-                return f"{hour}:{minute}:00"
+                return f"{hour}:{minute}"
             return hour
         return self.asStr
 
@@ -1008,8 +1144,8 @@ class FP_Time(FP_TimeBase):
 
     def _extractTimeByPrecision(self, date_obj, precision):
         format = {1: "T%H", 2: "T%H:%M", 3: "T%H:%M:%S", 4: "T%H:%M:%S.%f"}
-        if precision == 4 and date_obj.microsecond == 0:
-            return date_obj.strftime("T%H:%M:%S")
+        if precision == 4:
+            return date_obj.strftime("T%H:%M:%S.") + date_obj.strftime("%f")[:3]
         return date_obj.strftime(format.get(precision)) if precision in format else None
 
     def _calculateTimePrecision(self, dt_list):
@@ -1162,14 +1298,10 @@ class FP_DateTime(FP_TimeBase):
         formatted_date = date_obj.strftime(format.get(precision, ""))
         if precision == 7:
             milliseconds = date_obj.strftime("%f")[:3]
-            # Use original timezone if provided, otherwise use the date_obj's timezone
-            if timezone_str:
-                # Normalize Z to +00:00 for consistent output
-                tz_output = "+00:00" if timezone_str == "Z" else timezone_str
-            else:
-                tz_offset = date_obj.strftime("%z")
-                tz_output = tz_offset[:3] + ":" + tz_offset[3:] if tz_offset else "+00:00"
-            formatted_date = f"{formatted_date}.{milliseconds}{tz_output}"
+            formatted_date = f"{formatted_date}.{milliseconds}"
+        if precision >= 4 and timezone_str:
+            # Normalize Z to +00:00 for consistent output.
+            formatted_date += "+00:00" if timezone_str == "Z" else timezone_str
         return formatted_date
 
     def _convertDatetime(self, date_list):
@@ -1276,12 +1408,41 @@ class ResourceNode:
         if TypeInfo.model and isinstance(TypeInfo.model, dict):
             path2Type = TypeInfo.model.get("path2Type", {})
             if self.path in path2Type:
-                return TypeInfo(namespace=namespace, name=path2Type[self.path])
+                type_name = path2Type[self.path]
+                if (
+                    type_name == self.path
+                    and (
+                        TypeInfo.model.get("type2Parent", {}).get(type_name) == "BackboneElement"
+                        or "." in type_name
+                    )
+                ):
+                    type_name = "BackboneElement"
+                return TypeInfo(namespace=namespace, name=type_name)
 
         # Try to resolve type from built-in path-to-type mapping
         # First try exact match
         if self.path in TypeInfo.FHIR_PATH_TO_TYPE:
-            return TypeInfo(namespace=namespace, name=TypeInfo.FHIR_PATH_TO_TYPE[self.path])
+            type_name = TypeInfo.FHIR_PATH_TO_TYPE[self.path]
+            if (
+                type_name == self.path
+                and (
+                    TypeInfo.FHIR_TYPE_HIERARCHY.get(type_name) == "BackboneElement"
+                    or "." in type_name
+                )
+            ):
+                type_name = "BackboneElement"
+            return TypeInfo(namespace=namespace, name=type_name)
+
+        # When model metadata cannot resolve a primitive element path, trust the
+        # JSON value shape for numeric/boolean primitives before applying broad
+        # suffix fallbacks such as ".value" -> string. This keeps Quantity.value
+        # typed as decimal in the Python fallback.
+        if isinstance(self.data, bool):
+            return TypeInfo(namespace=namespace, name="boolean")
+        if isinstance(self.data, int):
+            return TypeInfo(namespace=namespace, name="integer")
+        if isinstance(self.data, (float, Decimal)):
+            return TypeInfo(namespace=namespace, name="decimal")
 
         # Try suffix match (e.g., "Patient.gender" matches ".gender")
         for suffix, type_name in TypeInfo.FHIR_PATH_TO_TYPE.items():
@@ -1380,8 +1541,11 @@ class TypeInfo:
     # Loaded from models/r4/fhir_path_to_type.json
     FHIR_PATH_TO_TYPE = _load_json("fhir_path_to_type.json")
 
-    # Loaded from models/r4/fhir_type_hierarchy.json
-    FHIR_TYPE_HIERARCHY = _load_json("fhir_type_hierarchy.json")
+    # Loaded from models/r4/type2Parent.json with legacy primitive overrides.
+    FHIR_TYPE_HIERARCHY = {
+        **_load_json("type2Parent.json"),
+        **_load_json("fhir_type_hierarchy.json"),
+    }
 
     def __init__(self, name, namespace):
         self.name = name
@@ -1389,7 +1553,11 @@ class TypeInfo:
 
     @staticmethod
     def is_type(type_name, super_type, model=None):
+        seen = set()
         while type_name:
+            if type_name in seen:
+                return False
+            seen.add(type_name)
             if type_name == super_type:
                 return True
 
@@ -1479,6 +1647,8 @@ class TypeInfo:
                 name = "Quantity"
             elif 'reference' in value:
                 name = "Reference"
+            elif 'contentType' in value:
+                name = "Attachment"
             elif 'low' in value or 'high' in value:
                 name = "Range"
             elif 'start' in value or 'end' in value:
@@ -1502,7 +1672,15 @@ class TypeInfo:
     @staticmethod
     def from_value(value):
         if isinstance(value, ResourceNode):
-            return value.get_type_info()
+            type_info = value.get_type_info()
+            if (
+                type_info
+                and type_info.namespace == TypeInfo.FHIR
+                and type_info.name
+                and "." in type_info.name
+            ):
+                return TypeInfo(namespace=TypeInfo.FHIR, name="BackboneElement")
+            return type_info
         # FHIR resources represented as dicts: detect via resourceType key
         if isinstance(value, abc.Mapping) and 'resourceType' in value:
             return TypeInfo(namespace=TypeInfo.FHIR, name=value['resourceType'])

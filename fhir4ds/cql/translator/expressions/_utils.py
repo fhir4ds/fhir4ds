@@ -38,13 +38,22 @@ def _is_list_returning_sql(node) -> bool:
     """
     if node is None:
         return False
+    result_type = getattr(node, "result_type", None)
+    if result_type is not None and str(result_type).lower().startswith("list<"):
+        return True
     if isinstance(node, SQLArray):
+        return True
+    if isinstance(node, SQLCast) and node.target_type.endswith("[]"):
         return True
     if isinstance(node, SQLFunctionCall):
         if node.name in ("list_transform", "list_filter", "list", "list_sort",
                          "list_distinct", "list_concat", "list_intersect", "flatten",
                          "str_split", "STR_SPLIT", "string_split",
-                         "Distinct", '"Distinct"', "list_reverse", "list_slice"):
+                         "Distinct", '"Distinct"', "list_reverse", "list_slice",
+                         "Skip", "Take", "Tail",
+                         "CQLListDistinctEq", "CQLListExceptEq",
+                         "CQLListIntersectEq", "jsonConcat",
+                         "cqlChildren", "cqlDescendants", "ExpandValueSet"):
             return True
         if node.name == "from_json" and len(node.args) >= 2:
             return True

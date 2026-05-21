@@ -18,7 +18,7 @@ def registerLogicalMacros(con: "duckdb.DuckDBPyConnection") -> None:
     Register logical function macros (Tier 1 & 2).
 
     Tier 1 (direct mappings):
-    - And, Or, Not, Coalesce
+    - And, Or, Not
 
     Tier 2 (SQL expressions):
     - Xor: Exclusive or
@@ -31,7 +31,6 @@ def registerLogicalMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute('CREATE MACRO IF NOT EXISTS "And"(a, b) AS a AND b')
     con.execute('CREATE MACRO IF NOT EXISTS "Or"(a, b) AS a OR b')
     con.execute('CREATE MACRO IF NOT EXISTS "Not"(a) AS NOT a')
-    con.execute('CREATE MACRO IF NOT EXISTS "Coalesce"(a, b) AS COALESCE(a, b)')
 
     # ============================================
     # Tier 2: SQL expressions
@@ -68,8 +67,8 @@ def registerLogicalMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # CQL §22.16 IsTrue / §22.15 IsFalse
     # IsTrue returns true only if the argument is explicitly true (not null)
     # IsFalse returns true only if the argument is explicitly false (not null)
-    con.execute('CREATE MACRO IF NOT EXISTS "IsTrue"(x) AS (x IS NOT NULL AND x = true)')
-    con.execute('CREATE MACRO IF NOT EXISTS "IsFalse"(x) AS (x IS NOT NULL AND x = false)')
+    con.execute('CREATE OR REPLACE MACRO "IsTrue"(x) AS (typeof(x) = \'BOOLEAN\' AND COALESCE(x = true, false))')
+    con.execute('CREATE OR REPLACE MACRO "IsFalse"(x) AS (typeof(x) = \'BOOLEAN\' AND COALESCE(x = false, false))')
 
 
 __all__ = ["registerLogicalMacros"]

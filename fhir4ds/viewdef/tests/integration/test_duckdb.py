@@ -20,7 +20,9 @@ import duckdb
 from fhir4ds.fhirpath.duckdb import register_fhirpath
 from ...parser import parse_view_definition
 from ...generator import SQLGenerator
+from ...errors import ValidationError
 from ...types import ColumnType, JoinType
+from ...metadata import SHAREABLE_VIEWDEFINITION_PROFILE, VIEWDEFINITION_RESOURCE_TYPE
 
 
 @pytest.fixture
@@ -36,6 +38,225 @@ def connection():
 def generator():
     """Create a SQL generator instance."""
     return SQLGenerator()
+
+
+def _forced_python_connection(monkeypatch):
+    """Create a DuckDB connection that bypasses the bundled C++ extension."""
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    con = duckdb.connect(config={"allow_unsigned_extensions": True})
+    assert register_fhirpath(con) is False
+    return con
+
+
+def _execute_view(con, view, resources):
+    vd = parse_view_definition(view)
+    sql = SQLGenerator().generate(vd)
+    con.execute("CREATE TABLE patients (resource JSON)")
+    for resource in resources:
+        con.execute("INSERT INTO patients VALUES (?)", [json.dumps(resource)])
+    return con.execute(sql).fetchall()
+
+
+def _execute_shared_view(con, view, resources):
+    vd = parse_view_definition(view)
+    sql = SQLGenerator(source_table="resources").generate(vd)
+    con.execute("CREATE OR REPLACE TABLE resources (resource JSON)")
+    for resource in resources:
+        con.execute("INSERT INTO resources VALUES (?)", [json.dumps(resource)])
+    return con.execute(sql).fetchall()
+
+
+def _execute_shared_view_json(con, view, resource_jsons):
+    vd = parse_view_definition(view)
+    sql = SQLGenerator(source_table="resources").generate(vd)
+    con.execute("CREATE OR REPLACE TABLE resources (resource JSON)")
+    for resource_json in resource_jsons:
+        con.execute("INSERT INTO resources VALUES (?::JSON)", [resource_json])
+    return con.execute(sql).fetchall()
+
+
+def test_root_where_numeric_results_do_not_satisfy_boolean_true_native_and_fallback(monkeypatch):
+    """SQL-on-FHIR where keeps only FHIRPath results that are exactly Boolean true."""
+    view = {
+        "resource": "Observation",
+        "select": [{"column": [{"path": "id", "name": "id", "type": "id"}]}],
+        "where": [{"path": "valueInteger"}],
+    }
+    resources = [
+        {"resourceType": "Observation", "id": "one", "valueInteger": 1},
+        {"resourceType": "Observation", "id": "zero", "valueInteger": 0},
+        {"resourceType": "Observation", "id": "two", "valueInteger": 2},
+        {"resourceType": "Observation", "id": "missing"},
+    ]
+
+    native = duckdb.connect(config={"allow_unsigned_extensions": True})
+    if register_fhirpath(native) is not True:
+        native.close()
+        pytest.skip("native FHIRPath extension not available")
+    fallback = _forced_python_connection(monkeypatch)
+    try:
+        assert _execute_shared_view(native, view, resources) == []
+        assert _execute_shared_view(fallback, view, resources) == []
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_root_where_literal_one_does_not_satisfy_boolean_true_native_and_fallback(monkeypatch):
+    """A valid non-Boolean FHIRPath literal is not a true where constraint."""
+    view = {
+        "resource": "Observation",
+        "select": [{"column": [{"path": "id", "name": "id", "type": "id"}]}],
+        "where": [{"path": "1"}],
+    }
+    resources = [
+        {"resourceType": "Observation", "id": "one", "valueInteger": 1},
+        {"resourceType": "Observation", "id": "zero", "valueInteger": 0},
+    ]
+
+    native = duckdb.connect(config={"allow_unsigned_extensions": True})
+    if register_fhirpath(native) is not True:
+        native.close()
+        pytest.skip("native FHIRPath extension not available")
+    fallback = _forced_python_connection(monkeypatch)
+    try:
+        assert _execute_shared_view(native, view, resources) == []
+        assert _execute_shared_view(fallback, view, resources) == []
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_observation_decimal_column_quantity_value_native_and_fallback(monkeypatch):
+    """Observation views can project Quantity.value as a decimal in both UDF paths."""
+    view = {
+        "resource": "Observation",
+        "where": [{"path": "status = 'final'"}],
+        "select": [
+            {
+                "column": [
+                    {"path": "id", "name": "id", "type": "id"},
+                    {"path": "valueQuantity.value", "name": "value", "type": "decimal"},
+                ]
+            }
+        ],
+    }
+    resources = [
+        {
+            "resourceType": "Observation",
+            "id": "bp",
+            "status": "final",
+            "valueQuantity": {
+                "value": 120.5,
+                "unit": "mmHg",
+                "system": "http://unitsofmeasure.org",
+                "code": "mm[Hg]",
+            },
+        },
+        {
+            "resourceType": "Observation",
+            "id": "draft",
+            "status": "preliminary",
+            "valueQuantity": {"value": 80, "unit": "mmHg"},
+        },
+    ]
+
+    native = duckdb.connect(config={"allow_unsigned_extensions": True})
+    if register_fhirpath(native) is not True:
+        native.close()
+        pytest.skip("native FHIRPath extension not available")
+    fallback = _forced_python_connection(monkeypatch)
+    try:
+        expected = [("bp", 120.5)]
+        assert _execute_shared_view(native, view, resources) == expected
+        assert _execute_shared_view(fallback, view, resources) == expected
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_view_runner_resource_and_reference_keys_native_and_fallback(monkeypatch):
+    """SQL-on-FHIR View Runner key helpers work in native and fallback UDFs."""
+    view = {
+        "resource": "Observation",
+        "select": [
+            {
+                "column": [
+                    {"path": "getResourceKey()", "name": "observation_key", "type": "string"},
+                    {
+                        "path": "subject.getReferenceKey(Patient)",
+                        "name": "patient_key",
+                        "type": "string",
+                    },
+                    {
+                        "path": "subject.getReferenceKey(Observation)",
+                        "name": "wrong_type_key",
+                        "type": "string",
+                    },
+                ]
+            }
+        ],
+    }
+    resources = [
+        {
+            "resourceType": "Observation",
+            "id": "obs-1",
+            "status": "final",
+            "subject": {"reference": "Patient/pat-1"},
+        }
+    ]
+
+    native = duckdb.connect(config={"allow_unsigned_extensions": True})
+    if register_fhirpath(native) is not True:
+        native.close()
+        pytest.skip("native FHIRPath extension not available")
+    fallback = _forced_python_connection(monkeypatch)
+    try:
+        expected = [("Observation/obs-1", "Patient/pat-1", None)]
+        assert _execute_shared_view(native, view, resources) == expected
+        assert _execute_shared_view(fallback, view, resources) == expected
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_shareable_metadata_does_not_change_execution_native_and_fallback(monkeypatch):
+    """Canonical metadata/profile fields are retained but ignored by SQL execution."""
+    view = {
+        "resourceType": VIEWDEFINITION_RESOURCE_TYPE,
+        "id": "ShareablePatient",
+        "meta": {"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
+        "url": "https://example.org/ViewDefinition/shareable-patient",
+        "version": "1.0.0",
+        "name": "shareable_patient",
+        "status": "draft",
+        "fhirVersion": ["4.0.1"],
+        "resource": "Patient",
+        "select": [
+            {
+                "column": [
+                    {"path": "getResourceKey()", "name": "patient_key", "type": "string"},
+                    {"path": "gender", "name": "gender", "type": "code"},
+                ]
+            }
+        ],
+    }
+    resources = [{"resourceType": "Patient", "id": "pat-1", "gender": "female"}]
+
+    native = duckdb.connect(config={"allow_unsigned_extensions": True})
+    if register_fhirpath(native) is not True:
+        native.close()
+        pytest.skip("native FHIRPath extension not available")
+    fallback = _forced_python_connection(monkeypatch)
+    try:
+        vd = parse_view_definition(view)
+        assert vd.to_dict()["url"] == view["url"]
+        expected = [("Patient/pat-1", "female")]
+        assert _execute_shared_view(native, vd.to_dict(), resources) == expected
+        assert _execute_shared_view(fallback, vd.to_dict(), resources) == expected
+    finally:
+        native.close()
+        fallback.close()
 
 
 class TestSimplePatientView:
@@ -131,6 +352,857 @@ class TestSimplePatientView:
         # ViewDef type hints are not yet applied as SQL CASTs;
         # birthDate comes back as a string from fhirpath_text.
         assert result[0][1] == "1990-01-15"
+
+    def test_constant_literal_boundaries_match_native_and_fallback(self, monkeypatch):
+        """Constants are substituted only outside FHIRPath literals and escaped as FHIRPath."""
+        patient = {
+            "resourceType": "Patient",
+            "id": "patient-1",
+            "name": [{"family": "O'Reilly"}],
+        }
+        view = {
+            "resource": "Patient",
+            "constant": [
+                {"name": "idx", "valueInteger": 1},
+                {"name": "target", "valueString": "O'Reilly"},
+            ],
+            "select": [{
+                "column": [
+                    {"path": "'%idx'", "name": "literal", "type": "string"},
+                    {
+                        "path": "name.where(family = %target).family",
+                        "name": "family",
+                        "type": "string",
+                    },
+                ]
+            }],
+        }
+
+        native = duckdb.connect(config={"allow_unsigned_extensions": True})
+        if register_fhirpath(native) is not True:
+            native.close()
+            pytest.skip("Bundled C++ FHIRPath extension is not available")
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            assert _execute_view(native, view, [patient]) == [("%idx", "O'Reilly")]
+            assert _execute_view(fallback, view, [patient]) == [("%idx", "O'Reilly")]
+        finally:
+            native.close()
+            fallback.close()
+
+    def test_collection_true_output_matches_native_and_fallback(self, monkeypatch):
+        """collection=true columns return multi-value list output in both backends."""
+        patient = {
+            "resourceType": "Patient",
+            "id": "pt1",
+            "name": [
+                {"family": "Alpha", "given": ["A", "B"]},
+                {"family": "Beta", "given": ["C"]},
+            ],
+        }
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "column": [
+                    {"path": "id", "name": "id", "type": "id"},
+                    {"path": "name.family", "name": "family", "type": "string", "collection": True},
+                    {"path": "name.given", "name": "given", "type": "string", "collection": True},
+                ]
+            }],
+        }
+
+        native = duckdb.connect(config={"allow_unsigned_extensions": True})
+        if register_fhirpath(native) is not True:
+            native.close()
+            pytest.skip("Bundled C++ FHIRPath extension is not available")
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            expected = [("pt1", ["Alpha", "Beta"], ["A", "B", "C"])]
+            assert sorted(_execute_shared_view(native, view, [patient])) == expected
+            assert sorted(_execute_shared_view(fallback, view, [patient])) == expected
+        finally:
+            native.close()
+            fallback.close()
+
+    def test_primitive_typed_collection_output_matches_native_and_fallback(self, monkeypatch):
+        """collection=true primitive type declarations preserve list element types."""
+        observation = {
+            "resourceType": "Observation",
+            "id": "obs1",
+            "active": True,
+            "component": [
+                {"valueInteger": 1, "interpretation": [{"coding": [{"code": "ok"}]}]},
+                {"valueInteger": 2, "interpretation": [{"coding": [{"code": "bad"}]}]},
+            ],
+        }
+        view = {
+            "resource": "Observation",
+            "select": [{
+                "column": [
+                    {"path": "id", "name": "id", "type": "id"},
+                    {
+                        "path": "component.value",
+                        "name": "values",
+                        "type": "http://hl7.org/fhir/StructureDefinition/integer",
+                        "collection": True,
+                    },
+                    {
+                        "path": "component.select(value.exists())",
+                        "name": "has_interp",
+                        "type": "boolean",
+                        "collection": True,
+                    },
+                ]
+            }],
+        }
+
+        native = duckdb.connect(config={"allow_unsigned_extensions": True})
+        if register_fhirpath(native) is not True:
+            native.close()
+            pytest.skip("Bundled C++ FHIRPath extension is not available")
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            expected = [("obs1", [1, 2], [True, True])]
+            assert _execute_shared_view(native, view, [observation]) == expected
+            assert _execute_shared_view(fallback, view, [observation]) == expected
+        finally:
+            native.close()
+            fallback.close()
+
+    def test_non_collection_multivalue_errors_native_and_fallback(self, monkeypatch):
+        """collection=false columns report runtime multi-value violations."""
+        patient = {
+            "resourceType": "Patient",
+            "id": "pt1",
+            "name": [{"family": "Alpha"}, {"family": "Beta"}],
+        }
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "column": [{"path": "name.family", "name": "family", "type": "string"}]
+            }],
+        }
+
+        native = duckdb.connect(config={"allow_unsigned_extensions": True})
+        if register_fhirpath(native) is not True:
+            native.close()
+            pytest.skip("Bundled C++ FHIRPath extension is not available")
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            with pytest.raises(Exception, match="ViewDefinition column 'family'"):
+                _execute_shared_view(native, view, [patient])
+            with pytest.raises(Exception, match="ViewDefinition column 'family'"):
+                _execute_shared_view(fallback, view, [patient])
+        finally:
+            native.close()
+            fallback.close()
+
+    def test_type_uri_and_mismatch_reporting_native_and_fallback(self, monkeypatch):
+        """FHIR type URIs route correctly and mismatches become execution errors."""
+        observation = {
+            "resourceType": "Observation",
+            "id": "obs1",
+            "code": {"coding": [{"system": "http://loinc.org", "code": "1234-5"}]},
+        }
+        patient = {"resourceType": "Patient", "id": "pt1", "gender": "female"}
+        typed_complex = {
+            "resource": "Observation",
+            "select": [{
+                "column": [{
+                    "path": "code",
+                    "name": "code",
+                    "type": "http://hl7.org/fhir/StructureDefinition/CodeableConcept",
+                }]
+            }],
+        }
+        missing_complex_type = {
+            "resource": "Observation",
+            "select": [{"column": [{"path": "code", "name": "code"}]}],
+        }
+        primitive_mismatch = {
+            "resource": "Patient",
+            "select": [{"column": [{"path": "gender", "name": "gender_as_int", "type": "integer"}]}],
+        }
+
+        native = duckdb.connect(config={"allow_unsigned_extensions": True})
+        if register_fhirpath(native) is not True:
+            native.close()
+            pytest.skip("Bundled C++ FHIRPath extension is not available")
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            native_rows = _execute_shared_view(native, typed_complex, [observation])
+            fallback_rows = _execute_shared_view(fallback, typed_complex, [observation])
+            assert native_rows == fallback_rows
+            assert native_rows[0][0].startswith("[{")
+
+            with pytest.raises(Exception, match="non-primitive outputs require column.type"):
+                _execute_shared_view(native, missing_complex_type, [observation])
+            with pytest.raises(Exception, match="non-primitive outputs require column.type"):
+                _execute_shared_view(fallback, missing_complex_type, [observation])
+            with pytest.raises(Exception, match="gender_as_int"):
+                _execute_shared_view(native, primitive_mismatch, [patient])
+            with pytest.raises(Exception, match="gender_as_int"):
+                _execute_shared_view(fallback, primitive_mismatch, [patient])
+        finally:
+            native.close()
+            fallback.close()
+
+    def test_element_id_type_uri_executes_native_and_fallback(self, monkeypatch):
+        """FHIR element-ID type notation is valid for non-primitive column output."""
+        observation = {
+            "resourceType": "Observation",
+            "id": "obs1",
+            "referenceRange": [
+                {"low": {"value": 1, "unit": "mg"}, "high": {"value": 2, "unit": "mg"}},
+                {"low": {"value": 3, "unit": "mg"}, "high": {"value": 4, "unit": "mg"}},
+            ],
+        }
+        view = {
+            "resource": "Observation",
+            "select": [{
+                "column": [{
+                    "path": "referenceRange",
+                    "name": "reference_range",
+                    "type": "Observation.referenceRange",
+                    "collection": True,
+                }]
+            }],
+        }
+
+        native = duckdb.connect(config={"allow_unsigned_extensions": True})
+        if register_fhirpath(native) is not True:
+            native.close()
+            pytest.skip("Bundled C++ FHIRPath extension is not available")
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            native_rows = _execute_shared_view(native, view, [observation])
+            fallback_rows = _execute_shared_view(fallback, view, [observation])
+
+            assert native_rows == fallback_rows
+            values = native_rows[0][0]
+            assert len(values) == 2
+            assert json.loads(values[0])["low"]["value"] == 1
+            assert json.loads(values[1])["high"]["value"] == 4
+        finally:
+            native.close()
+            fallback.close()
+
+    def test_this_nonprimitive_type_errors_native_and_fallback(self, monkeypatch):
+        """$this cannot silently serialize complex nodes when type is unset or primitive."""
+        patient = {
+            "resourceType": "Patient",
+            "id": "pt1",
+            "name": [{"family": "Alpha"}, {"family": "Beta"}],
+        }
+        untyped_whole_resource = {
+            "resource": "Patient",
+            "select": [{"column": [{"path": "$this", "name": "whole"}]}],
+        }
+        name_as_string = {
+            "resource": "Patient",
+            "select": [{
+                "forEach": "name",
+                "column": [{"path": "$this", "name": "name_as_string", "type": "string"}],
+            }],
+        }
+
+        native = duckdb.connect(config={"allow_unsigned_extensions": True})
+        if register_fhirpath(native) is not True:
+            native.close()
+            pytest.skip("Bundled C++ FHIRPath extension is not available")
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            for con in (native, fallback):
+                with pytest.raises(Exception, match="non-primitive outputs require column.type"):
+                    _execute_shared_view(con, untyped_whole_resource, [patient])
+                with pytest.raises(Exception, match="name_as_string"):
+                    _execute_shared_view(con, name_as_string, [patient])
+        finally:
+            native.close()
+            fallback.close()
+
+    def test_nested_unionall_default_context_matches_fallback(self, monkeypatch):
+        """Nested unionAll is processed through default-$this select wrappers."""
+        patient = {
+            "resourceType": "Patient",
+            "id": "pt1",
+            "gender": "female",
+        }
+        parent_and_union = {
+            "resource": "Patient",
+            "select": [{
+                "column": [{"path": "id", "name": "id", "type": "id"}],
+                "select": [{
+                    "unionAll": [
+                        {"column": [{"path": "id", "name": "value", "type": "string"}]},
+                        {"column": [{"path": "gender", "name": "value", "type": "string"}]},
+                    ],
+                }],
+            }],
+        }
+        deep_wrapped_union = {
+            "resource": "Patient",
+            "select": [{
+                "select": [{
+                    "select": [{
+                        "unionAll": [
+                            {"column": [{"path": "id", "name": "value", "type": "string"}]},
+                            {"column": [{"path": "gender", "name": "value", "type": "string"}]},
+                        ],
+                    }],
+                }],
+            }],
+        }
+
+        normal = duckdb.connect(config={"allow_unsigned_extensions": True})
+        normal_loaded_native = register_fhirpath(normal) is True
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            expected_parent = [("pt1", "female"), ("pt1", "pt1")]
+            expected_deep = [("female",), ("pt1",)]
+
+            assert sorted(_execute_shared_view(normal, parent_and_union, [patient])) == expected_parent
+            assert sorted(_execute_shared_view(fallback, parent_and_union, [patient])) == expected_parent
+            assert sorted(_execute_shared_view(normal, deep_wrapped_union, [patient])) == expected_deep
+            assert sorted(_execute_shared_view(fallback, deep_wrapped_union, [patient])) == expected_deep
+
+            # If the bundled native extension is available, the normal path is
+            # native; otherwise it still exercises public registration apart
+            # from the forced fallback connection.
+            assert isinstance(normal_loaded_native, bool)
+        finally:
+            normal.close()
+            fallback.close()
+
+    def test_nested_select_cross_product_matches_native_and_fallback(self, monkeypatch):
+        """Sibling nested selects cross-join while inheriting parent context."""
+        patient = {
+            "resourceType": "Patient",
+            "id": "pt1",
+            "name": [
+                {"family": "F1", "given": ["G1", "G2"]},
+                {"family": "F2", "given": ["H1"]},
+            ],
+            "telecom": [
+                {"system": "phone"},
+                {"system": "email"},
+            ],
+        }
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "column": [{"path": "id", "name": "id", "type": "id"}],
+                "select": [
+                    {
+                        "forEach": "name",
+                        "column": [{"path": "family", "name": "family", "type": "string"}],
+                        "select": [{
+                            "forEach": "given",
+                            "column": [{"path": "$this", "name": "given", "type": "string"}],
+                        }],
+                    },
+                    {
+                        "forEach": "telecom",
+                        "column": [{"path": "system", "name": "system", "type": "code"}],
+                    },
+                ],
+            }],
+        }
+
+        native = duckdb.connect(config={"allow_unsigned_extensions": True})
+        if register_fhirpath(native) is not True:
+            native.close()
+            pytest.skip("Bundled C++ FHIRPath extension is not available")
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            expected = [
+                ("pt1", "F1", "G1", "email"),
+                ("pt1", "F1", "G1", "phone"),
+                ("pt1", "F1", "G2", "email"),
+                ("pt1", "F1", "G2", "phone"),
+                ("pt1", "F2", "H1", "email"),
+                ("pt1", "F2", "H1", "phone"),
+            ]
+            assert sorted(_execute_shared_view(native, view, [patient])) == expected
+            assert sorted(_execute_shared_view(fallback, view, [patient])) == expected
+        finally:
+            native.close()
+            fallback.close()
+
+    def test_foreach_builtin_variables_match_native_and_fallback(self, monkeypatch):
+        """Iterator contexts keep current focus, root resource, and row index distinct."""
+        patient = {
+            "resourceType": "Patient",
+            "id": "pt-root",
+            "name": [
+                {"family": "Fam1", "given": ["A", "B"]},
+                {"family": "Fam2", "given": ["C"]},
+            ],
+        }
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "forEach": "name",
+                "column": [
+                    {"path": "%context.family", "name": "family", "type": "string"},
+                    {"path": "%resource.id", "name": "resource_id", "type": "id"},
+                    {"path": "%rootResource.id", "name": "root_id", "type": "id"},
+                    {"path": "%rowIndex", "name": "name_index", "type": "integer"},
+                ],
+                "select": [{
+                    "forEach": "given",
+                    "column": [
+                        {"path": "%context", "name": "given", "type": "string"},
+                        {"path": "%resource.id", "name": "inner_resource_id", "type": "id"},
+                        {"path": "%rowIndex", "name": "given_index", "type": "integer"},
+                    ],
+                }],
+            }],
+        }
+
+        native = duckdb.connect(config={"allow_unsigned_extensions": True})
+        if register_fhirpath(native) is not True:
+            native.close()
+            pytest.skip("Bundled C++ FHIRPath extension is not available")
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            expected = [
+                ("Fam1", "pt-root", "pt-root", 0, "A", "pt-root", 0),
+                ("Fam1", "pt-root", "pt-root", 0, "B", "pt-root", 1),
+                ("Fam2", "pt-root", "pt-root", 1, "C", "pt-root", 0),
+            ]
+            assert sorted(_execute_shared_view(native, view, [patient])) == expected
+            assert sorted(_execute_shared_view(fallback, view, [patient])) == expected
+        finally:
+            native.close()
+            fallback.close()
+
+    def test_foreach_complex_builtin_variable_paths_match_native_and_fallback(self, monkeypatch):
+        """Leading built-in variables keep their target context for full FHIRPath expressions."""
+        patient = {
+            "resourceType": "Patient",
+            "id": "pt-root",
+            "name": [
+                {"family": "RootFam", "given": ["R1"]},
+                {"family": "OtherFam", "given": ["R2"]},
+            ],
+            "contact": [
+                {"name": {"family": "Contact1", "given": ["C1"]}},
+                {"name": {"family": "Contact2", "given": ["C2"]}},
+            ],
+        }
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "forEach": "contact",
+                "column": [
+                    {"path": "%context.name.family.first()", "name": "contact_family", "type": "string"},
+                    {"path": "%resource.name.family.first()", "name": "root_family", "type": "string"},
+                    {"path": "%rootResource.name.family.first()", "name": "root_family_2", "type": "string"},
+                ],
+                "select": [{
+                    "forEach": "%resource.name.where(family = 'RootFam')",
+                    "column": [
+                        {"path": "%context.family.first()", "name": "iterated_root_family", "type": "string"},
+                    ],
+                }],
+            }],
+        }
+
+        native = duckdb.connect(config={"allow_unsigned_extensions": True})
+        if register_fhirpath(native) is not True:
+            native.close()
+            pytest.skip("Bundled C++ FHIRPath extension is not available")
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            expected = [
+                ("Contact1", "RootFam", "RootFam", "RootFam"),
+                ("Contact2", "RootFam", "RootFam", "RootFam"),
+            ]
+            assert sorted(_execute_shared_view(native, view, [patient])) == expected
+            assert sorted(_execute_shared_view(fallback, view, [patient])) == expected
+        finally:
+            native.close()
+            fallback.close()
+
+    def test_row_index_embedded_expressions_match_native_and_fallback(self, monkeypatch):
+        """%rowIndex works inside FHIRPath column and select where expressions."""
+        patient = {
+            "resourceType": "Patient",
+            "id": "pt-root",
+            "name": [
+                {"family": "Smith", "given": ["John", "James"]},
+                {"family": "Jones", "given": ["Jane"]},
+            ],
+        }
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "forEach": "name",
+                "where": [{"path": "%rowIndex = 1"}],
+                "column": [
+                    {
+                        "path": "iif(%rowIndex = 1, given.first(), family)",
+                        "name": "selected_value",
+                        "type": "string",
+                    },
+                    {"path": "%rowIndex", "name": "name_index", "type": "integer"},
+                ],
+            }],
+        }
+
+        native = duckdb.connect(config={"allow_unsigned_extensions": True})
+        if register_fhirpath(native) is not True:
+            native.close()
+            pytest.skip("Bundled C++ FHIRPath extension is not available")
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            expected = [("Jane", 1)]
+            assert _execute_shared_view(native, view, [patient]) == expected
+            assert _execute_shared_view(fallback, view, [patient]) == expected
+        finally:
+            native.close()
+            fallback.close()
+
+    def test_embedded_root_variables_inside_iterator_match_native_and_fallback(self, monkeypatch):
+        """Root-only %resource/%rootResource expressions route to the root resource."""
+        patient = {
+            "resourceType": "Patient",
+            "id": "pt-root",
+            "name": [
+                {"family": "Smith"},
+                {"family": "Jones"},
+            ],
+        }
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "forEach": "name",
+                "column": [{
+                    "path": "iif(%rowIndex = 0, %resource.id, %rootResource.id)",
+                    "name": "root_id",
+                    "type": "id",
+                }],
+            }],
+        }
+
+        native = duckdb.connect(config={"allow_unsigned_extensions": True})
+        if register_fhirpath(native) is not True:
+            native.close()
+            pytest.skip("Bundled C++ FHIRPath extension is not available")
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            expected = [("pt-root",), ("pt-root",)]
+            assert _execute_shared_view(native, view, [patient]) == expected
+            assert _execute_shared_view(fallback, view, [patient]) == expected
+        finally:
+            native.close()
+            fallback.close()
+
+    def test_foreach_mixed_builtin_variable_paths_fail_before_silent_misrouting(self):
+        """Mixed root/current built-ins need a multi-context evaluator, not a wrong single input."""
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "forEach": "contact",
+                "column": [{
+                    "path": "%resource.name.where(family = %context.name.family).family",
+                    "name": "matching_family",
+                    "type": "string",
+                }],
+            }],
+        }
+
+        vd = parse_view_definition(view)
+        with pytest.raises(ValidationError, match="mixes built-in ViewDefinition contexts"):
+            SQLGenerator(source_table="resources").generate(vd)
+
+    def test_embedded_mixed_builtin_variable_paths_fail_before_silent_misrouting(self):
+        """Non-leading mixed root/current built-ins must not evaluate against one JSON input."""
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "forEach": "name",
+                "column": [{
+                    "path": "iif(%rowIndex = 0, %resource.id, family)",
+                    "name": "value",
+                    "type": "string",
+                }],
+            }],
+        }
+
+        vd = parse_view_definition(view)
+        with pytest.raises(ValidationError, match="mixes built-in ViewDefinition contexts"):
+            SQLGenerator(source_table="resources").generate(vd)
+
+
+class TestRepeat:
+    """Test select.repeat recursive traversal."""
+
+    @staticmethod
+    def _native_connection():
+        con = duckdb.connect(config={"allow_unsigned_extensions": True})
+        if register_fhirpath(con) is not True:
+            con.close()
+            return None
+        return con
+
+    @staticmethod
+    def _nested_questionnaire(depth: int):
+        item = {"linkId": f"n{depth}", "text": f"Node {depth}"}
+        for index in range(depth - 1, -1, -1):
+            item = {
+                "linkId": f"n{index}",
+                "text": f"Node {index}",
+                "item": [item],
+            }
+        return {"resourceType": "QuestionnaireResponse", "id": "deep", "item": [item]}
+
+    @staticmethod
+    def _nested_questionnaire_json(depth: int):
+        item = '{"linkId":"n%d","text":"Node %d"}' % (depth, depth)
+        for index in range(depth - 1, -1, -1):
+            item = (
+                '{"linkId":"n%d","text":"Node %d","item":[%s]}'
+                % (index, index, item)
+            )
+        return '{"resourceType":"QuestionnaireResponse","id":"deep","item":[%s]}' % item
+
+    def test_repeat_fhirpath_expression_matches_native_and_fallback(self, monkeypatch):
+        """repeat entries are full FHIRPath expressions, not literal key chains."""
+        resource = {
+            "resourceType": "QuestionnaireResponse",
+            "id": "qr",
+            "item": [
+                {
+                    "linkId": "keep",
+                    "text": "Keep Root",
+                    "item": [{"linkId": "target", "text": "Target Child"}],
+                },
+                {"linkId": "skip"},
+            ],
+        }
+        view = {
+            "resource": "QuestionnaireResponse",
+            "select": [{
+                "repeat": ["item.where(text.exists())"],
+                "column": [{"name": "linkId", "path": "linkId", "type": "string"}],
+            }],
+        }
+        expected = [("keep",), ("target",)]
+
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            assert _execute_shared_view(fallback, view, [resource]) == expected
+        finally:
+            fallback.close()
+
+        native = self._native_connection()
+        if native is not None:
+            try:
+                assert _execute_shared_view(native, view, [resource]) == expected
+            finally:
+                native.close()
+
+    def test_repeat_duplicate_paths_use_union_semantics_native_and_fallback(self, monkeypatch):
+        """The same repeated node reached by multiple repeat paths appears once."""
+        resource = {
+            "resourceType": "QuestionnaireResponse",
+            "id": "qr",
+            "item": [
+                {
+                    "linkId": "keep",
+                    "item": [{"linkId": "target"}],
+                },
+                {"linkId": "skip"},
+            ],
+        }
+        view = {
+            "resource": "QuestionnaireResponse",
+            "select": [{
+                "repeat": ["item", "item"],
+                "column": [{"name": "linkId", "path": "linkId", "type": "string"}],
+            }],
+        }
+        expected = [("keep",), ("target",), ("skip",)]
+
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            assert _execute_shared_view(fallback, view, [resource]) == expected
+        finally:
+            fallback.close()
+
+        native = self._native_connection()
+        if native is not None:
+            try:
+                assert _execute_shared_view(native, view, [resource]) == expected
+            finally:
+                native.close()
+
+    def test_repeat_invalid_path_skips_only_that_path_native_and_fallback(self, monkeypatch):
+        """Direct repeat UDF keeps native/fallback parity for invalid path entries."""
+        resource = {
+            "resourceType": "QuestionnaireResponse",
+            "item": [{"linkId": "a"}, {"linkId": "b"}],
+        }
+
+        def repeat_link_ids(con, paths):
+            values = con.execute(
+                "SELECT fhirpath_repeat(?, ?)",
+                [json.dumps(resource), json.dumps(paths)],
+            ).fetchone()[0]
+            return [
+                (json.loads(value) if isinstance(value, str) else value)["linkId"]
+                for value in values
+            ]
+
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            fallback_invalid_first = repeat_link_ids(fallback, ["item(", "item"])
+            fallback_invalid_last = repeat_link_ids(fallback, ["item", "item("])
+            assert fallback_invalid_first == ["a", "b"]
+            assert fallback_invalid_last == ["a", "b"]
+        finally:
+            fallback.close()
+
+        native = self._native_connection()
+        if native is not None:
+            try:
+                assert repeat_link_ids(native, ["item(", "item"]) == fallback_invalid_first
+                assert repeat_link_ids(native, ["item", "item("]) == fallback_invalid_last
+            finally:
+                native.close()
+
+    def test_repeat_deep_traversal_matches_native_and_fallback(self, monkeypatch):
+        """repeat follows nested paths beyond the former hard-coded depth cap."""
+        resource = self._nested_questionnaire(205)
+        view = {
+            "resource": "QuestionnaireResponse",
+            "select": [{
+                "repeat": ["item"],
+                "column": [{"name": "linkId", "path": "linkId", "type": "string"}],
+            }],
+        }
+        expected = [(f"n{index}",) for index in range(206)]
+
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            assert _execute_shared_view(fallback, view, [resource]) == expected
+        finally:
+            fallback.close()
+
+        native = self._native_connection()
+        if native is not None:
+            try:
+                assert _execute_shared_view(native, view, [resource]) == expected
+            finally:
+                native.close()
+
+    def test_repeat_deep_raw_json_matches_native_and_fallback(self, monkeypatch):
+        """Deep raw JSON repeat traversal should not hit fallback recursion limits."""
+        resource_json = self._nested_questionnaire_json(800)
+        view = {
+            "resource": "QuestionnaireResponse",
+            "select": [{
+                "repeat": ["item"],
+                "column": [{"name": "linkId", "path": "linkId", "type": "string"}],
+            }],
+        }
+
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            fallback_rows = _execute_shared_view_json(fallback, view, [resource_json])
+            assert len(fallback_rows) == 801
+            assert fallback_rows[0] == ("n0",)
+            assert fallback_rows[-1] == ("n800",)
+        finally:
+            fallback.close()
+
+        native = self._native_connection()
+        if native is not None:
+            try:
+                native_rows = _execute_shared_view_json(native, view, [resource_json])
+                assert native_rows == fallback_rows
+            finally:
+                native.close()
+
+    def test_repeat_this_column_context_matches_native_and_fallback(self, monkeypatch):
+        """$this-prefixed columns inside repeat evaluate against each repeated node."""
+        resource = {
+            "resourceType": "QuestionnaireResponse",
+            "id": "qr",
+            "item": [
+                {
+                    "linkId": "root-a",
+                    "text": "Root A",
+                    "answer": [{
+                        "valueString": "yes",
+                        "item": [{"linkId": "answer-child", "text": "Answer Child"}],
+                    }],
+                    "item": [{"linkId": "child-a", "text": "Child A"}],
+                },
+                {"linkId": "root-b", "text": "Root B"},
+            ],
+        }
+        view = {
+            "resource": "QuestionnaireResponse",
+            "select": [{
+                "repeat": ["item", "answer.item"],
+                "column": [
+                    {"name": "plainLinkId", "path": "linkId", "type": "string"},
+                    {"name": "thisLinkId", "path": "$this.linkId", "type": "string"},
+                    {"name": "hasText", "path": "$this.text.exists()", "type": "boolean"},
+                ],
+            }],
+        }
+        expected = [
+            ("root-a", "root-a", True),
+            ("child-a", "child-a", True),
+            ("answer-child", "answer-child", True),
+            ("root-b", "root-b", True),
+        ]
+
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            assert _execute_shared_view(fallback, view, [resource]) == expected
+        finally:
+            fallback.close()
+
+        native = self._native_connection()
+        if native is not None:
+            try:
+                assert _execute_shared_view(native, view, [resource]) == expected
+            finally:
+                native.close()
+
+    def test_repeat_this_expression_matches_native_and_fallback(self, monkeypatch):
+        """repeat entries can explicitly navigate from the current focus with $this."""
+        resource = {
+            "resourceType": "QuestionnaireResponse",
+            "id": "qr",
+            "item": [{"linkId": "root", "item": [{"linkId": "child"}]}],
+        }
+        view = {
+            "resource": "QuestionnaireResponse",
+            "select": [{
+                "repeat": ["$this.item"],
+                "column": [{"name": "linkId", "path": "linkId", "type": "string"}],
+            }],
+        }
+        expected = [("root",), ("child",)]
+
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            assert _execute_shared_view(fallback, view, [resource]) == expected
+        finally:
+            fallback.close()
+
+        native = self._native_connection()
+        if native is not None:
+            try:
+                assert _execute_shared_view(native, view, [resource]) == expected
+            finally:
+                native.close()
 
 
 class TestForEach:
@@ -454,7 +1526,7 @@ class TestUnionAll:
         assert "UNION ALL" in sql
 
     def test_multiple_top_level_unionall_groups(self, connection, generator):
-        """Sibling top-level unionAll groups should all contribute rows."""
+        """Sibling top-level unionAll groups are cross-joined as select rowsets."""
         patient = {
             "resourceType": "Patient",
             "id": "patient-1",
@@ -474,14 +1546,14 @@ class TestUnionAll:
                 },
                 {
                     "unionAll": [
-                        {"column": [{"path": "name[0].family", "name": "value"}]},
-                        {"column": [{"path": "name[1].family", "name": "value"}]},
+                        {"column": [{"path": "name[0].family", "name": "family_value"}]},
+                        {"column": [{"path": "name[1].family", "name": "family_value"}]},
                     ]
                 },
                 {
                     "unionAll": [
-                        {"column": [{"path": "name[0].given.first()", "name": "value"}]},
-                        {"column": [{"path": "name[1].given.first()", "name": "value"}]},
+                        {"column": [{"path": "name[0].given.first()", "name": "given_value"}]},
+                        {"column": [{"path": "name[1].given.first()", "name": "given_value"}]},
                     ]
                 }
             ]
@@ -491,8 +1563,102 @@ class TestUnionAll:
 
         result = connection.execute(sql).fetchall()
 
-        assert len(result) == 4
-        assert {row[1] for row in result} == {"Doe", "Smith", "John", "Jane"}
+        assert sorted(result) == [
+            ("patient-1", "Doe", "Jane"),
+            ("patient-1", "Doe", "John"),
+            ("patient-1", "Smith", "Jane"),
+            ("patient-1", "Smith", "John"),
+        ]
+
+    def test_sibling_unionall_groups_cross_join_native_and_fallback(self, monkeypatch):
+        """Separate unionAll rowsets compose with sibling select semantics."""
+        patients = [
+            {"resourceType": "Patient", "id": "p1"},
+            {"resourceType": "Patient", "id": "p2"},
+        ]
+        view = {
+            "resource": "Patient",
+            "select": [
+                {"column": [{"path": "id", "name": "id", "type": "id"}]},
+                {
+                    "unionAll": [
+                        {"column": [{"path": "'A1'", "name": "a", "type": "string"}]},
+                        {"column": [{"path": "'A2'", "name": "a", "type": "string"}]},
+                    ]
+                },
+                {
+                    "unionAll": [
+                        {"column": [{"path": "'B1'", "name": "b", "type": "string"}]},
+                        {"column": [{"path": "'B2'", "name": "b", "type": "string"}]},
+                    ]
+                },
+            ],
+        }
+        expected = sorted([
+            ("p1", "A1", "B1"),
+            ("p1", "A1", "B2"),
+            ("p1", "A2", "B1"),
+            ("p1", "A2", "B2"),
+            ("p2", "A1", "B1"),
+            ("p2", "A1", "B2"),
+            ("p2", "A2", "B1"),
+            ("p2", "A2", "B2"),
+        ])
+
+        normal = duckdb.connect(config={"allow_unsigned_extensions": True})
+        register_fhirpath(normal)
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            assert sorted(_execute_shared_view(normal, view, patients)) == expected
+            assert sorted(_execute_shared_view(fallback, view, patients)) == expected
+        finally:
+            normal.close()
+            fallback.close()
+
+    def test_unionall_branch_with_nested_unionall_preserves_columns_native_and_fallback(self, monkeypatch):
+        """A branch may combine direct columns with nested unionAll columns."""
+        patient = {"resourceType": "Patient", "id": "p1"}
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "unionAll": [
+                    {
+                        "column": [{"path": "'outer1'", "name": "outer", "type": "string"}],
+                        "select": [{
+                            "unionAll": [
+                                {"column": [{"path": "'inner1'", "name": "inner", "type": "string"}]},
+                                {"column": [{"path": "'inner2'", "name": "inner", "type": "string"}]},
+                            ]
+                        }],
+                    },
+                    {
+                        "column": [{"path": "'outer2'", "name": "outer", "type": "string"}],
+                        "select": [{
+                            "unionAll": [
+                                {"column": [{"path": "'inner3'", "name": "inner", "type": "string"}]},
+                                {"column": [{"path": "'inner4'", "name": "inner", "type": "string"}]},
+                            ]
+                        }],
+                    },
+                ]
+            }],
+        }
+        expected = sorted([
+            ("outer1", "inner1"),
+            ("outer1", "inner2"),
+            ("outer2", "inner3"),
+            ("outer2", "inner4"),
+        ])
+
+        normal = duckdb.connect(config={"allow_unsigned_extensions": True})
+        register_fhirpath(normal)
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            assert sorted(_execute_shared_view(normal, view, [patient])) == expected
+            assert sorted(_execute_shared_view(fallback, view, [patient])) == expected
+        finally:
+            normal.close()
+            fallback.close()
 
     def test_unionall_without_parent_context_generates_sql_union(self, connection, generator):
         """A bare unionAll should produce separate SELECT branches."""
@@ -563,6 +1729,62 @@ class TestForeachParentColumns:
         assert result == [
             ("patient-1", "male", "phone", "555-0100"),
             ("patient-1", "male", "email", "a@example.test"),
+        ]
+
+    def test_nested_foreach_under_foreachornull_keeps_inner_semantics(self, connection, generator):
+        """Nested forEach still drops rows when the child collection is empty."""
+        patients = [
+            {
+                "resourceType": "Patient",
+                "id": "patient-1",
+                "contact": [
+                    {
+                        "telecom": [
+                            {"system": "phone"},
+                            {"system": "email"},
+                        ]
+                    },
+                    {
+                        "name": {"family": "NoTelecom"},
+                    },
+                ],
+            },
+            {
+                "resourceType": "Patient",
+                "id": "patient-2",
+            },
+        ]
+        connection.execute("CREATE TABLE patients (resource JSON)")
+        for patient in patients:
+            connection.execute("INSERT INTO patients VALUES (?)", [json.dumps(patient)])
+
+        vd_json = json.dumps({
+            "resource": "Patient",
+            "select": [
+                {
+                    "column": [
+                        {"path": "id", "name": "id", "type": "id"},
+                    ],
+                },
+                {
+                    "forEachOrNull": "contact",
+                    "select": [{
+                        "forEach": "telecom",
+                        "column": [
+                            {"path": "system", "name": "system", "type": "code"},
+                        ],
+                    }],
+                },
+            ],
+        })
+        vd = parse_view_definition(vd_json)
+        sql = generator.generate(vd)
+
+        result = sorted(connection.execute(sql).fetchall(), key=lambda row: (row[0], row[1] or ""))
+
+        assert result == [
+            ("patient-1", "email"),
+            ("patient-1", "phone"),
         ]
 
 

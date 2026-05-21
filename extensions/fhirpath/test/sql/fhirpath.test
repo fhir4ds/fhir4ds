@@ -130,6 +130,11 @@ SELECT fhirpath_is_valid('name.where(given = ''John'')');
 ----
 true
 
+query I
+SELECT fhirpath_is_valid('foo()');
+----
+false
+
 # =====================================================================
 # NULL handling
 # =====================================================================
@@ -170,6 +175,19 @@ query I
 SELECT fhirpath('{"resourceType":"Patient","extension":[{"url":"http://example.org/race","extension":[{"url":"ombCategory","valueCoding":{"code":"2106-3"}},{"url":"ombCategory","valueCoding":{"code":"1002-5"}}]}]}', 'extension.where(url = ''http://example.org/race'').extension.where(url = ''ombCategory'').valueCoding.code');
 ----
 [2106-3, 1002-5]
+
+# =====================================================================
+# fhirpath_repeat — SQL-on-FHIR repeat traversal
+# =====================================================================
+query I
+SELECT array_length(fhirpath_repeat('{"resourceType":"Questionnaire","item":[{"linkId":"a","item":[{"linkId":"a.1"}]},{"linkId":"b"}]}', '["item"]'));
+----
+3
+
+query I
+SELECT list_extract(fhirpath_repeat('{"resourceType":"Questionnaire","item":[{"linkId":"a","item":[{"linkId":"a.1"}]},{"linkId":"b"}]}', '["item"]'), 2);
+----
+{"linkId":"a.1"}
 
 # =====================================================================
 # fhirpath_date — date normalization
@@ -231,6 +249,31 @@ query I
 SELECT fhirpath_bool('{"resourceType":"Patient","name":[{"given":["John"]}]}', 'name.given.contains(''oh'')');
 ----
 true
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","s":"abcdef"}', 's.substring(6)');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","s":"abc123"}', 's.substring(''1'')');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","s":"abc123"}', 's.indexOf(123)');
+----
+NULL
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","s":"abc123"}', 's.contains(123)');
+----
+NULL
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","num":123}', 'num.contains(''2'')');
+----
+NULL
 
 # =====================================================================
 # Existence and count functions
@@ -342,3 +385,466 @@ query I
 SELECT fhirpath_number('{"resourceType":"Observation","a":[42]}', 'a');
 ----
 42.0
+
+# FP-06 regression: iif() must reject multi-item input before evaluating a branch
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","id":"p"}', '(''a''|''b'').iif(true, ''yes'', ''no'')');
+----
+NULL
+
+# FP-07 regression: decimal strings must match (+|-)?\d+(\.\d+)?
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","v":"1e2"}', 'v.toDecimal()');
+----
+NULL
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation","v":"1e2"}', 'v.convertsToDecimal()');
+----
+false
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","v":"1."}', 'v.toDecimal()');
+----
+NULL
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation","v":"1."}', 'v.convertsToDecimal()');
+----
+false
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","v":" 1"}', 'v.toDecimal()');
+----
+NULL
+
+# FP-07 regression: Date/DateTime conversion must not coerce non-string values
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","v":2015}', 'v.toDate()');
+----
+NULL
+
+query I
+SELECT fhirpath_timestamp('{"resourceType":"Observation","v":2015}', 'v.toDateTime()');
+----
+NULL
+
+# FP-07 regression: malformed DateTime-like strings must not be truncated to Date
+query I
+SELECT fhirpath_date('{"resourceType":"Observation","v":"2015-02-04T99"}', 'v.toDate()');
+----
+NULL
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation","v":"2015-02-04Tbogus"}', 'v.convertsToDate()');
+----
+false
+
+# FP-08 regression: Time conversion must preserve partial precision
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","v":"14:34"}', 'v.toTime()');
+----
+14:34
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","v":"x"}', '@T14:34.toString()');
+----
+14:34
+
+# FP-08 regression: Quantity conversion string parsing and target units
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation","v":"1 wk"}', 'v.convertsToQuantity()');
+----
+false
+
+query I
+SELECT fhirpath_quantity('{"resourceType":"Observation","v":" 1"}', 'v.toQuantity()');
+----
+NULL
+
+query I
+SELECT fhirpath_quantity('{"resourceType":"Observation","v":"1 ''mg"}', 'v.toQuantity()');
+----
+NULL
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation","v":"1 ''''"}', 'v.convertsToQuantity()');
+----
+false
+
+query I
+SELECT fhirpath_quantity('{"resourceType":"Observation","v":"1 ''''"}', 'v.toQuantity()');
+----
+NULL
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation","v":1}', 'v.convertsToQuantity(''kg'')');
+----
+false
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation","v":"1 ''kg''"}', 'v.convertsToQuantity(''g'')');
+----
+true
+
+query I
+SELECT fhirpath_quantity('{"resourceType":"Observation","v":"1 ''kg''"}', 'v.toQuantity(''g'')');
+----
+1000 'g'
+
+# FP-10 regression: String transform functions must not coerce non-String values
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","num":123}', 'num.matches(''123'')');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","s":"Abc abc"}', 's.replace(123, ''x'')');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","s":"Abc abc"}', 's.replace(''b'', 123)');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","num":123}', 'num.replaceMatches(''2'', ''x'')');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","s":"Abc abc"}', 's.replaceMatches(''b'', 123)');
+----
+NULL
+
+query I
+SELECT fhirpath('{"resourceType":"Patient","num":123}', 'num.toChars()');
+----
+[]
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","s":"Straße"}', 's.upper()');
+----
+STRASSE
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","s":"Σςσ"}', 's.upper()');
+----
+ΣΣΣ
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","s":"é"}', 's.matches(''.'')');
+----
+true
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","s":"é"}', 's.replaceMatches(''.'', ''x'')');
+----
+x
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","s":"😀"}', 's.matches(''.'')');
+----
+true
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","s":"😀"}', 's.replaceMatches(''.'', ''x'')');
+----
+x
+
+# review-10 regression: native regex paths reject common catastrophic backtracking shapes
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","s":"aaaaaaaa"}', 's.matches(''(a+)+'')');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","s":"aaaaaaaa"}', 's.replaceMatches(''(a|aa)+'', ''x'')');
+----
+NULL
+
+# FP-11 regression: math function arguments and Quantity inputs are strictly validated
+query I
+SELECT fhirpath_text('{"resourceType":"Observation"}', '3.14159.round(3)');
+----
+3.142
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation"}', '3.14159.abs()');
+----
+3.14159
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation"}', '(-3.14159).abs()');
+----
+3.14159
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","p":2.5}', 'p.round(0)');
+----
+3.0
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","p":2.5}', 'p.round(-1)');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","p":2.5}', 'p.round(1.5)');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","p":2.5}', 'p.round(''x'')');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","p":2.5}', 'p.round((2 | 3))');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation"}', '10.log((2 | 3))');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation"}', '2.power((3 | 4))');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation"}', '(-5.5 ''mg'').abs()');
+----
+5.5 'mg'
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation"}', '(-5.5 ''mg'').ceiling()');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation"}', '(-5.5 ''mg'').floor()');
+----
+NULL
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation"}', '(-5.5 ''mg'').truncate()');
+----
+NULL
+
+# FP-12 regression: children()/descendants() preserve JSON null child nodes
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","id":"p1","active":null,"name":[{"given":["Ann"],"family":null}]}', 'children().count()');
+----
+3
+
+query I
+SELECT fhirpath_json('{"resourceType":"Patient","id":"p1","active":null,"name":[{"given":["Ann"],"family":null}]}', 'children()');
+----
+["p1",null,{"given":["Ann"],"family":null}]
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","id":"p1","active":null,"name":[{"given":["Ann"],"family":null}]}', 'descendants().count()');
+----
+5
+
+# FP-13 HISTORIAN regression: multi-item Date/Time equality uses singleton temporal semantics
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation"}', '(@2012 | @2013) = (@2012 | @2014)');
+----
+false
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation"}', '(@2012 | @2013) != (@2012 | @2014)');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation"}', '(@2017-11-05T01:30:00.0-04:00 | @2012) = (@2017-11-05T00:30:00.0-05:00 | @2012)');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation"}', '(@2012-01-01T10:30:31.0 | @2012) = (@2012-01-01T10:30:31 | @2012)');
+----
+true
+
+# FP-13 EXPLORER regression: Date and partial DateTime are different primitive types
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation"}', '@2012 = @2012T');
+----
+NULL
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation"}', '@2012 != @2012T');
+----
+NULL
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation"}', '@2012 ~ @2012T');
+----
+false
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation"}', '@2012 !~ @2012T');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation"}', '(@2012 | @2013) = (@2012T | @2013T)');
+----
+NULL
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Observation"}', '(@2012 | @2013) ~ (@2012T | @2013T)');
+----
+false
+
+# FP-13 HISTORIAN regression: complex equivalence recurses through child equivalence
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","objA":{"given":["Alpha  Beta"],"family":"SMITH"},"objB":{"family":"smith","given":[" alpha beta "]}}', 'objA ~ objB');
+----
+true
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","objA":{"given":["Alpha  Beta"],"family":"SMITH"},"objB":{"family":"smith","given":[" alpha beta "]}}', 'objA !~ objB');
+----
+false
+
+# FP-18 SKEPTIC regression: temporal arithmetic units, precision, and path values
+query I
+SELECT fhirpath_text('{"resourceType":"Observation"}', '@2016 + 1 ''a''');
+----
+NULL
+
+query I
+SELECT fhirpath_is_valid('@2016 + 1 ''a''');
+----
+false
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation"}', '@T12:34 + 30 seconds');
+----
+T12:34
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation"}', '@T00:00:00 - 1 millisecond');
+----
+T00:00:00
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation"}', '@2016-02-29 + 23 hours');
+----
+NULL
+
+query I
+SELECT fhirpath_is_valid('@2016-02-29 + 23 hours');
+----
+false
+
+query I
+SELECT fhirpath_timestamp('{"resourceType":"Observation","effectiveDateTime":"2016-02-29T23:59:59"}', 'effectiveDateTime + 1 second');
+----
+2016-03-01T00:00:00
+
+query I
+SELECT fhirpath_json('{"resourceType":"Observation","effectiveTime":"23:59:59.500"}', 'effectiveTime + 750 milliseconds');
+----
+["T00:00:00.250"]
+
+# FP-19 SKEPTIC regression: delimited identifiers use FHIRPath string escapes
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","back`tick":"bt","line\nbreak":"lb"}', '`back\`tick`');
+----
+bt
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","back`tick":"bt","line\nbreak":"lb"}', '`line\nbreak`');
+----
+lb
+
+query I
+SELECT fhirpath_is_valid('1 Month');
+----
+false
+
+# FP-19 HISTORIAN regression: string literals that look like JSON stay strings
+query I
+SELECT fhirpath_json('{"resourceType":"Patient"}', '''[''');
+----
+["["]
+
+query I
+SELECT fhirpath_json('{"resourceType":"Patient"}', '''[1]''');
+----
+["[1]"]
+
+# FP-20 SKEPTIC regression: environment-variable strings and BackboneElement typing
+query I
+SELECT fhirpath_text('{"resourceType":"Patient"}', '%''vs-administrative-gender''');
+----
+http://hl7.org/fhir/ValueSet/administrative-gender
+
+query I
+SELECT fhirpath_is_valid('%unknown');
+----
+false
+
+query I
+SELECT fhirpath_is_valid('%`vs-foo`');
+----
+false
+
+query I
+SELECT fhirpath_is_valid('%`ext-foo`');
+----
+false
+
+query I
+SELECT fhirpath_is_valid('%factory');
+----
+false
+
+query I
+SELECT fhirpath_is_valid('%terminologies');
+----
+false
+
+query I
+SELECT fhirpath_bool('{"resourceType":"Patient","contact":[{"name":{"family":"Jones"}}]}', 'contact.is(BackboneElement)');
+----
+true
+
+query I
+SELECT fhirpath_text('{"resourceType":"Patient","contact":[{"name":{"family":"Jones"}}]}', 'contact.as(BackboneElement).name.family');
+----
+Jones
+
+# SOF-VD-11 HISTORIAN regression: SQL-on-FHIR View Runner key helpers
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","id":"obs-1","subject":{"reference":"Patient/pat-1"}}', 'getResourceKey()');
+----
+Observation/obs-1
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","id":"obs-1","subject":{"reference":"Patient/pat-1"}}', 'subject.getReferenceKey(Patient)');
+----
+Patient/pat-1
+
+query I
+SELECT fhirpath_text('{"resourceType":"Observation","id":"obs-1","subject":{"reference":"Patient/pat-1"}}', 'subject.getReferenceKey(Observation)');
+----
+NULL
+
+query I
+SELECT fhirpath_is_valid('getResourceKey()') AND fhirpath_is_valid('subject.getReferenceKey(Patient)');
+----
+true
+
+query I
+SELECT fhirpath_is_valid('subject.getReferenceKey(NoSuchType)');
+----
+false

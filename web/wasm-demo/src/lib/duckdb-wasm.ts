@@ -4,6 +4,7 @@ import { getAssetBase } from "./asset-base";
 // Emscripten loader can then resolve extension side modules correctly.
 import duckdbWorkerUrl from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
 import duckdbWasmUrl from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url";
+import { registerCQLMacros } from "./cql-macros";
 
 export interface DuckDBConnectionBundle {
   db: any;
@@ -74,6 +75,7 @@ async function loadFHIR4DSExtensions(db: any, conn: any, wasmAppUrl?: string) {
 
     await conn.query("LOAD 'fhirpath.duckdb_extension.wasm'");
     await conn.query("LOAD 'cql.duckdb_extension.wasm'");
+    await registerCQLMacros(conn);
   } catch (err) {
     throw new Error(
       `FHIR4DS DuckDB extension load failed from ${extBase}. Check that fhirpath.duckdb_extension.wasm and cql.duckdb_extension.wasm are deployed and served with cross-origin isolation. ${errorMessage(err)}`,

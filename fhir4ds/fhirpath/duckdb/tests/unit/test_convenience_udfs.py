@@ -425,24 +425,24 @@ class TestMultiRowQueries:
     def test_fhirpath_date_month_precision(
         self, con: duckdb.DuckDBPyConnection
     ) -> None:
-        """Test fhirpath_date with month precision date."""
+        """Test fhirpath_date preserves month precision."""
         resource = '{"resourceType":"Observation","id":"123","effectiveDateTime":"2023-01"}'
         result = con.execute(
             "SELECT fhirpath_date(?, 'effectiveDateTime')", [resource]
         ).fetchone()
         assert result is not None
-        assert result[0] == "2023-01-01"
+        assert result[0] == "2023-01"
 
     def test_fhirpath_date_year_precision(
         self, con: duckdb.DuckDBPyConnection
     ) -> None:
-        """Test fhirpath_date with year precision date."""
+        """Test fhirpath_date preserves year precision."""
         resource = '{"resourceType":"Observation","id":"123","effectiveDateTime":"2023"}'
         result = con.execute(
             "SELECT fhirpath_date(?, 'effectiveDateTime')", [resource]
         ).fetchone()
         assert result is not None
-        assert result[0] == "2023-01-01"
+        assert result[0] == "2023"
 
     def test_fhirpath_date_missing_field(
         self, con: duckdb.DuckDBPyConnection

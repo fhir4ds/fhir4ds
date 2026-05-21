@@ -58,6 +58,24 @@ def _write_patients_csv(path: str) -> None:
 # Tests: Happy path
 # ---------------------------------------------------------------------------
 
+class TestCSVSourceConstructor:
+    def test_rejects_non_string_path(self):
+        with pytest.raises(TypeError, match="path must be a string"):
+            CSVSource(None, _GOOD_PROJECTION)
+
+    def test_rejects_empty_path(self):
+        with pytest.raises(ValueError, match="path must be a non-empty string"):
+            CSVSource("", _GOOD_PROJECTION)
+
+    def test_rejects_non_string_projection_sql(self):
+        with pytest.raises(TypeError, match="projection_sql must be a string"):
+            CSVSource("/data/patients.csv", None)
+
+    def test_rejects_empty_projection_sql(self):
+        with pytest.raises(ValueError, match="projection_sql must be a non-empty"):
+            CSVSource("/data/patients.csv", "   ")
+
+
 class TestCSVSourceHappyPath:
     def test_mounts_csv_file_as_resources_view(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -116,7 +134,7 @@ class TestSourcePlaceholder:
     def test_placeholder_is_replaced_with_scan_expression(self):
         source = CSVSource("/data/patients.csv", "SELECT * FROM {source}")
         projection = source._projection_sql.replace(
-            "{source}", f"read_csv_auto('{source._path}')"
+            "{source}", "read_csv_auto('/data/patients.csv')"
         )
         assert "read_csv_auto('/data/patients.csv')" in projection
 
@@ -124,9 +142,22 @@ class TestSourcePlaceholder:
         # If user provides SQL without {source}, it passes through unchanged
         source = CSVSource("/data/patients.csv", "SELECT 1 AS x")
         projection = source._projection_sql.replace(
-            "{source}", f"read_csv_auto('{source._path}')"
+            "{source}", "read_csv_auto('/data/patients.csv')"
         )
         assert projection == "SELECT 1 AS x"
+
+    def test_path_is_sql_escaped_before_placeholder_substitution(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "patients'); DROP TABLE sentinel; --.csv")
+            _write_patients_csv(path)
+            con = _make_con()
+            con.execute("CREATE TABLE sentinel (id INTEGER)")
+            con.execute("INSERT INTO sentinel VALUES (1)")
+
+            source = CSVSource(path, _GOOD_PROJECTION)
+            source.register(con)
+
+            assert con.execute("SELECT COUNT(*) FROM sentinel").fetchone() == (1,)
 
 
 # ---------------------------------------------------------------------------

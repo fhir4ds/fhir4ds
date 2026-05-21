@@ -40,6 +40,134 @@ static const std::unordered_map<std::string, TokenType> KEYWORDS = {
 Lexer::Lexer(const std::string &input) : input_(input), pos_(0) {
 }
 
+static bool isDigitAt(const std::string &value, size_t pos) {
+	return pos < value.size() && std::isdigit(static_cast<unsigned char>(value[pos]));
+}
+
+static bool consumeTimezoneFormat(const std::string &value, size_t &pos) {
+	if (pos >= value.size()) {
+		return true;
+	}
+	if (value[pos] == 'Z') {
+		pos++;
+		return pos == value.size();
+	}
+	if (value[pos] != '+' && value[pos] != '-') {
+		return false;
+	}
+	if (pos + 6 > value.size() || value[pos + 3] != ':') {
+		return false;
+	}
+	if (!isDigitAt(value, pos + 1) || !isDigitAt(value, pos + 2) ||
+	    !isDigitAt(value, pos + 4) || !isDigitAt(value, pos + 5)) {
+		return false;
+	}
+	pos += 6;
+	return pos == value.size();
+}
+
+static bool consumeTimeFormat(const std::string &value, size_t &pos, bool allow_timezone) {
+	if (!isDigitAt(value, pos) || !isDigitAt(value, pos + 1)) {
+		return false;
+	}
+	pos += 2;
+	if (pos >= value.size()) {
+		return true;
+	}
+	if (allow_timezone && (value[pos] == 'Z' || value[pos] == '+' || value[pos] == '-')) {
+		return consumeTimezoneFormat(value, pos);
+	}
+	if (value[pos] != ':') {
+		return false;
+	}
+	pos++;
+	if (!isDigitAt(value, pos) || !isDigitAt(value, pos + 1)) {
+		return false;
+	}
+	pos += 2;
+	if (pos >= value.size()) {
+		return true;
+	}
+	if (allow_timezone && (value[pos] == 'Z' || value[pos] == '+' || value[pos] == '-')) {
+		return consumeTimezoneFormat(value, pos);
+	}
+	if (value[pos] != ':') {
+		return false;
+	}
+	pos++;
+	if (!isDigitAt(value, pos) || !isDigitAt(value, pos + 1)) {
+		return false;
+	}
+	pos += 2;
+	if (pos < value.size() && value[pos] == '.') {
+		pos++;
+		size_t fraction_start = pos;
+		while (isDigitAt(value, pos)) {
+			pos++;
+		}
+		if (pos == fraction_start) {
+			return false;
+		}
+	}
+	if (pos >= value.size()) {
+		return true;
+	}
+	if (allow_timezone && (value[pos] == 'Z' || value[pos] == '+' || value[pos] == '-')) {
+		return consumeTimezoneFormat(value, pos);
+	}
+	return false;
+}
+
+static bool isValidDateLiteralFormat(const std::string &value) {
+	size_t pos = 0;
+	if (!isDigitAt(value, 0) || !isDigitAt(value, 1) || !isDigitAt(value, 2) || !isDigitAt(value, 3)) {
+		return false;
+	}
+	pos = 4;
+	if (pos < value.size() && value[pos] == '-') {
+		pos++;
+		if (!isDigitAt(value, pos) || !isDigitAt(value, pos + 1)) {
+			return false;
+		}
+		pos += 2;
+		if (pos < value.size() && value[pos] == '-') {
+			pos++;
+			if (!isDigitAt(value, pos) || !isDigitAt(value, pos + 1)) {
+				return false;
+			}
+			pos += 2;
+		}
+	}
+	if (pos >= value.size()) {
+		return true;
+	}
+	if (value[pos] != 'T') {
+		return false;
+	}
+	pos++;
+	if (pos >= value.size()) {
+		return true;
+	}
+	return consumeTimeFormat(value, pos, true) && pos == value.size();
+}
+
+static bool isValidTimeLiteralFormat(const std::string &value) {
+	if (value.empty() || value[0] != 'T') {
+		return false;
+	}
+	size_t pos = 1;
+	return consumeTimeFormat(value, pos, false) && pos == value.size();
+}
+
+static bool hasLaterSingleQuote(const std::string &value, size_t pos) {
+	for (size_t i = pos; i < value.size(); ++i) {
+		if (value[i] == '\'') {
+			return true;
+		}
+	}
+	return false;
+}
+
 std::vector<Token> Lexer::tokenize() {
 	std::vector<Token> tokens;
 	while (!isAtEnd()) {
@@ -157,13 +285,9 @@ Token Lexer::nextToken() {
 		std::string name;
 		// Handle backtick-delimited names
 		if (!isAtEnd() && peek() == '`') {
-			advance(); // skip opening backtick
-			while (!isAtEnd() && peek() != '`') {
-				name += advance();
-			}
-			if (!isAtEnd()) {
-				advance(); // skip closing backtick
-			}
+			name = readDelimitedIdentifier().text;
+		} else if (!isAtEnd() && peek() == '\'') {
+			name = readString().text;
 		} else {
 			while (!isAtEnd() && (std::isalnum(static_cast<unsigned char>(peek())) || peek() == '_' || peek() == '-')) {
 				name += advance();
@@ -174,15 +298,7 @@ Token Lexer::nextToken() {
 
 	// Backtick-delimited identifier
 	if (c == '`') {
-		advance(); // skip opening backtick
-		std::string name;
-		while (!isAtEnd() && peek() != '`') {
-			name += advance();
-		}
-		if (!isAtEnd()) {
-			advance(); // skip closing backtick
-		}
-		return {TokenType::Identifier, name, start};
+		return readDelimitedIdentifier();
 	}
 
 	// Symbols
@@ -248,6 +364,87 @@ Token Lexer::nextToken() {
 	}
 }
 
+Token Lexer::readDelimitedIdentifier() {
+	size_t start = pos_;
+	advance(); // skip opening backtick
+	std::string value;
+	while (!isAtEnd()) {
+		char c = peek();
+		if (c == '\\') {
+			advance();
+			if (isAtEnd()) {
+				break;
+			}
+			char escaped = advance();
+			switch (escaped) {
+			case '\'':
+				value += '\'';
+				break;
+			case '"':
+				value += '"';
+				break;
+			case '`':
+				value += '`';
+				break;
+			case '\\':
+				value += '\\';
+				break;
+			case 'n':
+				value += '\n';
+				break;
+			case 'r':
+				value += '\r';
+				break;
+			case 't':
+				value += '\t';
+				break;
+			case 'f':
+				value += '\f';
+				break;
+			case 'u': {
+				std::string hex;
+				for (int i = 0; i < 4 && !isAtEnd() && peek() != '`'; ++i) {
+					hex += advance();
+				}
+				bool valid_hex = hex.size() == 4;
+				for (char h : hex) {
+					if (!std::isxdigit(static_cast<unsigned char>(h))) {
+						valid_hex = false;
+						break;
+					}
+				}
+				if (valid_hex) {
+					unsigned int cp = std::stoul(hex, nullptr, 16);
+					if (cp < 0x80) {
+						value += static_cast<char>(cp);
+					} else if (cp < 0x800) {
+						value += static_cast<char>(0xC0 | (cp >> 6));
+						value += static_cast<char>(0x80 | (cp & 0x3F));
+					} else {
+						value += static_cast<char>(0xE0 | (cp >> 12));
+						value += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+						value += static_cast<char>(0x80 | (cp & 0x3F));
+					}
+				} else {
+					value += 'u';
+					value += hex;
+				}
+				break;
+			}
+			default:
+				value += escaped;
+				break;
+			}
+		} else if (c == '`') {
+			advance(); // skip closing backtick
+			return {TokenType::Identifier, value, start};
+		} else {
+			value += advance();
+		}
+	}
+	throw std::runtime_error("Unterminated delimited identifier at position " + std::to_string(start));
+}
+
 Token Lexer::readString() {
 	size_t start = pos_;
 	advance(); // skip opening quote
@@ -260,6 +457,9 @@ Token Lexer::readString() {
 				char escaped = advance();
 				switch (escaped) {
 				case '\'':
+					if (!hasLaterSingleQuote(input_, pos_)) {
+						return {TokenType::String, value, start};
+					}
 					value += '\'';
 					break;
 				case '"':
@@ -379,12 +579,50 @@ Token Lexer::readDateLiteral() {
 		is_time_only = true;
 	}
 
+	auto looks_like_timezone_offset = [this]() -> bool {
+		return pos_ + 5 < input_.size() &&
+		       (input_[pos_] == '+' || input_[pos_] == '-') &&
+		       std::isdigit(static_cast<unsigned char>(input_[pos_ + 1])) &&
+		       std::isdigit(static_cast<unsigned char>(input_[pos_ + 2])) &&
+		       input_[pos_ + 3] == ':' &&
+		       std::isdigit(static_cast<unsigned char>(input_[pos_ + 4])) &&
+		       std::isdigit(static_cast<unsigned char>(input_[pos_ + 5]));
+	};
+
 	// Read date/datetime/time characters
 	while (!isAtEnd()) {
 		char c = peek();
-		if (std::isdigit(static_cast<unsigned char>(c)) || c == '-' || c == ':' || c == 'T' || c == '+' ||
-		    c == 'Z') {
+		if (std::isdigit(static_cast<unsigned char>(c)) || c == ':' || c == 'T' || c == 'Z') {
 			value += advance();
+		} else if (c == '-') {
+			bool date_prefix = (value.size() == 4 || value.size() == 7);
+			bool date_separator =
+			    date_prefix && pos_ + 2 < input_.size() &&
+			    std::isdigit(static_cast<unsigned char>(input_[pos_ + 1])) &&
+			    std::isdigit(static_cast<unsigned char>(input_[pos_ + 2]));
+			if (date_separator || looks_like_timezone_offset()) {
+				value += advance();
+			} else if (date_prefix) {
+				error_ = true;
+				value += advance();
+			} else {
+				break;
+			}
+		} else if (c == '+') {
+			if (looks_like_timezone_offset()) {
+				value += advance();
+			} else if (value.find('T') != std::string::npos &&
+			           pos_ + 2 < input_.size() &&
+			           std::isdigit(static_cast<unsigned char>(input_[pos_ + 1])) &&
+			           std::isdigit(static_cast<unsigned char>(input_[pos_ + 2])) &&
+			           (pos_ + 3 >= input_.size() ||
+			            (!std::isdigit(static_cast<unsigned char>(input_[pos_ + 3])) &&
+			             !std::isspace(static_cast<unsigned char>(input_[pos_ + 3]))))) {
+				error_ = true;
+				value += advance();
+			} else {
+				break;
+			}
 		} else if (c == '.') {
 			// Only consume '.' if followed by a digit (milliseconds), not if followed by a letter (member access)
 			if (pos_ + 1 < input_.size() && std::isdigit(static_cast<unsigned char>(input_[pos_ + 1]))) {
@@ -410,7 +648,13 @@ Token Lexer::readDateLiteral() {
 				return {TokenType::Time, value, start};
 			}
 		}
+		if (!isValidTimeLiteralFormat(value)) {
+			error_ = true;
+		}
 		return {TokenType::Time, value, start};
+	}
+	if (!isValidDateLiteralFormat(value)) {
+		error_ = true;
 	}
 	if (value.find('T') != std::string::npos) {
 		return {TokenType::DateTime, value, start};

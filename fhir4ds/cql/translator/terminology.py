@@ -92,7 +92,7 @@ class TerminologyTranslator:
         Args:
             codesystem: The CodeSystemDefinition AST node.
         """
-        self.context.add_codesystem(codesystem.name, codesystem.id)
+        self.context.add_codesystem(codesystem.name, codesystem.id, codesystem.version)
 
     def register_code(self, code: CodeDefinition) -> None:
         """
@@ -103,7 +103,8 @@ class TerminologyTranslator:
         """
         # Resolve codesystem name to URL if available
         system_url = self.context.codesystems.get(code.codesystem, code.codesystem)
-        self.context.add_code(code.name, system_url, code.code, code.display)
+        version = self.context.codesystem_versions.get(code.codesystem)
+        self.context.add_code(code.name, system_url, code.code, code.display, version)
 
     def register_concept(self, concept: ConceptDefinition) -> None:
         """

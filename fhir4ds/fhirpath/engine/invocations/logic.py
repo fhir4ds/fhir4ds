@@ -1,88 +1,62 @@
+from ...engine import util
+from ...engine.errors import FHIRPathError
+
+
+def _singleton_boolean(value):
+    data = util.arraify(value)
+    if len(data) == 0:
+        return None
+    if len(data) > 1:
+        raise FHIRPathError("Cannot convert a collection with multiple items to a boolean")
+    item = util.get_data(data[0])
+    if item is True:
+        return True
+    if item is False:
+        return False
+    return True
+
+
 def or_op(ctx, a, b):
-    # Handle list wrapping - extract single values from lists
-    if isinstance(a, list) and len(a) == 1:
-        a = a[0]
-    if isinstance(b, list) and len(b) == 1:
-        b = b[0]
+    a_bool = _singleton_boolean(a)
+    b_bool = _singleton_boolean(b)
 
-    if isinstance(b, list):
-        if a == True:
-            return True
-        if a == False:
-            return []
-        if isinstance(a, list):
-            return []
-    if isinstance(a, list):
-        if b == True:
-            return True
-        return []
-
-    return a or b
+    if a_bool is True or b_bool is True:
+        return True
+    if a_bool is False and b_bool is False:
+        return False
+    return []
 
 
 def and_op(ctx, a, b):
-    # Handle list wrapping - extract single values from lists
-    if isinstance(a, list) and len(a) == 1:
-        a = a[0]
-    if isinstance(b, list) and len(b) == 1:
-        b = b[0]
+    a_bool = _singleton_boolean(a)
+    b_bool = _singleton_boolean(b)
 
-    # FHIRPath and operator:
-    # - If both operands are boolean, return boolean and
-    # - If left is true, return right (even if not boolean)
-    # - If left is false, return false
-    # - If left is empty, return empty
-    # - If right is empty and left is true, return empty
-
-    if isinstance(b, list):
-        # b is empty collection
-        if a == True:
-            return []
-        if a == False:
-            return False
-        if isinstance(a, list):
-            return []
-
-    if isinstance(a, list):
-        # a is empty collection
-        if b == True:
-            return []
+    if a_bool is False or b_bool is False:
         return False
-
-    # Non-boolean handling per FHIRPath spec
-    # and operator: if left is true, return right
-    if a == True:
-        return b
-    if a == False:
-        return False
-
-    return a and b
+    if a_bool is True and b_bool is True:
+        return True
+    return []
 
 
 def xor_op(ctx, a, b):
-    # If a or b are arrays, they must be the empty set.
-    # In that case, the result is always the empty set.
-    if isinstance(a, list) or isinstance(b, list):
-        return []
+    a_bool = _singleton_boolean(a)
+    b_bool = _singleton_boolean(b)
 
-    return (a and not b) or (not a and b)
+    if a_bool is None or b_bool is None:
+        return []
+    return a_bool != b_bool
 
 
 def implies_op(ctx, a, b):
-    if isinstance(b, list):
-        if a == True:
-            return []
-        if a == False:
-            return True
-        if isinstance(a, list):
-            return []
-
-    if isinstance(a, list):
-        if b == True:
-            return True
-        return []
-
-    if a == False:
+    a_bool = _singleton_boolean(a)
+    if a_bool is False:
         return True
 
-    return a and b
+    b_bool = _singleton_boolean(b)
+    if a_bool is None:
+        if b_bool is True:
+            return True
+        return []
+    if b_bool is None:
+        return []
+    return b_bool

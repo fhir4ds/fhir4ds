@@ -22,6 +22,13 @@ def _connection() -> duckdb.DuckDBPyConnection:
     return con
 
 
+def _fallback_connection(monkeypatch) -> duckdb.DuckDBPyConnection:
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    con = duckdb.connect()
+    assert register_fhirpath(con) is False
+    return con
+
+
 def test_aggregate_and_lexical_forms_match_cpp() -> None:
     resource = json.dumps(
         {
@@ -31,6 +38,9 @@ def test_aggregate_and_lexical_forms_match_cpp() -> None:
             "value": 3,
             "class": "vip",
             "div": 7,
+            "back`tick": "bt",
+            "line\nbreak": "lb",
+            "omegaΩ": "unicode",
             "a": [1, 2, 3],
         }
     )
@@ -42,13 +52,20 @@ def test_aggregate_and_lexical_forms_match_cpp() -> None:
         "  id  ",
         "id/* block */",
         "id // line comment",
+        "/* leading block */ id",
+        "// leading line\nid",
         "`class`",
         "`div`",
+        r"`back\`tick`",
+        r"`line\nbreak`",
+        r"`omega\u03A9`",
         "true",
         "false",
         "active = true",
         "'a' = 'a'",
         "'a' = 'A'",
+        "'('",
+        "'['",
     ]
 
     con = _connection()
@@ -79,3 +96,61 @@ def test_aggregate_and_lexical_forms_match_cpp() -> None:
             assert cpp == py
     finally:
         con.close()
+
+
+def test_invalid_case_sensitive_quantity_unit_is_not_prefix_parsed(monkeypatch) -> None:
+    con = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        assert con.execute("SELECT fhirpath_is_valid('1 Month')").fetchone() == (False,)
+        assert fallback.execute("SELECT fhirpath_is_valid('1 Month')").fetchone() == (False,)
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_no_whitespace_calendar_quantity_literals_match_cpp(monkeypatch) -> None:
+    con = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        for expression in ["1month", "1months", "1millisecond", "1year + 2months"]:
+            native = con.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                ["{}", expression, "{}", expression, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                ["{}", expression, "{}", expression, expression],
+            ).fetchone()
+            assert native == py, expression
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_aggregate_scope_restoration_matches_cpp(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Patient", "id": "p"})
+    expressions = [
+        "(1|2).aggregate($this+$total, 0) + $total",
+        "(1|2).aggregate($this+$total, 0) + $index",
+        "(1|2).aggregate($this+$total, 0).combine($total)",
+        "(1|2).aggregate($this+$total, 0).combine($index)",
+        "(1|2).aggregate($this+$total, 0).combine($this)",
+    ]
+
+    con = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        for expression in expressions:
+            native = con.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native == py, expression
+    finally:
+        con.close()
+        fallback.close()

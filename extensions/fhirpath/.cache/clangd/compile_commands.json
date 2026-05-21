@@ -1,42 +1,42 @@
 [
 {
   "directory": "/mnt/d/fhir4ds/extensions/fhirpath/build/wasm_eh/extension/fhirpath",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"092831e1\\\" @CMakeFiles/fhirpath_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_loadable_extension.dir/src/fhirpath_extension.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath_extension.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"b670a5da\\\" @CMakeFiles/fhirpath_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_loadable_extension.dir/src/fhirpath_extension.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath_extension.cpp",
   "file": "/mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath_extension.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/fhirpath/build/wasm_eh/extension/fhirpath",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"092831e1\\\" @CMakeFiles/fhirpath_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_loadable_extension.dir/src/fhirpath/lexer.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/lexer.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"b670a5da\\\" @CMakeFiles/fhirpath_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_loadable_extension.dir/src/fhirpath/lexer.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/lexer.cpp",
   "file": "/mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/lexer.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/fhirpath/build/wasm_eh/extension/fhirpath",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"092831e1\\\" @CMakeFiles/fhirpath_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_loadable_extension.dir/src/fhirpath/parser.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/parser.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"b670a5da\\\" @CMakeFiles/fhirpath_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_loadable_extension.dir/src/fhirpath/parser.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/parser.cpp",
   "file": "/mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/parser.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/fhirpath/build/wasm_eh/extension/fhirpath",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"092831e1\\\" @CMakeFiles/fhirpath_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_loadable_extension.dir/src/fhirpath/evaluator.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/evaluator.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_BUILD_LOADABLE_EXTENSION -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"b670a5da\\\" @CMakeFiles/fhirpath_loadable_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_loadable_extension.dir/src/fhirpath/evaluator.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/evaluator.cpp",
   "file": "/mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/evaluator.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/fhirpath/build/wasm_eh/extension/fhirpath",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"092831e1\\\" @CMakeFiles/fhirpath_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_extension.dir/src/fhirpath_extension.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath_extension.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"b670a5da\\\" @CMakeFiles/fhirpath_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_extension.dir/src/fhirpath_extension.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath_extension.cpp",
   "file": "/mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath_extension.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/fhirpath/build/wasm_eh/extension/fhirpath",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"092831e1\\\" @CMakeFiles/fhirpath_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_extension.dir/src/fhirpath/lexer.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/lexer.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"b670a5da\\\" @CMakeFiles/fhirpath_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_extension.dir/src/fhirpath/lexer.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/lexer.cpp",
   "file": "/mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/lexer.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/fhirpath/build/wasm_eh/extension/fhirpath",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"092831e1\\\" @CMakeFiles/fhirpath_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_extension.dir/src/fhirpath/parser.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/parser.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"b670a5da\\\" @CMakeFiles/fhirpath_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_extension.dir/src/fhirpath/parser.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/parser.cpp",
   "file": "/mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/parser.cpp"
 },
 {
   "directory": "/mnt/d/fhir4ds/extensions/fhirpath/build/wasm_eh/extension/fhirpath",
-  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"092831e1\\\" @CMakeFiles/fhirpath_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_extension.dir/src/fhirpath/evaluator.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/evaluator.cpp",
+  "command": "/home/jmontavon/emsdk/upstream/emscripten/em++ -DDUCKDB_BUILD_LIBRARY -DDUCKDB_CUSTOM_PLATFORM=wasm_eh -DEXT_VERSION_FHIRPATH=\\\"b670a5da\\\" @CMakeFiles/fhirpath_extension.dir/includes_CXX.rsp  -fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1 -O3 -DNDEBUG -O3 -DNDEBUG   -fPIC -std=c++11 -o CMakeFiles/fhirpath_extension.dir/src/fhirpath/evaluator.cpp.o -c /mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/evaluator.cpp",
   "file": "/mnt/d/fhir4ds/extensions/fhirpath/src/fhirpath/evaluator.cpp"
 },
 {

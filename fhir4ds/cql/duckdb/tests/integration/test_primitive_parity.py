@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import duckdb
+import pytest
 
 from fhir4ds.cql.duckdb import register
 from fhir4ds.cql.duckdb.extension import _register_python_supplements
-from fhir4ds.cql.translator import translate_cql
+from fhir4ds.cql.duckdb.udf.conversion import ConvertsToInteger, ConvertsToLong, ToLong
+from fhir4ds.cql.parser import parse_cql, parse_expression
+from fhir4ds.cql.translator import CQLToSQLTranslator, translate_cql
 
 
 def _python_only_connection() -> duckdb.DuckDBPyConnection:
@@ -46,6 +51,64 @@ def test_cql_primitive_literal_translation() -> None:
     assert "SQLNull" in str(translated["NullValue"])
 
 
+def test_cql_primitive_type_and_boundary_translation() -> None:
+    header = "library Test version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n"
+    translated = translate_cql(
+        header
+        + "\n".join(
+            [
+                "define IntegerMin: -2147483648",
+                "define DecimalMax: 9999999999999999999999999999.99999999",
+                "define LongMax: 9223372036854775807L",
+                "define LongMin: -9223372036854775808L",
+                "define AnyCheck: 5 is Any",
+                "define IntegerIsInteger: 5 is Integer",
+                "define LongIsLong: 5L is Long",
+                "define IntegerIsLong: 5 is Long",
+                "define LongIsInteger: 5L is Integer",
+                "define IntegerAsInteger: 5 as Integer",
+                "define IntegerAsString: 5 as String",
+                "define StringAsInteger: '5' as Integer",
+                "define BooleanAsInteger: true as Integer",
+                "define LongAsInteger: 5L as Integer",
+                "define IntegerAsAny: 5 as Any",
+            ]
+        )
+    )
+
+    assert translated["IntegerMin"].to_sql() == "-2147483648"
+    assert translated["DecimalMax"].to_sql() == "9999999999999999999999999999.99999999"
+    assert translated["LongMax"].to_sql() == "9223372036854775807"
+    assert translated["LongMin"].to_sql() == "-9223372036854775808"
+    assert translated["AnyCheck"].to_sql() == "5 IS NOT NULL"
+    assert translated["IntegerIsInteger"].to_sql() == "TRUE"
+    assert translated["LongIsLong"].to_sql() == "TRUE"
+    assert translated["IntegerIsLong"].to_sql() == "FALSE"
+    assert translated["LongIsInteger"].to_sql() == "FALSE"
+    assert translated["IntegerAsInteger"].to_sql() == "5"
+    assert translated["IntegerAsString"].to_sql() == "NULL"
+    assert translated["StringAsInteger"].to_sql() == "NULL"
+    assert translated["BooleanAsInteger"].to_sql() == "NULL"
+    assert translated["LongAsInteger"].to_sql() == "NULL"
+    assert translated["IntegerAsAny"].to_sql() == "5"
+
+    for invalid in [
+        "2147483648",
+        "-2147483649",
+        "9223372036854775808L",
+        "-9223372036854775809L",
+    ]:
+        try:
+            translate_cql(header + f"define Invalid: {invalid}")
+        except ValueError:
+            continue
+        raise AssertionError(f"Expected out-of-range primitive literal to fail: {invalid}")
+
+    for invalid in ["1LL", "1.0L", "1day"]:
+        with pytest.raises(Exception):
+            parse_expression(invalid)
+
+
 def test_cql_primitive_duckdb_surface_matches_cpp_registration() -> None:
     expressions = [
         'SELECT "And"(true, false)',
@@ -56,8 +119,15 @@ def test_cql_primitive_duckdb_surface_matches_cpp_registration() -> None:
         'SELECT "IsFalse"(false)',
         "SELECT ToString(123)",
         "SELECT ToInteger('42')",
+        "SELECT ToInteger(true)",
+        "SELECT ToInteger('1.0')",
+        "SELECT ToInteger('1.5')",
         "SELECT ToDecimal('1.25')",
         "SELECT ToBoolean('true')",
+        "SELECT ConvertsToInteger('1.0')",
+        "SELECT ConvertsToInteger('1.5')",
+        "SELECT ConvertsToLong(true)",
+        "SELECT ToLong(true)",
         "SELECT logicalImplies(true, false)",
         "SELECT logicalImplies(NULL, false)",
         "SELECT fhirpath_text('{\"resourceType\":\"Patient\",\"active\":true}'::JSON, 'active')",
@@ -69,6 +139,283 @@ def test_cql_primitive_duckdb_surface_matches_cpp_registration() -> None:
     try:
         for expression in expressions:
             assert cpp.execute(expression).fetchone() == py.execute(expression).fetchone()
+        assert py.execute("SELECT ToInteger('1.0')").fetchone() == (None,)
+        assert py.execute("SELECT ToInteger('1.5')").fetchone() == (None,)
+        assert py.execute("SELECT ToInteger(true)").fetchone() == (1,)
+        assert py.execute("SELECT ConvertsToInteger('1.0')").fetchone() == (False,)
+        assert py.execute("SELECT ConvertsToLong(true), ToLong(true)").fetchone() == (True, 1)
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_primitive_as_type_assertions_execute_as_null_on_mismatch() -> None:
+    header = "library Test version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n"
+    translated = translate_cql(
+        header
+        + "\n".join(
+            [
+                "define IntegerAsInteger: 5 as Integer",
+                "define IntegerAsString: 5 as String",
+                "define StringAsInteger: '5' as Integer",
+                "define BooleanAsInteger: true as Integer",
+                "define LongAsLong: 5L as Long",
+                "define LongAsInteger: 5L as Integer",
+                "define NullAsInteger: null as Integer",
+                "define IntegerAsAny: 5 as Any",
+                "define DynamicStringAsInteger: ToString(5) as Integer",
+                "define DynamicIntegerAsString: ToInteger('5') as String",
+                "define DynamicLongAsLong: ToLong('5') as Long",
+                "define DynamicLongAsInteger: ToLong('5') as Integer",
+            ]
+        )
+    )
+
+    expected = {
+        "IntegerAsInteger": 5,
+        "IntegerAsString": None,
+        "StringAsInteger": None,
+        "BooleanAsInteger": None,
+        "LongAsLong": 5,
+        "LongAsInteger": None,
+        "NullAsInteger": None,
+        "IntegerAsAny": 5,
+        "DynamicStringAsInteger": None,
+        "DynamicIntegerAsString": None,
+        "DynamicLongAsLong": 5,
+        "DynamicLongAsInteger": None,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (value,)
+            assert cpp.execute(sql).fetchone() == (value,)
+
+        fhir_value_sql = translate_cql(
+            header + "define FhirIntegerAsInteger: AUASIAssessment.value as Integer"
+        )["FhirIntegerAsInteger"].to_sql()
+        query = f"SELECT {fhir_value_sql} FROM (SELECT ?::JSON AS AUASIAssessment)"
+        resource = '{"resourceType":"Observation","valueInteger":5}'
+        assert py.execute(query, [resource]).fetchone() == (5,)
+        assert cpp.execute(query, [resource]).fetchone() == (5,)
+
+        fhir_translated = translate_cql(
+            header
+            + "\n".join(
+                [
+                    "define FhirAsInteger: O.value as Integer",
+                    "define FhirAsString: O.value as String",
+                    "define FhirAsBoolean: O.value as Boolean",
+                    "define FhirAsDecimal: O.value as Decimal",
+                    "define FhirIsInteger: O.value is Integer",
+                    "define FhirIsString: O.value is String",
+                    "define FhirIsBoolean: O.value is Boolean",
+                    "define FhirIsDecimal: O.value is Decimal",
+                ]
+            )
+        )
+        resources = {
+            "valueInteger": (
+                '{"resourceType":"Observation","valueInteger":5}',
+                {
+                    "FhirAsInteger": 5,
+                    "FhirAsString": None,
+                    "FhirAsBoolean": None,
+                    "FhirAsDecimal": None,
+                    "FhirIsInteger": True,
+                    "FhirIsString": False,
+                    "FhirIsBoolean": False,
+                    "FhirIsDecimal": False,
+                },
+            ),
+            "valueStringNumber": (
+                '{"resourceType":"Observation","valueString":"5"}',
+                {
+                    "FhirAsInteger": None,
+                    "FhirAsString": "5",
+                    "FhirAsBoolean": None,
+                    "FhirAsDecimal": None,
+                    "FhirIsInteger": False,
+                    "FhirIsString": True,
+                    "FhirIsBoolean": False,
+                    "FhirIsDecimal": False,
+                },
+            ),
+            "valueStringBoolean": (
+                '{"resourceType":"Observation","valueString":"true"}',
+                {
+                    "FhirAsInteger": None,
+                    "FhirAsString": "true",
+                    "FhirAsBoolean": None,
+                    "FhirAsDecimal": None,
+                    "FhirIsInteger": False,
+                    "FhirIsString": True,
+                    "FhirIsBoolean": False,
+                    "FhirIsDecimal": False,
+                },
+            ),
+            "valueBoolean": (
+                '{"resourceType":"Observation","valueBoolean":true}',
+                {
+                    "FhirAsInteger": None,
+                    "FhirAsString": None,
+                    "FhirAsBoolean": True,
+                    "FhirAsDecimal": None,
+                    "FhirIsInteger": False,
+                    "FhirIsString": False,
+                    "FhirIsBoolean": True,
+                    "FhirIsDecimal": False,
+                },
+            ),
+            "valueDecimal": (
+                '{"resourceType":"Observation","valueDecimal":1.25}',
+                {
+                    "FhirAsInteger": None,
+                    "FhirAsString": None,
+                    "FhirAsBoolean": None,
+                    "FhirAsDecimal": 1.25,
+                    "FhirIsInteger": False,
+                    "FhirIsString": False,
+                    "FhirIsBoolean": False,
+                    "FhirIsDecimal": True,
+                },
+            ),
+        }
+        for _label, (resource, expected_values) in resources.items():
+            for name, expected_value in expected_values.items():
+                sql = f"SELECT {fhir_translated[name].to_sql()} FROM (SELECT ?::JSON AS O)"
+                assert py.execute(sql, [resource]).fetchone() == (expected_value,)
+                assert cpp.execute(sql, [resource]).fetchone() == (expected_value,)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_primitive_conversion_translation_uses_spec_boundaries() -> None:
+    header = "library Test version '1.0.0'\nusing FHIR version '4.0.1'\ncontext Patient\n"
+    translated = translate_cql(
+        header
+        + "\n".join(
+            [
+                "define ToIntegerDecimalString: ToInteger('1.5')",
+                "define ToIntegerWholeDecimalString: ToInteger('1.0')",
+                "define ToIntegerDecimal: ToInteger(1.5)",
+                "define ConvertDecimalStringToInteger: convert '1.5' to Integer",
+                "define ConvertDecimalToInteger: convert 1.5 to Integer",
+                "define ToBooleanInvalidString: ToBoolean('2')",
+                "define ToDecimalBoolean: ToDecimal(true)",
+                "define ToDecimalPreciseString: ToDecimal('25.12345')",
+            ]
+        )
+    )
+    expected = {
+        "ToIntegerDecimalString": None,
+        "ToIntegerWholeDecimalString": None,
+        "ToIntegerDecimal": None,
+        "ConvertDecimalStringToInteger": None,
+        "ConvertDecimalToInteger": None,
+        "ToBooleanInvalidString": None,
+        "ToDecimalBoolean": Decimal("1.00000000"),
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (value,)
+            assert cpp.execute(sql).fetchone() == (value,)
+
+        precise_sql = f"SELECT CAST({translated['ToDecimalPreciseString'].to_sql()} AS VARCHAR)"
+        assert py.execute(precise_sql).fetchone() == ("25.12345000",)
+        assert cpp.execute(precise_sql).fetchone() == ("25.12345000",)
+
+        direct_expressions = [
+            "SELECT ToDecimal('25.12345')::VARCHAR, typeof(ToDecimal('25.12345'))",
+            "SELECT ToDecimal('true')",
+            "SELECT ToDecimal(true), ConvertsToDecimal(true)",
+            "SELECT ToBoolean('2')",
+            "SELECT ToBoolean(2), ConvertsToBoolean(2)",
+        ]
+        for expression in direct_expressions:
+            assert py.execute(expression).fetchone() == cpp.execute(expression).fetchone()
+        assert py.execute("SELECT ToDecimal(true)::VARCHAR, ToBoolean('2')").fetchone() == ("1.00000000", None)
+        assert py.execute(
+            "SELECT ToDecimal('1e2'), ToDecimal('.5'), ToDecimal('1.'), "
+            "ToDecimal('1.123456789'), ToDecimal('1000000000000000000000000000000')"
+        ).fetchone() == (
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_primitive_type_assertions_survive_materialized_ctes() -> None:
+    cql = """library Test version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define V: First([Observation] O return O.valueQuantity.value)
+define VIsString: V is String
+define VAsString: V as String
+define VIsDecimal: V is Decimal
+define VAsDecimal: V as Decimal
+"""
+    library = parse_cql(cql)
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        library,
+        output_columns={
+            "v": "V",
+            "is_string": "VIsString",
+            "as_string": "VAsString",
+            "is_decimal": "VIsDecimal",
+            "as_decimal": "VAsDecimal",
+        },
+    )
+    setup_sql = [
+        """
+        CREATE TABLE resources (
+            patient_ref VARCHAR,
+            resourceType VARCHAR,
+            id VARCHAR,
+            resource JSON
+        )
+        """,
+        """
+        INSERT INTO resources VALUES
+        ('p1', 'Patient', 'p1', '{"resourceType":"Patient","id":"p1"}'::JSON),
+        ('p1', 'Observation', 'o1', '{"resourceType":"Observation","id":"o1","subject":{"reference":"Patient/p1"},"valueQuantity":{"value":1.5,"unit":"mg"}}'::JSON)
+        """,
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            for statement in setup_sql:
+                con.execute(statement)
+        expected = ("p1", "1.500000", False, None, True, 1.5)
+        assert py.execute(sql).fetchone() == expected
+        assert cpp.execute(sql).fetchone() == expected
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_primitive_direct_conversion_apis() -> None:
+    assert ConvertsToInteger("2147483647") is True
+    assert ConvertsToInteger("2147483648") is False
+    assert ConvertsToInteger("1.0") is False
+    assert ConvertsToInteger("1.5") is False
+    assert ConvertsToInteger(True) is True
+
+    assert ConvertsToLong("9223372036854775807") is True
+    assert ConvertsToLong("9223372036854775808") is False
+    assert ConvertsToLong("1.0") is False
+    assert ConvertsToLong(True) is True
+    assert ToLong(True) == 1

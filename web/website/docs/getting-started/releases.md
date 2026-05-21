@@ -7,6 +7,38 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.6
+*May 2026*
+
+Version 0.0.6 focuses on release hardening, browser runtime parity, and clinical correctness for HEDIS/DQM workflows. The release preserves 100% conformance across ViewDefinition, FHIRPath, CQL, and DQM while tightening the packaged DuckDB extension boundary.
+
+### Highlights
+
+- **C++ DuckDB WASM Parity**: Browser-required CQL interval, boundary, date/quantity, interval set, logical, list, valueset, and FHIRPath repeat functions are available through C++ extensions.
+- **No-Python Runtime Gate**: Added direct-extension tests that load packaged C++ extensions without registering Python fallback UDFs.
+- **100% Conformance Gate**: ViewDefinition (134/134), FHIRPath R4 (935/935), CQL (1,706/1,706), and DQM QI-Core 2025 (47/47) all pass.
+- **HEDIS Clinical Logic**: Calendar age helpers, episode aggregate folds, repeated-extension predicates, interval boundaries, stratifiers, and reference resolution were hardened for native DuckDB, Python fallback, and browser-style execution.
+- **DQM Reporting**: Measure group stratifiers are parsed, evaluated, summarized, and exported in MeasureReport output.
+- **Packaging Safety**: The wheel pins DuckDB to `1.5.2` so installed Python dependencies match the bundled native extension ABI.
+- **WASM Assets**: Updated translator wheel to `fhir4ds_v2-0.0.6-py3-none-any.whl` and rebuilt DuckDB extension side modules.
+
+### Bug Fixes
+
+- **CQL**: Patient-context `AgeIn*At(asOf)` now routes through `CalculateAgeIn*At(birthDate, asOf)` helpers for leap-day and calendar-period parity.
+- **CQL**: Query aggregate list folds preserve typed empty-list semantics so HEDIS episode deduplication counts episode collections correctly.
+- **CQL**: `resolve()` accepts `ResourceType/id`, bare ids, full URLs ending in `ResourceType/id`, and JSON Reference objects.
+- **DQM**: Proportion summaries now assign patient/case population labels before aggregation so exclusions and exceptions are counted in the correct order.
+- **Sources**: Strict NDJSON loading is all-or-nothing for both malformed JSON and valid-JSON invalid-FHIR records.
+- **CSV Source**: Constructor inputs are validated at the public API boundary before SQL projection registration.
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.6
+```
+
+---
+
 ## Version 0.0.5
 *May 2026*
 
@@ -31,7 +63,7 @@ Version 0.0.5 continues the **100% Compliance Milestone** — every conformance 
 
 - **`ReactiveEvaluator.__init__`**: Parameters changed from `(con, measure, adapter)` to `(con, measure_bundle, cql_library_path, adapter)`.
 - **Version Bump**: All `fhir4ds` packages bumped to version `0.0.5`.
-- **WASM Assets**: Updated translator wheel to `fhir4ds_v2-0.0.5-py3-none-any.whl`.
+- **WASM Assets**: Updated translator wheel for the 0.0.5 release series.
 
 ### Upgrade
 

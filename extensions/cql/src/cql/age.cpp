@@ -2,9 +2,58 @@
 #include "yyjson.hpp"
 
 using namespace duckdb_yyjson; // NOLINT
+#include <algorithm>
 #include <cstdlib>
 
 namespace cql {
+
+namespace {
+
+bool IsLeapYear(int32_t year) {
+	return (year % 4 == 0) && (year % 100 != 0 || year % 400 == 0);
+}
+
+int32_t DaysInMonth(int32_t year, int32_t month) {
+	switch (month) {
+	case 2:
+		return IsLeapYear(year) ? 29 : 28;
+	case 4:
+	case 6:
+	case 9:
+	case 11:
+		return 30;
+	default:
+		return 31;
+	}
+}
+
+DateTimeValue AddCalendarMonths(const DateTimeValue &value, int64_t months) {
+	int64_t month_index = static_cast<int64_t>(value.year) * 12 + (value.month - 1) + months;
+	int64_t year = month_index / 12;
+	int64_t month_zero = month_index % 12;
+	if (month_zero < 0) {
+		month_zero += 12;
+		year--;
+	}
+
+	DateTimeValue result = value;
+	result.year = static_cast<int32_t>(year);
+	result.month = static_cast<int32_t>(month_zero + 1);
+	result.day = std::min(value.day, DaysInMonth(result.year, result.month));
+	return result;
+}
+
+bool DateAfter(const DateTimeValue &left, const DateTimeValue &right) {
+	if (left.year != right.year) {
+		return left.year > right.year;
+	}
+	if (left.month != right.month) {
+		return left.month > right.month;
+	}
+	return left.day > right.day;
+}
+
+} // namespace
 
 Optional<DateTimeValue> AgeCalculator::extract_birthdate(const char *json, size_t len) {
 	yyjson_doc *doc = yyjson_read(json, len, 0);
@@ -25,7 +74,7 @@ Optional<DateTimeValue> AgeCalculator::extract_birthdate(const char *json, size_
 
 Optional<int64_t> AgeCalculator::age_in_years(const DateTimeValue &birth, const DateTimeValue &as_of) {
 	int64_t years = as_of.year - birth.year;
-	if (as_of.month < birth.month || (as_of.month == birth.month && as_of.day < birth.day)) {
+	if (DateAfter(AddCalendarMonths(birth, years * 12), as_of)) {
 		years--;
 	}
 	if (years < 0) {
@@ -36,7 +85,7 @@ Optional<int64_t> AgeCalculator::age_in_years(const DateTimeValue &birth, const 
 
 Optional<int64_t> AgeCalculator::age_in_months(const DateTimeValue &birth, const DateTimeValue &as_of) {
 	int64_t months = (as_of.year - birth.year) * 12 + (as_of.month - birth.month);
-	if (as_of.day < birth.day) {
+	if (DateAfter(AddCalendarMonths(birth, months), as_of)) {
 		months--;
 	}
 	if (months < 0) {

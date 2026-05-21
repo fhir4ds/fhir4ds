@@ -10,6 +10,8 @@ from fhir4ds.cql.parser import parse_expression
 from fhir4ds.cql.parser.ast_nodes import FunctionRef, IndexerExpression
 from fhir4ds.cql.translator import translate_cql
 
+from .wasm_runtime_helpers import no_python_connection
+
 
 def _python_only_connection() -> duckdb.DuckDBPyConnection:
     con = duckdb.connect(config={"allow_unsigned_extensions": True})
@@ -69,8 +71,8 @@ define UpperCheck: Upper('abc')
 
     assert "CombineSep" in str(translated["CombineCheck"])
     assert "Concatenate" in str(translated["ConcatCheck"])
-    assert "LIKE" in str(translated["EndsCheck"])
-    assert "LIST_EXTRACT" in str(translated["IndexCheck"])
+    assert "EndsWith" in str(translated["EndsCheck"])
+    assert "Indexer" in str(translated["IndexCheck"])
     assert "LastPositionOf" in str(translated["LastPosCheck"])
     assert "LENGTH" in str(translated["LengthCheck"])
     assert "LOWER" in str(translated["LowerCheck"])
@@ -79,7 +81,7 @@ define UpperCheck: Upper('abc')
     assert "ReplaceMatches" in str(translated["ReplaceMatchesCheck"])
     assert "STR_SPLIT" in str(translated["SplitCheck"])
     assert "SplitOnMatches" in str(translated["SplitOnMatchesCheck"])
-    assert "LIKE" in str(translated["StartsCheck"])
+    assert "StartsWith" in str(translated["StartsCheck"])
     assert "system.substring" in str(translated["SubstringCheck"])
     assert "UPPER" in str(translated["UpperCheck"])
 
@@ -87,7 +89,10 @@ define UpperCheck: Upper('abc')
 def test_cql_string_duckdb_surface_matches_cpp_registration() -> None:
     expressions = [
         "SELECT Combine(['a','b'])",
+        "SELECT Combine([])",
         "SELECT CombineSep(['a','b'], ',')",
+        "SELECT CombineSep([], ',')",
+        "SELECT CombineSep(['a','b'], NULL)",
         "SELECT Concatenate('a','b')",
         "SELECT EndsWith('abc','bc')",
         "SELECT Indexer('abc', 1)",
@@ -95,17 +100,34 @@ def test_cql_string_duckdb_surface_matches_cpp_registration() -> None:
         "SELECT Length('abc')",
         "SELECT Lower('ABC')",
         "SELECT Matches('abc','a.*')",
+        "SELECT Matches('a\nb','a.b')",
+        "SELECT Matches('aa','(.)\\1')",
+        "SELECT Matches('ab','(?=b)')",
         "SELECT PositionOf('b','abc')",
         "SELECT ReplaceMatches('abc','b','X')",
+        "SELECT ReplaceMatches('a\nb','a.b','x')",
+        "SELECT ReplaceMatches('book','(.)\\1','X')",
         "SELECT Split('a,b', ',')",
         "SELECT SplitOnMatches('a1b2','\\d')",
+        "SELECT SplitOnMatches('a\nb','.')",
+        "SELECT SplitOnMatches('ab','(?=b)')",
         "SELECT StartsWith('abc','a')",
+        "SELECT StartsWith('abc','a%')",
         "SELECT Substring('abc', 1)",
+        "SELECT Substring('abc', 3)",
         "SELECT SubstringLen('abc', 1, 2)",
+        "SELECT SubstringLen('abc', 1, -1)",
         "SELECT Upper('abc')",
         "SELECT stringLength('abc')",
+        "SELECT stringStartsWith('abc', NULL)",
+        "SELECT stringEndsWith('abc', NULL)",
+        "SELECT stringSubstring('abc', 1, -1)",
         "SELECT stringSplit('a,b', ',')",
         "SELECT stringMatches('aaaaaaaaaaaaaaaaaaaaaaaa', '(a+)+b')",
+        "SELECT stringMatches('a\nb', 'a.b')",
+        "SELECT stringMatches('abc', NULL)",
+        "SELECT stringReplace('abc', NULL, 'x')",
+        "SELECT stringReplace('abc', 'a', NULL)",
     ]
 
     py = _python_only_connection()
@@ -116,3 +138,116 @@ def test_cql_string_duckdb_surface_matches_cpp_registration() -> None:
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_string_skeptic_regressions() -> None:
+    cql = """library StringSkeptic version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define CombineEmpty: Combine({})
+define CombineSepEmpty: Combine({}, '-')
+define CombineSepNullSeparator: Combine({'a', 'b'}, null)
+define SubstringAtEnd: Substring('ab', 2)
+define SubstringPastEnd: Substring('ab', 3)
+define SubstringNegativeLength: Substring('ab', 0, -1)
+define StartsWithWildcardLiteral: StartsWith('abc', 'a%')
+define EndsWithWildcardLiteral: EndsWith('abc', '_c')
+define BracketIndexerAtEnd: 'ab'[2]
+define CombineIndexerAtEnd: Combine({'a', 'b'})[2]
+define ReplaceMatchesIndexerAtEnd: ReplaceMatches('abc', 'b', 'x')[3]
+define LastSplitIndexerAtEnd: Last(Split('ab/cd', '/'))[2]
+define AmpersandLeftNull: null & 'b'
+define AmpersandRightNull: 'a' & null
+define AmpersandBothNull: null & null
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "CombineEmpty": None,
+        "CombineSepEmpty": None,
+        "CombineSepNullSeparator": "ab",
+        "SubstringAtEnd": None,
+        "SubstringPastEnd": None,
+        "SubstringNegativeLength": None,
+        "StartsWithWildcardLiteral": False,
+        "EndsWithWildcardLiteral": False,
+        "BracketIndexerAtEnd": None,
+        "CombineIndexerAtEnd": None,
+        "ReplaceMatchesIndexerAtEnd": None,
+        "LastSplitIndexerAtEnd": None,
+        "AmpersandLeftNull": "b",
+        "AmpersandRightNull": "a",
+        "AmpersandBothNull": "",
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            assert py.execute(sql).fetchone()[0] == expected_value
+            assert cpp.execute(sql).fetchone()[0] == expected_value
+    finally:
+        py.close()
+        cpp.close()
+
+    direct_queries = {
+        "SELECT Combine([])": None,
+        "SELECT CombineSep([], '-')": None,
+        "SELECT CombineSep(['a','b'], NULL)": "ab",
+        "SELECT Substring('ab', 2)": None,
+        "SELECT Substring('ab', 3)": None,
+        "SELECT SubstringLen('ab', 0, -1)": None,
+        "SELECT StartsWith('abc', 'a%')": False,
+        "SELECT EndsWith('abc', '_c')": False,
+    }
+    with no_python_connection() as con:
+        for sql, expected_value in direct_queries.items():
+            assert con.execute(sql).fetchone()[0] == expected_value
+
+
+def test_cql_string_historian_regex_single_line_regressions() -> None:
+    cql = """library StringHistorian version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define MatchDotCrossesNewline: Matches('a\\nb', 'a.b')
+define ReplaceDotCrossesNewline: ReplaceMatches('a\\nb', 'a.b', 'x')
+define SplitDotCrossesNewline: SplitOnMatches('a\\nb', '.')
+define MatchBackreference: Matches('aa', '(.)\\1')
+define MatchLookahead: Matches('ab', '(?=b)')
+define ReplaceBackreferencePattern: ReplaceMatches('book', '(.)\\1', 'X')
+define SplitLookahead: SplitOnMatches('ab', '(?=b)')
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "MatchDotCrossesNewline": True,
+        "ReplaceDotCrossesNewline": "x",
+        "SplitDotCrossesNewline": ["", "", "", ""],
+        "MatchBackreference": True,
+        "MatchLookahead": True,
+        "ReplaceBackreferencePattern": "bXk",
+        "SplitLookahead": ["a", "b"],
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            assert py.execute(sql).fetchone()[0] == expected_value
+            assert cpp.execute(sql).fetchone()[0] == expected_value
+    finally:
+        py.close()
+        cpp.close()
+
+    direct_queries = {
+        "SELECT Matches('a\nb', 'a.b')": True,
+        "SELECT ReplaceMatches('a\nb', 'a.b', 'x')": "x",
+        "SELECT SplitOnMatches('a\nb', '.')": ["", "", "", ""],
+        "SELECT Matches('aa', '(.)\\1')": True,
+        "SELECT Matches('ab', '(?=b)')": True,
+        "SELECT ReplaceMatches('book', '(.)\\1', 'X')": "bXk",
+        "SELECT SplitOnMatches('ab', '(?=b)')": ["a", "b"],
+    }
+    with no_python_connection() as con:
+        for sql, expected_value in direct_queries.items():
+            assert con.execute(sql).fetchone()[0] == expected_value

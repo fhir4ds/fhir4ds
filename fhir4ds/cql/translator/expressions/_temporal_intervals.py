@@ -463,6 +463,8 @@ class IntervalMixin:
             # intervalFromBounds() always produces an interval
             if expr.name == "intervalFromBounds":
                 return True
+            if expr.name in ("intervalExcept", "intervalIntersect", "intervalUnion"):
+                return True
             # DATE_TRUNC(precision, interval_expr) wraps an interval when
             # precision-of is applied — check the inner argument.
             if expr.name and expr.name.upper() == "DATE_TRUNC" and len(expr.args) >= 2:
@@ -497,8 +499,48 @@ class IntervalMixin:
                         return True
         return False
 
-    @staticmethod
-    def _is_single_list_expr(sql_expr: SQLExpression, cql_expr) -> bool:
+    def _is_list_typed_ast(self, cql_expr) -> bool:
+        """Return True when the CQL AST node is statically typed as a list."""
+        from ...parser.ast_nodes import BinaryExpression, Identifier, Interval, ListExpression, Query, Retrieve
+        from ...translator.context import RowShape
+
+        if cql_expr is None or isinstance(cql_expr, Interval):
+            return False
+        if isinstance(cql_expr, (Query, Retrieve)):
+            return False
+        if isinstance(cql_expr, ListExpression):
+            return True
+        if isinstance(cql_expr, BinaryExpression) and getattr(cql_expr, "operator", "") == "as":
+            type_spec = getattr(cql_expr, "right", None)
+            if type_spec is not None and "list" in str(type_spec).lower():
+                return True
+
+        if isinstance(cql_expr, Identifier):
+            meta = getattr(self.context, "definition_meta", {}).get(cql_expr.name)
+            if (
+                meta
+                and meta.shape == RowShape.PATIENT_SCALAR
+                and str(meta.cql_type).startswith("List<")
+            ):
+                return True
+            definition_asts = getattr(self.context, "_definition_cql_asts", {})
+            ast_def = definition_asts.get(cql_expr.name)
+            if ast_def is not None and ast_def is not cql_expr:
+                if self._is_list_typed_ast(ast_def):
+                    return True
+
+        infer_cql_type = getattr(self, "_infer_cql_type", None)
+        if infer_cql_type is not None:
+            try:
+                infer_row_shape = getattr(self, "_infer_row_shape", None)
+                if infer_row_shape is not None and infer_row_shape(cql_expr) != RowShape.PATIENT_SCALAR:
+                    return False
+                return str(infer_cql_type(cql_expr)).startswith("List<")
+            except Exception:
+                return False
+        return False
+
+    def _is_single_list_expr(self, sql_expr: SQLExpression, cql_expr) -> bool:
         """Return True when a single operand represents a CQL list."""
         from ...parser.ast_nodes import ListExpression
         from ...translator.types import SQLArray
@@ -506,15 +548,17 @@ class IntervalMixin:
             return True
         if isinstance(cql_expr, ListExpression):
             return True
+        if self._is_list_typed_ast(cql_expr):
+            return True
         if isinstance(sql_expr, SQLFunctionCall) and sql_expr.name in (
             'list_filter', 'list_concat', 'list_distinct', 'list_sort',
-            'list_transform', 'Distinct', 'Tail',
+            'list_transform', 'Distinct', '"Distinct"', 'Tail',
+            'CQLListDistinctEq', 'CQLListExceptEq', 'CQLListIntersectEq',
         ):
             return True
         return False
 
-    @staticmethod
-    def _is_list_operands(left: SQLExpression, right: SQLExpression, expr) -> bool:
+    def _is_list_operands(self, left: SQLExpression, right: SQLExpression, expr) -> bool:
         """Return True when at least one operand represents a CQL list (not interval).
 
         Used to route ``includes`` / ``included in`` / ``properly includes`` /
@@ -532,12 +576,20 @@ class IntervalMixin:
             return True
         if hasattr(expr, 'right') and isinstance(expr.right, ListExpression):
             return True
+        if hasattr(expr, 'left') and self._is_list_typed_ast(expr.left):
+            return True
+        if hasattr(expr, 'right') and self._is_list_typed_ast(expr.right):
+            return True
         # If neither side is an interval, but both look like arrays, treat as list
         if hasattr(expr, 'left') and hasattr(expr, 'right'):
             if not isinstance(expr.left, Interval) and not isinstance(expr.right, Interval):
                 if isinstance(left, SQLFunctionCall) and left.name in ('list_filter', 'list_concat', 'list_distinct'):
                     return True
+                if isinstance(left, SQLFunctionCall) and left.name in ('CQLListDistinctEq', 'CQLListExceptEq', 'CQLListIntersectEq', '"Distinct"'):
+                    return True
                 if isinstance(right, SQLFunctionCall) and right.name in ('list_filter', 'list_concat', 'list_distinct'):
+                    return True
+                if isinstance(right, SQLFunctionCall) and right.name in ('CQLListDistinctEq', 'CQLListExceptEq', 'CQLListIntersectEq', '"Distinct"'):
                     return True
         return False
 
@@ -625,7 +677,10 @@ class IntervalMixin:
             # Fallback: use intervalStart/intervalEnd functions
             start = SQLFunctionCall(name="intervalStart", args=[sql_expr])
             end = SQLFunctionCall(name="intervalEnd", args=[sql_expr])
-            return (start, end, True, False)
+            # intervalStart/intervalEnd return semantic effective bounds.
+            # Even when the authored interval was half-open, callers comparing
+            # against these helper results should use closed comparisons.
+            return (start, end, True, True)
 
         # Case 6: Function call that might be intervalFromBounds wrapped in COALESCE
         if isinstance(sql_expr, SQLFunctionCall) and sql_expr.name == "COALESCE":
