@@ -6,9 +6,11 @@ test.describe("Landing page", () => {
   test("loads with correct hero subtitle and stats", async ({ page }) => {
     await page.goto(".");
     await expect(page).toHaveTitle(/FHIR for Data Science/);
+    await expect(page.getByRole("heading", { level: 1, name: "FHIR for Data Science" })).toBeVisible();
+    await expect(page.getByText("v0.0.6")).toBeVisible();
 
     // Hero secondary line
-    await expect(page.getByText("Production-Scale FHIR Analytics")).toBeVisible();
+    await expect(page.getByText("Production-Scale FHIR Analytics. Running Anywhere.")).toBeVisible();
 
     // Hero tagline (hero__subtitle) — case-insensitive substrings
     const subtitle = page.locator(".hero__subtitle");

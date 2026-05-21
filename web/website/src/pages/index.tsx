@@ -7,7 +7,7 @@ import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
-const PRODUCT_VERSION = '0.0.5';
+const PRODUCT_VERSION = '0.0.6';
 const SQL_EXECUTION_MEAN_ALL_MEASURES = '~3.9ms';
 const SQL_EXECUTION_MEAN_SHARED_MEASURES = '~6.9ms';
 const JAVA_EXECUTION_MEAN_SHARED_MEASURES = '~936ms';
@@ -324,15 +324,15 @@ function Hero() {
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className={styles.heroGrid} />
       <div className="container">
-        <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginBottom: '1rem'}}>
-          <img src={logoUrl} alt="FHIR4DS Logo" style={{width: '4rem', height: '4rem'}} />
+        <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap'}}>
+          <img src={logoUrl} alt="FHIR for Data Science Logo" style={{width: '4rem', height: '4rem'}} />
           <Heading as="h1" className="hero__title" style={{marginBottom: 0, background: 'none', WebkitTextFillColor: 'rgb(95, 237, 131)', color: 'rgb(95, 237, 131)'}}>
-            FHIR4DS
+            FHIR for Data Science
           </Heading>
           <span className={styles.versionBadge}>v{PRODUCT_VERSION}</span>
         </div>
         <p style={{fontSize: '1.35rem', fontWeight: 600, color: '#e2e8f0', margin: '0.4rem 0 0.6rem'}}>
-          Production-Scale FHIR Analytics. In Your Browser.
+          Production-Scale FHIR Analytics. Running Anywhere.
         </p>
         <p className="hero__subtitle" style={{fontSize: '1.1rem', fontWeight: 400, color: '#94a3b8', marginBottom: '2rem', maxWidth: '800px', margin: '0 auto 2rem'}}>
           The first SQL-native clinical reasoning engine. Translate CQL to DuckDB SQL 
