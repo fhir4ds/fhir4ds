@@ -32,6 +32,7 @@ dependencies = [
     "pyarrow>=14.0.0",
     "orjson>=3.9.0",
     "pint>=0.21.0",
+    "PyYAML>=6.0",
     "numpy",
 ]
 
@@ -51,6 +52,9 @@ Homepage = "https://fhir4ds.com"
 Documentation = "https://fhir4ds.com/docs/getting-started/installation"
 Repository = "https://github.com/fhir4ds/fhir4ds"
 Issues = "https://github.com/fhir4ds/fhir4ds/issues"
+
+[project.scripts]
+fhir4ds = "fhir4ds.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["fhir4ds"]
