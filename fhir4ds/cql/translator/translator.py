@@ -52,6 +52,7 @@ from ..parser.ast_nodes import (
     Library,
     MethodInvocation,
     ParameterDefinition,
+    Property,
     Query,
     QuerySource,
     Retrieve,
@@ -812,6 +813,28 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         for cte in cte_defs:
             seen_lower[cte.name.lower()] = cte.name
 
+        def _emit_ready_function_promotion_ctes() -> None:
+            for (fn_name, fn_src), fn_ctes in list(self._context._function_promotion_ctes.items()):
+                deps = self._context._function_cte_deps.get((fn_name, fn_src), set())
+                # All dependencies must be in definition_ctes (i.e., already emitted)
+                if fn_src not in definition_ctes:
+                    continue  # source not yet emitted
+                if not deps.issubset(definition_ctes.keys()):
+                    continue  # some dependencies not yet emitted
+                for fn_cte_name, fn_cte_body in fn_ctes.items():
+                    _fixed_body = self._resolve_function_cte_source(fn_cte_body, definition_ctes)
+                    quoted_fn = f'"{fn_cte_name}"'
+                    if quoted_fn.lower() not in seen_lower:
+                        seen_lower[quoted_fn.lower()] = quoted_fn
+                        cte_defs.append(CTEDefinition(name=quoted_fn, query=_fixed_body))
+                # Remove so we don't try to emit again
+                self._context._function_promotion_ctes.pop((fn_name, fn_src), None)
+
+        # Included-library and retrieve-backed sources are already emitted before
+        # main definitions, so their promoted function CTEs must be available to
+        # the first main definition that references them.
+        _emit_ready_function_promotion_ctes()
+
         for name in ordered_names:
             expr = resolved_asts[name]
             self._pending_precte.clear()
@@ -848,21 +871,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # (directly) has been emitted above. The source definition is always
             # a dependency (it provides the FROM clause), so this naturally defers
             # the CTE until at least after the source.
-            for (fn_name, fn_src), fn_ctes in list(self._context._function_promotion_ctes.items()):
-                deps = self._context._function_cte_deps.get((fn_name, fn_src), set())
-                # All dependencies must be in definition_ctes (i.e., already emitted)
-                if fn_src not in definition_ctes:
-                    continue  # source not yet emitted
-                if not deps.issubset(definition_ctes.keys()):
-                    continue  # some dependencies not yet emitted
-                for fn_cte_name, fn_cte_body in fn_ctes.items():
-                    _fixed_body = self._resolve_function_cte_source(fn_cte_body, definition_ctes)
-                    quoted_fn = f'"{fn_cte_name}"'
-                    if quoted_fn.lower() not in seen_lower:
-                        seen_lower[quoted_fn.lower()] = quoted_fn
-                        cte_defs.append(CTEDefinition(name=quoted_fn, query=_fixed_body))
-                # Remove so we don't try to emit again
-                self._context._function_promotion_ctes.pop((fn_name, fn_src), None)
+            _emit_ready_function_promotion_ctes()
 
         # Safety: any remaining function promotion CTEs have unresolvable
         # dependencies (shouldn't happen in practice). Remove them from
@@ -911,7 +920,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         import os
 
         if os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP", "1") != "0":
-            min_occurrences = int(os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP_MIN", "3"))
+            min_occurrences = int(os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP_MIN", "2"))
             fragment.deduplicate_lateral_aliases(min_occurrences=min_occurrences)
         sql_text = fragment.to_sql()
         if self._context.column_registry:
@@ -1781,6 +1790,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             if expr.name in self._context._definition_names:
                 return expr.name
             return None
+        if isinstance(expr, Property) and isinstance(expr.source, Identifier):
+            prefixed_name = f"{expr.source.name}.{expr.path}"
+            if prefixed_name in self._context._included_definition_names:
+                return prefixed_name
+            if prefixed_name in self._context.definition_meta:
+                return prefixed_name
         if isinstance(expr, Retrieve):
             result = self._retrieve_promotion_source(expr)
             return result[0] if result else None
@@ -1905,6 +1920,18 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             if isinstance(stmt, FunctionDefinition) and stmt.expression is not None:
                 _extract_calls(stmt.expression, stmt.name)
 
+        # Walk first-level included library function bodies as well. Main measure
+        # definitions often call included fluent functions whose own bodies call
+        # other expensive helpers; without these edges, transitive promotion misses
+        # nested helpers such as PCMaternal.lastTimeOfDelivery.
+        for lib_info in self._context.includes.values():
+            lib_ast = getattr(lib_info, "library_ast", None)
+            if lib_ast is None:
+                continue
+            for stmt in getattr(lib_ast, "statements", []) or []:
+                if isinstance(stmt, FunctionDefinition) and stmt.expression is not None:
+                    _extract_calls(stmt.expression, stmt.name)
+
         # Walk Definition bodies
         for stmt in library.statements:
             if isinstance(stmt, Definition) and not isinstance(stmt, FunctionDefinition):
@@ -1959,14 +1986,102 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                          func_name, source_cte, d, t)
 
     _FUNCTION_CTE_PROMOTION_THRESHOLD = 3
+    _FUNCTION_CTE_SECONDARY_THRESHOLD = 2
+    _FUNCTION_CTE_PROMOTION_DENYLIST = {
+        # Returns a Quantity from a retrieve-local let/sort query. Promoting it
+        # currently changes CMS0334 population results; keep it inline until the
+        # function CTE path preserves that query shape exactly.
+        "lastEstimatedGestationalAge",
+        # Location/ICU helpers depend on nested collection/singleton semantics
+        # that are not preserved by row-keyed scalar function CTE lookups.
+        "GetLocation",
+        "getLocation",
+        "firstInpatientIntensiveCareUnit",
+    }
 
     def _select_promoted_functions(self) -> None:
         """Select functions meeting the transitive count threshold for CTE promotion."""
         for key, count in self._context.function_transitive_counts.items():
-            if count >= self._FUNCTION_CTE_PROMOTION_THRESHOLD:
+            if key[0] in self._FUNCTION_CTE_PROMOTION_DENYLIST:
+                continue
+            if (
+                count >= self._FUNCTION_CTE_PROMOTION_THRESHOLD
+                or (
+                    count >= self._FUNCTION_CTE_SECONDARY_THRESHOLD
+                    and self._is_expensive_scalar_function(key[0])
+                )
+            ):
                 self._context.promoted_functions[key] = count
         _logger.info("Selected %d functions for CTE promotion (threshold=%d)",
                      len(self._context.promoted_functions), self._FUNCTION_CTE_PROMOTION_THRESHOLD)
+
+    def _is_expensive_scalar_function(self, func_name: str) -> bool:
+        """Return true for single-argument fluent functions worth promoting at count 2."""
+        inliner = self._context.function_inliner
+        if not inliner:
+            return False
+        func_def = None
+        for key, candidate in inliner._functions.items():
+            if key == func_name or key.endswith(f".{func_name}"):
+                func_def = candidate
+                break
+        if func_def is None or len(func_def.parameters) != 1 or func_def.body is None:
+            return False
+        # Count-2 promotion is deliberately narrow: the current performance
+        # regression is caused by PCMaternal's scalar fluent helpers. Other
+        # libraries have collection and unit-sensitive helpers where promoting
+        # at lower counts can erase type context.
+        if func_def.library_name != "PCMaternal":
+            return False
+        if self._function_body_is_likely_collection(func_def):
+            return False
+        return self._function_body_has_expensive_construct(func_def.body)
+
+    @staticmethod
+    def _function_body_is_likely_collection(func_def: Any) -> bool:
+        """Avoid promoting collection-returning fluent helpers as scalar lookups."""
+        body = getattr(func_def, "body", None)
+        if not isinstance(body, Query):
+            return False
+        param_name = func_def.parameters[0][0] if func_def.parameters else None
+        sources = body.source if isinstance(body.source, list) else [body.source]
+        if len(sources) != 1:
+            return True
+        source = sources[0]
+        if not isinstance(source, QuerySource):
+            return True
+        return not (
+            isinstance(source.expression, Identifier)
+            and source.expression.name == param_name
+        )
+
+    @staticmethod
+    def _function_body_has_expensive_construct(node: Any) -> bool:
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            if current is None:
+                continue
+            type_name = type(current).__name__
+            if type_name in {
+                "Retrieve",
+                "Query",
+                "FirstExpression",
+                "LastExpression",
+                "ExistsExpression",
+                "SingletonFromExpression",
+            }:
+                return True
+            if isinstance(current, (FunctionRef, MethodInvocation)):
+                return True
+            if isinstance(current, (list, tuple)):
+                stack.extend(current)
+                continue
+            if not hasattr(current, "__dataclass_fields__"):
+                continue
+            for field_name in current.__dataclass_fields__:
+                stack.append(getattr(current, field_name, None))
+        return False
 
     # -----------------------------------------------------------------
     # Function-body CTE generation (Phase 3)
@@ -1974,7 +2089,22 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
     def _build_all_function_promotion_ctes(self, library: Library) -> None:
         """Build a CTE for each promoted (func_name, source_cte) pair."""
-        for (func_name, source_cte_name) in list(self._context.promoted_functions.keys()):
+        def _call_depth(func_name: str, seen: Set[str] | None = None) -> int:
+            if seen is None:
+                seen = set()
+            if func_name in seen:
+                return 0
+            seen.add(func_name)
+            callees = self._context.function_call_graph.get(func_name, set())
+            if not callees:
+                return 0
+            return 1 + max(_call_depth(callee, set(seen)) for callee in callees)
+
+        ordered_keys = sorted(
+            self._context.promoted_functions.keys(),
+            key=lambda item: _call_depth(item[0]),
+        )
+        for (func_name, source_cte_name) in ordered_keys:
             self._build_function_promotion_cte(func_name, source_cte_name, library)
 
     def _build_function_promotion_cte(self, func_name: str, source_cte_name: str,
@@ -2017,6 +2147,15 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             source_cte_name,
         )
         fn_cte_name = self._generate_function_cte_name(func_name, source_cte_name)
+        if not source_resource_type:
+            source_meta = self._context.definition_meta.get(source_cte_name)
+            if not (source_meta and source_meta.has_resource):
+                _logger.debug(
+                    "Skipping function promotion CTE %s: source %s is not resource-backed",
+                    fn_cte_name,
+                    source_cte_name,
+                )
+                return
 
         # 4. Set up isolated translation scope
         saved_scope_stack = list(self._context.scopes)
@@ -2025,11 +2164,17 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         saved_resource_type = self._context.resource_type
         saved_current_def = self._context._current_definition
         saved_alias_resource_types = dict(self._context._alias_resource_types)
+        saved_building_function_promotion = getattr(
+            self._context,
+            "_building_function_promotion_cte",
+            False,
+        )
 
         try:
             # Push barrier scope — isolate from caller context
             self._context.push_scope()
             self._context.scopes[-1].barrier = True
+            self._context._building_function_promotion_cte = True
 
             # Register synthetic alias pointing to source CTE
             self._context.add_alias(
@@ -2061,6 +2206,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             self._context.resource_type = saved_resource_type
             self._context._current_definition = saved_current_def
             self._context._alias_resource_types = saved_alias_resource_types
+            self._context._building_function_promotion_cte = saved_building_function_promotion
 
         # 7. Build CTE SELECT body
         # Use fhirpath_text(resource, 'id') as _row_key to avoid comparing large JSON blobs
@@ -2110,7 +2256,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             from ..translator.placeholder import find_all_placeholders
             _sql_ph_types = {p.resource_type for p in find_all_placeholders(result_sql)}
             _unsafe_types |= _sql_ph_types - {_source_type}
-        if _unsafe_types:
+        if _unsafe_types and not self._sql_references_alias(result_sql, synthetic_alias):
             _logger.info(
                 "Skipping function promotion CTE %s: body retrieves "
                 "different resource types %s (source type: %s)",
@@ -2129,6 +2275,33 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         self._context._promoted_cte_keys.add(key)
         _logger.info("Built function promotion CTE: %s for (%s, %s)",
                       fn_cte_name, func_name, source_cte_name)
+
+    @staticmethod
+    def _sql_references_alias(node: Any, alias: str) -> bool:
+        """Return True when a SQL AST subtree references a table alias."""
+        alias_lower = alias.lower()
+        stack = [node]
+        seen: Set[int] = set()
+        while stack:
+            current = stack.pop()
+            if current is None:
+                continue
+            current_id = id(current)
+            if current_id in seen:
+                continue
+            seen.add(current_id)
+            if isinstance(current, SQLQualifiedIdentifier):
+                if current.parts and current.parts[0].lower() == alias_lower:
+                    return True
+                continue
+            if isinstance(current, (list, tuple)):
+                stack.extend(current)
+                continue
+            if not hasattr(current, "__dataclass_fields__"):
+                continue
+            for field_name in current.__dataclass_fields__:
+                stack.append(getattr(current, field_name, None))
+        return False
 
     def _compute_function_cte_dependencies(self) -> None:
         """Compute direct definition dependencies for each function promotion CTE.
@@ -2317,6 +2490,16 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         retrieve_source = self._retrieve_source_type_from_cte_name(def_name)
         if retrieve_source:
             return retrieve_source
+
+        meta = self._context.definition_meta.get(def_name)
+        if meta and meta.has_resource:
+            cql_type = meta.cql_type or ""
+            candidate = cql_type
+            if candidate.startswith("List<") and candidate.endswith(">"):
+                candidate = candidate[5:-1]
+            candidate = candidate.rsplit(".", 1)[-1]
+            if self._context.fhir_schema and candidate in self._context.fhir_schema.resources:
+                return candidate
 
         definitions = {
             stmt.name: stmt

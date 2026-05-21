@@ -1315,6 +1315,13 @@ class QueryMixin:
             self.context.let_variables[let_name] = let_expr_sql
             return
 
+        if (
+            getattr(self.context, "_building_function_promotion_cte", False)
+            and self._references_foreign_table_alias(let_expr_sql, alias)
+        ):
+            self.context.let_variables[let_name] = let_expr_sql
+            return
+
         # Fix outer-scope references in let_expr_sql.
         # Inside the CTE body, only {alias} is available as a table alias.
         # Expressions translated in the outer query scope may reference:
@@ -1367,6 +1374,35 @@ class QueryMixin:
         # Register a lightweight lookup expression
         lookup = self._make_let_cte_lookup(let_cte_name, alias, match_resource=_has_resource)
         self.context.let_variables[let_name] = lookup
+
+    @staticmethod
+    def _references_foreign_table_alias(node: SQLExpression, allowed_alias: str) -> bool:
+        """Detect aliases that would be out of scope in a promoted let CTE."""
+        allowed = {allowed_alias.lower(), "_pt"}
+        stack = [node]
+        seen = set()
+        while stack:
+            current = stack.pop()
+            if current is None:
+                continue
+            current_id = id(current)
+            if current_id in seen:
+                continue
+            seen.add(current_id)
+            if isinstance(current, SQLQualifiedIdentifier):
+                if current.parts:
+                    alias = current.parts[0].lower()
+                    if alias not in allowed and not alias.startswith("_lt_"):
+                        return True
+                continue
+            if isinstance(current, (list, tuple)):
+                stack.extend(current)
+                continue
+            if not hasattr(current, "__dataclass_fields__"):
+                continue
+            for field_name in current.__dataclass_fields__:
+                stack.append(getattr(current, field_name, None))
+        return False
 
     def _try_set_op_source(self, src_expr, alias, node, usage):
         """Handle Query sources that are set operations (intersect/union/except).

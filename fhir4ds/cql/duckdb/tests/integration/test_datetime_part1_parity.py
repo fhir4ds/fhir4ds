@@ -114,6 +114,7 @@ define DateFromYearPrecisionDateTime: date from DateTime(2012)
 define DateFromMonthPrecisionDateTime: date from DateTime(2012, 5)
 define DateFromDayPrecisionDateTime: date from DateTime(2012, 5, 10)
 define DateFromHourPrecisionDateTime: date from DateTime(2012, 5, 10, 6)
+define DynamicDateFromDateTime: date from DateTime(year from @2024-01-01, 2, 3, 4)
 define TimeFromDateTime: time from DateTime(2012, 1, 1, 12, 30, 0, 0, -7)
 define TimeFromDayPrecisionDateTime: time from DateTime(2012, 1, 1)
 define DifferenceMonthsUncertain: difference in months between @2012-01-02 and @2012
@@ -152,6 +153,7 @@ define TimeInvalidHour: Time(24, 0)
         "DateFromMonthPrecisionDateTime": "2012-05",
         "DateFromDayPrecisionDateTime": "2012-05-10",
         "DateFromHourPrecisionDateTime": "2012-05-10",
+        "DynamicDateFromDateTime": "2024-02-03",
         "TimeFromDateTime": "T12:30:00.000-07:00",
         "TimeFromDayPrecisionDateTime": None,
         "DifferenceMonthsUncertain": '{"start":0,"end":11,"lowClosed":true,"highClosed":true}',
@@ -182,6 +184,7 @@ define TimeInvalidHour: Time(24, 0)
     py = _python_only_connection()
     cpp = _cpp_connection()
     try:
+        assert "ToDate" in translated["DynamicDateFromDateTime"].to_sql()
         for name, expected_value in expected.items():
             sql = f"SELECT {translated[name].to_sql()}"
             assert py.execute(sql).fetchone() == (expected_value,)

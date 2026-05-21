@@ -399,29 +399,14 @@ class DateComponentMixin:
                 if normalized.startswith("T"):
                     return SQLNull()
                 return SQLLiteral(value=normalized.split("T", 1)[0])
-            # Non-literal expression: extract the date portion up to T.
-            # Build AST nodes (not SQLRaw with .to_sql()) to avoid premature
-            # placeholder resolution — CQL §22.6.
-            source = SQLFunctionCall(
+            source = self._unwrap_interval_case(year)
+            normalized = SQLFunctionCall(
                 name="REPLACE",
-                args=[SQLCast(year, "VARCHAR"), SQLLiteral(' '), SQLLiteral('T')],
+                args=[SQLCast(source, "VARCHAR"), SQLLiteral(' '), SQLLiteral('T')],
             )
-            t_pos = SQLFunctionCall(name="STRPOS", args=[source, SQLLiteral('T')])
-            return SQLCase(
-                when_clauses=[
-                    (SQLBinaryOp(operator="=", left=t_pos, right=SQLLiteral(1)), SQLNull()),
-                    (
-                        SQLBinaryOp(operator=">", left=t_pos, right=SQLLiteral(1)),
-                        SQLFunctionCall(
-                            name="LEFT",
-                            args=[
-                                source,
-                                SQLBinaryOp(operator="-", left=t_pos, right=SQLLiteral(1)),
-                            ],
-                        ),
-                    ),
-                ],
-                else_clause=source,
+            return SQLFunctionCall(
+                name="ToDate",
+                args=[normalized],
             )
 
         year = args[0]
@@ -508,26 +493,14 @@ class DateComponentMixin:
 
         # Handle 'date from X' - extract date portion (first 10 chars of ISO string)
         if component_lower == 'date':
-            source = SQLFunctionCall(
+            operand = self._unwrap_interval_case(operand)
+            normalized = SQLFunctionCall(
                 name="REPLACE",
                 args=[SQLCast(operand, "VARCHAR"), SQLLiteral(' '), SQLLiteral('T')],
             )
-            t_pos = SQLFunctionCall(name="STRPOS", args=[source, SQLLiteral('T')])
-            return SQLCase(
-                when_clauses=[
-                    (SQLBinaryOp(operator="=", left=t_pos, right=SQLLiteral(1)), SQLNull()),
-                    (
-                        SQLBinaryOp(operator=">", left=t_pos, right=SQLLiteral(1)),
-                        SQLFunctionCall(
-                            name="LEFT",
-                            args=[
-                                source,
-                                SQLBinaryOp(operator="-", left=t_pos, right=SQLLiteral(1)),
-                            ],
-                        ),
-                    ),
-                ],
-                else_clause=source,
+            return SQLFunctionCall(
+                name="ToDate",
+                args=[normalized],
             )
 
         # Map component names to (start_position, length, min_string_length)
