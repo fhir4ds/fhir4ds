@@ -932,12 +932,16 @@ def intervalContains(interval: str | None, point: str | None) -> bool | None:
     # Check bounds — None means unbounded (always satisfies that side)
     low_ok = True
     if low is not None:
-        low_n, pt_low = _normalize_for_compare(low, pt)
-        low_ok = pt_low >= low_n if iv["low_closed"] else pt_low > low_n
+        cmp = _compare_interval_values(low, pt)
+        if cmp is None:
+            return None
+        low_ok = cmp <= 0 if iv["low_closed"] else cmp < 0
     high_ok = True
     if high is not None:
-        pt_high, high_n = _normalize_for_compare(pt, high)
-        high_ok = pt_high <= high_n if iv["high_closed"] else pt_high < high_n
+        cmp = _compare_interval_values(pt, high)
+        if cmp is None:
+            return None
+        high_ok = cmp <= 0 if iv["high_closed"] else cmp < 0
 
     return low_ok and high_ok
 
@@ -977,12 +981,16 @@ def intervalProperlyContains(interval: str | None, point: str | None) -> bool | 
     # strict containment: boundary points are not properly contained.
     low_ok = True
     if low is not None:
-        low_n, pt_low = _normalize_for_compare(low, pt)
-        low_ok = pt_low > low_n
+        cmp = _compare_interval_values(low, pt)
+        if cmp is None:
+            return None
+        low_ok = cmp < 0
     high_ok = True
     if high is not None:
-        pt_high, high_n = _normalize_for_compare(pt, high)
-        high_ok = pt_high < high_n
+        cmp = _compare_interval_values(pt, high)
+        if cmp is None:
+            return None
+        high_ok = cmp < 0
     return low_ok and high_ok
 
 
@@ -1054,6 +1062,41 @@ def _precision_aware_compare(a, b) -> int | None:
         if na < nb:
             return -1
         elif na > nb:
+            return 1
+    except TypeError:
+        return None
+    return 0
+
+
+def _compare_interval_values(a: Any, b: Any) -> int | None:
+    """Tri-valued comparison for interval bounds and points."""
+    q_a = _quantity_json(a)
+    q_b = _quantity_json(b)
+    if q_a is not None and q_b is not None:
+        from .quantity import quantityCompare
+
+        less = quantityCompare(q_a, q_b, "<")
+        if less is None:
+            return None
+        if less:
+            return -1
+        greater = quantityCompare(q_a, q_b, ">")
+        if greater is None:
+            return None
+        if greater:
+            return 1
+        equal = quantityCompare(q_a, q_b, "==")
+        if equal is None:
+            return None
+        return 0 if equal else None
+
+    left, right = _normalize_for_compare(a, b)
+    if isinstance(left, (dict, list)) or isinstance(right, (dict, list)):
+        return None
+    try:
+        if left < right:
+            return -1
+        if left > right:
             return 1
     except TypeError:
         return None

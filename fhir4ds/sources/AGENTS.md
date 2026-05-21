@@ -90,11 +90,17 @@ fhir4ds/sources/
 - Cloud storage paths are passed to DuckDB's own parser — never used as SQL identifiers
 - `resource_type` string literals are escaped by doubling single quotes before interpolation
 - Connection strings are passed to DuckDB's `ATTACH` — never interpolated into SQL statements
-- Milestone code review finding (2026-05-20, OPEN): `CSVSource` must quote the
+- Milestone code review finding (2026-05-20, FIXED): `CSVSource` quotes the
   CSV path with `quote_sql_literal()` before substituting it into
-  `read_csv_auto(...)`. A malicious path containing `'); DROP TABLE ...; --`
-  can currently execute as SQL during `register()`. Mirror
-  `FileSystemSource` path-escaping tests when remediating.
+  `read_csv_auto(...)`. Keep the malicious-path regression test covering
+  `'); DROP TABLE ...; --` patterns when changing the adapter.
+
+## API Contract Notes
+
+- `CSVSource` validates `path` and `projection_sql` at construction time.
+  Invalid argument types must raise `TypeError`, and empty strings must raise
+  `ValueError`; do not let bad public constructor inputs fall through to
+  internal `AttributeError` during `register()`.
 
 ## Known Limitations (Phase 6: Incremental Delta Tracking)
 

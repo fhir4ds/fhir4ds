@@ -167,7 +167,7 @@ class TestGap9AgeInYearsAt:
         ctx.has_patient_demographics_cte = True
         return ExpressionTranslator(ctx)
 
-    def test_age_in_years_no_simple_date_diff(self, translator):
+    def test_age_in_years_routes_to_helper_not_simple_date_diff(self, translator):
         """AC: Birthday-aware calculation, not simple date_diff('year', ...)."""
         # Simulate AgeInYearsAt with demographics CTE available
         as_of_date = SQLRaw(raw_sql="DATE '2026-01-01'")
@@ -175,26 +175,25 @@ class TestGap9AgeInYearsAt:
         sql = result.to_sql()
         # Should NOT use simple date_diff for year precision
         assert "date_diff" not in sql.lower() or "year" not in sql.lower()
-        # Should use EXTRACT-based birthday-aware calculation
-        assert "EXTRACT" in sql
+        # Should route through the public helper so native and Python fallback stay aligned.
+        assert "CalculateAgeInYearsAt" in sql
 
-    def test_age_in_years_has_birthday_adjustment(self, translator):
-        """AC: Birthday adjustment with CASE WHEN for birthday not yet reached."""
+    def test_age_in_years_uses_patient_demographics_birth_date(self, translator):
+        """AC: Birthday-aware helper is fed the demographics birth-date source."""
         as_of_date = SQLRaw(raw_sql="DATE '2026-01-01'")
         result = translator._translate_age_at_function("AgeInYearsAt", [as_of_date])
         sql = result.to_sql()
-        # Should have CASE expression for birthday adjustment
-        assert "CASE" in sql
-        assert "WHEN" in sql
-        assert "MONTH" in sql
-        assert "DAY" in sql
+        assert "_patient_demographics" in sql
+        assert "_pd.birth_date" in sql
+        assert "DATE '2026-01-01'" in sql
 
-    def test_age_in_months_still_uses_date_diff(self, translator):
-        """For month precision, date_diff is acceptable."""
+    def test_age_in_months_routes_to_helper(self, translator):
+        """For month precision, use the same helper boundary as other age variants."""
         as_of_date = SQLRaw(raw_sql="DATE '2026-01-01'")
         result = translator._translate_age_at_function("AgeInMonthsAt", [as_of_date])
         sql = result.to_sql()
-        assert "date_diff" in sql.lower()
+        assert "CalculateAgeInMonthsAt" in sql
+        assert "date_diff" not in sql.lower()
 
 
 # ---------------------------------------------------------------------------

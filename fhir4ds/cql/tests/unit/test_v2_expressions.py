@@ -779,9 +779,8 @@ class TestAgeAtFunctions:
         assert len(result.args) == 2
 
     def test_age_in_years_at_single_arg(self, translator: ExpressionTranslator):
-        """Test AgeInYearsAt with single arg is inlined as date arithmetic."""
+        """Test AgeInYearsAt with single arg routes through demographics helper."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLBinaryOp
         result = translator.translate(
             FunctionRef(
                 name="AgeInYearsAt",
@@ -790,13 +789,14 @@ class TestAgeAtFunctions:
                 ]
             )
         )
-        # AgeInYearsAt is now inlined as EXTRACT-based date arithmetic
-        assert isinstance(result, SQLBinaryOp)
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "CalculateAgeInYearsAt"
+        assert len(result.args) == 2
+        assert translator.context._needs_demographics is True
 
     def test_age_in_years_at_population_context(self):
-        """Test AgeInYearsAt in population context is inlined as date arithmetic."""
+        """Test AgeInYearsAt in population context uses patient demographics."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLBinaryOp
         # Create context with patient_alias set (population context)
         context = SQLTranslationContext()
         context.patient_alias = "_pt"  # Simulate "FROM patients p" context
@@ -810,8 +810,11 @@ class TestAgeAtFunctions:
                 ]
             )
         )
-        # AgeInYearsAt is now inlined as EXTRACT-based date arithmetic
-        assert isinstance(result, SQLBinaryOp)
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "CalculateAgeInYearsAt"
+        sql = result.to_sql()
+        assert "_patient_demographics" in sql
+        assert "_pt.patient_id" in sql
 
 
 class TestIntervalOperations:

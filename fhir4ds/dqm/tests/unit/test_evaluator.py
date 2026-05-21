@@ -5,7 +5,15 @@ import pandas as pd
 
 from fhir4ds.dqm.evaluator import MeasureEvaluator
 from fhir4ds.dqm.models import MeasureResult
-from fhir4ds.dqm.types import AuditMode, GroupMap, PopulationEntry, PopulationMap, AuditPersona
+from fhir4ds.dqm.types import (
+    AuditMode,
+    AuditPersona,
+    GroupMap,
+    PopulationEntry,
+    PopulationMap,
+    StratifierComponent,
+    StratifierEntry,
+)
 
 
 def _make_pop_map(measure_url="http://example.com/Library/Test"):
@@ -71,6 +79,85 @@ def _make_measure_result():
     )
 
 
+def _make_stratified_measure_result():
+    """Helper to build a MeasureResult with simple and composite stratifiers."""
+    pop_map = PopulationMap(
+        measure_id="payer-measure",
+        cql_library_ref="http://example.com/Library/Payer",
+        groups=[
+            GroupMap(
+                group_id="group-0",
+                population_basis="boolean",
+                populations=[
+                    PopulationEntry(
+                        population_code="initial-population",
+                        group_id="group-0",
+                        cql_expression="Initial Population",
+                        audit_persona=AuditPersona.INCLUSION,
+                    ),
+                    PopulationEntry(
+                        population_code="denominator",
+                        group_id="group-0",
+                        cql_expression="Denominator",
+                        audit_persona=AuditPersona.INCLUSION,
+                    ),
+                    PopulationEntry(
+                        population_code="numerator",
+                        group_id="group-0",
+                        cql_expression="Numerator",
+                        audit_persona=AuditPersona.NUMERATOR,
+                    ),
+                ],
+                stratifiers=[
+                    StratifierEntry(
+                        stratifier_id="payer",
+                        code_text="Payer Reporting Line",
+                        cql_expression="Payer Reporting Line",
+                    ),
+                    StratifierEntry(
+                        stratifier_id="payer-components",
+                        code_text="Payer Components",
+                        components=[
+                            StratifierComponent(
+                                component_id="plan",
+                                code_text="Plan",
+                                cql_expression="Plan Type",
+                            ),
+                            StratifierComponent(
+                                component_id="line",
+                                code_text="Line",
+                                cql_expression="Reporting Line",
+                            ),
+                        ],
+                    ),
+                ],
+            )
+        ],
+    )
+    df = pd.DataFrame(
+        {
+            "patient_id": ["P1", "P2", "P3"],
+            "initial_population": [True, True, True],
+            "denominator": [True, True, True],
+            "numerator": [True, False, True],
+            "stratifier_1": ["Medicare", "Medicaid", "Medicare"],
+            "stratifier_2_component_1": ["SNP", "Standard", "SNP"],
+            "stratifier_2_component_2": ["Medicare", "Medicaid", "Medicare"],
+        }
+    )
+    return MeasureResult(
+        dataframe=df,
+        populations={
+            "initial_population": "Initial Population",
+            "denominator": "Denominator",
+            "numerator": "Numerator",
+        },
+        parameters={"Measurement Period": ("2026-01-01", "2026-12-31")},
+        measure_url=pop_map.cql_library_ref,
+        pop_map=pop_map,
+    )
+
+
 class TestMeasureEvaluatorValidation:
     """Test input validation."""
 
@@ -119,6 +206,137 @@ class TestMeasureEvaluatorValidation:
         assert summary["numerator_final"] == 1
         assert summary["performance_rate"] == 0.5  # 1/2
         assert summary["total_patients"] == 4
+
+    def test_summary_report_applies_denominator_exclusion_before_numerator(self):
+        """Excluded denominator patients must not contribute to numerator rate."""
+        df = pd.DataFrame(
+            {
+                "patient_id": ["P_excluded_numer", "P_denominator_only"],
+                "initial_population": [True, True],
+                "denominator": [True, True],
+                "denominator_exclusion": [True, False],
+                "denominator_exception": [False, False],
+                "numerator": [True, False],
+                "numerator_exclusion": [False, False],
+            }
+        )
+        evaluator = MeasureEvaluator(conn=None)
+        summary = evaluator.summary_report(df)
+        assert summary["denominator"] == 2
+        assert summary["denominator_exclusion"] == 1
+        assert summary["denominator_final"] == 1
+        assert summary["numerator"] == 0
+        assert summary["numerator_final"] == 0
+        assert summary["performance_rate"] == 0.0
+
+    def test_summary_report_applies_denominator_exception_only_when_not_numerator(self):
+        """Denominator exceptions do not remove patients that satisfy numerator."""
+        df = pd.DataFrame(
+            {
+                "patient_id": ["P_exception_numer", "P_denominator_only"],
+                "initial_population": [True, True],
+                "denominator": [True, True],
+                "denominator_exclusion": [False, False],
+                "denominator_exception": [True, False],
+                "numerator": [True, False],
+                "numerator_exclusion": [False, False],
+            }
+        )
+        evaluator = MeasureEvaluator(conn=None)
+        summary = evaluator.summary_report(df)
+        assert summary["denominator"] == 2
+        assert summary["denominator_exception"] == 0
+        assert summary["denominator_final"] == 2
+        assert summary["numerator"] == 1
+        assert summary["numerator_final"] == 1
+        assert summary["performance_rate"] == 0.5
+
+    def test_summary_report_counts_measure_stratifiers(self):
+        """MeasureResult summaries should include population counts by stratum."""
+        evaluator = MeasureEvaluator(conn=None)
+        summary = evaluator.summary_report(_make_stratified_measure_result())
+
+        payer_strata = {
+            stratum["text"]: stratum["population"]
+            for stratum in summary["stratifiers"][0]["strata"]
+        }
+
+        assert payer_strata["Medicare"]["initial-population"] == 2
+        assert payer_strata["Medicare"]["denominator"] == 2
+        assert payer_strata["Medicare"]["numerator"] == 2
+        assert payer_strata["Medicaid"]["initial-population"] == 1
+        assert payer_strata["Medicaid"]["numerator"] == 0
+        assert sum(
+            counts["initial-population"] for counts in payer_strata.values()
+        ) == summary["initial_population"]
+
+        component_strata = summary["stratifiers"][1]["strata"]
+        assert component_strata[0]["components"][0]["text"] == "SNP"
+        assert component_strata[0]["components"][1]["text"] == "Medicare"
+        assert component_strata[0]["population"]["initial-population"] == 2
+
+    def test_prune_population_evidence_preserves_inclusion_evidence(self):
+        """Evaluator pruning must pass the population column context to AuditEngine."""
+        df = pd.DataFrame(
+            {
+                "initial_population": [
+                    {
+                        "result": True,
+                        "evidence": [
+                            {
+                                "target": "Encounter/e1",
+                                "operator": "exists",
+                                "trace": ["Initial Population"],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        evaluator = MeasureEvaluator(conn=None)
+
+        pruned = evaluator._prune_population_evidence(df, _make_pop_map())
+        evidence = pruned["initial_population"].iloc[0]["evidence"]
+
+        assert evidence
+        assert evidence[0]["operator"] == "exists"
+        assert evidence[0]["findings"][0]["target"] == "Encounter/e1"
+
+    def test_prune_population_evidence_applies_exclusion_persona(self):
+        """Excluded rows keep exclusion evidence; non-excluded rows prune it."""
+        pop_map = PopulationMap(
+            measure_id="test-measure",
+            cql_library_ref="http://example.com/Library/Test",
+            groups=[
+                GroupMap(
+                    group_id="group-0",
+                    population_basis="boolean",
+                    populations=[
+                        PopulationEntry(
+                            population_code="denominator-exclusion",
+                            group_id="group-0",
+                            cql_expression="Denominator Exclusion",
+                            audit_persona=AuditPersona.EXCLUSION,
+                        ),
+                    ],
+                )
+            ],
+        )
+        df = pd.DataFrame(
+            {
+                "denominator_exclusion": [
+                    {"result": False, "evidence": [{"target": "Condition/no"}]},
+                    {"result": True, "evidence": [{"target": "Condition/yes"}]},
+                ]
+            }
+        )
+        evaluator = MeasureEvaluator(conn=None)
+
+        pruned = evaluator._prune_population_evidence(df, pop_map)
+
+        assert pruned["denominator_exclusion"].iloc[0]["evidence"] == []
+        kept = pruned["denominator_exclusion"].iloc[1]["evidence"]
+        assert kept[0]["findings"][0]["target"] == "Condition/yes"
 
 
 class TestToMeasureReport:
@@ -180,6 +398,32 @@ class TestToMeasureReport:
         ext = report["extension"][0]
         assert "performanceRate" in ext["url"]
         assert isinstance(ext["valueDecimal"], float)
+
+    def test_to_measure_report_includes_stratifiers(self):
+        """MeasureReport output should carry configured stratifier strata."""
+        evaluator = MeasureEvaluator(conn=None)
+        report = evaluator.to_measure_report(_make_stratified_measure_result())
+
+        stratifiers = report["group"][0]["stratifier"]
+        payer_stratifier = stratifiers[0]
+        assert payer_stratifier["id"] == "payer"
+        assert payer_stratifier["code"]["text"] == "Payer Reporting Line"
+
+        medicare = next(
+            stratum
+            for stratum in payer_stratifier["stratum"]
+            if stratum["value"]["text"] == "Medicare"
+        )
+        medicare_counts = {
+            pop["code"]["coding"][0]["code"]: pop["count"]
+            for pop in medicare["population"]
+        }
+        assert medicare_counts["initial-population"] == 2
+        assert medicare_counts["numerator"] == 2
+
+        component = stratifiers[1]["stratum"][0]["component"]
+        assert component[0]["value"]["text"] == "SNP"
+        assert component[1]["value"]["text"] == "Medicare"
 
 
 class TestToCsv:

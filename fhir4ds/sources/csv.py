@@ -59,6 +59,16 @@ class CSVSource:
     """
 
     def __init__(self, path: str, projection_sql: str) -> None:
+        if not isinstance(path, str):
+            raise TypeError(f"path must be a string, got {type(path).__name__}")
+        if not path:
+            raise ValueError("path must be a non-empty string")
+        if not isinstance(projection_sql, str):
+            raise TypeError(
+                f"projection_sql must be a string, got {type(projection_sql).__name__}"
+            )
+        if not projection_sql.strip():
+            raise ValueError("projection_sql must be a non-empty SQL SELECT statement")
         self._path = path
         self._projection_sql = projection_sql
 

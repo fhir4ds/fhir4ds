@@ -296,6 +296,7 @@ def test_cql_interval_quantity_contains_uses_unit_aware_comparison() -> None:
 using FHIR version '4.0.1'
 context Patient
 define ContainsCompatibleQuantity: Interval[1 'g', 2 'g'] contains 1500 'mg'
+define ContainsIncompatibleQuantity: Interval[1 'g', 2 'g'] contains 1 'cm'
 define IncludesCompatibleQuantity: Interval[1 'g', 2 'g'] includes Interval[1500 'mg', 1600 'mg']
 """
     translated = translate_cql(cql)
@@ -306,6 +307,13 @@ define IncludesCompatibleQuantity: Interval[1 'g', 2 'g'] includes Interval[1500
             "'{\"value\":2,\"unit\":\"g\",\"code\":\"g\"}', true, true), "
             "'{\"value\":1500,\"unit\":\"mg\",\"code\":\"mg\"}')",
             (True,),
+        ),
+        (
+            "SELECT intervalContains("
+            "intervalFromBounds('{\"value\":1,\"unit\":\"g\",\"code\":\"g\"}', "
+            "'{\"value\":2,\"unit\":\"g\",\"code\":\"g\"}', true, true), "
+            "'{\"value\":1,\"unit\":\"cm\",\"code\":\"cm\"}')",
+            (None,),
         ),
         (
             "SELECT intervalIncludes("
@@ -324,11 +332,16 @@ define IncludesCompatibleQuantity: Interval[1 'g', 2 'g'] includes Interval[1500
                 assert py.execute(sql).fetchone() == expected
                 assert cpp.execute(sql).fetchone() == expected
                 assert no_py.execute(sql).fetchone() == expected
-            for name in ("ContainsCompatibleQuantity", "IncludesCompatibleQuantity"):
+            expected = {
+                "ContainsCompatibleQuantity": (True,),
+                "ContainsIncompatibleQuantity": (None,),
+                "IncludesCompatibleQuantity": (True,),
+            }
+            for name, expected_result in expected.items():
                 sql = f"SELECT {translated[name].to_sql()}"
-                assert py.execute(sql).fetchone() == (True,)
-                assert cpp.execute(sql).fetchone() == (True,)
-                assert no_py.execute(sql).fetchone() == (True,)
+                assert py.execute(sql).fetchone() == expected_result
+                assert cpp.execute(sql).fetchone() == expected_result
+                assert no_py.execute(sql).fetchone() == expected_result
     finally:
         py.close()
         cpp.close()

@@ -48,6 +48,30 @@ def test_load_multiple_resources(loader):
     assert loader.count("Condition") == 1
 
 
+@pytest.mark.parametrize(
+    "reference",
+    [
+        "Patient/p1",
+        "p1",
+        "http://example.org/fhir/Patient/p1",
+        {"reference": "Patient/p1"},
+        {"reference": "http://example.org/fhir/Patient/p1"},
+    ],
+)
+def test_resolve_macro_accepts_common_reference_forms(loader, duckdb_con, reference):
+    """CQL resolve() should accept HEDIS reference id/url forms."""
+    loader.load_resource({"resourceType": "Patient", "id": "p1", "gender": "female"})
+
+    ref_value = json.dumps(reference) if isinstance(reference, dict) else reference
+
+    result = duckdb_con.execute(
+        "SELECT json_extract_string(resolve(?), '$.id')",
+        [ref_value],
+    ).fetchone()
+
+    assert result == ("p1",)
+
+
 def test_load_resource_rejects_non_standard_json_numbers(loader):
     with pytest.raises(ValueError, match="standard JSON"):
         loader.load_resource({"resourceType": "Patient", "id": "nan", "value": float("nan")})
@@ -177,6 +201,36 @@ def test_load_ndjson_with_empty_lines(loader, tmp_path):
 
     count = loader.load_ndjson(ndjson_file)
     assert count == 2
+
+
+def test_load_ndjson_strict_validation_error_is_all_or_nothing(loader, tmp_path):
+    """Strict NDJSON loading should not leave partial rows after validation errors."""
+    ndjson_file = tmp_path / "bad-valid-json.ndjson"
+    ndjson_file.write_text(
+        '{"resourceType": "Patient", "id": "p1"}\n'
+        '{"id": "missing-resource-type"}\n'
+        '{"resourceType": "Patient", "id": "p2"}\n'
+    )
+
+    with pytest.raises(ValueError, match="resourceType"):
+        loader.load_ndjson(ndjson_file)
+
+    assert loader.count() == 0
+
+
+def test_load_ndjson_non_strict_skips_invalid_resource_records(loader, tmp_path):
+    """Non-strict NDJSON loading skips valid JSON records that are not FHIR resources."""
+    ndjson_file = tmp_path / "mixed.ndjson"
+    ndjson_file.write_text(
+        '{"resourceType": "Patient", "id": "p1"}\n'
+        '{"id": "missing-resource-type"}\n'
+        '{"resourceType": "Patient", "id": "p2"}\n'
+    )
+
+    count = loader.load_ndjson(ndjson_file, strict=False)
+
+    assert count == 2
+    assert loader.count("Patient") == 2
 
 
 def test_load_file_single_resource(loader, tmp_path):

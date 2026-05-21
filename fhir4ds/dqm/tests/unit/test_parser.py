@@ -98,6 +98,54 @@ class TestMeasureParserBasic:
         assert pop_map.groups[0].populations[0].cql_expression == "IP Group 1"
         assert pop_map.groups[1].populations[0].cql_expression == "IP Group 2"
 
+    def test_parse_group_stratifiers(self):
+        measure = {
+            "resourceType": "Measure",
+            "id": "stratified",
+            "group": [
+                {
+                    "population": [
+                        {
+                            "code": {"coding": [{"code": "initial-population"}]},
+                            "criteria": {"expression": "Initial Population"},
+                        }
+                    ],
+                    "stratifier": [
+                        {
+                            "id": "payer",
+                            "code": {"text": "Payer"},
+                            "criteria": {"expression": "Payer Reporting Line"},
+                        },
+                        {
+                            "id": "payer-components",
+                            "code": {"text": "Payer Components"},
+                            "component": [
+                                {
+                                    "id": "plan",
+                                    "code": {"text": "Plan"},
+                                    "criteria": {"expression": "Plan Type"},
+                                },
+                                {
+                                    "id": "line",
+                                    "code": {"text": "Line"},
+                                    "criteria": {"expression": "Reporting Line"},
+                                },
+                            ],
+                        },
+                    ],
+                }
+            ],
+        }
+
+        group = MeasureParser().parse(measure).groups[0]
+
+        assert len(group.stratifiers) == 2
+        assert group.stratifiers[0].stratifier_id == "payer"
+        assert group.stratifiers[0].code_text == "Payer"
+        assert group.stratifiers[0].cql_expression == "Payer Reporting Line"
+        assert group.stratifiers[1].components[0].component_id == "plan"
+        assert group.stratifiers[1].components[0].cql_expression == "Plan Type"
+
     def test_population_basis_default_boolean(self):
         measure = {
             "resourceType": "Measure",

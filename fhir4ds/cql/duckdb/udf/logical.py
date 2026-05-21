@@ -17,6 +17,9 @@ if TYPE_CHECKING:
     import duckdb
 
 
+_COALESCE_RETURN_TYPE = getattr(sqltypes, "VARIANT", "VARCHAR")
+
+
 def _coalesce_return_value(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
@@ -163,8 +166,10 @@ def logicalAnyFalse(values: List[bool | None] | None) -> bool | None:
 
 def registerLogicalUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     """Register all logical UDFs."""
-    # Coalesce is variadic and type-preserving, so it needs VARIANT output.
-    con.create_function("Coalesce", Coalesce, return_type=sqltypes.VARIANT, null_handling="special")
+    # Coalesce is variadic and type-preserving on DuckDB versions that expose
+    # VARIANT. Older unsupported DuckDB fallback probes lack VARIANT, so use
+    # VARCHAR there to keep registration and representative fallback UDFs alive.
+    con.create_function("Coalesce", Coalesce, return_type=_COALESCE_RETURN_TYPE, null_handling="special")
     # logicalCoalesce is the legacy string-returning JSON-list helper.
     con.create_function("logicalCoalesce", logicalCoalesce, return_type="VARCHAR", null_handling="special")
     con.create_function("logicalImplies", logicalImplies, null_handling="special")

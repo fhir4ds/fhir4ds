@@ -204,6 +204,57 @@ define QueryTimeMin: Min((from { @T12:00, @T10:00, @T11:00 } T return T))
         cpp.close()
 
 
+def test_cql_list_accumulator_aggregate_supports_hedis_episode_dedup() -> None:
+    translated = translate_cql(
+        """library HedisEpisodeDedup version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define EmptyEpisodes:
+  (from ({} as List<Date>) E
+    sort by E
+    aggregate R starting ({} as List<Date>):
+      if Count(R) = 0 then { E }
+      else if difference in days between Last(R) and E > 31 then R union { E }
+      else R)
+define DedupEpisodes:
+  (from { @2025-02-02, @2025-01-01, @2025-02-01, @2025-01-01 } E
+    sort by E
+    aggregate R starting ({} as List<Date>):
+      if Count(R) = 0 then { E }
+      else if difference in days between Last(R) and E > 31 then R union { E }
+      else R)
+define DedupCount:
+  Count((from { @2025-02-02, @2025-01-01, @2025-02-01, @2025-01-01 } E
+    sort by E
+    aggregate R starting ({} as List<Date>):
+      if Count(R) = 0 then { E }
+      else if difference in days between Last(R) and E > 31 then R union { E }
+      else R))
+"""
+    )
+    expected = {
+        "EmptyEpisodes": [],
+        "DedupEpisodes": ["2025-01-01", "2025-02-02"],
+        "DedupCount": 2,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expr in translated.items():
+                sql = f"SELECT {expr.to_sql()}"
+                py_value = py.execute(sql).fetchone()[0]
+                cpp_value = cpp.execute(sql).fetchone()[0]
+                no_py_value = no_py.execute(sql).fetchone()[0]
+                assert py_value == expected[name], name
+                assert cpp_value == py_value, name
+                assert no_py_value == py_value, name
+    finally:
+        py.close()
+        cpp.close()
+
+
 def test_cql_quantity_aggregate_translation_is_unit_aware_across_surfaces() -> None:
     translated = translate_cql(_cql_quantity_aggregate_library())
 

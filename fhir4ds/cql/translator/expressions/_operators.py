@@ -116,6 +116,22 @@ _CQL_LONG_MIN = -9223372036854775808
 _CQL_LONG_MAX = 9223372036854775807
 
 
+def _sql_list_type_for_cql_list_specifier(specifier: ListTypeSpecifier) -> str:
+    """Return a DuckDB list type for a statically typed empty CQL list."""
+    element = specifier.element_type
+    if isinstance(element, NamedTypeSpecifier):
+        bare = element.name.split(".")[-1].lower()
+        if bare == "boolean":
+            return "BOOLEAN[]"
+        if bare == "integer":
+            return "INTEGER[]"
+        if bare == "long":
+            return "BIGINT[]"
+        if bare == "decimal":
+            return "DOUBLE[]"
+    return "VARCHAR[]"
+
+
 def _literal_int_values(args: list) -> Optional[list[int]]:
     values: list[int] = []
     for arg in args:
@@ -1326,6 +1342,15 @@ class OperatorsMixin:
                     target_name = self._type_specifier_name(expr.right)
                     self._ensure_known_type_specifier_target(expr.right, "as")
                 bare_target = target_name.split(".")[-1] if "." in target_name else target_name
+                if (
+                    isinstance(expr.right, ListTypeSpecifier)
+                    and isinstance(expr.left, ListExpression)
+                    and not expr.left.elements
+                ):
+                    return SQLCast(
+                        expression=SQLArray(elements=[]),
+                        target_type=_sql_list_type_for_cql_list_specifier(expr.right),
+                    )
                 primitive_targets = {
                     "Boolean", "boolean",
                     "Integer", "integer",
@@ -5191,11 +5216,43 @@ class OperatorsMixin:
 
             # Handle DATE vs VARCHAR type mismatch — with VARCHAR-based datetime
             # representation, both sides should remain VARCHAR strings for comparison.
-            # No CAST needed since ISO 8601 strings compare correctly as VARCHAR.
+        # No CAST needed since ISO 8601 strings compare correctly as VARCHAR.
 
         # CQL §16.4: division by zero returns null — wrap the divisor with NULLIF
         if sql_op == "/":
             right = SQLFunctionCall(name="NULLIF", args=[right, SQLLiteral(value=0)])
+
+        # Nested FHIR extension predicates such as
+        # `exists(C.extension Ext where Ext.url = '...')` are translated through
+        # a projected `extension.url` path.  Scalar `fhirpath_text` cannot
+        # represent all extension repetitions, so route URL equality through an
+        # existential FHIRPath predicate over the original resource.
+        def _extension_url_exists_call(candidate: SQLExpression, url_expr: SQLExpression) -> Optional[SQLExpression]:
+            if not (
+                isinstance(candidate, SQLFunctionCall)
+                and candidate.name == "fhirpath_text"
+                and len(candidate.args) == 2
+                and isinstance(candidate.args[1], SQLLiteral)
+                and candidate.args[1].value == "extension.url"
+                and isinstance(url_expr, SQLLiteral)
+                and isinstance(url_expr.value, str)
+            ):
+                return None
+            escaped_url = url_expr.value.replace("'", "''")
+            return SQLFunctionCall(
+                name="fhirpath_bool",
+                args=[
+                    candidate.args[0],
+                    SQLLiteral(f"extension.where(url='{escaped_url}').exists()"),
+                ],
+            )
+
+        if sql_op == "=":
+            extension_exists = _extension_url_exists_call(left, right)
+            if extension_exists is None:
+                extension_exists = _extension_url_exists_call(right, left)
+            if extension_exists is not None:
+                return self._maybe_wrap_audit_comparison(extension_exists, operator, left, right)
 
         # CQL §12.1/§12.2: List equality requires element type compatibility.
         # DuckDB implicitly coerces [1,2,3] = ['1','2','3'] to true; CQL does not.

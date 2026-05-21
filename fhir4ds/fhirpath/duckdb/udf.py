@@ -267,7 +267,9 @@ _KNOWN_FHIRPATH_FUNCTIONS = frozenset({
     # FHIR-specific
     'resolve', 'extension', 'hasValue', 'getValue', 'getResourceKey',
     'getReferenceKey', 'memberOf',
-    'htmlChecks', 'conformsTo', 'elementDefinition', 'slice', 'checkModifiers',
+    'htmlChecks', 'htmlChecks2', 'conformsTo', 'elementDefinition', 'slice',
+    'checkModifiers', 'hasTemplateIdOf', 'create', 'withExtension',
+    'withProperty', 'empty_collection',
     # Boolean
     'not',
 })
@@ -276,19 +278,37 @@ _KNOWN_FHIRPATH_FUNCTIONS = frozenset({
 _FHIRPATH_FUNC_RE = re.compile(r'\.?([a-zA-Z_]\w*)\s*\(')
 
 
-def _warn_unknown_functions(expression: str) -> None:
-    """Log warnings for unrecognized function names in a FHIRPath expression."""
-    for match in _FHIRPATH_FUNC_RE.finditer(expression):
+def _function_scan_text(expression: str) -> str:
+    """Mask comments, strings, identifiers, and temporal literals before scanning calls."""
+    text = _strip_comments_for_precheck(expression)
+    text = re.sub(r"'(?:\\.|[^\\'])*'", "S", text)
+    text = re.sub(r"`(?:\\.|[^\\`])*`", "I", text)
+    text = re.sub(r"@[T0-9:.\-+Z]+", "D", text)
+    return text
+
+
+def _unknown_function_names(expression: str) -> list[str]:
+    """Return lower-case-style unknown function calls in an expression."""
+    unknown: list[str] = []
+    for match in _FHIRPATH_FUNC_RE.finditer(_function_scan_text(expression)):
         func_name = match.group(1)
         if func_name not in _KNOWN_FHIRPATH_FUNCTIONS:
-            # Skip common non-function patterns (resource types, string literals)
+            # Skip common non-function patterns such as resource type names and
+            # constructor-like clinical/FHIR type helpers.
             if func_name[0].isupper():
-                continue  # Resource type names like Patient, Observation
-            _logger.warning(
-                "FHIRPath expression contains unknown function '%s' — "
-                "possible typo (will return empty/NULL): %s",
-                func_name, expression,
-            )
+                continue
+            unknown.append(func_name)
+    return unknown
+
+
+def _warn_unknown_functions(expression: str) -> None:
+    """Log warnings for unrecognized function names in a FHIRPath expression."""
+    for func_name in _unknown_function_names(expression):
+        _logger.warning(
+            "FHIRPath expression contains unknown function '%s' — "
+            "possible typo (will return empty/NULL): %s",
+            func_name, expression,
+        )
 
 
 # Lazily cached choice type lookup table: base_name -> list of suffixed field names
@@ -849,6 +869,8 @@ def fhirpath_is_valid_udf(expression: str | None) -> bool:
     if _INVALID_EXPR_PATTERNS.search(precheck_text):
         return False
     if not _has_balanced_delimiters(stripped):
+        return False
+    if _unknown_function_names(stripped):
         return False
     try:
         if _evaluate_literal_temporal_arithmetic(expression) is not None:

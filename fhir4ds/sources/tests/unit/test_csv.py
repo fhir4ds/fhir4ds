@@ -58,6 +58,24 @@ def _write_patients_csv(path: str) -> None:
 # Tests: Happy path
 # ---------------------------------------------------------------------------
 
+class TestCSVSourceConstructor:
+    def test_rejects_non_string_path(self):
+        with pytest.raises(TypeError, match="path must be a string"):
+            CSVSource(None, _GOOD_PROJECTION)
+
+    def test_rejects_empty_path(self):
+        with pytest.raises(ValueError, match="path must be a non-empty string"):
+            CSVSource("", _GOOD_PROJECTION)
+
+    def test_rejects_non_string_projection_sql(self):
+        with pytest.raises(TypeError, match="projection_sql must be a string"):
+            CSVSource("/data/patients.csv", None)
+
+    def test_rejects_empty_projection_sql(self):
+        with pytest.raises(ValueError, match="projection_sql must be a non-empty"):
+            CSVSource("/data/patients.csv", "   ")
+
+
 class TestCSVSourceHappyPath:
     def test_mounts_csv_file_as_resources_view(self):
         with tempfile.TemporaryDirectory() as tmpdir:

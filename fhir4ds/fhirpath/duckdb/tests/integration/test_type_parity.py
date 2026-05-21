@@ -223,6 +223,14 @@ def test_unknown_function_is_invalid_in_native_and_fallback(monkeypatch) -> None
         assert native.execute("SELECT fhirpath_is_valid('foo()')").fetchone() == (False,)
         assert fallback.execute("SELECT fhirpath_is_valid('foo()')").fetchone() == (False,)
         assert fhirpath_is_valid_udf("foo()") is False
+        lazy_branch = "iif(true, 'ok', unknownFunction())"
+        assert native.execute("SELECT fhirpath_is_valid(?)", [lazy_branch]).fetchone() == (False,)
+        assert fallback.execute("SELECT fhirpath_is_valid(?)", [lazy_branch]).fetchone() == (False,)
+        assert fhirpath_is_valid_udf(lazy_branch) is False
+        string_literal = "'unknownFunction()'.trace('label')"
+        assert native.execute("SELECT fhirpath_is_valid(?)", [string_literal]).fetchone() == (True,)
+        assert fallback.execute("SELECT fhirpath_is_valid(?)", [string_literal]).fetchone() == (True,)
+        assert fhirpath_is_valid_udf(string_literal) is True
         assert native.execute("SELECT fhirpath_is_valid('1.lowBoundary()')").fetchone() == (True,)
         assert fallback.execute("SELECT fhirpath_is_valid('1.lowBoundary()')").fetchone() == (True,)
         assert fhirpath_is_valid_udf("1.lowBoundary()") is True

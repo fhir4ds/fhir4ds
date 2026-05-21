@@ -1047,6 +1047,39 @@ class FunctionsMixin:
         # a scalar CTE lookup. Inline literal Quantity lists here so the
         # unit-aware aggregate path is preserved.
         if isinstance(arg, Identifier):
+            symbol = self.context.lookup_symbol(arg.name)
+            symbol_expr = getattr(symbol, "ast_expr", None) if symbol else None
+            if (
+                symbol_expr is not None
+                and (
+                    _is_list_returning_sql(symbol_expr)
+                    or (
+                        isinstance(symbol_expr, SQLQualifiedIdentifier)
+                        and len(symbol_expr.parts) == 2
+                        and symbol_expr.parts[1] == "__acc"
+                    )
+                )
+            ):
+                source_sql = self.translate(arg, usage=ExprUsage.SCALAR)
+                if name.lower() == "count":
+                    filtered = SQLFunctionCall(
+                        name="list_filter",
+                        args=[source_sql, SQLLambda(param="_v", body=SQLUnaryOp(
+                            operator="IS NOT NULL",
+                            operand=SQLIdentifier(name="_v"),
+                            prefix=False,
+                        ))],
+                    )
+                    return SQLFunctionCall(name="len", args=[filtered])
+                list_func = {
+                    "min": "list_min",
+                    "max": "list_max",
+                    "sum": "list_sum",
+                    "avg": "list_avg",
+                }.get(name.lower())
+                if list_func is not None:
+                    return SQLFunctionCall(name=list_func, args=[source_sql])
+
             meta = self.context.definition_meta.get(arg.name)
             cql_type = str(getattr(meta, "cql_type", "") or "")
             if cql_type == "List<Quantity>":
@@ -2185,16 +2218,16 @@ class FunctionsMixin:
             # Use demographics CTE for birthday-aware age calculation.
             # Always flag that demographics CTE is needed.
             self.context._needs_demographics = True
-            unit_map = {
-                "ageinyearsat": "year",
-                "ageinmonthsat": "month",
-                "ageinweeksat": "week",
-                "ageindaysat": "day",
-                "ageinhoursat": "hour",
-                "ageinminutesat": "minute",
-                "ageinsecondsat": "second",
+            calc_udf_map = {
+                "ageinyearsat": "CalculateAgeInYearsAt",
+                "ageinmonthsat": "CalculateAgeInMonthsAt",
+                "ageinweeksat": "CalculateAgeInWeeksAt",
+                "ageindaysat": "CalculateAgeInDaysAt",
+                "ageinhoursat": "CalculateAgeInHoursAt",
+                "ageinminutesat": "CalculateAgeInMinutesAt",
+                "ageinsecondsat": "CalculateAgeInSecondsAt",
             }
-            unit = unit_map.get(name.lower(), "year")
+            calc_udf_name = calc_udf_map.get(name.lower(), "CalculateAgeInYearsAt")
 
             _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
             birth_date = SQLSubquery(query=SQLSelect(
@@ -2210,52 +2243,13 @@ class FunctionsMixin:
                 ),
                 limit=1,
             ))
-            as_of_date = self._ensure_date_cast(args[0])
-
-            if unit == "year":
-                # Birthday-aware: subtract 1 if birthday hasn't occurred yet
-                month_as_of = SQLExtract(extract_field="MONTH", source=as_of_date)
-                day_as_of = SQLExtract(extract_field="DAY", source=as_of_date)
-                month_birth = SQLExtract(extract_field="MONTH", source=birth_date)
-                day_birth = SQLExtract(extract_field="DAY", source=birth_date)
-
-                birthday_not_reached = SQLBinaryOp(
-                    operator="OR",
-                    left=SQLBinaryOp(operator="<", left=month_as_of, right=month_birth),
-                    right=SQLBinaryOp(
-                        operator="AND",
-                        left=SQLBinaryOp(operator="=", left=month_as_of, right=month_birth),
-                        right=SQLBinaryOp(operator="<", left=day_as_of, right=day_birth),
-                    ),
-                )
-
-                return SQLBinaryOp(
-                    operator="-",
-                    left=SQLBinaryOp(
-                        operator="-",
-                        left=SQLExtract(extract_field="YEAR", source=as_of_date),
-                        right=SQLExtract(extract_field="YEAR", source=birth_date),
-                    ),
-                    right=SQLCase(
-                        when_clauses=[(
-                            birthday_not_reached,
-                            SQLLiteral(value=1),
-                        )],
-                        else_clause=SQLLiteral(value=0),
-                    ),
-                )
-            else:
-                target_type = "TIMESTAMP" if unit in {"hour", "minute", "second"} else "DATE"
-                birth_date_cast = SQLRaw(f"TRY_CAST({birth_date.to_sql()} AS {target_type})")
-                as_of_date_cast = SQLRaw(f"TRY_CAST({args[0].to_sql()} AS {target_type})")
-                return SQLFunctionCall(
-                    name="date_diff",
-                    args=[
-                        SQLLiteral(value=unit),
-                        birth_date_cast,
-                        as_of_date_cast,
-                    ],
-                )
+            return SQLFunctionCall(
+                name=calc_udf_name,
+                args=[
+                    SQLCast(expression=birth_date, target_type="VARCHAR"),
+                    SQLCast(expression=args[0], target_type="VARCHAR"),
+                ],
+            )
         elif len(args) >= 2:
             patient_resource = args[0]
             as_of_date = args[1]

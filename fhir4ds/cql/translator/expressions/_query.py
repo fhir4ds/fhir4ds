@@ -4585,33 +4585,46 @@ class QueryMixin:
                 )
             else:
                 # ── Single-source aggregate ───────────────────────────────
-                # Detect "null as List<T>" starting value.
+                # Detect typed-list starting values.
                 # DuckDB's list_reduce requires the lambda body return type to
                 # match the element type (VARCHAR), but a list accumulator body
                 # returns VARCHAR[] — a type mismatch that causes a runtime
                 # error.  Route these through the same recursive-CTE fold used
-                # for multi-source aggregates so the accumulator is typed as
-                # VARCHAR[] from the outset.  (CQL §19.27)
+                # for multi-source aggregates so the accumulator is typed as a
+                # list from the outset.  (CQL §19.27)
                 from ...parser.ast_nodes import (
+                    ListExpression as _ListExpression,
                     ListTypeSpecifier as _ListTypeSpec,
                     Literal as _ASTLiteral,
                 )
-                _starting_is_null_list = (
+                _starting_is_typed_list = (
                     agg.starting is not None
                     and isinstance(agg.starting, BinaryExpression)
                     and agg.starting.operator == 'as'
                     and isinstance(agg.starting.right, _ListTypeSpec)
-                    and isinstance(agg.starting.left, _ASTLiteral)
-                    and agg.starting.left.value is None
+                    and (
+                        (
+                            isinstance(agg.starting.left, _ASTLiteral)
+                            and agg.starting.left.value is None
+                        )
+                        or (
+                            isinstance(agg.starting.left, _ListExpression)
+                            and not agg.starting.left.elements
+                        )
+                    )
                 )
 
-                if _starting_is_null_list and alias:
+                if _starting_is_typed_list and alias:
                     # ── Single-source list-accumulator aggregate: recursive CTE fold ──
                     # source_list is the array expression (SQLArray or SQLFunctionCall).
                     if isinstance(source_list, SQLArray):
                         _arr_sql = source_list.to_sql()
                     elif isinstance(source_list, SQLFunctionCall) and source_list.name == "unnest":
                         _arr_sql = source_list.args[0].to_sql()
+                    elif isinstance(source_list, SQLCast) and source_list.target_type.endswith("[]"):
+                        _arr_sql = source_list.to_sql()
+                    elif _is_list_returning_sql(source_list):
+                        _arr_sql = source_list.to_sql()
                     else:
                         _arr_sql = f"[{source_list.to_sql()}]"
 
@@ -4632,6 +4645,11 @@ class QueryMixin:
                         self.context.pop_scope()
 
                     _body_sql = agg_body.to_sql()
+                    _start_sql = (
+                        "CAST(NULL AS VARCHAR[])"
+                        if isinstance(agg.starting.left, _ASTLiteral)
+                        else "CAST([] AS VARCHAR[])"
+                    )
                     result = SQLRaw(
                         f"(WITH RECURSIVE __xj AS ("
                         f"SELECT {_distinct_kw}{alias} FROM "
@@ -4639,12 +4657,13 @@ class QueryMixin:
                         f"), __xjn AS ("
                         f"SELECT ROW_NUMBER() OVER () AS __rn, * FROM __xj"
                         f"), __fold(__acc, __rn) AS ("
-                        f"SELECT CAST(NULL AS VARCHAR[]), CAST(0 AS BIGINT) "
+                        f"SELECT {_start_sql}, CAST(0 AS BIGINT) "
                         f"UNION ALL "
                         f"SELECT {_body_sql}, __xjn.__rn "
                         f"FROM __fold JOIN __xjn ON __xjn.__rn = __fold.__rn + 1"
                         f") SELECT __acc FROM __fold ORDER BY __rn DESC LIMIT 1)"
                     )
+                    result.result_type = "List<Any>"
                 else:
                     # ── Single-source scalar aggregate: list_reduce pattern ──────────
                     # Apply distinct/all modifiers

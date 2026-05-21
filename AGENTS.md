@@ -116,6 +116,16 @@ or connection strings directly into SQL. Cloud credential providers and option
 keys are allowlisted in `fhir4ds/sources/filesystem.py`; extend that allowlist
 deliberately with focused injection tests when adding provider options.
 
+### FHIRDataLoader Ingestion Atomicity
+
+Strict `FHIRDataLoader.load_ndjson(..., strict=True)` must be all-or-nothing for
+both malformed JSON and valid-JSON invalid-FHIR records. Parse and validate the
+full file before inserting through the batch loader so a later missing
+`resourceType`, invalid `id`, non-dict line, or non-standard JSON number cannot
+leave earlier rows partially committed. Non-strict NDJSON/directory loading may
+skip invalid records with warnings, but strict mode must keep the resources
+table unchanged on failure.
+
 ---
 
 ## Development Workflow
@@ -342,12 +352,26 @@ clinical type inference must also flow through query `let`/`return` and
 CQL interval operators must preserve Quantity shape at interval boundaries.
 Do not reduce Quantity bounds or points to bare numeric values before
 comparison; `Interval[1 'g', 2 'g'] contains 1500 'mg'` depends on the same
-unit-aware comparison surface as ordinary Quantity ordering. Interval-valued
-set-operation outputs such as `intervalExcept`, `intervalIntersect`, and
-`intervalUnion` remain interval expressions for downstream `contains`,
-`includes`, equality, and precision operators; translator dispatch must not
-fall through to generic DuckDB list/string functions for nested interval
-composition.
+unit-aware comparison surface as ordinary Quantity ordering. Incompatible
+Quantity dimensions such as `Interval[1 'g', 2 'g'] contains 1 'cm'` must
+return SQL NULL in Python fallback, native-loaded, and no-Python C++ DuckDB
+surfaces, not Python comparison errors or `false`. Interval-valued set-operation
+outputs such as `intervalExcept`, `intervalIntersect`, and `intervalUnion`
+remain interval expressions for downstream `contains`, `includes`, equality,
+and precision operators; translator dispatch must not fall through to generic
+DuckDB list/string functions for nested interval composition.
+
+### DQM Population Attribution
+`MeasureEvaluator.summary_report()` must apply subject-based proportion
+population labels in FHIR CQM order, not by independently counting raw CQL
+definition truth values. Label denominator only inside initial population,
+denominator exclusion only inside denominator, numerator only after denominator
+exclusion is removed, denominator exception only for denominator/non-excluded
+patients that did **not** meet numerator, and numerator exclusion only inside
+numerator. Aggregate caps cannot repair patient-level misattribution: if the
+only numerator patient is denominator-excluded, numerator_final is 0; if a
+denominator-exception patient also meets numerator, the exception does not
+remove that patient from denominator_final.
 
 ### ViewDefinition Canonical Constants
 Built-in FHIRPath variables (`%context`, `%resource`, `%rootResource`, `%ucum`, `%rowIndex`)
@@ -663,3 +687,135 @@ evaluation when optional `code` or `message` operands are SQL NULL. DuckDB
 `CQLMessage` must coalesce nullable error text before calling `error(...)`.
 Fixed in the DuckDB macro and Python fallback body with parity coverage for
 forced Python fallback and native-loaded registrations.
+
+### Performance Scaling Probe
+
+**NOT A BUG (Release 0.0.6 Domain 7, 2026-05-20).** Synthetic Patient loading
+through `FHIRDataLoader.load_resources()` showed stable linear cost from 1k to
+50k rows, with proportional tracemalloc peak growth and linear FHIRPath wrapper
+query execution. Do not classify normal row-proportional slowdown as a
+performance defect; Domain 7 findings require a qualitative scaling cliff,
+memory spike, leak, or concurrency failure.
+
+### Source Adapter API Errors
+
+**Fixed in Release 0.0.6 Domain 8 (2026-05-20).** Source-adapter public
+constructor argument validation should happen before SQL construction or DuckDB
+registration. `CSVSource` rejects non-string `path`/`projection_sql` with
+`TypeError` and empty required strings with `ValueError`; projection/view shape
+errors still belong to `SchemaValidationError`.
+
+### DQM Audit Evidence Boundary
+
+**Fixed in Release 0.0.6 Domain 9 (2026-05-20).** `AuditEngine.prune_evidence()`
+is row-oriented: it expects a dict keyed by the population column name so it can
+read the result/evidence for that population. Evaluator code that prunes one
+cell at a time must wrap the cell as `{col_name: cell}`. Passing the raw audit
+cell erases causal evidence and causes narratives/exports to report missing
+detail incorrectly.
+
+### Release Version Consistency
+
+**Fixed in Release 0.0.6 Domain 10 (2026-05-20).** Public subpackage
+`__version__` values in the unified namespace should match `fhir4ds.__version__`.
+Keep `fhir4ds/tests/test_version.py` release-neutral by comparing against the
+root package version rather than hardcoding the current version.
+
+### HEDIS Continuous Enrollment Primitives
+
+**NOT A BUG (Release 0.0.6 Domain 11, 2026-05-20).** Continuous-enrollment
+temporal primitives matched across forced Python fallback, native-loaded, and
+no-Python C++ surfaces: overlapping/adjacent coverage intervals collapse,
+one-day uncovered gaps remain separate, `successor of end` advances exactly one
+day, and 45/46-day plus total-small-gap threshold comparisons evaluate
+correctly. If adding a dedicated enrollment helper, keep these primitives
+parity-tested together.
+
+### HEDIS Age Boundary Semantics
+
+**Fixed in Release 0.0.6 Domain 12 (2026-05-20).** CQL age helpers use complete
+calendar periods, not raw day counts or simple month/day tuple comparison. Feb
+29 birthdays use the last valid day in non-leap years, so
+`CalculateAgeInYearsAt(@2000-02-29, @2021-02-28)` is `21`, and complete-month
+calculation follows the same calendar-month add rule. Keep forced Python
+fallback, native-loaded, no-Python C++ runtime, and patient-context translated
+`AgeIn*At()` SQL parity-tested together.
+
+### HEDIS Episode Dedup Aggregate Boundary
+
+**Fixed in Release 0.0.6 Domain 13 (2026-05-20).** HEDIS-style episode
+deduplication depends on CQL query `aggregate` with a typed empty list starting
+value such as `({} as List<Date>)`. Typed empty lists must compile to typed
+DuckDB arrays, list-accumulator aggregates must use the recursive fold path,
+`Count(R)` inside the fold must count list elements rather than emitting a SQL
+row aggregate, and `Count(<fold result>)` must treat the fold output as a list.
+Keep sorting-before-fold, empty input, same-day collapse, exact 31-day collapse,
+and 32-day new-episode cases parity-tested across forced Python fallback,
+native-loaded, and no-Python C++ surfaces.
+
+### HEDIS Hospice Extension Predicates
+
+**Fixed in Release 0.0.6 Domain 14 (2026-05-20).** Nested extension predicates
+such as `exists(Coverage.extension Ext where Ext.url = '<url>')` must be
+existential over all repeated extensions. Do not lower extension URL equality
+to scalar `fhirpath_text(resource, 'extension.url') = '<url>'`; that only sees
+one projected value and can miss a later LTI/hospice extension. Route
+`extension.url` equality through `fhirpath_bool(resource,
+'extension.where(url=''<url>'').exists()')` and keep multi-source OR,
+empty-source short-circuiting, temporal measurement-period bounding, and
+multi-extension coverage cases parity-tested across forced Python fallback,
+native-loaded, and no-Python C++ surfaces.
+
+### HEDIS FHIR Choice Type Assertions
+
+**NOT A BUG (Release 0.0.6 Domain 15, 2026-05-20).** Current translated
+choice-type assertions handle the tested HEDIS effective[x] boundaries:
+`effectivePeriod as FHIR.dateTime` returns NULL, `date from (effective as
+FHIR.dateTime)` strips the date from an `effectiveDateTime`, and
+`effectiveDate as FHIR.date` remains distinct from `FHIR.dateTime`. Keep these
+assertion/extraction cases parity-tested across forced Python fallback,
+native-loaded, and no-Python C++ surfaces when changing choice-type logic.
+
+### HEDIS Interval Boundary Semantics
+
+**NOT A BUG (Release 0.0.6 Domain 16, 2026-05-20).** Current translated CQL
+interval boundaries match the HEDIS expectations tested in the release loop:
+closed intervals sharing one endpoint overlap, equal closed intervals satisfy
+`during`, `within 15 days of` is inclusive at 15 and false at 16,
+`same day or after` includes equality, and `starts/ends during day of`
+measurement-period endpoints include the first/last day. Keep these boundaries
+parity-tested across forced Python fallback, native-loaded, and no-Python C++
+surfaces when changing temporal interval operators.
+
+### HEDIS Multi-Group Population Isolation
+
+**NOT A BUG (Release 0.0.6 Domain 17, 2026-05-20).** Current DQM
+`summary_report()` computes per-group summaries from each `_group_id` slice, so
+denominator exclusions in one independent rate group do not remove numerator
+or denominator membership from another group. The top-level summary over a
+concatenated multi-group DataFrame is an aggregate convenience view; consumers
+that need official rate-group counts should use `summary["groups"][group_id]`
+or the generated MeasureReport groups.
+
+### DQM Stratifier Propagation
+
+**Fixed in Release 0.0.6 Domain 18 (2026-05-20).** DQM `Measure.group.stratifier`
+entries are part of the reporting contract, including payer/reporting-line
+strata. Parse simple criteria stratifiers and composite component stratifiers,
+evaluate their CQL expressions as generated `stratifier_*` columns, and export
+stratum population counts in `summary_report()` and generated MeasureReport
+groups. For mutually exclusive reporting-line stratifiers, keep a total
+validation that the sum of initial-population stratum counts equals the group
+initial population.
+
+### HEDIS Reference Resolution
+
+**Fixed in Release 0.0.6 Domain 19 (2026-05-20).** CQL/FHIR reference
+resolution must accept the same id-tail semantics used by QICoreCommon
+`GetId()`/`getId()`/`references()`: `ResourceType/id`, bare ids, full URLs
+ending in `ResourceType/id`, and JSON `Reference` objects containing those
+forms all resolve to the target resource id. Keep `resolve()` macro behavior
+aligned between `FHIRDataLoader` registration and the DuckDB clinical macro
+module. `singleton from` may return NULL or raise for multi-item inputs
+depending on the translated/direct surface, but it must never silently pick an
+arbitrary element.

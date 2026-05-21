@@ -177,49 +177,59 @@ class MeasureEvaluator:
             the dict additionally contains a ``"groups"`` key mapping each
             group_id to its own summary dict.
         """
+        pop_map: PopulationMap | None = None
         if isinstance(result, MeasureResult):
             df = result.dataframe
+            pop_map = result.pop_map
         elif hasattr(result, "df"):
             df = result.df()
         else:
             df = result
+            pop_map = self._last_pop_map
 
-        def _summary_for_df(frame: pd.DataFrame) -> dict:
-            def _count_col(col_name: str) -> int:
+        def _summary_for_df(frame: pd.DataFrame, group: GroupMap | None = None) -> dict:
+            def _population_mask(col_name: str) -> pd.Series:
                 if col_name not in frame.columns:
-                    return 0
-                col = frame[col_name]
-                if len(col) > 0 and isinstance(col.iloc[0], dict):
-                    return int(col.apply(lambda x: x.get("result", False) if isinstance(x, dict) else bool(x)).sum())
-                return int(col.astype(bool).sum())
+                    return pd.Series(False, index=frame.index, dtype=bool)
 
-            ip = _count_col("initial_population")
-            denom = _count_col("denominator")
-            denom_excl = _count_col("denominator_exclusion")
-            denom_except = _count_col("denominator_exception")
-            numer = _count_col("numerator")
-            numer_excl = _count_col("numerator_exclusion")
+                def _is_true(value: Any) -> bool:
+                    if isinstance(value, dict):
+                        value = value.get("result", False)
+                    if value is None:
+                        return False
+                    try:
+                        if pd.isna(value):
+                            return False
+                    except (TypeError, ValueError):
+                        pass
+                    return bool(value)
 
-            denom_final = denom - denom_excl - denom_except
-            numer_final = numer - numer_excl
+                return frame[col_name].apply(_is_true).astype(bool)
 
-            # CQL §10: Numerator is a subset of Denominator — cap numer_final
-            # to denom_final so excluded-denominator patients are also removed
-            # from the numerator count.
-            if denom_final >= 0 and numer_final > denom_final:
-                numer_final = denom_final
+            population_masks = self._population_masks(frame, _population_mask)
+            ip_mask = population_masks["initial_population"]
+            denom_mask = population_masks["denominator"]
+            denom_excl_mask = population_masks["denominator_exclusion"]
+            denom_after_excl_mask = population_masks["denominator_after_exclusion"]
+            numer_mask = population_masks["numerator"]
+            denom_except_mask = (
+                denom_after_excl_mask
+                & ~numer_mask
+                & _population_mask("denominator_exception")
+            )
+            population_masks["denominator_exception"] = denom_except_mask
+            population_masks["denominator_final"] = denom_after_excl_mask & ~denom_except_mask
+            numer_excl_mask = population_masks["numerator_exclusion"]
 
-            if denom_final < 0:
-                raise DQMError(
-                    f"Negative denominator_final ({denom_final}): denominator({denom}) < "
-                    f"exclusions({denom_excl}) + exceptions({denom_except}). "
-                    f"Check measure logic or data."
-                )
-            if numer_final < 0:
-                raise DQMError(
-                    f"Negative numerator_final ({numer_final}): numerator({numer}) < "
-                    f"numerator_exclusion({numer_excl}). Check measure logic or data."
-                )
+            ip = int(ip_mask.sum())
+            denom = int(denom_mask.sum())
+            denom_excl = int(denom_excl_mask.sum())
+            denom_except = int(denom_except_mask.sum())
+            numer = int(numer_mask.sum())
+            numer_excl = int(numer_excl_mask.sum())
+
+            denom_final = int(population_masks["denominator_final"].sum())
+            numer_final = int(population_masks["numerator_final"].sum())
 
             if denom_final > 0:
                 performance_rate = numer_final / denom_final
@@ -240,7 +250,7 @@ class MeasureEvaluator:
             else:
                 total = len(frame)
 
-            return {
+            summary = {
                 "initial_population": ip,
                 "denominator": denom,
                 "denominator_exclusion": denom_excl,
@@ -253,7 +263,17 @@ class MeasureEvaluator:
                 "total_patients": total,
             }
 
-        overall = _summary_for_df(df)
+            if group is not None and group.stratifiers:
+                summary["stratifiers"] = self._stratifier_summaries(
+                    frame, group, population_masks
+                )
+
+            return summary
+
+        group_by_id = {g.group_id: g for g in pop_map.groups} if pop_map else {}
+        sole_group = pop_map.groups[0] if pop_map and len(pop_map.groups) == 1 else None
+
+        overall = _summary_for_df(df, sole_group if "_group_id" not in df.columns else None)
 
         # Multi-group: add per-group breakdowns
         if "_group_id" in df.columns:
@@ -262,11 +282,164 @@ class MeasureEvaluator:
                 gdf = df[df["_group_id"] == gid]
                 # Drop _group_id so it doesn't interfere with patient counts
                 group_summaries[str(gid)] = _summary_for_df(
-                    gdf.drop(columns=["_group_id"])
+                    gdf.drop(columns=["_group_id"]),
+                    group_by_id.get(str(gid)),
                 )
             overall["groups"] = group_summaries
 
         return overall
+
+    def _population_masks(self, frame: pd.DataFrame, population_mask: Any) -> dict[str, pd.Series]:
+        """Build DQM population masks with exclusion/exception semantics applied."""
+        ip_mask = population_mask("initial_population")
+        denom_mask = ip_mask & population_mask("denominator")
+        denom_excl_mask = denom_mask & population_mask("denominator_exclusion")
+        denom_after_excl_mask = denom_mask & ~denom_excl_mask
+        numer_mask = denom_after_excl_mask & population_mask("numerator")
+        numer_excl_mask = numer_mask & population_mask("numerator_exclusion")
+
+        false_mask = pd.Series(False, index=frame.index, dtype=bool)
+        return {
+            "initial_population": ip_mask,
+            "denominator": denom_mask,
+            "denominator_exclusion": denom_excl_mask,
+            "denominator_after_exclusion": denom_after_excl_mask,
+            "denominator_exception": false_mask,
+            "denominator_final": denom_after_excl_mask,
+            "numerator": numer_mask,
+            "numerator_exclusion": numer_excl_mask,
+            "numerator_final": numer_mask & ~numer_excl_mask,
+            "measure_population": ip_mask & population_mask("measure_population"),
+        }
+
+    def _stratifier_summaries(
+        self,
+        frame: pd.DataFrame,
+        group: GroupMap,
+        population_masks: dict[str, pd.Series],
+    ) -> list[dict[str, Any]]:
+        """Summarize configured Measure stratifiers for one group frame."""
+        summaries: list[dict[str, Any]] = []
+        for strat_index, stratifier in enumerate(group.stratifiers):
+            base = {
+                "id": stratifier.stratifier_id,
+                "code_text": stratifier.code_text,
+                "strata": [],
+            }
+            if stratifier.components:
+                component_cols = [
+                    self._stratifier_component_col(strat_index, comp_index)
+                    for comp_index, _ in enumerate(stratifier.components)
+                ]
+                if not all(col in frame.columns for col in component_cols):
+                    summaries.append(base)
+                    continue
+                keys = frame.apply(
+                    lambda row: tuple(
+                        self._stratifier_value(row[col]) for col in component_cols
+                    ),
+                    axis=1,
+                )
+                for key in self._ordered_unique(keys):
+                    mask = keys == key
+                    components = [
+                        {
+                            "id": component.component_id,
+                            "code_text": component.code_text,
+                            "value": value,
+                            "text": self._stratum_value_text(value),
+                        }
+                        for component, value in zip(stratifier.components, key)
+                    ]
+                    base["strata"].append(
+                        {
+                            "components": components,
+                            "population": self._stratum_population_counts(
+                                mask, group, population_masks
+                            ),
+                        }
+                    )
+            else:
+                col_name = self._stratifier_col(strat_index)
+                if col_name not in frame.columns:
+                    summaries.append(base)
+                    continue
+                values = frame[col_name].apply(self._stratifier_value)
+                keys = self._ordered_unique(values)
+                if self._has_boolean_values(keys):
+                    keys = [True, False]
+                for key in keys:
+                    mask = values == key
+                    base["strata"].append(
+                        {
+                            "value": key,
+                            "text": self._stratum_value_text(key),
+                            "population": self._stratum_population_counts(
+                                mask, group, population_masks
+                            ),
+                        }
+                    )
+            summaries.append(base)
+        return summaries
+
+    def _stratum_population_counts(
+        self,
+        stratum_mask: pd.Series,
+        group: GroupMap,
+        population_masks: dict[str, pd.Series],
+    ) -> dict[str, int]:
+        """Count each configured population inside a stratum."""
+        counts: dict[str, int] = {}
+        for pop in group.populations:
+            col_name = self._col_name(pop.population_code)
+            mask = population_masks.get(col_name)
+            if mask is None:
+                mask = pd.Series(False, index=stratum_mask.index, dtype=bool)
+            counts[pop.population_code] = int((stratum_mask & mask).sum())
+        return counts
+
+    @staticmethod
+    def _stratifier_value(value: Any) -> Any:
+        """Return the value part of a raw or audit-wrapped stratifier cell."""
+        if isinstance(value, dict) and "result" in value:
+            value = value.get("result")
+        try:
+            if pd.isna(value):
+                return None
+        except (TypeError, ValueError):
+            pass
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, sort_keys=True, default=str)
+        return value
+
+    @staticmethod
+    def _ordered_unique(values: Any) -> list[Any]:
+        """Return unique values in first-seen order."""
+        seen: set[str] = set()
+        out: list[Any] = []
+        for value in values:
+            key = json.dumps(value, sort_keys=True, default=str)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(value)
+        return out
+
+    @staticmethod
+    def _has_boolean_values(values: list[Any]) -> bool:
+        """Whether a stratum value set is boolean-shaped."""
+        return any(isinstance(value, (bool, np.bool_)) for value in values)
+
+    @staticmethod
+    def _stratum_value_text(value: Any) -> str:
+        """Serialize a stratum value into MeasureReport text form."""
+        if isinstance(value, (bool, np.bool_)):
+            return "true" if bool(value) else "false"
+        if value is None:
+            return "null"
+        return str(value)
 
     # ── Export Methods ──────────────────────────────────────────────────
 
@@ -335,7 +508,8 @@ class MeasureEvaluator:
         if pop_map is None:
             raise DQMError("No evaluation has been run yet. Call evaluate() first.")
 
-        summary = self.summary_report(df)
+        summary_input: Any = result if isinstance(result, MeasureResult) else df
+        summary = self.summary_report(summary_input)
         group_summaries = summary.get("groups", {})
 
         # Resolve period
@@ -373,7 +547,14 @@ class MeasureEvaluator:
                     },
                     "count": count,
                 })
-            groups.append({"population": populations})
+            group_report: dict[str, Any] = {"population": populations}
+            stratifier_summaries = group_summary.get("stratifiers", [])
+            if stratifier_summaries:
+                group_report["stratifier"] = [
+                    self._measure_report_stratifier(strat_summary, group)
+                    for strat_summary in stratifier_summaries
+                ]
+            groups.append(group_report)
 
         report: dict[str, Any] = {
             "resourceType": "MeasureReport",
@@ -392,6 +573,58 @@ class MeasureEvaluator:
             }]
 
         return report
+
+    def _measure_report_stratifier(
+        self, stratifier_summary: dict[str, Any], group: GroupMap
+    ) -> dict[str, Any]:
+        """Convert an internal stratifier summary to FHIR MeasureReport shape."""
+        stratifier: dict[str, Any] = {"stratum": []}
+        if stratifier_summary.get("id"):
+            stratifier["id"] = stratifier_summary["id"]
+        if stratifier_summary.get("code_text"):
+            stratifier["code"] = {"text": stratifier_summary["code_text"]}
+
+        for stratum_summary in stratifier_summary.get("strata", []):
+            stratum: dict[str, Any] = {
+                "population": self._measure_report_stratum_populations(
+                    stratum_summary.get("population", {}),
+                    group,
+                )
+            }
+            if "components" in stratum_summary:
+                stratum["component"] = [
+                    {
+                        **(
+                            {"code": {"text": component["code_text"]}}
+                            if component.get("code_text")
+                            else {}
+                        ),
+                        "value": {"text": component.get("text", "null")},
+                    }
+                    for component in stratum_summary["components"]
+                ]
+            else:
+                stratum["value"] = {"text": stratum_summary.get("text", "null")}
+            stratifier["stratum"].append(stratum)
+
+        return stratifier
+
+    def _measure_report_stratum_populations(
+        self, counts: dict[str, int], group: GroupMap
+    ) -> list[dict[str, Any]]:
+        """Build population count entries for a MeasureReport stratum."""
+        populations: list[dict[str, Any]] = []
+        for pop in group.populations:
+            populations.append({
+                "code": {
+                    "coding": [{
+                        "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                        "code": pop.population_code,
+                    }]
+                },
+                "count": int(counts.get(pop.population_code, 0)),
+            })
+        return populations
 
     # ── Internal Helpers ───────────────────────────────────────────────
 
@@ -457,6 +690,13 @@ class MeasureEvaluator:
             self._col_name(p.population_code): p.cql_expression
             for p in group.populations
         }
+        for strat_index, stratifier in enumerate(group.stratifiers):
+            if stratifier.cql_expression:
+                output_columns[self._stratifier_col(strat_index)] = stratifier.cql_expression
+            for comp_index, component in enumerate(stratifier.components):
+                output_columns[
+                    self._stratifier_component_col(strat_index, comp_index)
+                ] = component.cql_expression
 
         if audit_mode != AuditMode.NONE:
             for pop in group.populations:
@@ -526,11 +766,18 @@ class MeasureEvaluator:
                 if col_name not in df.columns:
                     continue
 
-                def _prune(cell, persona=pop.audit_persona, code=pop.population_code):
+                def _prune(
+                    cell,
+                    persona=pop.audit_persona,
+                    code=pop.population_code,
+                    column=col_name,
+                ):
                     if not isinstance(cell, dict):
                         return cell
                     try:
-                        pruned = self._audit_engine.prune_evidence(cell, code, persona)
+                        pruned = self._audit_engine.prune_evidence(
+                            {column: cell}, code, persona
+                        )
                         return {**cell, "evidence": pruned}
                     except Exception:
                         logger.warning(
@@ -626,6 +873,16 @@ class MeasureEvaluator:
     def _col_name(population_code: str) -> str:
         """Convert population code to column name."""
         return population_code.replace("-", "_")
+
+    @staticmethod
+    def _stratifier_col(index: int) -> str:
+        """Generated output column name for a group stratifier."""
+        return f"stratifier_{index + 1}"
+
+    @staticmethod
+    def _stratifier_component_col(stratifier_index: int, component_index: int) -> str:
+        """Generated output column name for a composite stratifier component."""
+        return f"stratifier_{stratifier_index + 1}_component_{component_index + 1}"
 
 
 # ── Module-level helpers ───────────────────────────────────────────────

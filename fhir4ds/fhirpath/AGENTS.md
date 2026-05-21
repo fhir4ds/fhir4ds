@@ -2,6 +2,14 @@
 
 ## Known Fragile Areas
 
+- **`fhirpath_is_valid()` unknown-function detection in lazy branches (Release 0.0.6 Domain 2, 2026-05-20):**
+  **FIXED:** Forced Python fallback used to validate by evaluating against a
+  sample Patient, so unknown functions hidden in an unselected `iif()` branch
+  could return `true` even though native C++ rejected the AST. Validation now
+  scans function calls outside strings/comments/delimited identifiers/temporal
+  literals before sample execution. Preserve `iif()` short-circuiting for
+  evaluation while keeping public native and forced fallback
+  `fhirpath_is_valid()` aligned.
 - **Quantity.value type reflection fallback parity (SOF-VD-11 SKEPTIC, 2026-05-20):**
   **FIXED:** Python fallback FHIRPath must report `valueQuantity.value.type().name`
   and `value.ofType(Quantity).value.type().name` as `decimal`, matching native
@@ -58,3 +66,13 @@
 - **Comparison string typing (FP-14 SKEPTIC, 2026-05-17):** Python fallback comparison must not coerce numeric-looking `String` operands into numbers. FHIRPath conversion table makes `String -> Integer/Decimal` explicit only; `Integer -> Decimal` is the relevant implicit numeric conversion. The fix is metadata-aware: XML-derived FHIR numeric primitives may be converted only when the original `ResourceNode.get_type_info()` identifies a numeric FHIR primitive (`decimal`, `integer`, `unsignedInt`, `positiveInt`, `integer64`). Plain string literals and arbitrary JSON string fields remain strings. Keep native C++ and forced Python DuckDB fallback parity for cases such as `'10' < '2'` and `'10' > 2`.
 - **Native Quantity path comparison (FP-14 HISTORIAN, 2026-05-17):** Native C++ comparison must materialize FHIR JSON `Quantity` path values into `FPValue::Quantity` before applying `<`, `>`, `<=`, or `>=`. **FIXED:** `isQuantityLike()` now recognizes FHIR `Quantity`/subtype metadata and structural Quantity objects before comparison, covering path-to-path expressions such as `Observation.value > Observation.component.value`. Keep native and forced Python fallback parity coverage in `test_comparison_parity.py`.
 - **FHIR Quantity `unit` fallback in comparison (FP-14 EXPLORER, 2026-05-17):** **FIXED:** Python fallback Quantity parsing recognizes structural FHIR Quantity objects with `value` plus either `code` or `unit`, matching the native `isQuantityLike()` path. Display-unit-only objects such as `{"value":4,"unit":"m"}` no longer become plain dicts during `<`, `>`, `<=`, or `>=` evaluation. Keep forced fallback parity with native for path-to-path comparisons.
+
+## NOT A BUG Registry
+
+- **Release 0.0.6 Domain 1 null/singleton wrapper behavior (2026-05-20):**
+  Public DuckDB FHIRPath wrappers intentionally convert strict singleton and
+  criteria-evaluation errors to empty/NULL for row resilience. A SKEPTIC sweep
+  over missing paths, JSON nulls, `where()` criteria, multi-item singleton
+  failures, scalar wrappers, and native-vs-forced-fallback registration found
+  no parity mismatch; keep `test_existence_parity.py` and `test_type_parity.py`
+  as guardrails.

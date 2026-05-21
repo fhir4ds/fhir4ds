@@ -1073,6 +1073,17 @@ static bool IntervalOverlapsQuantityUnknown(const cql::Interval &left, const cql
 	       IncomparableQuantityEndpoint(left.high, right.low);
 }
 
+static bool IntervalContainsPointQuantityUnknown(const cql::Interval &interval, const cql::BoundValue &point) {
+	cql::Optional<cql::BoundValue> point_value(point);
+	return IncomparableQuantityEndpoint(interval.low, point_value) ||
+	       IncomparableQuantityEndpoint(interval.high, point_value);
+}
+
+static bool IntervalIncludesQuantityUnknown(const cql::Interval &container, const cql::Interval &contained) {
+	return IncomparableQuantityEndpoint(container.low, contained.low) ||
+	       IncomparableQuantityEndpoint(container.high, contained.high);
+}
+
 DEFINE_TWO_STR_BOOL_UDF(IntervalContainsFunc, {
 	auto iv = cql::Interval::parse(a_str);
 	if (!iv) {
@@ -1081,9 +1092,17 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalContainsFunc, {
 	}
 	if (cql::is_json_interval(b_str)) {
 		auto other = cql::Interval::parse(b_str);
+		if (other && IntervalIncludesQuantityUnknown(*iv, *other)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
 		result_data[i] = other ? iv->includes(*other) : false;
 	} else {
 		auto point = cql::parse_point_value(b_str);
+		if (point && IntervalContainsPointQuantityUnknown(*iv, *point)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
 		result_data[i] = point ? iv->contains_point(*point) : false;
 	}
 })
@@ -1096,9 +1115,17 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalProperlyContainsFunc, {
 	}
 	if (cql::is_json_interval(b_str)) {
 		auto other = cql::Interval::parse(b_str);
+		if (other && IntervalIncludesQuantityUnknown(*iv, *other)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
 		result_data[i] = other ? iv->properly_includes(*other) : false;
 	} else {
 		auto point = cql::parse_point_value(b_str);
+		if (point && IntervalContainsPointQuantityUnknown(*iv, *point)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
 		result_data[i] = point ? iv->properly_contains_point(*point) : false;
 	}
 })

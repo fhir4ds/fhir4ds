@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
 
 import logging
+import calendar
 
 _logger = logging.getLogger(__name__)
 # Feature flag for rollback
@@ -186,10 +187,8 @@ def ageInYears_scalar(resource: str | None) -> int | None:
     if not birth:
         return None
     today = datetime.now(timezone.utc).date()
-    age = today.year - birth.year
-    if (today.month, today.day) < (birth.month, birth.day):
-        age -= 1
-    return age
+    age = _calc_years(birth, today, datetime.now(timezone.utc))
+    return age if age >= 0 else None
 
 
 def ageInMonths_scalar(resource: str | None) -> int | None:
@@ -198,9 +197,7 @@ def ageInMonths_scalar(resource: str | None) -> int | None:
     if not birth:
         return None
     today = datetime.now(timezone.utc).date()
-    months = (today.year - birth.year) * 12 + (today.month - birth.month)
-    if today.day < birth.day:
-        months -= 1
+    months = _calc_months(birth, today, datetime.now(timezone.utc))
     return months
 
 
@@ -253,9 +250,11 @@ def ageInYearsAt_scalar(resource: str | None, as_of: str) -> int | None:
     except (ValueError, TypeError) as e:
         _logger.warning("UDF ageInYearsAt failed to parse date: %s", e)
         return None
-    age = as_of_date.year - birth.year
-    if (as_of_date.month, as_of_date.day) < (birth.month, birth.day):
-        age -= 1
+    age = _calc_years(
+        birth,
+        as_of_date,
+        datetime.combine(as_of_date, time.min, tzinfo=timezone.utc),
+    )
     return age if age >= 0 else None
 
 
@@ -269,9 +268,11 @@ def ageInMonthsAt_scalar(resource: str | None, as_of: str) -> int | None:
     except (ValueError, TypeError) as e:
         _logger.warning("UDF ageInMonthsAt failed to parse date: %s", e)
         return None
-    months = (as_of_date.year - birth.year) * 12 + (as_of_date.month - birth.month)
-    if as_of_date.day < birth.day:
-        months -= 1
+    months = _calc_months(
+        birth,
+        as_of_date,
+        datetime.combine(as_of_date, time.min, tzinfo=timezone.utc),
+    )
     return months if months >= 0 else None
 
 
@@ -406,16 +407,28 @@ def _arrow_scalar_as_py(scalar: pa.Scalar) -> Any:
     return scalar.as_py() if scalar.is_valid else None
 
 
+def _days_in_month(year: int, month: int) -> int:
+    return calendar.monthrange(year, month)[1]
+
+
+def _add_calendar_months(value: date, months: int) -> date:
+    month_index = value.year * 12 + (value.month - 1) + months
+    year, month_zero = divmod(month_index, 12)
+    month = month_zero + 1
+    day = min(value.day, _days_in_month(year, month))
+    return date(year, month, day)
+
+
 def _calc_years(birth: date, ref_date: date, ref_now: datetime) -> int:
     age = ref_date.year - birth.year
-    if (ref_date.month, ref_date.day) < (birth.month, birth.day):
+    if _add_calendar_months(birth, age * 12) > ref_date:
         age -= 1
     return age
 
 
 def _calc_months(birth: date, ref_date: date, ref_now: datetime) -> int:
     months = (ref_date.year - birth.year) * 12 + (ref_date.month - birth.month)
-    if ref_date.day < birth.day:
+    if _add_calendar_months(birth, months) > ref_date:
         months -= 1
     return months
 
