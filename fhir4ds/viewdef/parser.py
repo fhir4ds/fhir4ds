@@ -4,15 +4,68 @@ ViewDefinition parser for SQL-on-FHIR v2.
 Parses JSON ViewDefinitions into Python dataclasses for SQL generation.
 """
 
-from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Dict, Any, Union
 import json
-import logging
 
-from .types import Column, Select, Constant, Join, JoinType, ViewDefinition
-from .errors import ParseError, ValidationError
+from .types import (
+    _extract_constant_value,
+    Column,
+    ColumnTag,
+    Select,
+    Constant,
+    Join,
+    JoinType,
+    ViewDefinition,
+    validate_column_fields,
+    validate_optional_boolean,
+    validate_optional_fhirpath_string,
+    validate_optional_uri_string,
+    validate_repeat_paths,
+    validate_root_metadata_fields,
+    validate_sql_name,
+    validate_supported_view_profiles,
+    validate_where_conditions,
+)
+from .errors import ParseError
+from .metadata import FHIR_VERSION_CODES, KNOWN_FHIR_RESOURCE_TYPES
 
-_logger = logging.getLogger(__name__)
+
+def _parse_optional_sql_name(data: Dict[str, Any], field_name: str) -> str | None:
+    """Parse an optional SQL-on-FHIR sql-name field."""
+    if field_name not in data:
+        return None
+    value = data[field_name]
+    try:
+        return validate_sql_name(value, f"ViewDefinition.{field_name}")
+    except ValueError as exc:
+        raise ParseError(str(exc)) from exc
+
+def _parse_string_array(data: Dict[str, Any], field_name: str) -> List[str]:
+    """Parse an optional 0..* string field from a ViewDefinition object."""
+    if field_name not in data:
+        return []
+    raw = data[field_name]
+    if raw is None:
+        raise ParseError(
+            f"ViewDefinition '{field_name}' must be an array of strings, got null"
+        )
+    if not isinstance(raw, list):
+        raise ParseError(
+            f"ViewDefinition '{field_name}' must be an array of strings, "
+            f"got {type(raw).__name__}"
+        )
+    if not all(isinstance(item, str) and item for item in raw):
+        raise ParseError(f"ViewDefinition '{field_name}' must contain only non-empty strings")
+    return list(raw)
+
+
+def _validate_fhir_versions(values: List[str]) -> None:
+    for value in values:
+        if value not in FHIR_VERSION_CODES:
+            raise ParseError(
+                f"ViewDefinition 'fhirVersion' value {value!r} is not in the "
+                "required FHIRVersion binding"
+            )
 
 
 def _parse_column(col_data: Dict[str, Any]) -> Column:
@@ -24,20 +77,52 @@ def _parse_column(col_data: Dict[str, Any]) -> Column:
     Returns:
         Column dataclass instance
     """
-    path = col_data.get('path', '')
-    name = col_data.get('name', '')
+    if not isinstance(col_data, dict):
+        raise ParseError(
+            f"Column definition must be a JSON object, got "
+            f"{type(col_data).__name__}: {col_data!r}"
+        )
 
-    if not path:
-        raise ParseError(f"Column missing required 'path' field: {col_data}")
-    if not name:
-        raise ParseError(f"Column missing required 'name' field: {col_data}")
+    raw_tag = col_data.get("tag", col_data.get("tags", []))
+    if "tag" in col_data and "tags" in col_data:
+        raise ParseError("Column must not specify both 'tag' and 'tags'")
+    if raw_tag is None or not isinstance(raw_tag, list):
+        raise ParseError(
+            f"Column 'tag' must be an array of JSON objects, got {type(raw_tag).__name__}"
+        )
+    tags = []
+    for idx, tag_item in enumerate(raw_tag):
+        try:
+            tags.append(ColumnTag.from_dict(tag_item))
+        except ValueError as exc:
+            raise ParseError(f"Invalid column tag at index {idx}: {exc}") from exc
+
+    try:
+        path, name, description = validate_column_fields(
+            col_data.get('path'),
+            col_data.get('name'),
+            col_data.get('description'),
+        )
+        collection = validate_optional_boolean(
+            col_data["collection"] if "collection" in col_data else False,
+            "Column.collection",
+        )
+        if "type" in col_data:
+            if col_data["type"] is None:
+                raise ValueError("Column.type must be a non-empty URI string")
+            column_type = validate_optional_uri_string(col_data["type"], "Column.type")
+        else:
+            column_type = None
+    except ValueError as exc:
+        raise ParseError(f"Invalid column definition: {exc}") from exc
 
     return Column(
         path=path,
         name=name,
-        type=col_data.get('type'),
-        collection=col_data.get('collection', False),
-        description=col_data.get('description')
+        type=column_type,
+        collection=collection,
+        description=description,
+        tag=tags,
     )
 
 
@@ -56,29 +141,10 @@ def _parse_where(where_data: Union[List[Any], Dict[str, Any], str]) -> List[Dict
     Raises:
         ParseError: If a where condition has an unsupported type
     """
-    if isinstance(where_data, str):
-        where_items = [where_data]
-    elif isinstance(where_data, dict):
-        where_items = [where_data]
-    elif isinstance(where_data, list):
-        where_items = where_data
-    else:
-        raise ParseError(
-            f"Where must be a string, object, or list, got "
-            f"{type(where_data).__name__}: {where_data!r}"
-        )
-
-    result = []
-    for w in where_items:
-        if isinstance(w, dict):
-            result.append(dict(w))
-        elif isinstance(w, str):
-            result.append({"path": w})
-        else:
-            raise ParseError(
-                f"Where condition must be a string or object, got {type(w).__name__}: {w!r}"
-            )
-    return result
+    try:
+        return validate_where_conditions(where_data, "Where")
+    except ValueError as exc:
+        raise ParseError(str(exc)) from exc
 
 
 def _parse_select(select_data: Dict[str, Any]) -> Select:
@@ -90,37 +156,82 @@ def _parse_select(select_data: Dict[str, Any]) -> Select:
     Returns:
         Select dataclass instance
     """
+    if not isinstance(select_data, dict):
+        raise ParseError(
+            f"Select definition must be a JSON object, got "
+            f"{type(select_data).__name__}: {select_data!r}"
+        )
+
+    def _parse_object_array(field_name: str) -> List[Dict[str, Any]]:
+        if field_name not in select_data:
+            return []
+        raw = select_data[field_name]
+        if not isinstance(raw, list):
+            raise ParseError(
+                f"Select '{field_name}' must be an array of JSON objects, "
+                f"got {type(raw).__name__}"
+            )
+        for idx, item in enumerate(raw):
+            if not isinstance(item, dict):
+                raise ParseError(
+                    f"Select '{field_name}' item {idx} must be a JSON object, "
+                    f"got {type(item).__name__}: {item!r}"
+                )
+        return raw
+
     # Parse columns
     columns = []
-    for col in select_data.get('column', []):
+    for col in _parse_object_array('column'):
         columns.append(_parse_column(col))
 
     # Parse nested selects
     nested_selects = []
-    for sel in select_data.get('select', []):
+    for sel in _parse_object_array('select'):
         nested_selects.append(_parse_select(sel))
 
     # Parse unionAll
     union_all = []
-    for u in select_data.get('unionAll', []):
+    for u in _parse_object_array('unionAll'):
         union_all.append(_parse_select(u))
 
     # Parse where conditions
     where = _parse_where(select_data.get('where', []))
 
-    # Parse repeat (list of FHIRPath expressions for recursive traversal)
-    repeat = select_data.get('repeat')
-    if repeat is not None:
-        if isinstance(repeat, str):
-            repeat = [repeat]
-        elif not isinstance(repeat, list):
-            repeat = list(repeat)
+    try:
+        for_each = validate_optional_fhirpath_string(
+            select_data.get('forEach'),
+            "Select.forEach",
+        )
+        for_each_or_null = validate_optional_fhirpath_string(
+            select_data.get('forEachOrNull'),
+            "Select.forEachOrNull",
+        )
+        repeat = (
+            validate_repeat_paths(select_data['repeat'], "Select.repeat")
+            if 'repeat' in select_data
+            else None
+        )
+    except ValueError as exc:
+        raise ParseError(str(exc)) from exc
+
+    active_iterators = []
+    if for_each:
+        active_iterators.append("forEach")
+    if for_each_or_null:
+        active_iterators.append("forEachOrNull")
+    if repeat:
+        active_iterators.append("repeat")
+    if len(active_iterators) > 1:
+        raise ParseError(
+            "Select can only have at most one of forEach, forEachOrNull, or repeat; "
+            f"got {', '.join(active_iterators)}"
+        )
 
     return Select(
         column=columns,
         select=nested_selects,
-        forEach=select_data.get('forEach'),
-        forEachOrNull=select_data.get('forEachOrNull'),
+        forEach=for_each,
+        forEachOrNull=for_each_or_null,
         unionAll=union_all,
         where=where,
         repeat=repeat,
@@ -131,11 +242,10 @@ def _parse_constant(const_data: Dict[str, Any]) -> Constant:
     """Parse a constant definition from JSON dict.
 
     Handles various constant value types per SQL-on-FHIR v2 spec:
-    - valueString, valueCode, valueInteger, valueBoolean, valueDecimal
+    - valueString, valueCode, valueInteger, valueInteger64, valueBoolean, valueDecimal
     - valueDate, valueDateTime, valueTime, valueInstant
-    - valueUri, valueUrl, valueUuid, valueOid, valueBase64Binary, valueId
+    - valueUri, valueUrl, valueUuid, valueOid, valueCanonical, valueBase64Binary, valueId
     - valuePositiveInt, valueUnsignedInt
-    - valueCoding, valueCodeableConcept
 
     Args:
         const_data: Dictionary with constant properties
@@ -147,55 +257,15 @@ def _parse_constant(const_data: Dict[str, Any]) -> Constant:
     if not name:
         raise ParseError(f"Constant missing required 'name' field: {const_data}")
 
-    # Map value keys to their type names
-    value_type_map = {
-        'valueString': 'string',
-        'valueCode': 'code',
-        'valueInteger': 'integer',
-        'valueBoolean': 'boolean',
-        'valueDecimal': 'decimal',
-        'valueDate': 'date',
-        'valueDateTime': 'dateTime',
-        'valueTime': 'time',
-        'valueInstant': 'instant',
-        'valueUri': 'uri',
-        'valueUrl': 'url',
-        'valueUuid': 'uuid',
-        'valueOid': 'oid',
-        'valueBase64Binary': 'base64Binary',
-        'valueId': 'id',
-        'valuePositiveInt': 'positiveInt',
-        'valueUnsignedInt': 'unsignedInt',
-        'valueCoding': 'Coding',
-        'valueCodeableConcept': 'CodeableConcept',
-    }
+    try:
+        validate_sql_name(name, "Constant.name")
+    except ValueError as exc:
+        raise ParseError(str(exc)) from exc
 
-    # Try various value keys
-    value = None
-    value_type = None
-
-    for key, vtype in value_type_map.items():
-        if key in const_data:
-            value = const_data[key]
-            value_type = vtype
-            break
-
-    # Fallback: check for any key starting with 'value'
-    if value is None:
-        for key, val in const_data.items():
-            if key.startswith('value') and key != 'value_type':
-                value = val
-                # Try to extract type from key name
-                type_name = key[5:]  # Remove 'value' prefix
-                if type_name:
-                    value_type = type_name
-                break
-
-    if value is None and value_type is None:
-        raise ParseError(
-            f"Constant '{name}' has no value. "
-            f"A constant must include a typed value property (e.g., valueString, valueInteger)."
-        )
+    try:
+        value, value_type = _extract_constant_value(const_data)
+    except ValueError as exc:
+        raise ParseError(f"Constant '{name}' invalid value[x]: {exc}") from exc
 
     return Constant(name=name, value=value, value_type=value_type)
 
@@ -209,6 +279,12 @@ def _parse_join(join_data: Dict[str, Any]) -> Join:
     Returns:
         Join dataclass instance
     """
+    if not isinstance(join_data, dict):
+        raise ParseError(
+            f"Join definition must be a JSON object, got "
+            f"{type(join_data).__name__}: {join_data!r}"
+        )
+
     name = join_data.get('name', '')
     resource = join_data.get('resource', '')
 
@@ -216,22 +292,42 @@ def _parse_join(join_data: Dict[str, Any]) -> Join:
         raise ParseError(f"Join missing required 'name' field: {join_data}")
     if not resource:
         raise ParseError(f"Join missing required 'resource' field: {join_data}")
+    try:
+        validate_sql_name(name, "Join.name")
+    except ValueError as exc:
+        raise ParseError(str(exc)) from exc
+    if not isinstance(resource, str):
+        raise ParseError(
+            f"Join.resource must be a FHIR ResourceType string, got {type(resource).__name__}"
+        )
+    if resource not in KNOWN_FHIR_RESOURCE_TYPES:
+        raise ParseError(
+            f"Join.resource {resource!r} is not in the required ResourceType binding"
+        )
 
     # Parse on conditions
+    raw_on = join_data.get('on', [])
+    if not isinstance(raw_on, list):
+        raise ParseError(
+            f"Join 'on' must be an array of JSON objects, got {type(raw_on).__name__}"
+        )
     on_conditions = []
-    for on_item in join_data.get('on', []):
+    for on_item in raw_on:
         if isinstance(on_item, dict):
             on_conditions.append(dict(on_item))
         else:
             raise ParseError(
                 f"Join 'on' items must be dicts, got {type(on_item).__name__}: {on_item}"
             )
-    return Join(
-        name=name,
-        resource=resource,
-        on=on_conditions,
-        type=join_data.get('type', 'inner')
-    )
+    try:
+        return Join(
+            name=name,
+            resource=resource,
+            on=on_conditions,
+            type=join_data.get('type', 'inner')
+        )
+    except ValueError as exc:
+        raise ParseError(str(exc)) from exc
 
 
 def parse_view_definition(json_str_or_dict) -> ViewDefinition:
@@ -250,6 +346,11 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
     if isinstance(json_str_or_dict, dict):
         data = json_str_or_dict
     elif isinstance(json_str_or_dict, str):
+        if json_str_or_dict.lstrip().startswith("<"):
+            raise ParseError(
+                "XML ViewDefinition parsing is not supported. Provide the "
+                "SQL-on-FHIR JSON representation instead."
+            )
         try:
             data = json.loads(json_str_or_dict)
         except json.JSONDecodeError as e:
@@ -262,90 +363,75 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
     if not isinstance(data, dict):
         raise ParseError("ViewDefinition must be a JSON object")
 
+    try:
+        (
+            resource_type,
+            view_id,
+            meta,
+            url,
+            version,
+            status,
+            title,
+            description,
+        ) = validate_root_metadata_fields(
+            resourceType=data.get("resourceType"),
+            id=data.get("id"),
+            meta=data.get("meta"),
+            url=data.get("url"),
+            version=data.get("version"),
+            status=data.get("status"),
+            title=data.get("title"),
+            description=data.get("description"),
+        )
+    except ValueError as exc:
+        raise ParseError(str(exc)) from exc
+
     # Parse required fields
     resource = data.get('resource', '')
     if not resource:
         raise ParseError("ViewDefinition missing required 'resource' field")
 
-    # Validate resource type(s) — accept string or list of strings
-    if isinstance(resource, list):
-        if not all(isinstance(r, str) for r in resource):
-            raise ParseError("'resource' list must contain only strings")
-        if len(resource) == 0:
-            raise ParseError("'resource' list must not be empty")
-    elif not isinstance(resource, str):
+    # ViewDefinition.resource is 1..1 code, bound to FHIR ResourceType.
+    if not isinstance(resource, str):
         raise ParseError(
-            f"'resource' must be a string or list of strings, got {type(resource).__name__}"
+            f"'resource' must be a string FHIR ResourceType code, got {type(resource).__name__}"
+        )
+    if resource not in KNOWN_FHIR_RESOURCE_TYPES:
+        raise ParseError(
+            f"ViewDefinition resource {resource!r} is not in the required ResourceType binding"
         )
 
-    # Warn on unrecognized resource type names (non-blocking)
-    _KNOWN_FHIR_RESOURCES = {
-        "Account", "ActivityDefinition", "ActorDefinition", "AdministrableProductDefinition",
-        "AdverseEvent", "AllergyIntolerance", "Appointment", "AppointmentResponse",
-        "ArtifactAssessment", "AuditEvent", "Basic", "Binary", "BiologicallyDerivedProduct",
-        "BiologicallyDerivedProductDispense", "BodyStructure", "Bundle",
-        "CapabilityStatement", "CarePlan", "CareTeam", "ChargeItem",
-        "ChargeItemDefinition", "Citation", "Claim", "ClaimResponse",
-        "ClinicalImpression", "ClinicalUseDefinition", "CodeSystem", "Communication",
-        "CommunicationRequest", "CompartmentDefinition", "Composition", "ConceptMap",
-        "Condition", "ConditionDefinition", "Consent", "Contract", "Coverage",
-        "CoverageEligibilityRequest", "CoverageEligibilityResponse", "DetectedIssue",
-        "Device", "DeviceAssociation", "DeviceDefinition", "DeviceDispense",
-        "DeviceMetric", "DeviceRequest", "DeviceUsage", "DiagnosticReport",
-        "DocumentReference", "Encounter", "EncounterHistory", "Endpoint",
-        "EnrollmentRequest", "EnrollmentResponse", "EpisodeOfCare",
-        "EventDefinition", "Evidence", "EvidenceReport", "EvidenceVariable",
-        "ExampleScenario", "ExplanationOfBenefit", "FamilyMemberHistory", "Flag",
-        "FormularyItem", "GenomicStudy", "Goal", "GraphDefinition", "Group",
-        "GuidanceResponse", "HealthcareService", "ImagingSelection", "ImagingStudy",
-        "Immunization", "ImmunizationEvaluation", "ImmunizationRecommendation",
-        "ImplementationGuide", "Ingredient", "InsurancePlan", "InventoryItem",
-        "InventoryReport", "Invoice", "Library", "Linkage", "List", "Location",
-        "ManufacturedItemDefinition", "Measure", "MeasureReport", "Medication",
-        "MedicationAdministration", "MedicationDispense", "MedicationKnowledge",
-        "MedicationRequest", "MedicationStatement", "MedicinalProductDefinition",
-        "MessageDefinition", "MessageHeader", "MolecularSequence", "NamingSystem",
-        "NutritionIntake", "NutritionOrder", "NutritionProduct", "Observation",
-        "ObservationDefinition", "OperationDefinition", "OperationOutcome",
-        "Organization", "OrganizationAffiliation", "PackagedProductDefinition",
-        "Parameters", "Patient", "PaymentNotice", "PaymentReconciliation",
-        "Permission", "Person", "PlanDefinition", "Practitioner",
-        "PractitionerRole", "Procedure", "Provenance", "Questionnaire",
-        "QuestionnaireResponse", "RegulatedAuthorization", "RelatedPerson",
-        "RequestOrchestration", "Requirements", "ResearchStudy", "ResearchSubject",
-        "RiskAssessment", "Schedule", "SearchParameter", "ServiceRequest", "Slot",
-        "Specimen", "SpecimenDefinition", "StructureDefinition", "StructureMap",
-        "Subscription", "SubscriptionStatus", "SubscriptionTopic", "Substance",
-        "SubstanceDefinition", "SubstanceNucleicAcid", "SubstancePolymer",
-        "SubstanceProtein", "SubstanceReferenceInformation", "SubstanceSourceMaterial",
-        "SupplyDelivery", "SupplyRequest", "Task", "TerminologyCapabilities",
-        "TestPlan", "TestReport", "TestScript", "Transport", "ValueSet",
-        "VerificationResult", "VisionPrescription",
-    }
-    import logging as _logging
-    _vd_logger = _logging.getLogger(__name__)
-    _resource_names = [resource] if isinstance(resource, str) else resource
-    for _rn in _resource_names:
-        if _rn not in _KNOWN_FHIR_RESOURCES:
-            _vd_logger.warning(
-                "ViewDefinition resource type '%s' is not a recognized FHIR resource type. "
-                "Possible typo? Known types include Patient, Observation, Condition, etc.", _rn
-            )
+    profile = _parse_string_array(data, "profile")
+    fhir_version = _parse_string_array(data, "fhirVersion")
+    _validate_fhir_versions(fhir_version)
 
     # Parse select structures
     selects = []
     if 'select' not in data:
         raise ParseError("ViewDefinition missing required 'select' field")
     select_data = data['select']
+    if not isinstance(select_data, list):
+        raise ParseError(
+            f"ViewDefinition 'select' must be an array of JSON objects, "
+            f"got {type(select_data).__name__}"
+        )
     if not select_data:
         raise ParseError("ViewDefinition 'select' array must not be empty")
 
-    for sel in select_data:
+    for idx, sel in enumerate(select_data):
+        if not isinstance(sel, dict):
+            raise ParseError(
+                f"ViewDefinition 'select' item {idx} must be a JSON object, "
+                f"got {type(sel).__name__}: {sel!r}"
+            )
         selects.append(_parse_select(sel))
 
     # Parse constants (spec uses 'constant' singular, also accept 'constants')
     constants = []
-    const_raw = data.get('constant', data.get('constants', []))
+    if 'constant' in data:
+        const_raw = data['constant']
+    else:
+        const_raw = data.get('constants', [])
     if isinstance(const_raw, list):
         for const in const_raw:
             if isinstance(const, dict):
@@ -354,6 +440,8 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
                 raise ParseError(
                     f"Each constant must be a JSON object, got {type(const).__name__}: {const!r}"
                 )
+    elif const_raw is None:
+        raise ParseError("'constant' must be a JSON array, got null")
     elif const_raw:
         raise ParseError(
             f"'constant' must be a JSON array, got {type(const_raw).__name__}"
@@ -361,21 +449,43 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
 
     # Parse joins
     joins = []
-    for j in data.get('joins', []):
+    raw_joins = data.get('joins', [])
+    if raw_joins is None or not isinstance(raw_joins, list):
+        raise ParseError(
+            f"ViewDefinition 'joins' must be an array of JSON objects, "
+            f"got {type(raw_joins).__name__}"
+        )
+    for j in raw_joins:
         joins.append(_parse_join(j))
 
     # Parse top-level where conditions
     where = _parse_where(data.get('where', []))
 
-    return ViewDefinition(
+    name = _parse_optional_sql_name(data, "name")
+
+    view_definition = ViewDefinition(
         resource=resource,
         select=selects,
-        name=data.get('name'),
-        description=data.get('description'),
+        resourceType=resource_type,
+        id=view_id,
+        meta=meta,
+        url=url,
+        version=version,
+        name=name,
+        status=status,
+        title=title,
+        description=description,
+        profile=profile,
+        fhirVersion=fhir_version,
         constants=constants,
         joins=joins,
         where=where
     )
+    try:
+        validate_supported_view_profiles(view_definition)
+    except ValueError as exc:
+        raise ParseError(str(exc)) from exc
+    return view_definition
 
 
 def validate_view_definition(vd: ViewDefinition) -> List[str]:
@@ -456,11 +566,18 @@ def _validate_selects(selects: List[Select], path: str) -> List[str]:
     for i, sel in enumerate(selects):
         current_path = f"{path}[{i}]"
 
-        # Check for both forEach and forEachOrNull (mutually exclusive per spec)
-        if sel.forEach and sel.forEachOrNull:
-            raise ValidationError(
-                f"{current_path}: Both forEach and forEachOrNull specified "
-                "(they are mutually exclusive per the SQL-on-FHIR v2 specification)"
+        # Check iterator mutual exclusion per SQL-on-FHIR sql-expressions constraint.
+        active_iterators = []
+        if sel.forEach:
+            active_iterators.append("forEach")
+        if sel.forEachOrNull:
+            active_iterators.append("forEachOrNull")
+        if sel.repeat:
+            active_iterators.append("repeat")
+        if len(active_iterators) > 1:
+            warnings.append(
+                f"{current_path}: Select can only have at most one of "
+                f"forEach, forEachOrNull, or repeat; got {', '.join(active_iterators)}"
             )
 
         # Check for empty select (no columns, no nested selects, no unionAll)

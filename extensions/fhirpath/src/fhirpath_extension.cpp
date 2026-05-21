@@ -23,9 +23,11 @@ using namespace duckdb_yyjson; // NOLINT
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -41,6 +43,45 @@ static bool IsSimplePath(const fhirpath::ASTNode &ast) {
 		return IsSimplePath(*ast.source);
 	}
 	return false;
+}
+
+static bool IsKnownFunctionName(const std::string &name) {
+	static const std::set<std::string> known_functions = {
+		"abs", "aggregate", "all", "allFalse", "allTrue", "anyFalse", "anyTrue", "as",
+		"ceiling", "checkModifiers", "children", "coalesce", "combine", "comparable",
+		"conformsTo", "contains", "convertsToBoolean", "convertsToDate", "convertsToDateTime",
+		"convertsToDecimal", "convertsToInteger", "convertsToQuantity", "convertsToString",
+		"convertsToTime", "count", "dayOf", "decode", "defineVariable", "descendants",
+		"distinct", "elementDefinition", "empty", "empty_collection", "encode", "endsWith", "escape", "exclude",
+		"exists", "exp", "first", "floor", "getReferenceKey", "getResourceKey", "getValue", "hasTemplateIdOf", "hasValue",
+		"highBoundary", "hourOf", "htmlChecks", "htmlChecks2", "iif", "indexOf", "intersect",
+		"is", "isDistinct", "join", "last", "length", "ln", "log", "lowBoundary", "lower",
+		"matches", "matchesFull", "memberOf", "millisecondOf", "minuteOf", "monthOf", "not", "now",
+		"ofType", "power", "precision", "repeat", "repeatAll", "replace", "replaceMatches", "resolve",
+		"round", "secondOf", "select", "single", "skip", "sort", "split", "sqrt", "startsWith",
+		"slice", "subsetOf", "substring", "supersetOf", "tail", "take", "timeOfDay", "timezoneOffsetOf",
+		"toBoolean", "toChars", "toDate", "toDateTime", "toDecimal", "toInteger", "toQuantity",
+		"toString", "toTime", "today", "trace", "trim", "truncate", "type", "unescape", "union",
+		"upper", "where", "yearOf",
+		"Address", "CodeableConcept", "Coding", "ContactPoint", "Extension", "HumanName",
+		"Identifier", "Quantity", "create", "withExtension", "withProperty",
+	};
+	return known_functions.find(name) != known_functions.end();
+}
+
+static bool AstHasOnlyKnownFunctions(const fhirpath::ASTNode &ast) {
+	if (ast.type == fhirpath::NodeType::FunctionCall && !IsKnownFunctionName(ast.name)) {
+		return false;
+	}
+	if (ast.source && !AstHasOnlyKnownFunctions(*ast.source)) {
+		return false;
+	}
+	for (const auto &child : ast.children) {
+		if (child && !AstHasOnlyKnownFunctions(*child)) {
+			return false;
+		}
+	}
+	return true;
 }
 
 // Collect path segments from a simple path AST in order
@@ -847,12 +888,14 @@ static fhirpath::FPCollection EvaluateFhirpath(FhirpathState &state, const char 
 			} else if (yyjson_is_bool(val.json_val)) {
 				owned_results.push_back(fhirpath::FPValue::FromBoolean(yyjson_get_bool(val.json_val)));
 			} else if (yyjson_is_null(val.json_val)) {
-				// Skip nulls
+				owned_results.push_back(fhirpath::FPValue::FromNull());
 			} else {
 				// Objects/arrays: serialize to JSON string
 				char *json = yyjson_val_write(val.json_val, 0, nullptr);
 				if (json) {
-					owned_results.push_back(fhirpath::FPValue::FromString(json));
+					auto owned_json = fhirpath::FPValue::FromString(json);
+					owned_json.fhir_type = "__json__";
+					owned_results.push_back(owned_json);
 					free(json);
 				}
 			}
@@ -1405,6 +1448,8 @@ static void FhirpathJsonFunction(DataChunk &args, ExpressionState &state, Vector
 					}
 				}
 				json_str += "\"}";
+			} else if (val.type == fhirpath::FPValue::Type::Null) {
+				json_str += "null";
 			} else if (val.type == fhirpath::FPValue::Type::JsonVal && val.json_val) {
 				// Serialize yyjson value directly (preserves native JSON types)
 				auto *written = yyjson_val_write(val.json_val, 0, nullptr);
@@ -1417,13 +1462,11 @@ static void FhirpathJsonFunction(DataChunk &args, ExpressionState &state, Vector
 			} else {
 				// String, Date, DateTime, Time
 				auto s = str_helper.toString(val);
-				// Detect already-serialized JSON objects/arrays from the evaluator
-				// and output them without quotes to produce proper nested JSON.
-				bool is_json_struct = (!s.empty() && (s[0] == '{' || s[0] == '['));
-				if (is_json_struct) {
+				if (val.type == fhirpath::FPValue::Type::String && val.fhir_type == "__json__") {
 					json_str += s;
 				} else {
-					// Wrap in quotes with JSON escaping
+					// String-typed values remain JSON strings even when their text
+					// begins with a JSON structural character such as '[' or '{'.
 					json_str += "\"";
 					for (unsigned char c : s) {
 						switch (c) {
@@ -1557,7 +1600,31 @@ static void FhirpathIsValidFunction(DataChunk &args, ExpressionState &state, Vec
 
 		try {
 			auto ast = tls_parser.parse(expressions[e_idx].GetString());
-			result_data[i] = (ast != nullptr);
+			if (!ast) {
+				result_data[i] = false;
+				continue;
+			}
+			if (!AstHasOnlyKnownFunctions(*ast)) {
+				result_data[i] = false;
+				continue;
+			}
+			static const char *validation_json = "{\"resourceType\":\"Patient\",\"id\":\"_validation\"}";
+			yyjson_doc *doc = yyjson_read(validation_json, strlen(validation_json), 0);
+			if (!doc) {
+				result_data[i] = false;
+				continue;
+			}
+			fhirpath::Evaluator evaluator;
+			try {
+				(void)evaluator.evaluate(*ast, doc, yyjson_doc_get_root(doc));
+				result_data[i] = true;
+			} catch (const std::bad_alloc&) {
+				yyjson_doc_free(doc);
+				throw;
+			} catch (const std::exception&) {
+				result_data[i] = false;
+			}
+			yyjson_doc_free(doc);
 		} catch (const std::bad_alloc&) {
 			throw;
 		} catch (const std::exception&) {
@@ -1619,50 +1686,9 @@ static void FhirpathPredicateFunction(DataChunk &args, ExpressionState &state, V
 }
 
 // fhirpath_repeat(resource JSON, paths_json VARCHAR) -> VARCHAR[]
-// SQL-on-FHIR v2 repeat support. The Python fallback treats paths as simple
-// dotted property chains, recursively collects object children in document
-// order, and returns each child as a JSON string.
-static bool IsRepeatPathSegment(const std::string &segment) {
-	if (segment.empty()) {
-		return false;
-	}
-	for (char ch : segment) {
-		unsigned char uch = static_cast<unsigned char>(ch);
-		if (!(std::isalnum(uch) || ch == '_' || ch == '-')) {
-			return false;
-		}
-	}
-	return true;
-}
-
-static bool SplitRepeatPath(const std::string &path, std::vector<std::string> &parts) {
-	parts.clear();
-	if (path.empty()) {
-		return false;
-	}
-
-	std::string current;
-	for (char ch : path) {
-		if (ch == '.') {
-			if (!IsRepeatPathSegment(current)) {
-				parts.clear();
-				return false;
-			}
-			parts.push_back(current);
-			current.clear();
-			continue;
-		}
-		current.push_back(ch);
-	}
-	if (!IsRepeatPathSegment(current)) {
-		parts.clear();
-		return false;
-	}
-	parts.push_back(current);
-	return true;
-}
-
-static bool ParseRepeatPaths(const char *paths_data, idx_t paths_len, std::vector<std::vector<std::string>> &paths) {
+// SQL-on-FHIR v2 repeat support. Repeat entries are FHIRPath expressions,
+// recursively applied to every matched object node.
+static bool ParseRepeatPathExpressions(const char *paths_data, idx_t paths_len, std::vector<std::string> &paths) {
 	paths.clear();
 	yyjson_doc *doc = yyjson_read(paths_data, paths_len, 0);
 	if (!doc) {
@@ -1678,12 +1704,11 @@ static bool ParseRepeatPaths(const char *paths_data, idx_t paths_len, std::vecto
 	size_t idx, max;
 	yyjson_val *elem;
 	yyjson_arr_foreach(root, idx, max, elem) {
-		if (!yyjson_is_str(elem)) {
-			continue;
-		}
-		std::vector<std::string> parts;
-		if (SplitRepeatPath(yyjson_get_str(elem), parts)) {
-			paths.push_back(parts);
+		if (yyjson_is_str(elem)) {
+			std::string path = yyjson_get_str(elem);
+			if (!path.empty()) {
+				paths.push_back(std::move(path));
+			}
 		}
 	}
 
@@ -1691,75 +1716,63 @@ static bool ParseRepeatPaths(const char *paths_data, idx_t paths_len, std::vecto
 	return !paths.empty();
 }
 
-static void NavigateRepeatPath(yyjson_val *obj, const std::vector<std::string> &parts,
-                               std::vector<yyjson_val *> &children) {
-	children.clear();
-	if (!obj || !yyjson_is_obj(obj)) {
-		return;
-	}
-
-	std::vector<yyjson_val *> candidates;
-	candidates.push_back(obj);
-
-	for (const auto &part : parts) {
-		std::vector<yyjson_val *> next_candidates;
-		for (auto *candidate : candidates) {
-			if (!candidate || !yyjson_is_obj(candidate)) {
-				continue;
-			}
-			yyjson_val *val = yyjson_obj_get(candidate, part.c_str());
-			if (!val || yyjson_is_null(val)) {
-				continue;
-			}
-			if (yyjson_is_arr(val)) {
-				size_t idx, max;
-				yyjson_val *elem;
-				yyjson_arr_foreach(val, idx, max, elem) {
-					next_candidates.push_back(elem);
-				}
-			} else {
-				next_candidates.push_back(val);
-			}
+static bool RepeatValueToObjectJson(const fhirpath::FPValue &val, std::string &json) {
+	json.clear();
+	if (val.type == fhirpath::FPValue::Type::JsonVal && val.json_val && yyjson_is_obj(val.json_val)) {
+		char *raw = yyjson_val_write(val.json_val, 0, nullptr);
+		if (!raw) {
+			return false;
 		}
-		candidates.swap(next_candidates);
-		if (candidates.empty()) {
-			return;
+		json = raw;
+		free(raw);
+		return true;
+	}
+	if (val.type == fhirpath::FPValue::Type::String && val.fhir_type == "__json__") {
+		yyjson_doc *doc = yyjson_read(val.string_val.data(), val.string_val.size(), 0);
+		if (!doc) {
+			return false;
+		}
+		yyjson_val *root = yyjson_doc_get_root(doc);
+		bool is_object = root && yyjson_is_obj(root);
+		yyjson_doc_free(doc);
+		if (is_object) {
+			json = val.string_val;
+			return true;
 		}
 	}
-
-	for (auto *candidate : candidates) {
-		if (candidate && yyjson_is_obj(candidate)) {
-			children.push_back(candidate);
-		}
-	}
+	return false;
 }
 
-static void RepeatDfs(yyjson_val *current, const std::vector<std::vector<std::string>> &paths,
-                      std::vector<std::string> &results, int depth) {
-	static const int MAX_REPEAT_DEPTH = 200;
-	if (!current || !yyjson_is_obj(current) || depth >= MAX_REPEAT_DEPTH) {
-		return;
-	}
-
+static void RepeatDfs(FhirpathState &state, const std::string &current_json, const std::vector<std::string> &paths,
+                      std::vector<std::string> &results, std::set<std::string> &seen) {
 	for (const auto &path : paths) {
-		std::vector<yyjson_val *> children;
-		NavigateRepeatPath(current, path, children);
-		for (auto *child : children) {
-			char *json = yyjson_val_write(child, 0, nullptr);
-			if (json) {
-				results.push_back(std::string(json));
-				free(json);
+		fhirpath::FPCollection children;
+		try {
+			children = EvaluateFhirpath(state, current_json.data(), current_json.size(), path);
+		} catch (const std::bad_alloc&) {
+			throw;
+		} catch (const std::exception&) {
+			continue;
+		}
+		for (const auto &child : children) {
+			std::string child_json;
+			if (!RepeatValueToObjectJson(child, child_json)) {
+				continue;
 			}
-			RepeatDfs(child, paths, results, depth + 1);
+			if (!seen.insert(child_json).second) {
+				continue;
+			}
+			results.push_back(child_json);
+			RepeatDfs(state, child_json, paths, results, seen);
 		}
 	}
 }
 
-static std::vector<std::string> EvaluateFhirpathRepeat(const char *resource_data, idx_t resource_len,
+static std::vector<std::string> EvaluateFhirpathRepeat(FhirpathState &state, const char *resource_data, idx_t resource_len,
                                                        const char *paths_data, idx_t paths_len) {
 	std::vector<std::string> results;
-	std::vector<std::vector<std::string>> paths;
-	if (!ParseRepeatPaths(paths_data, paths_len, paths)) {
+	std::vector<std::string> paths;
+	if (!ParseRepeatPathExpressions(paths_data, paths_len, paths)) {
 		return results;
 	}
 
@@ -1770,7 +1783,9 @@ static std::vector<std::string> EvaluateFhirpathRepeat(const char *resource_data
 
 	yyjson_val *root = yyjson_doc_get_root(doc);
 	if (root && yyjson_is_obj(root)) {
-		RepeatDfs(root, paths, results, 0);
+		std::set<std::string> seen;
+		std::string root_json(resource_data, resource_len);
+		RepeatDfs(state, root_json, paths, results, seen);
 	}
 
 	yyjson_doc_free(doc);
@@ -1778,6 +1793,7 @@ static std::vector<std::string> EvaluateFhirpathRepeat(const char *resource_data
 }
 
 static void FhirpathRepeatFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	auto func_state = GetFhirpathState(state);
 	idx_t count = args.size();
 
 	UnifiedVectorFormat resource_data, paths_data;
@@ -1802,7 +1818,7 @@ static void FhirpathRepeatFunction(DataChunk &args, ExpressionState &state, Vect
 		}
 
 		auto repeat_results =
-		    EvaluateFhirpathRepeat(resources[r_idx].GetData(), resources[r_idx].GetSize(),
+		    EvaluateFhirpathRepeat(func_state, resources[r_idx].GetData(), resources[r_idx].GetSize(),
 		                          paths[p_idx].GetData(), paths[p_idx].GetSize());
 		row_counts[i] = repeat_results.size();
 		for (const auto &item : repeat_results) {
@@ -1889,7 +1905,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	// fhirpath_repeat(JSON, VARCHAR) → VARCHAR[]
 	auto repeat_func = ScalarFunction("fhirpath_repeat", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                                  LogicalType::LIST(LogicalType::VARCHAR), FhirpathRepeatFunction);
+	                                  LogicalType::LIST(LogicalType::VARCHAR), FhirpathRepeatFunction, FhirpathBind);
 	repeat_func.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
 	loader.RegisterFunction(repeat_func);
 }

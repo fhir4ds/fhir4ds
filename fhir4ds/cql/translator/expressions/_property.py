@@ -346,6 +346,16 @@ class PropertyMixin:
                 # Already a function call result (scalar) — use flatten to combine paths
                 func_name = "fhirpath_bool" if boolean_context else "fhirpath_text"
                 return self._flatten_fhirpath_source(source_sql, path, func_name)
+            elif isinstance(source_sql, SQLCase):
+                # A type assertion on an inlined choice parameter lowers to a
+                # CASE expression, e.g. ``choice as Procedure``.  The CASE
+                # yields either the chosen resource JSON or NULL, so property
+                # navigation can apply directly to that scalar JSON expression.
+                if is_choice_type:
+                    return self._translate_choice_type_property_from_source(
+                        source_sql, path, boolean_context
+                    )
+                return self._make_fhirpath_call(source_sql, path, boolean_context)
             elif isinstance(source_sql, (SQLSelect, SQLSubquery, SQLUnion, SQLIntersect, SQLExcept)):
                 # The parameter resolved to a full query expression, but we
                 # are inside a query scope where the source is already aliased
@@ -1142,4 +1152,3 @@ class PropertyMixin:
         """Create a fhirpath UDF call, flattening nested fhirpath chains."""
         func_name = "fhirpath_bool" if boolean_context else "fhirpath_text"
         return self._flatten_fhirpath_source(resource_col, path, func_name)
-

@@ -1431,6 +1431,105 @@ class TestRawSQLColumnOptimization:
         assert "fhirpath_text(r.resource, 'period')" in optimized
         assert "LastObs.period IS NOT NULL" in optimized
 
+    def test_scalar_subquery_fhirpath_number_keeps_non_numeric_type_guard(self):
+        """Do not replace fhirpath_number() with a text precomputed column."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import optimize_property_access
+        from ...translator.types import (
+            SQLAlias,
+            SQLFunctionCall,
+            SQLIdentifier,
+            SQLLiteral,
+            SQLQualifiedIdentifier,
+            SQLSelect,
+            SQLSubquery,
+        )
+
+        registry = ColumnRegistry()
+        registry.register_cte(
+            "Observation: Score",
+            {
+                "value": ColumnInfo(
+                    column_name="value",
+                    fhirpath="value",
+                    sql_type="VARCHAR",
+                )
+            },
+        )
+        resource_subquery = SQLSubquery(
+            query=SQLSelect(
+                columns=[SQLQualifiedIdentifier(parts=["o", "resource"])],
+                from_clause=SQLAlias(
+                    expr=SQLIdentifier(name="Observation: Score", quoted=True),
+                    alias="o",
+                ),
+                limit=1,
+            )
+        )
+
+        optimized = optimize_property_access(
+            SQLFunctionCall(
+                name="fhirpath_number",
+                args=[resource_subquery, SQLLiteral(value="value")],
+            ),
+            registry,
+        )
+        sql = optimized.to_sql()
+
+        assert "fhirpath_number" in sql
+        assert "SELECT o.value" not in sql
+
+    def test_scalar_subquery_precomputed_text_comparison_casts_numeric_literal(self):
+        """Optimizer-created scalar subqueries remain comparable to numeric literals."""
+        from ...translator.column_registry import ColumnInfo, ColumnRegistry
+        from ...translator.retrieve_optimizer import optimize_property_access
+        from ...translator.types import (
+            SQLAlias,
+            SQLBinaryOp,
+            SQLFunctionCall,
+            SQLIdentifier,
+            SQLLiteral,
+            SQLQualifiedIdentifier,
+            SQLSelect,
+            SQLSubquery,
+        )
+
+        registry = ColumnRegistry()
+        registry.register_cte(
+            "Observation: Score",
+            {
+                "value": ColumnInfo(
+                    column_name="value",
+                    fhirpath="value",
+                    sql_type="VARCHAR",
+                )
+            },
+        )
+        resource_subquery = SQLSubquery(
+            query=SQLSelect(
+                columns=[SQLQualifiedIdentifier(parts=["o", "resource"])],
+                from_clause=SQLAlias(
+                    expr=SQLIdentifier(name="Observation: Score", quoted=True),
+                    alias="o",
+                ),
+                limit=1,
+            )
+        )
+        comparison = SQLBinaryOp(
+            operator="<",
+            left=SQLFunctionCall(
+                name="fhirpath_text",
+                args=[resource_subquery, SQLLiteral(value="value")],
+            ),
+            right=SQLLiteral(value=5),
+        )
+
+        optimized = optimize_property_access(comparison, registry)
+        sql = optimized.to_sql()
+
+        assert "TRY_CAST((SELECT o.value" in sql
+        assert " AS DOUBLE) < 5" in sql
+
 
 class TestResourceColumnLineage:
     """Tests for carrying precomputed columns through resource-shaped CTEs."""

@@ -37,6 +37,7 @@ struct BoundValue {
 	// Parse from a yyjson value (used during interval JSON parsing)
 	// Requires forward-declared yyjson types — implemented in .cpp
 	static Optional<BoundValue> from_string(const std::string &str);
+	static Optional<BoundValue> from_interval_bound_string(const std::string &str);
 	static Optional<BoundValue> from_number(double val, bool is_integer);
 };
 
@@ -83,6 +84,7 @@ struct Interval {
 	Optional<int64_t> width_days() const;
 	// Generic width: for numeric intervals returns high-low as string
 	Optional<std::string> width_string() const;
+	Optional<std::string> size_string() const;
 	std::string start_string() const;
 	std::string end_string() const;
 	std::string to_json() const;

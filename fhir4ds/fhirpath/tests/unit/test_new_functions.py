@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import pytest
 
+from fhir4ds.fhirpath import evaluate
 from ...engine.errors import FHIRPathError
 from ...engine.nodes import FP_DateTime, FP_Time, FP_Date
 from ...engine.invocations.datetime import lowBoundary, highBoundary, precision
@@ -23,6 +24,29 @@ from ...engine.invocations.filtering import single_fn
 from ...engine.invocations.strings import matches, matchesFull
 from ...engine.invocations.types import is_fn
 from ...engine.nodes import TypeInfo
+
+
+def test_trace_projection_logs_projection_and_returns_input() -> None:
+    resource = {
+        "resourceType": "Patient",
+        "name": [
+            {"given": ["Ann"], "family": "Smith"},
+            {"given": ["Bob"], "family": "Jones"},
+        ],
+    }
+    traces = []
+
+    result = evaluate(
+        resource,
+        "name.trace('names', given).family",
+        options={"traceFn": lambda label, value: traces.append((label, value))},
+    )
+
+    assert result == ["Smith", "Jones"]
+    assert len(traces) == 1
+    label, value = traces[0]
+    assert label == "names"
+    assert value == ["Ann", "Bob"]
 
 
 class TestLowBoundary:

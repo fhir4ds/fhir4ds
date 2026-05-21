@@ -28,8 +28,9 @@ class TestResourceToTableName:
         assert resource_to_table_name("Condition") == "conditions"
 
     def test_resource_lowercase(self):
-        """Test resource name is lowercased."""
-        assert resource_to_table_name("PATIENT") == "patients"
+        """FHIR ResourceType values are case-sensitive before pluralization."""
+        with pytest.raises(ValueError, match="ResourceType"):
+            resource_to_table_name("PATIENT")
         assert resource_to_table_name("Patient") == "patients"
 
 
@@ -96,7 +97,7 @@ class TestGenerateJoin:
         result = generate_join(join, "t")
 
         assert "JOIN" in result
-        assert "patients patient" in result
+        assert '"patients" "patient"' in result
         assert "ON" in result
 
     def test_left_join(self):
@@ -143,7 +144,7 @@ class TestGenerateJoin:
         with pytest.raises(ValueError, match="Unknown join type"):
             Join(
                 name="test",
-                resource="Test",
+                resource="Patient",
                 on=[{"path": "id"}],
                 type="invalid"
             )
@@ -163,9 +164,26 @@ class TestGenerateJoin:
         result = generate_join(join, "t")
 
         # Should have proper indentation/structure
-        assert "JOIN patients patient ON" in result
-        assert "fhirpath_text(t.resource" in result
-        assert "fhirpath_text(patient.resource" in result
+        assert 'JOIN "patients" "patient" ON' in result
+        assert 'fhirpath_text("t".resource' in result
+        assert 'fhirpath_text("patient".resource' in result
+
+    def test_invalid_join_identifier_or_resource_rejected(self):
+        with pytest.raises(ValueError, match="sql-name"):
+            Join(
+                name="patient; DROP TABLE x",
+                resource="Patient",
+                on=[{"path": "subject.reference"}, {"path": "id"}],
+                type="inner",
+            )
+
+        with pytest.raises(ValueError, match="ResourceType"):
+            Join(
+                name="patient",
+                resource="DefinitelyNotAResource",
+                on=[{"path": "subject.reference"}, {"path": "id"}],
+                type="inner",
+            )
 
 
 class TestJoinGenerator:
@@ -246,8 +264,8 @@ class TestJoinGenerator:
 
         result = gen.generate_all()
 
-        assert "JOIN patients patient" in result
-        assert "LEFT JOIN encounters encounter" in result
+        assert 'JOIN "patients" "patient"' in result
+        assert 'LEFT JOIN "encounters" "encounter"' in result
 
     def test_generate_all_empty(self):
         """Test generating all when no joins."""

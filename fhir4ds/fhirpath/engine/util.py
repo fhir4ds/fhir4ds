@@ -33,7 +33,7 @@ def get_data(value):
 
 def parse_value(value):
     def parse_complex_value(v):
-        num_value, unit = v.get("value"), v.get("code")
+        num_value, unit = v.get("value"), v.get("code") or v.get("unit")
         # Convert string values to Decimal for proper numeric comparison
         if isinstance(num_value, str):
             try:
@@ -47,8 +47,8 @@ def parse_value(value):
     if getattr(value, "get_type_info", lambda: None)() and value.get_type_info().name == "Quantity":
         return parse_complex_value(value.data)
 
-    # Handle plain dict that looks like a Quantity (has value and code keys)
-    if isinstance(value, dict) and "value" in value and "code" in value:
+    # Handle plain dict that looks like a Quantity (has value and code/unit keys)
+    if isinstance(value, dict) and "value" in value and ("code" in value or "unit" in value):
         return parse_complex_value(value)
 
     return value
@@ -74,15 +74,15 @@ def is_nullable(x):
     return x is None or is_empty(x)
 
 
-def is_true(x):
+def is_true(x, singleton_non_boolean=False):
     """
-    Check if a value represents boolean true in FHIRPath.
+    Evaluate a value using FHIRPath singleton Boolean evaluation.
 
-    For iif conditions:
     - Empty collection {} -> false
     - Singleton true -> true
     - Singleton false -> false
-    - Singleton non-boolean (string, number, etc.) -> semantic error
+    - Singleton non-boolean (string, number, etc.) -> semantic error unless
+      non-strict callers explicitly request singleton Boolean truthiness
     - Multi-item collection -> semantic error (cannot convert to boolean)
     """
     if x == True:
@@ -93,16 +93,18 @@ def is_true(x):
         if len(x) == 0:
             return False  # Empty collection is false
         if len(x) == 1:
-            val = x[0]
+            val = get_data(x[0])
             if val == True:
                 return True
             if val == False:
                 return False
-            # Singleton non-boolean: semantic error
+            if singleton_non_boolean:
+                return True
             raise FHIRPathError(f"Cannot convert {type(val).__name__} to boolean")
         # Multi-item collection: cannot convert to boolean
         raise FHIRPathError(f"Cannot convert a collection with multiple items to a boolean")
-    # Non-list, non-boolean value: semantic error
+    if singleton_non_boolean:
+        return True
     raise FHIRPathError(f"Cannot convert {type(x).__name__} to boolean")
 
 

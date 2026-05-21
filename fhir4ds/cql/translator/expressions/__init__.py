@@ -157,7 +157,6 @@ class ExpressionTranslator(
             "lower": "LOWER",
             "replace": "REPLACE",
             "split": "STR_SPLIT",
-            "abs": "ABS",
             "ceiling": "CEIL",
             "floor": "FLOOR",
             "sqrt": "SQRT",
@@ -186,8 +185,21 @@ class ExpressionTranslator(
         # === SQL keywords that must not have parentheses ===
         from ...translator.types import SQLRaw
         registry.register("today", lambda args, ctx: SQLRaw(raw_sql="CAST(CURRENT_DATE AS VARCHAR)"), arity=0)
-        registry.register("now", lambda args, ctx: SQLRaw(raw_sql="REPLACE(CAST(CURRENT_TIMESTAMP AS VARCHAR), ' ', 'T')"), arity=0)
-        registry.register("timeofday", lambda args, ctx: SQLRaw(raw_sql="CURRENT_TIME"), arity=0)
+        registry.register(
+            "now",
+            lambda args, ctx: SQLRaw(
+                raw_sql=(
+                    "regexp_replace(REPLACE(CAST(CURRENT_TIMESTAMP AS VARCHAR), ' ', 'T'), "
+                    "'([+-][0-9]{2})$', '\\1:00')"
+                )
+            ),
+            arity=0,
+        )
+        registry.register(
+            "timeofday",
+            lambda args, ctx: SQLRaw(raw_sql="'T' || SUBSTR(CAST(CURRENT_TIME AS VARCHAR), 1, 8)"),
+            arity=0,
+        )
 
         # === Parameterized translations: need arg manipulation ===
 
@@ -210,6 +222,7 @@ class ExpressionTranslator(
         registry.register("splitonmatches", lambda args, ctx: SQLFunctionCall(name="SplitOnMatches", args=args))
 
         # Math functions
+        registry.register("abs", lambda args, ctx: self._translate_abs(args))
         registry.register("exp", lambda args, ctx: self._translate_exp(args))
         registry.register("log", lambda args, ctx: self._translate_log(args))
         registry.register("ln", lambda args, ctx: self._translate_ln(args))
@@ -243,6 +256,7 @@ class ExpressionTranslator(
         # Maximum/Minimum need raw CQL AST to extract type name
         registry.register_pre_translate("maximum", self._translate_maximum_pre)
         registry.register_pre_translate("minimum", self._translate_minimum_pre)
+        registry.register_pre_translate("time", self._translate_time_pre, arity=1)
 
         # Date/time constructors
         registry.register("datetime", lambda args, ctx: self._translate_datetime_constructor(args))
@@ -260,7 +274,7 @@ class ExpressionTranslator(
             registry.register(_n, lambda args, ctx, n=_n: self._translate_difference_between_func(n, args))
 
         # Age functions (no reference date) — arity=None covers 0 or 1 args
-        for func_name in ("age", "ageinyears", "ageinmonths", "ageindays",
+        for func_name in ("age", "ageinyears", "ageinmonths", "ageinweeks", "ageindays",
                           "ageinhours", "ageinminutes", "ageinseconds"):
             _name = func_name
             registry.register(
@@ -268,7 +282,10 @@ class ExpressionTranslator(
                 lambda args, ctx, n=_name: self._translate_age_function(n, args),
             )
         # AgeAt (with reference date)
-        for func_name in ("ageinyearsat", "ageinmonthsat", "ageindaysat"):
+        for func_name in (
+            "ageinyearsat", "ageinmonthsat", "ageinweeksat", "ageindaysat",
+            "ageinhoursat", "ageinminutesat", "ageinsecondsat",
+        ):
             _name = func_name
             registry.register(
                 _name,
@@ -280,7 +297,7 @@ class ExpressionTranslator(
                          "min", "max", "sum", "avg", "count",
                          "median", "mode", "stddev", "variance",
                          "populationstddev", "populationvariance",
-                         "stddevpop"):
+                         "stddevpop", "product"):
             registry.register_pre_translate(
                 agg_name,
                 self._translate_aggregate_pre,

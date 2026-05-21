@@ -4,7 +4,12 @@ Tests the UNION ALL generation for combining results
 from multiple select branches in ViewDefinitions.
 """
 
+import json
+
+import duckdb
 import pytest
+
+from fhir4ds.fhirpath.duckdb import register_fhirpath
 
 from ...parser import parse_view_definition, Column, Select, ViewDefinition
 from ...generator import SQLGenerator
@@ -36,6 +41,31 @@ class TestUnionAllGeneration:
 
         assert "UNION ALL" in sql
         assert sql.count("SELECT") == 2
+        assert 'FROM "patients" t' in sql
+
+    def test_union_all_rejects_injected_base_query(self):
+        """Legacy helper treats base_query as table plus alias, not raw SQL."""
+        union_selects = [
+            Select(column=[Column(path="id", name="id")])
+        ]
+        gen = SQLGenerator()
+
+        con = duckdb.connect()
+        try:
+            con.execute("CREATE TABLE sentinel (id INTEGER)")
+            con.execute("INSERT INTO sentinel VALUES (1)")
+
+            with pytest.raises(UnionGeneratorError):
+                generate_union_all(
+                    union_selects,
+                    "patients t; DROP TABLE sentinel; --",
+                    gen,
+                    "t.resource",
+                )
+
+            assert con.execute("SELECT COUNT(*) FROM sentinel").fetchone()[0] == 1
+        finally:
+            con.close()
 
     def test_union_all_maintains_column_order(self):
         """Test UNION ALL maintains column order across branches."""
@@ -83,22 +113,22 @@ class TestUnionAllGeneration:
 
         assert "mismatched" in str(exc_info.value).lower()
 
-    def test_generator_handles_multiple_top_level_union_groups(self):
-        """Top-level sibling unionAll groups should all contribute branches."""
+    def test_generator_cross_joins_multiple_top_level_union_groups(self):
+        """Top-level sibling unionAll groups behave like select rowsets."""
         view_definition = ViewDefinition(
             resource="Patient",
             select=[
                 Select(column=[Column(path="id", name="pid")]),
                 Select(
                     unionAll=[
-                        Select(column=[Column(path="name[0].family", name="value")]),
-                        Select(column=[Column(path="name[1].family", name="value")]),
+                        Select(column=[Column(path="name[0].family", name="family_value")]),
+                        Select(column=[Column(path="name[1].family", name="family_value")]),
                     ]
                 ),
                 Select(
                     unionAll=[
-                        Select(column=[Column(path="name[0].given.first()", name="value")]),
-                        Select(column=[Column(path="name[1].given.first()", name="value")]),
+                        Select(column=[Column(path="name[0].given.first()", name="given_value")]),
+                        Select(column=[Column(path="name[1].given.first()", name="given_value")]),
                     ]
                 ),
             ],
@@ -107,6 +137,8 @@ class TestUnionAllGeneration:
         sql = SQLGenerator().generate(view_definition)
 
         assert sql.count("UNION ALL") == 3
+        assert 'as "family_value"' in sql
+        assert 'as "given_value"' in sql
         assert "name[0].family" in sql
         assert "name[1].family" in sql
         assert "name[0].given.first()" in sql
@@ -247,6 +279,39 @@ class TestUnionGenerator:
         assert len(warnings) > 0
         assert "mismatched" in warnings[0].lower()
 
+    def test_validate_union_columns_type_mismatch_invalid(self):
+        """Validation checks names, order, declared FHIR types, and cardinality."""
+        gen = SQLGenerator()
+        union_gen = UnionGenerator(gen)
+
+        union_selects = [
+            Select(column=[Column(path="id", name="value", type="id")]),
+            Select(column=[Column(path="active", name="value", type="boolean")]),
+        ]
+
+        warnings = union_gen.validate_union_columns(union_selects)
+
+        assert len(warnings) > 0
+        assert "mismatched column schema" in warnings[0].lower()
+        assert "boolean" in warnings[0]
+
+    def test_validate_union_columns_collection_mismatch_invalid(self):
+        """Collection cardinality is part of the unionAll branch schema."""
+        gen = SQLGenerator()
+        union_gen = UnionGenerator(gen)
+
+        union_selects = [
+            Select(column=[Column(path="name.family", name="value", type="string", collection=True)]),
+            Select(column=[Column(path="id", name="value", type="string", collection=False)]),
+        ]
+
+        warnings = union_gen.validate_union_columns(union_selects)
+
+        assert len(warnings) > 0
+        assert "mismatched column schema" in warnings[0].lower()
+        assert "True" in warnings[0]
+        assert "False" in warnings[0]
+
     def test_validate_empty_union(self):
         """Test validation with empty union."""
         gen = SQLGenerator()
@@ -305,19 +370,84 @@ class TestUnionAllWithForeach:
 
     def test_union_with_foreach_in_branch(self):
         """Test UNION ALL branch containing forEach."""
-        # This tests that the lateral join generation for forEach
-        # is integrated into union branch generation
         union_selects = [
             Select(
                 forEach="name",
-                column=[Column(path="given", name="name_part")]
+                column=[Column(path="given.first()", name="name_part", type="string")]
             ),
-            Select(column=[Column(path="id", name="name_part")])
+            Select(column=[Column(path="id", name="name_part", type="string")])
         ]
 
         gen = SQLGenerator()
         sql = generate_union_all(union_selects, "patients t", gen, "t.resource")
-        assert "SELECT" in sql
+        assert "JOIN LATERAL" in sql
+
+        con = duckdb.connect(config={"allow_unsigned_extensions": True})
+        register_fhirpath(con)
+        try:
+            patient = {
+                "resourceType": "Patient",
+                "id": "p1",
+                "name": [
+                    {"given": ["A"]},
+                    {"given": ["B"]},
+                ],
+            }
+            con.execute("CREATE TABLE patients (resource JSON)")
+            con.execute("INSERT INTO patients VALUES (?)", [json.dumps(patient)])
+
+            assert con.execute(sql).fetchall() == [("A",), ("B",), ("p1",)]
+        finally:
+            con.close()
+
+    def test_union_branch_with_nested_union_preserves_direct_columns(self):
+        """Legacy helper preserves direct columns plus nested unionAll columns."""
+        union_selects = [
+            Select(
+                column=[Column(path="'outer-a'", name="outer", type="string")],
+                select=[
+                    Select(
+                        unionAll=[
+                            Select(column=[Column(path="'inner-1'", name="inner", type="string")]),
+                            Select(column=[Column(path="'inner-2'", name="inner", type="string")]),
+                        ]
+                    )
+                ],
+            ),
+            Select(
+                column=[Column(path="'outer-b'", name="outer", type="string")],
+                select=[
+                    Select(
+                        unionAll=[
+                            Select(column=[Column(path="'inner-3'", name="inner", type="string")]),
+                            Select(column=[Column(path="'inner-4'", name="inner", type="string")]),
+                        ]
+                    )
+                ],
+            ),
+        ]
+
+        sql = generate_union_all(union_selects, "patients t", SQLGenerator(), "t.resource")
+        assert 'as "outer"' in sql
+        assert 'as "inner"' in sql
+
+        con = duckdb.connect(config={"allow_unsigned_extensions": True})
+        register_fhirpath(con)
+        try:
+            con.execute("CREATE TABLE patients (resource JSON)")
+            con.execute(
+                "INSERT INTO patients VALUES (?)",
+                [json.dumps({"resourceType": "Patient", "id": "p1"})],
+            )
+
+            assert con.execute(sql).fetchall() == [
+                ("outer-a", "inner-1"),
+                ("outer-a", "inner-2"),
+                ("outer-b", "inner-3"),
+                ("outer-b", "inner-4"),
+            ]
+        finally:
+            con.close()
 
 
 class TestMultipleUnionBranches:

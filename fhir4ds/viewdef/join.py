@@ -7,6 +7,8 @@ Generates SQL JOIN clauses from ViewDefinition join specifications.
 import logging
 from typing import List, Dict
 from .parser import Join
+from .metadata import KNOWN_FHIR_RESOURCE_TYPES
+from .types import validate_sql_name
 from .utils import pluralize_resource
 
 _logger = logging.getLogger(__name__)
@@ -14,6 +16,16 @@ _logger = logging.getLogger(__name__)
 
 # Valid join types per SQL-on-FHIR spec
 VALID_JOIN_TYPES = frozenset(['inner', 'left', 'right', 'full'])
+
+
+def _quote_identifier(name: str) -> str:
+    """Quote a validated DuckDB identifier."""
+    return f'"{validate_sql_name(name, "SQL identifier")}"'
+
+
+def _resource_column_ref(alias: str) -> str:
+    """Return a safe resource-column reference for a table alias."""
+    return f"{_quote_identifier(alias)}.resource"
 
 
 def resource_to_table_name(resource: str) -> str:
@@ -28,6 +40,10 @@ def resource_to_table_name(resource: str) -> str:
     Returns:
         Lowercase plural table name
     """
+    if not isinstance(resource, str) or resource not in KNOWN_FHIR_RESOURCE_TYPES:
+        raise ValueError(
+            f"Join.resource {resource!r} is not in the required ResourceType binding"
+        )
     return pluralize_resource(resource)
 
 
@@ -61,6 +77,9 @@ def generate_on_condition(
     if not on_clauses:
         raise ValueError("JOIN requires at least one ON clause")
 
+    left_resource = _resource_column_ref(left_alias)
+    right_resource = _resource_column_ref(right_alias)
+
     # Extract paths from on_clauses
     paths = [clause.get('path', '') for clause in on_clauses]
 
@@ -71,15 +90,15 @@ def generate_on_condition(
         right_path = paths[1].replace("'", "''")
 
         # Generate FHIRPath expressions for both sides
-        left_expr = f"fhirpath_text({left_alias}.resource, '{left_path}')"
-        right_expr = f"fhirpath_text({right_alias}.resource, '{right_path}')"
+        left_expr = f"fhirpath_text({left_resource}, '{left_path}')"
+        right_expr = f"fhirpath_text({right_resource}, '{right_path}')"
 
         return f"{left_expr} =\n    {right_expr}"
 
     # Single path: just generate the expression
     if len(paths) == 1:
         escaped_path = paths[0].replace("'", "''")
-        return f"fhirpath_text({left_alias}.resource, '{escaped_path}')"
+        return f"fhirpath_text({left_resource}, '{escaped_path}')"
 
     return "TRUE"  # Unreachable after validation above, but required by the spec
     # for degenerate cases where paths list is somehow non-empty but all empty strings
@@ -127,11 +146,15 @@ def generate_join(join: Join, base_alias: str) -> str:
             f"Must be one of: {', '.join(sorted(VALID_JOIN_TYPES))}"
         )
 
+    join_alias = validate_sql_name(join.name, "Join.name")
+
     # Get table name from resource type
     table_name = resource_to_table_name(join.resource)
+    quoted_table = _quote_identifier(table_name)
+    quoted_alias = _quote_identifier(join_alias)
 
     # Generate ON condition
-    on_condition = generate_on_condition(join.on, base_alias, join.name)
+    on_condition = generate_on_condition(join.on, base_alias, join_alias)
 
     # Build the JOIN clause
     # SQL join type keywords
@@ -142,7 +165,7 @@ def generate_join(join: Join, base_alias: str) -> str:
         'full': 'FULL JOIN'
     }[join_type]
 
-    return f"{join_keyword} {table_name} {join.name} ON\n    {on_condition}"
+    return f"{join_keyword} {quoted_table} {quoted_alias} ON\n    {on_condition}"
 
 
 class JoinGenerator:
@@ -190,9 +213,10 @@ class JoinGenerator:
             ValueError: If join name conflicts with existing alias
         """
         # Check for alias conflicts
-        if join.name in self._aliases:
+        join_alias = validate_sql_name(join.name, "Join.name")
+        if join_alias in self._aliases:
             raise ValueError(
-                f"Join alias '{join.name}' conflicts with existing alias. "
+                f"Join alias '{join_alias}' conflicts with existing alias. "
                 f"Current aliases: {', '.join(sorted(self._aliases))}"
             )
 
@@ -200,7 +224,7 @@ class JoinGenerator:
         join_clause = generate_join(join, self.base_alias)
 
         # Track the new alias
-        self._aliases.add(join.name)
+        self._aliases.add(join_alias)
         self._joins.append(join_clause)
 
         return join_clause

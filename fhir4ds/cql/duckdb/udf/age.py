@@ -13,7 +13,7 @@ Supports both scalar (row-by-row) and Arrow vectorized implementations.
 from __future__ import annotations
 
 import os
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import TYPE_CHECKING, Any, Callable
 
 import orjson
@@ -78,6 +78,42 @@ def _parse_birthdate(value: str | None) -> date | None:
         return date.fromisoformat(value[:10])
     except (ValueError, TypeError) as e:
         _logger.warning("_parse_birthdate failed: %s", e)
+    return None
+
+
+def _parse_birth_datetime(value: str | None) -> datetime | None:
+    """Parse a CQL Date/DateTime birth value for hour-or-finer age units."""
+    if not value:
+        return None
+    try:
+        text = value.replace("Z", "+00:00")
+        if len(text) == 4:
+            return datetime(int(text), 1, 1, tzinfo=timezone.utc)
+        if len(text) == 7:
+            year, month = text.split("-")
+            return datetime(int(year), int(month), 1, tzinfo=timezone.utc)
+        if "T" in text:
+            parsed = datetime.fromisoformat(text)
+            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+        parsed_date = date.fromisoformat(text[:10])
+        return datetime.combine(parsed_date, time.min, tzinfo=timezone.utc)
+    except (ValueError, TypeError) as e:
+        _logger.warning("_parse_birth_datetime failed: %s", e)
+        return None
+
+
+def _reference_datetime(as_of: str | None = None) -> datetime | None:
+    if as_of is None:
+        return datetime.now(timezone.utc)
+    try:
+        text = as_of.replace("Z", "+00:00")
+        if "T" in text:
+            parsed = datetime.fromisoformat(text)
+            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+        parsed_date = date.fromisoformat(text[:10])
+        return datetime.combine(parsed_date, time.min, tzinfo=timezone.utc)
+    except (ValueError, TypeError) as e:
+        _logger.warning("_reference_datetime failed: %s", e)
         return None
 
 
@@ -95,6 +131,15 @@ def _reference_now(as_of: str | None = None) -> tuple[date, datetime] | None:
 
 
 def _calculate_age(birth_date: str | None, unit: str, as_of: str | None = None) -> int | None:
+    if unit in {"hours", "minutes", "seconds"}:
+        birth_dt = _parse_birth_datetime(birth_date)
+        ref_dt = _reference_datetime(as_of)
+        if birth_dt is None or ref_dt is None or ref_dt < birth_dt:
+            return None
+        delta_seconds = (ref_dt - birth_dt).total_seconds()
+        divisor = {"hours": 3600, "minutes": 60, "seconds": 1}[unit]
+        return int(delta_seconds // divisor)
+
     birth = _parse_birthdate(birth_date)
     ref = _reference_now(as_of)
     if birth is None or ref is None:
@@ -263,6 +308,39 @@ def ageInWeeksAt_scalar(resource: str | None, as_of: str) -> int | None:
     return days // 7 if days >= 0 else None
 
 
+def ageInHoursAt_scalar(resource: str | None, as_of: str) -> int | None:
+    birth = _extract_birthdate(resource)
+    ref_dt = _reference_datetime(as_of)
+    if not birth or ref_dt is None:
+        return None
+    birth_dt = datetime.combine(birth, time.min, tzinfo=timezone.utc)
+    if ref_dt < birth_dt:
+        return None
+    return int((ref_dt - birth_dt).total_seconds() // 3600)
+
+
+def ageInMinutesAt_scalar(resource: str | None, as_of: str) -> int | None:
+    birth = _extract_birthdate(resource)
+    ref_dt = _reference_datetime(as_of)
+    if not birth or ref_dt is None:
+        return None
+    birth_dt = datetime.combine(birth, time.min, tzinfo=timezone.utc)
+    if ref_dt < birth_dt:
+        return None
+    return int((ref_dt - birth_dt).total_seconds() // 60)
+
+
+def ageInSecondsAt_scalar(resource: str | None, as_of: str) -> int | None:
+    birth = _extract_birthdate(resource)
+    ref_dt = _reference_datetime(as_of)
+    if not birth or ref_dt is None:
+        return None
+    birth_dt = datetime.combine(birth, time.min, tzinfo=timezone.utc)
+    if ref_dt < birth_dt:
+        return None
+    return int((ref_dt - birth_dt).total_seconds())
+
+
 def calculateAgeInYears(birth_date: str | None) -> int | None:
     return _calculate_age(birth_date, "years")
 
@@ -429,6 +507,9 @@ def registerAgeUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("AgeInMonthsAt", ageInMonthsAt_scalar, null_handling="special")
     con.create_function("AgeInWeeksAt", ageInWeeksAt_scalar, null_handling="special")
     con.create_function("AgeInDaysAt", ageInDaysAt_scalar, null_handling="special")
+    con.create_function("AgeInHoursAt", ageInHoursAt_scalar, null_handling="special")
+    con.create_function("AgeInMinutesAt", ageInMinutesAt_scalar, null_handling="special")
+    con.create_function("AgeInSecondsAt", ageInSecondsAt_scalar, null_handling="special")
     con.create_function("CalculateAgeInYears", calculateAgeInYears, null_handling="special")
     con.create_function("CalculateAgeInMonths", calculateAgeInMonths, null_handling="special")
     con.create_function("CalculateAgeInWeeks", calculateAgeInWeeks, null_handling="special")

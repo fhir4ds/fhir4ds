@@ -11,8 +11,8 @@ from .errors import FHIRPathError, FHIRPathEvaluationError
 
 def check_integer_param(val):
     data = util.get_data(val)
-    if int(data) != data:
-        raise FHIRPathError("Expected integer, got: " + json.dumps(data))
+    if isinstance(data, bool) or not isinstance(data, int):
+        raise FHIRPathError("Expected integer, got: " + str(data))
     return data
 
 
@@ -79,9 +79,6 @@ def doInvoke(ctx, fn_name, data, raw_params):
 
         raise FHIRPathError(fn_name + " expects no params")
 
-    if invocation["fn"].__name__ == "trace_fn" and raw_params is not None:
-        raw_params = raw_params[:1]
-
     paramsNumber = 0
     if isinstance(raw_params, list):
         paramsNumber = len(raw_params)
@@ -122,10 +119,22 @@ def type_specifier(ctx, parent_data, node):
     else:
         raise FHIRPathError(f"Expected TypeSpecifier node, got {node}")
 
-    # Validate that the type is a known FHIR type or System type
-    # This catches typos like "string1" instead of "string"
-    valid_types = TypeInfo.get_valid_types()
-    if name not in valid_types:
+    # Validate that the type resolves in the requested model namespace.
+    # This catches typos like "string1" and invalid qualified FHIR aliases such
+    # as FHIR.Integer while preserving official R4 behavior where
+    # System.Patient resolves but does not match a FHIR Patient.
+    if namespace == TypeInfo.System:
+        if name not in TypeInfo.SYSTEM_TO_FHIR_TYPE and name not in TypeInfo.get_valid_types():
+            raise ValueError(f"Unknown type: {node['text']}")
+    elif namespace == TypeInfo.FHIR:
+        fhir_equivalent = TypeInfo.SYSTEM_TO_FHIR_TYPE.get(name)
+        if fhir_equivalent is not None and fhir_equivalent != name:
+            raise ValueError(f"Unknown type: {node['text']}")
+        if name not in TypeInfo.VALID_FHIR_TYPES:
+            raise ValueError(f"Unknown type: {node['text']}")
+    elif namespace is not None:
+        raise ValueError(f"Unknown type namespace: {namespace}")
+    elif name not in TypeInfo.get_valid_types():
         raise ValueError(f"Unknown type: {name}")
 
     # Infer namespace from casing when unqualified:
@@ -154,8 +163,16 @@ def make_param(ctx, parentData, node_type, param):
     if node_type == "Expr":
 
         def func(data):
+            missing = object()
+            old_this = ctx.get("$this", missing)
             ctx["$this"] = util.arraify(data)
-            return do_eval(ctx, ctx["$this"], param)
+            try:
+                return do_eval(ctx, ctx["$this"], param)
+            finally:
+                if old_this is missing:
+                    ctx.pop("$this", None)
+                else:
+                    ctx["$this"] = old_this
 
         return func
 

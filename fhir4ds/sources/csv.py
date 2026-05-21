@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fhir4ds.sources.base import SchemaValidationError, validate_schema
+from fhir4ds.sources.base import SchemaValidationError, quote_sql_literal, validate_schema
 
 
 class CSVSource:
@@ -31,7 +31,7 @@ class CSVSource:
         projection_sql: A SQL ``SELECT`` statement projecting the CSV columns
             to the fhir4ds schema.  Use the placeholder ``{source}`` in your
             ``FROM`` clause — it will be replaced with the correct DuckDB scan
-            expression ``read_csv_auto('<path>')``.
+            expression ``read_csv_auto('<path>')`` with the path SQL-escaped.
 
     Raises:
         SchemaValidationError: If the projection does not produce the required
@@ -80,7 +80,7 @@ class CSVSource:
                 cannot be created (e.g. projection references non-existent
                 columns).
         """
-        scan_expr = f"read_csv_auto('{self._path}')"
+        scan_expr = f"read_csv_auto({quote_sql_literal(self._path)})"
         projection = self._projection_sql.replace("{source}", scan_expr)
         try:
             con.execute(f"CREATE OR REPLACE VIEW resources AS {projection}")

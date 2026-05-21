@@ -378,7 +378,8 @@ class InferenceMixin:
             Retrieve, ExistsExpression, FirstExpression, LastExpression,
             SingletonExpression, FunctionRef, Property, BinaryExpression,
             ConditionalExpression, UnaryExpression, Identifier, Query,
-            MethodInvocation, QualifiedIdentifier, Literal, Interval
+            MethodInvocation, QualifiedIdentifier, Literal, Interval,
+            ListExpression, DistinctExpression,
         )
 
         if ast_node is None:
@@ -395,6 +396,10 @@ class InferenceMixin:
         if isinstance(ast_node, Interval):
             return RowShape.PATIENT_SCALAR
 
+        # CQL list literals are scalar collection values: one list per patient.
+        if isinstance(ast_node, ListExpression):
+            return RowShape.PATIENT_SCALAR
+
         # Retrieve always produces RESOURCE_ROWS
         if isinstance(ast_node, Retrieve):
             return RowShape.RESOURCE_ROWS
@@ -402,6 +407,12 @@ class InferenceMixin:
         # Existence check produces scalar boolean
         if isinstance(ast_node, ExistsExpression):
             return RowShape.PATIENT_SCALAR
+
+        if isinstance(ast_node, DistinctExpression):
+            source_shape = self._infer_row_shape(ast_node.source, _visited)
+            if source_shape == RowShape.PATIENT_SCALAR:
+                return RowShape.PATIENT_SCALAR
+            return source_shape
 
         # First/Last/singleton produce scalar (single resource or value)
         if isinstance(ast_node, (FirstExpression, LastExpression, SingletonExpression)):
@@ -415,6 +426,8 @@ class InferenceMixin:
                 return RowShape.PATIENT_SCALAR
             # First/Last/Singleton functions produce scalar (single value)
             if func_name in ('first', 'last', 'singleton', 'singletonfrom'):
+                return RowShape.PATIENT_SCALAR
+            if func_name in ('flatten', 'distinct'):
                 return RowShape.PATIENT_SCALAR
             # Constructor functions that produce scalar values
             if func_name in ('datetime', 'date', 'time', 'now', 'today', 'timeofdayvalue',
@@ -484,6 +497,11 @@ class InferenceMixin:
                 # If either side is PATIENT_MULTI_VALUE, result is PATIENT_MULTI_VALUE
                 if left_shape == RowShape.PATIENT_MULTI_VALUE or right_shape == RowShape.PATIENT_MULTI_VALUE:
                     return RowShape.PATIENT_MULTI_VALUE
+                # Scalar CQL list set operators produce a scalar list value.
+                left_type = self._infer_cql_type(ast_node.left)
+                right_type = self._infer_cql_type(ast_node.right)
+                if left_type.startswith("List<") or right_type.startswith("List<"):
+                    return RowShape.PATIENT_SCALAR
                 return RowShape.RESOURCE_ROWS
 
         # Conditional: if either branch is RESOURCE_ROWS, result is RESOURCE_ROWS
@@ -751,6 +769,98 @@ class InferenceMixin:
                 qty_fields.add(name)
         return qty_fields if qty_fields else None
 
+    @staticmethod
+    def _property_chain_parts(ast_node: Any) -> tuple[Optional[str], list[str]]:
+        """Return the root identifier and property path parts for a chain."""
+        from ..parser.ast_nodes import Identifier, Property
+
+        parts: list[str] = []
+        current = ast_node
+        while isinstance(current, Property):
+            parts.append(current.path)
+            current = current.source
+        if isinstance(current, Identifier):
+            parts.reverse()
+            return current.name, parts
+        return None, []
+
+    @staticmethod
+    def _fhir_type_to_cql_type(fhir_type: Optional[str]) -> Optional[str]:
+        if not fhir_type:
+            return None
+        return {
+            "boolean": "Boolean",
+            "integer": "Integer",
+            "positiveInt": "Integer",
+            "unsignedInt": "Integer",
+            "integer64": "Long",
+            "decimal": "Decimal",
+            "string": "String",
+            "code": "String",
+            "id": "String",
+            "markdown": "String",
+            "oid": "String",
+            "uri": "String",
+            "url": "String",
+            "uuid": "String",
+            "canonical": "String",
+            "base64Binary": "String",
+            "date": "Date",
+            "dateTime": "DateTime",
+            "instant": "DateTime",
+            "time": "Time",
+            "Quantity": "Quantity",
+            "Ratio": "Ratio",
+            "CodeableConcept": "Concept",
+            "Coding": "Code",
+        }.get(fhir_type)
+
+    def _infer_fhir_property_type(self, resource_type: str, path: str) -> Optional[str]:
+        """Infer CQL type for a FHIR property path from schema metadata."""
+        schema = getattr(self._context, "fhir_schema", None)
+        if schema is None:
+            return None
+        cql_type = self._fhir_type_to_cql_type(schema.get_element_type(resource_type, path))
+        if cql_type is not None:
+            return cql_type
+
+        if "." not in path:
+            return None
+        head, tail = path.split(".", 1)
+        if schema.get_element_type(resource_type, head) == "Quantity":
+            return {
+                "value": "Decimal",
+                "unit": "String",
+                "system": "String",
+                "code": "String",
+                "comparator": "String",
+            }.get(tail)
+        return None
+
+    def _infer_query_return_property_type(self, query: Any, return_expr: Any) -> Optional[str]:
+        """Infer property return type for simple aliased FHIR retrieve queries."""
+        from ..parser.ast_nodes import QuerySource, Retrieve
+
+        sources = query.source
+        if not isinstance(sources, list):
+            sources = [sources]
+        alias_resource_types: dict[str, str] = {}
+        for source in sources:
+            if (
+                isinstance(source, QuerySource)
+                and source.alias
+                and isinstance(source.expression, Retrieve)
+            ):
+                alias_resource_types[source.alias] = source.expression.type
+
+        root_name, path_parts = self._property_chain_parts(return_expr)
+        if not root_name or not path_parts:
+            return None
+        resource_type = alias_resource_types.get(root_name)
+        if not resource_type:
+            return None
+        return self._infer_fhir_property_type(resource_type, ".".join(path_parts))
+
     def _infer_cql_type(self, ast_node: Any) -> str:
         """
         Infer the CQL type of an expression.
@@ -765,11 +875,34 @@ class InferenceMixin:
             Retrieve, ExistsExpression, FunctionRef, Literal,
             BinaryExpression, Property, UnaryExpression, Identifier,
             FirstExpression, LastExpression, ConditionalExpression,
-            DurationBetween, DifferenceBetween, Interval,
+            DurationBetween, DifferenceBetween, Interval, CodeSelector,
+            InstanceExpression, ListExpression, Quantity, DateTimeLiteral,
+            TimeLiteral, DistinctExpression,
         )
 
         if ast_node is None:
             return "Any"
+
+        if isinstance(ast_node, CodeSelector):
+            return "Code"
+
+        if isinstance(ast_node, InstanceExpression):
+            type_name = getattr(ast_node, "type", "")
+            bare = type_name.split(".")[-1] if "." in type_name else type_name
+            if bare in {"Code", "Concept", "ValueSet", "CodeSystem", "Vocabulary"}:
+                return bare
+
+        if isinstance(ast_node, Quantity):
+            return "Quantity"
+
+        if isinstance(ast_node, DateTimeLiteral):
+            value = str(getattr(ast_node, "value", "") or "")
+            if value.startswith("T"):
+                return "Time"
+            return "DateTime" if "T" in value else "Date"
+
+        if isinstance(ast_node, TimeLiteral):
+            return "Time"
 
         # DurationBetween / DifferenceBetween return Integer (years/months/days/etc. between)
         if isinstance(ast_node, (DurationBetween, DifferenceBetween)):
@@ -784,6 +917,9 @@ class InferenceMixin:
         if isinstance(ast_node, ExistsExpression):
             return "Boolean"
 
+        if isinstance(ast_node, DistinctExpression):
+            return self._infer_cql_type(ast_node.source)
+
         # Literals
         if isinstance(ast_node, Literal):
             value = ast_node.value
@@ -796,6 +932,19 @@ class InferenceMixin:
             elif isinstance(value, str):
                 return "String"
             return "Any"
+
+        if isinstance(ast_node, ListExpression):
+            element_types = [
+                element_type
+                for element_type in (self._infer_cql_type(element) for element in ast_node.elements)
+                if element_type != "Any"
+            ]
+            if not element_types:
+                return "List<Any>"
+            first_type = element_types[0]
+            if all(element_type == first_type for element_type in element_types):
+                return f"List<{first_type}>"
+            return "List<Any>"
 
         # Interval expressions
         if isinstance(ast_node, Interval):
@@ -823,6 +972,8 @@ class InferenceMixin:
             func_name = ast_node.name.lower() if hasattr(ast_node, 'name') else ''
             if func_name == 'count':
                 return "Integer"
+            elif func_name == 'indexof':
+                return "Integer"
             elif func_name in ('sum', 'avg'):
                 return "Decimal"
             elif func_name in ('min', 'max'):
@@ -840,6 +991,18 @@ class InferenceMixin:
                 return "DateTime"
             elif func_name == 'time':
                 return "Time"
+            elif func_name == 'distinct':
+                if ast_node.arguments:
+                    return self._infer_cql_type(ast_node.arguments[0])
+                return "List<Any>"
+            elif func_name == 'flatten':
+                if ast_node.arguments:
+                    source_type = self._infer_cql_type(ast_node.arguments[0])
+                    if source_type.startswith("List<List<") and source_type.endswith(">>"):
+                        return f"List<{source_type[10:-2]}>"
+                    if source_type.startswith("List<"):
+                        return "List<Any>"
+                return "List<Any>"
 
         # Binary comparisons and temporal operators return Boolean
         if isinstance(ast_node, BinaryExpression):
@@ -861,7 +1024,7 @@ class InferenceMixin:
                       'includes', 'included in',
                       'properly includes', 'properly included in',
                       'meets', 'meets before', 'meets after',
-                      'contains'):
+                      'contains', 'is'):
                 return "Boolean"
             # Precision-qualified same operators: "same or before month of", etc.
             if op.startswith('same '):
@@ -917,6 +1080,13 @@ class InferenceMixin:
 
         # Check if it's an identifier referencing a known definition
         if isinstance(ast_node, Identifier):
+            if ast_node.name in self._context.valuesets:
+                return "ValueSet"
+            if ast_node.name in self._context.codesystems:
+                return "CodeSystem"
+            code_info = self._context.codes.get(ast_node.name)
+            if code_info:
+                return "Concept" if code_info.get("is_concept") else "Code"
             meta = self._context.definition_meta.get(ast_node.name)
             if meta:
                 return meta.cql_type
@@ -936,6 +1106,9 @@ class InferenceMixin:
         if isinstance(ast_node, Query):
             if ast_node.return_clause is not None:
                 rc_expr = ast_node.return_clause.expression if isinstance(ast_node.return_clause, ReturnClause) else ast_node.return_clause
+                property_return_type = self._infer_query_return_property_type(ast_node, rc_expr)
+                if property_return_type is not None:
+                    return f"List<{property_return_type}>"
                 return_type = self._infer_cql_type(rc_expr)
                 if return_type != "Any":
                     return f"List<{return_type}>"
@@ -973,4 +1146,3 @@ class InferenceMixin:
             return "0..1"
         else:
             return "0..*"
-

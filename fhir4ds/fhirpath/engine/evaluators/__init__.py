@@ -28,7 +28,10 @@ def number_literal(ctx, parentData, node):
 
 
 def identifier(ctx, parentData, node):
-    return [re.sub(r"(^\"|\"$)", "", node["text"])]
+    text = re.sub(r"(^\"|\"$)", "", node["text"])
+    if len(text) >= 2 and text[0] == "`" and text[-1] == "`":
+        text = _unescape_fhirpath_string(text[1:-1])
+    return [text]
 
 
 def invocation_term(ctx, parentData, node):
@@ -82,6 +85,11 @@ def _extract_as_target_type(node):
 
 
 def invocation_expression(ctx, parentData, node):
+    chain_missing = object()
+    old_chain = ctx.get("_chain_defined_vars", chain_missing)
+    if old_chain is chain_missing:
+        ctx["_chain_defined_vars"] = set()
+
     if ctx.get("strict_mode"):
         children = node.get("children", [])
         if len(children) == 2:
@@ -110,13 +118,19 @@ def invocation_expression(ctx, parentData, node):
                                     f"'{prop}' is not a valid property of '{as_type}'"
                                 )
 
-    return list(
-        reduce(
-            lambda accumulator, children: engine.do_eval(ctx, accumulator, children),
-            node["children"],
-            parentData,
+    try:
+        return list(
+            reduce(
+                lambda accumulator, children: engine.do_eval(ctx, accumulator, children),
+                node["children"],
+                parentData,
+            )
         )
-    )
+    finally:
+        if old_chain is chain_missing:
+            ctx.pop("_chain_defined_vars", None)
+        else:
+            ctx["_chain_defined_vars"] = old_chain
 
 
 def param_list(ctx, parentData, node):
@@ -130,6 +144,8 @@ def union_expression(ctx, parentData, node):
 
 
 def index_invocation(ctx, parentData, node):
+    if "$index" not in ctx:
+        return []
     return util.arraify(ctx["$index"])
 
 
@@ -138,6 +154,8 @@ def this_invocation(ctx, parentData, node):
 
 
 def total_invocation(ctx, parentData, node):
+    if "$total" not in ctx:
+        return []
     return util.arraify(ctx["$total"])
 
 
@@ -182,8 +200,14 @@ def literal_term(ctx, parentData, node):
 
 def external_constant_term(ctx, parent_data, node):
     ext_constant = node["children"][0]
-    ext_identifier = ext_constant["children"][0]
-    varName = identifier(ctx, parent_data, ext_identifier)[0].replace("`", "")
+    if ext_constant.get("children"):
+        ext_identifier = ext_constant["children"][0]
+        varName = identifier(ctx, parent_data, ext_identifier)[0]
+    else:
+        tokens = ext_constant.get("terminalNodeText", [])
+        if len(tokens) < 2:
+            raise ValueError("Invalid environment variable reference")
+        varName = _unescape_fhirpath_string(tokens[1][1:-1])
 
     if varName not in ctx["vars"]:
         raise ValueError(f'Attempting to access an undefined environment variable: {varName}')
@@ -202,25 +226,54 @@ def external_constant_term(ctx, parent_data, node):
     return value
 
 
-def match(m):
-    code = m.group(1)
-    return chr(int(code[1:], 16))
+def _unescape_fhirpath_string(value):
+    escapes = {
+        "'": "'",
+        "`": "`",
+        '"': '"',
+        "r": "\r",
+        "n": "\n",
+        "t": "\t",
+        "f": "\f",
+        "\\": "\\",
+        "/": "/",
+    }
+
+    result = []
+    i = 0
+    while i < len(value):
+        char = value[i]
+        if char != "\\":
+            result.append(char)
+            i += 1
+            continue
+
+        if i + 1 >= len(value):
+            i += 1
+            continue
+
+        escaped = value[i + 1]
+        if escaped == "u":
+            hex_value = value[i + 2 : i + 6]
+            if len(hex_value) == 4 and re.fullmatch(r"[0-9a-fA-F]{4}", hex_value):
+                result.append(chr(int(hex_value, 16)))
+                i += 6
+            else:
+                result.append("u")
+                i += 2
+            continue
+
+        result.append(escapes.get(escaped, escaped))
+        i += 2
+
+    return "".join(result)
 
 
 def string_literal(ctx, parentData, node):
     # Remove the beginning and ending quotes.
     rtn = re.sub(r"^['\"]|['\"]$", "", node["text"])
 
-    rtn = rtn.replace("\\'", "'")
-    rtn = rtn.replace("\\`", "`")
-    rtn = rtn.replace('\\"', '"')
-    rtn = rtn.replace("\\r", "\r")
-    rtn = rtn.replace("\\n", "\n")
-    rtn = rtn.replace("\\t", "\t")
-    rtn = rtn.replace("\\f", "\f")
-    rtn = rtn.replace("\\\\", "\\")
-    rtn = re.sub(r"\\(u\d{4})", match, rtn)
-    rtn = re.sub(r"\\(.)", r"\1", rtn)
+    rtn = _unescape_fhirpath_string(rtn)
 
     return [rtn]
 
@@ -275,6 +328,8 @@ def create_reduce_member_invocation(model, key):
 
         if isinstance(res.data, nodes.FP_Quantity):
             toAdd = res.data.value
+            if key == "value":
+                childPath = "decimal"
 
         if actualTypes and isinstance(res.data, abc.Mapping):
             # Use actualTypes to find the field's value
@@ -431,7 +486,7 @@ def _strict_validate_member(ctx, parentData, key, model):
 
 
 def member_invocation(ctx, parentData, node):
-    key = engine.do_eval(ctx, parentData, node["children"][0])[0].replace("`", "")
+    key = engine.do_eval(ctx, parentData, node["children"][0])[0]
     model = ctx["model"]
 
     if isinstance(parentData, list):
@@ -475,7 +530,12 @@ def indexer_expression(ctx, parentData, node):
     if util.is_empty(idx):
         return []
 
-    idxNum = int(idx[0])
+    if len(idx) > 1:
+        raise FHIRPathError("Indexer requires a singleton integer index")
+
+    idxNum = util.get_data(idx[0])
+    if isinstance(idxNum, bool) or not isinstance(idxNum, int):
+        raise FHIRPathError("Indexer requires an integer index")
 
     if coll is not None and util.is_some(idxNum) and len(coll) > idxNum and idxNum >= 0:
         return [coll[idxNum]]

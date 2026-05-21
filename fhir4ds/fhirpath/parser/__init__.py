@@ -77,7 +77,16 @@ def parse(value, strict_mode=False):
 
     walker = ParseTreeWalker()
     try:
-        walker.walk(astPathListener, parser.expression())
+        tree = parser.expression()
+        current = parser.getCurrentToken()
+        if current.type != Token.EOF:
+            raise FHIRPathSyntaxError(
+                "Unexpected trailing token",
+                expression=value,
+                position=current.column,
+                token=current.text,
+            )
+        walker.walk(astPathListener, tree)
         return astPathListener.parentStack[0]
     except FHIRPathSyntaxError:
         raise

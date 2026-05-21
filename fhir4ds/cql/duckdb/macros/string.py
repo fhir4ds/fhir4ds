@@ -43,8 +43,7 @@ def registerStringMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute("CREATE MACRO IF NOT EXISTS Split(s, delim) AS system.string_split(s, delim)")
     con.execute(
         "CREATE MACRO IF NOT EXISTS SplitOnMatches(s, pattern) AS "
-        "CASE WHEN s IS NULL OR pattern IS NULL THEN NULL "
-        "ELSE regexp_split_to_array(s, pattern) END"
+        "cqlRegexSplitOnMatches(s, pattern)"
     )
 
     # Trimming functions
@@ -67,14 +66,15 @@ def registerStringMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # 2-argument version: Substring(s, start) -> from position to end
     con.execute(
         "CREATE MACRO IF NOT EXISTS Substring(s, start) AS "
-        "CASE WHEN s IS NULL OR start IS NULL OR start < 0 THEN NULL "
+        "CASE WHEN s IS NULL OR start IS NULL OR start < 0 OR start >= system.length(s) THEN NULL "
         "ELSE system.substring(s, start + 1) END"
     )
 
     # 3-argument version: SubstringLen(s, start, length)
     con.execute(
         "CREATE MACRO IF NOT EXISTS SubstringLen(s, start, len) AS "
-        "CASE WHEN s IS NULL OR start IS NULL OR start < 0 THEN NULL "
+        "CASE WHEN s IS NULL OR start IS NULL OR len IS NULL OR start < 0 OR len < 0 "
+        "OR start >= system.length(s) THEN NULL "
         "ELSE system.substring(s, start + 1, len) END"
     )
 
@@ -99,20 +99,14 @@ def registerStringMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # Matches: CQL §17.8 — test if string matches a regex pattern
     con.execute(
         "CREATE MACRO IF NOT EXISTS Matches(s, pattern) AS "
-        "CASE WHEN s IS NULL OR pattern IS NULL THEN NULL "
-        "ELSE regexp_matches(s, pattern) END"
+        "cqlRegexMatches(s, pattern)"
     )
 
     # ReplaceMatches: CQL §17.13 — replace regex matches in string
     # CQL uses Java regex replacement: $1-$9 = group backrefs, \$ = literal $, \\ = literal \
-    # DuckDB's regexp_replace uses \1-\9 for backrefs (POSIX-style).
-    # Steps: 1) Convert CQL \$ → placeholder, 2) Convert $N → \N, 3) Restore placeholder → $
     con.execute(
         "CREATE MACRO IF NOT EXISTS ReplaceMatches(s, pattern, replacement) AS "
-        "CASE WHEN s IS NULL OR pattern IS NULL OR replacement IS NULL THEN NULL "
-        "ELSE regexp_replace(s, pattern, "
-        "replace(regexp_replace(replace(replace(replacement, '\\$', '\x01'), '\\\\', '\\'), "
-        "'[$](\\d)', '\\\\\\1', 'g'), '\x01', '$'), 'g') END"
+        "cqlRegexReplaceMatches(s, pattern, replacement)"
     )
 
     # Concatenate: CQL §17.1 — if any argument is null, result is null

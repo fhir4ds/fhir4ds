@@ -6,8 +6,10 @@ objects into DuckDB SQL queries.
 
 import pytest
 
-from ...parser import parse_view_definition, Column, Select, ViewDefinition
+from ...parser import parse_view_definition, Column, Constant, Select, ViewDefinition
 from ...generator import SQLGenerator
+from ...errors import ValidationError
+from ...metadata import SHAREABLE_VIEWDEFINITION_PROFILE, TABULAR_VIEWDEFINITION_PROFILE
 
 
 class TestSQLGeneratorInit:
@@ -38,7 +40,7 @@ class TestTableNames:
         """Test resource ending in consonant+y becomes ies."""
         gen = SQLGenerator()
         assert gen._get_table_name("Person") == "people"  # special case
-        assert gen._get_table_name("Category") == "categories"
+        assert gen._get_table_name("SupplyDelivery") == "supplydeliveries"
 
     def test_resource_ending_in_s(self):
         """Test resource ending in s becomes es."""
@@ -100,11 +102,28 @@ class TestUDFSelection:
         gen = SQLGenerator()
         assert gen._get_udf_for_type("CodeableConcept") == "fhirpath_json"
 
-    def test_unknown_type_defaults_to_text(self):
-        """Test unknown type defaults to fhirpath_text."""
+    def test_unknown_type_raises(self):
+        """Unknown column types fail fast instead of silently becoming text."""
         gen = SQLGenerator()
-        assert gen._get_udf_for_type("unknown") == "fhirpath_text"
+        with pytest.raises(ValidationError, match="Unsupported ViewDefinition column type"):
+            gen._get_udf_for_type("unknown")
         assert gen._get_udf_for_type(None) == "fhirpath_text"
+
+    def test_full_fhir_structure_definition_uri_type(self):
+        """Core FHIR StructureDefinition URIs normalize to supported type behavior."""
+        gen = SQLGenerator()
+        assert (
+            gen._get_udf_for_type("http://hl7.org/fhir/StructureDefinition/CodeableConcept")
+            == "fhirpath_json"
+        )
+        assert (
+            gen._get_udf_for_type("http://hl7.org/fhir/StructureDefinition/HumanName")
+            == "fhirpath_json"
+        )
+        assert (
+            gen._get_udf_for_type("http://hl7.org/fhir/StructureDefinition/string")
+            == "fhirpath_text"
+        )
 
 
 class TestColumnExpression:
@@ -138,6 +157,52 @@ class TestColumnExpression:
 
         # Single quotes should be doubled for SQL escaping
         assert "''test''" in expr
+
+    def test_direct_column_path_must_not_be_empty(self):
+        """Direct dataclass construction cannot bypass required column.path."""
+        gen = SQLGenerator()
+        col = Column(path="", name="id")
+
+        with pytest.raises(ValidationError, match="path"):
+            gen.generate_column_expr(col, "t.resource")
+
+    def test_direct_column_collection_must_be_boolean(self):
+        """Direct dataclass construction cannot bypass boolean collection shape."""
+        gen = SQLGenerator()
+        col = Column(path="id", name="id", collection="false")
+
+        with pytest.raises(ValidationError, match="collection"):
+            gen.generate_column_expr(col, "t.resource")
+
+    def test_direct_column_tag_must_be_structured(self):
+        """Direct dataclass construction cannot bypass tag shape checks."""
+        gen = SQLGenerator()
+        col = Column(path="id", name="id", tag=[{"name": "ansi/type", "value": "VARCHAR"}])
+        expr = gen.generate_column_expr(col, "t.resource")
+        assert 'as "id"' in expr
+
+        col.tag = ["bad"]
+        with pytest.raises(ValidationError, match="tag"):
+            gen.generate_column_expr(col, "t.resource")
+
+    def test_scalar_column_expression_has_runtime_cardinality_guard(self):
+        """Generated scalar columns report multi-value runtime violations."""
+        gen = SQLGenerator()
+        col = Column(path="name.family", name="family", type="string")
+        expr = gen.generate_column_expr(col, "t.resource")
+
+        assert "array_length(fhirpath(t.resource, 'name.family')) > 1" in expr
+        assert "error('ViewDefinition column" in expr
+
+    def test_typed_column_expression_has_runtime_type_guard(self):
+        """Generated typed columns report runtime type mismatch violations."""
+        gen = SQLGenerator()
+        col = Column(path="gender", name="gender_as_int", type="integer")
+        expr = gen.generate_column_expr(col, "t.resource")
+
+        assert "(gender).type().name" in expr
+        assert "'integer'" in expr
+        assert "error('ViewDefinition column" in expr
 
 
 class TestColumnsGeneration:
@@ -243,6 +308,125 @@ class TestFullQueryGeneration:
 
         assert "FROM observations" in sql
 
+    def test_direct_view_definition_resource_must_be_single_string(self):
+        """Generator rejects direct dataclass bypass of the resource cardinality."""
+        vd = ViewDefinition(
+            resource=["Patient", "Observation"],
+            select=[Select(column=[Column(path="id", name="id")])],
+        )
+
+        with pytest.raises(ValidationError, match="single FHIR ResourceType string"):
+            SQLGenerator().generate(vd)
+
+    def test_direct_view_definition_resource_must_be_known_resource_type(self):
+        """Generator validates the required ResourceType binding."""
+        vd = ViewDefinition(
+            resource="NotARealFHIRResource",
+            select=[Select(column=[Column(path="id", name="id")])],
+        )
+
+        with pytest.raises(ValidationError, match="ResourceType"):
+            SQLGenerator().generate(vd)
+
+    def test_direct_view_definition_name_must_be_sql_name(self):
+        """Generator rejects direct dataclass bypass of ViewDefinition.name."""
+        vd = ViewDefinition(
+            resource="Patient",
+            name="_bad",
+            select=[Select(column=[Column(path="id", name="id")])],
+        )
+
+        with pytest.raises(ValidationError, match="sql-name"):
+            SQLGenerator().generate(vd)
+
+    def test_direct_view_definition_fhir_version_must_use_binding(self):
+        """Generator validates direct dataclass fhirVersion binding values."""
+        vd = ViewDefinition(
+            resource="Patient",
+            fhirVersion=["9.9.9"],
+            select=[Select(column=[Column(path="id", name="id")])],
+        )
+
+        with pytest.raises(ValidationError, match="FHIRVersion"):
+            SQLGenerator().generate(vd)
+
+    def test_direct_view_definition_supported_profiles_are_validated(self):
+        """Generator validates profile constraints for direct dataclass construction."""
+        shareable = ViewDefinition(
+            resource="Patient",
+            meta={"profile": [SHAREABLE_VIEWDEFINITION_PROFILE]},
+            url="https://example.org/ViewDefinition/shareable",
+            name="shareable_patient",
+            fhirVersion=["4.0.1"],
+            select=[Select(column=[Column(path="id", name="id")])],
+        )
+        with pytest.raises(ValidationError, match="Column.type"):
+            SQLGenerator().generate(shareable)
+
+        tabular = ViewDefinition(
+            resource="Patient",
+            meta={"profile": [TABULAR_VIEWDEFINITION_PROFILE]},
+            select=[Select(column=[Column(path="name", name="name", type="HumanName")])],
+        )
+        with pytest.raises(ValidationError, match="primitive"):
+            SQLGenerator().generate(tabular)
+
+    @pytest.mark.parametrize(
+        "constant, message",
+        [
+            (Constant(name="_bad", value="x", value_type="string"), "sql-name"),
+            (Constant(name="Good", value=None, value_type="string"), "no value"),
+        ],
+    )
+    def test_direct_view_definition_constants_are_validated(self, constant, message):
+        """Generator validates direct dataclass Constant name/value requirements."""
+        vd = ViewDefinition(
+            resource="Patient",
+            constants=[constant],
+            select=[Select(column=[Column(path="id", name="id")])],
+        )
+
+        with pytest.raises(ValidationError, match=message):
+            SQLGenerator().generate(vd)
+
+    def test_direct_select_iteration_shapes_are_validated(self):
+        """Direct dataclass construction cannot bypass select iteration field shapes."""
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[Select(repeat={"path": "name"}, column=[Column(path="$this", name="value")])],
+        )
+
+        with pytest.raises(ValidationError, match="repeat"):
+            SQLGenerator().generate(vd)
+
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[Select(repeat="name", column=[Column(path="$this", name="value")])],
+        )
+
+        with pytest.raises(ValidationError, match="repeat"):
+            SQLGenerator().generate(vd)
+
+    @pytest.mark.parametrize(
+        "kwargs, message",
+        [
+            ({"column": {"path": "id", "name": "id"}}, "column"),
+            ({"select": None}, "select"),
+            ({"select": {"bad": "shape"}}, "select"),
+            ({"unionAll": None}, "unionAll"),
+            ({"unionAll": {"bad": "shape"}}, "unionAll"),
+        ],
+    )
+    def test_direct_select_containers_are_validated(self, kwargs, message):
+        """Direct dataclass construction cannot bypass recursive container shapes."""
+        vd = ViewDefinition(
+            resource="Patient",
+            select=[Select(**kwargs)],
+        )
+
+        with pytest.raises(ValidationError, match=message):
+            SQLGenerator().generate(vd)
+
     def test_generate_from_json(self):
         """Test generating SQL directly from JSON string."""
         gen = SQLGenerator()
@@ -259,6 +443,118 @@ class TestFullQueryGeneration:
 
         assert "SELECT" in sql
         assert "FROM patients" in sql
+
+    def test_percent_text_inside_string_literal_is_not_undefined_constant(self):
+        """FHIRPath string literal content is not a ViewDefinition constant reference."""
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "select": [{
+                "column": [
+                    {"path": "'%missing'", "name": "literal", "type": "string"}
+                ]
+            }]
+        })
+
+        sql = SQLGenerator().generate(vd)
+
+        assert "%missing" in sql
+
+    def test_duplicate_column_name_across_sibling_and_unionall_branch_rejected(self):
+        """unionAll branch columns cannot collide with sibling output columns."""
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "select": [
+                {"column": [{"path": "id", "name": "dup"}]},
+                {
+                    "unionAll": [
+                        {"column": [{"path": "gender", "name": "dup"}]},
+                        {"column": [{"path": "active", "name": "dup"}]},
+                    ]
+                },
+            ],
+        })
+
+        with pytest.raises(ValidationError, match="Duplicate column names"):
+            SQLGenerator().generate(vd)
+
+    def test_unionall_branch_matching_names_are_allowed(self):
+        """Matching unionAll branch schemas remain valid when no sibling collides."""
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "select": [
+                {"column": [{"path": "id", "name": "id"}]},
+                {
+                    "unionAll": [
+                        {"column": [{"path": "gender", "name": "value"}]},
+                        {"column": [{"path": "active", "name": "value"}]},
+                    ]
+                },
+            ],
+        })
+
+        sql = SQLGenerator().generate(vd)
+
+        assert "UNION ALL" in sql
+
+    def test_sibling_unionall_output_name_collision_rejected(self):
+        """Separate sibling unionAll rowsets cannot project the same output name."""
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "select": [
+                {
+                    "unionAll": [
+                        {"column": [{"path": "gender", "name": "value"}]},
+                        {"column": [{"path": "active", "name": "value"}]},
+                    ]
+                },
+                {
+                    "unionAll": [
+                        {"column": [{"path": "id", "name": "value"}]},
+                        {"column": [{"path": "birthDate", "name": "value"}]},
+                    ]
+                },
+            ],
+        })
+
+        with pytest.raises(ValidationError, match="Duplicate column names"):
+            SQLGenerator().generate(vd)
+
+    def test_unionall_branch_type_mismatch_rejected(self):
+        """unionAll branches must match column names, order, FHIR types, and collection flags."""
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "select": [{
+                "unionAll": [
+                    {"column": [{"path": "id", "name": "value", "type": "id"}]},
+                    {"column": [{"path": "1", "name": "value", "type": "integer"}]},
+                ]
+            }],
+        })
+
+        with pytest.raises(ValidationError, match="column schema"):
+            SQLGenerator().generate(vd)
+
+    def test_unionall_branch_collection_mismatch_rejected(self):
+        """unionAll branch cardinality is part of the output schema."""
+        vd = parse_view_definition({
+            "resource": "Patient",
+            "select": [{
+                "unionAll": [
+                    {"column": [{"path": "id", "name": "value", "type": "id"}]},
+                    {
+                        "column": [{
+                            "path": "name.given",
+                            "name": "value",
+                            "type": "id",
+                            "collection": True,
+                        }]
+                    },
+                ]
+            }],
+        })
+
+        with pytest.raises(ValidationError, match="collection flags"):
+            SQLGenerator().generate(vd)
 
 
 class TestMultipleSelects:

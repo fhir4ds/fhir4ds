@@ -7,9 +7,13 @@ batch processing of FHIR resources.
 
 from __future__ import annotations
 
+import calendar
+import json
 import logging
 import os
 import re
+import sys
+import threading
 from decimal import Decimal
 from functools import lru_cache
 
@@ -19,7 +23,7 @@ from typing import TYPE_CHECKING
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from .evaluator import FHIRPathEvaluator
+from .evaluator import FHIRPathEvaluator, _strip_comments_for_precheck
 from .errors import FHIRPathError, FHIRPathSyntaxError
 
 if TYPE_CHECKING:
@@ -28,17 +32,66 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 _STRICT_MODE = os.environ.get("FHIRPATH_STRICT_MODE") == "1"
 
-_VALID_BOOL_STRINGS = frozenset({"true", "false", "1", "0"})
+_VALID_BOOL_STRINGS = frozenset({"true", "false"})
+_RECURSION_LIMIT_LOCK = threading.RLock()
 
 # Cache compiled expressions for reuse
 # This is shared across all UDF invocations
 _EXPRESSION_CACHE_SIZE = 1024
 
 
+def _json_max_nesting_depth(resource: str) -> int:
+    """Return maximum JSON object/array nesting depth, ignoring quoted text."""
+    max_depth = 0
+    depth = 0
+    in_string = False
+    escaped = False
+
+    for char in resource:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char in "[{":
+            depth += 1
+            if depth > max_depth:
+                max_depth = depth
+        elif char in "]}":
+            depth -= 1
+
+    return max_depth
+
+
 def _parse_json(resource: str) -> dict:
-    """Parse a JSON string. No caching — orjson is fast and caching returns
-    mutable dicts that the evaluator may mutate, corrupting shared state."""
-    return orjson.loads(resource)
+    """Parse a JSON string.
+
+    No caching — parsing returns mutable dicts that the evaluator may mutate.
+    ``orjson`` is the normal fast path, but it enforces a nesting ceiling below
+    DuckDB/yyjson. Fall back to the standard parser with a temporary recursion
+    budget for valid deeply nested resources.
+    """
+    try:
+        return orjson.loads(resource)
+    except orjson.JSONDecodeError as exc:
+        if "recursion depth" not in str(exc):
+            raise
+
+        current_limit = sys.getrecursionlimit()
+        needed_limit = max(current_limit, (_json_max_nesting_depth(resource) * 4) + 1000)
+        try:
+            if needed_limit > current_limit:
+                sys.setrecursionlimit(needed_limit)
+            return json.loads(resource)
+        finally:
+            if sys.getrecursionlimit() != current_limit:
+                sys.setrecursionlimit(current_limit)
 
 
 def _json_default(obj: object) -> object:
@@ -52,6 +105,64 @@ def _json_default(obj: object) -> object:
 def _json_serialize(obj: object) -> str:
     """Serialize an object to a JSON string using orjson for performance."""
     return orjson.dumps(obj, default=_json_default).decode()
+
+
+def _json_scalar_serialize(obj: object) -> str:
+    """Serialize a scalar JSON value with compact separators."""
+    if obj is None:
+        return "null"
+    if obj is True:
+        return "true"
+    if obj is False:
+        return "false"
+    if isinstance(obj, Decimal):
+        obj = float(obj)
+    if isinstance(obj, (str, int, float)):
+        return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
+def _json_serialize_iterative(obj: object) -> str:
+    """Serialize JSON-compatible objects without Python recursion.
+
+    DuckDB fallback repeat traversal may need to return deeply nested child
+    objects. Both ``orjson`` and ``json.dumps`` have recursion ceilings, so this
+    compact serializer handles dict/list structure with an explicit stack.
+    """
+    chunks: list[str] = []
+    stack: list[tuple[str, object]] = [("value", obj)]
+
+    while stack:
+        kind, value = stack.pop()
+        if kind == "literal":
+            chunks.append(value)  # type: ignore[arg-type]
+            continue
+
+        if isinstance(value, dict):
+            chunks.append("{")
+            items = list(value.items())
+            stack.append(("literal", "}"))
+            for index in range(len(items) - 1, -1, -1):
+                key, item_value = items[index]
+                if index < len(items) - 1:
+                    stack.append(("literal", ","))
+                stack.append(("value", item_value))
+                stack.append(("literal", ":"))
+                stack.append(("literal", _json_scalar_serialize(str(key))))
+            continue
+
+        if isinstance(value, (list, tuple)):
+            chunks.append("[")
+            stack.append(("literal", "]"))
+            for index in range(len(value) - 1, -1, -1):
+                if index < len(value) - 1:
+                    stack.append(("literal", ","))
+                stack.append(("value", value[index]))
+            continue
+
+        chunks.append(_json_scalar_serialize(value))
+
+    return "".join(chunks)
 
 
 _TEMPORAL_ARITH_RE = re.compile(
@@ -100,27 +211,13 @@ def _get_compiled_evaluator(expression: str) -> FHIRPathEvaluator:
         FHIRPathSyntaxError: If the expression matches a known-invalid pattern.
     """
     stripped = expression.strip()
-    if _INVALID_EXPR_PATTERNS.search(stripped):
+    precheck_text = _strip_comments_for_precheck(stripped)
+    if _INVALID_EXPR_PATTERNS.search(precheck_text):
         raise FHIRPathSyntaxError(
             f"Invalid FHIRPath expression: rejected by pattern check: '{expression}'"
         )
     # Reject unbalanced parentheses and brackets
-    depth_paren = 0
-    depth_bracket = 0
-    for ch in stripped:
-        if ch == '(':
-            depth_paren += 1
-        elif ch == ')':
-            depth_paren -= 1
-        elif ch == '[':
-            depth_bracket += 1
-        elif ch == ']':
-            depth_bracket -= 1
-        if depth_paren < 0 or depth_bracket < 0:
-            raise FHIRPathSyntaxError(
-                f"Invalid FHIRPath expression: unbalanced delimiters in '{expression}'"
-            )
-    if depth_paren != 0 or depth_bracket != 0:
+    if not _has_balanced_delimiters(stripped):
         raise FHIRPathSyntaxError(
             f"Invalid FHIRPath expression: unbalanced delimiters in '{expression}'"
         )
@@ -162,8 +259,14 @@ _KNOWN_FHIRPATH_FUNCTIONS = frozenset({
     'is', 'as', 'type',
     # Aggregate (§5.12)
     'aggregate',
+    # STU/date-time helpers implemented by native/public surfaces
+    'lowBoundary', 'highBoundary', 'precision', 'yearOf', 'monthOf', 'dayOf',
+    'hourOf', 'minuteOf', 'secondOf', 'millisecondOf', 'timezoneOffsetOf',
+    'escape', 'unescape', 'matchesFull', 'comparable', 'coalesce',
+    'repeatAll', 'sort',
     # FHIR-specific
-    'resolve', 'extension', 'hasValue', 'getValue', 'memberOf',
+    'resolve', 'extension', 'hasValue', 'getValue', 'getResourceKey',
+    'getReferenceKey', 'memberOf',
     'htmlChecks', 'conformsTo', 'elementDefinition', 'slice', 'checkModifiers',
     # Boolean
     'not',
@@ -250,6 +353,107 @@ def _resolve_choice_oftype(resource_dict: dict, expression: str) -> list:
     return [val]
 
 
+_CHOICE_ASSERTION_METHOD_RE = re.compile(
+    r"^\s*(?P<path>[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\."
+    r"(?P<op>is|as)\(\s*(?P<type>`?[\w.]+`?)\s*\)\s*$",
+    re.IGNORECASE,
+)
+_CHOICE_ASSERTION_INFIX_RE = re.compile(
+    r"^\s*(?P<path>[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s+"
+    r"(?P<op>is|as)\s+(?P<type>`?[\w.]+`?)\s*$",
+    re.IGNORECASE,
+)
+
+_KNOWN_FUNCTION_NAMES = frozenset(
+    {
+        "abs", "aggregate", "all", "allFalse", "allTrue", "anyFalse", "anyTrue", "as",
+        "ceiling", "checkModifiers", "children", "coalesce", "combine", "comparable",
+        "conformsTo", "contains", "convertsToBoolean", "convertsToDate", "convertsToDateTime",
+        "convertsToDecimal", "convertsToInteger", "convertsToQuantity", "convertsToString",
+        "convertsToTime", "count", "dayOf", "decode", "defineVariable", "descendants",
+        "distinct", "elementDefinition", "empty", "empty_collection", "encode", "endsWith", "escape", "exclude",
+        "exists", "exp", "first", "floor", "getValue", "hasTemplateIdOf", "hasValue",
+        "highBoundary", "hourOf", "htmlChecks", "htmlChecks2", "iif", "indexOf", "intersect",
+        "is", "isDistinct", "join", "last", "length", "ln", "log", "lowBoundary", "lower",
+        "matches", "matchesFull", "memberOf", "millisecondOf", "minuteOf", "monthOf", "not", "now",
+        "ofType", "power", "precision", "repeat", "repeatAll", "replace", "replaceMatches", "resolve",
+        "round", "secondOf", "select", "single", "skip", "sort", "split", "sqrt", "startsWith",
+        "slice", "subsetOf", "substring", "supersetOf", "tail", "take", "timeOfDay", "timezoneOffsetOf",
+        "toBoolean", "toChars", "toDate", "toDateTime", "toDecimal", "toInteger", "toQuantity",
+        "toString", "toTime", "today", "trace", "trim", "truncate", "type", "unescape", "union",
+        "upper", "where", "yearOf",
+        "Address", "CodeableConcept", "Coding", "ContactPoint", "Extension", "HumanName",
+        "Identifier", "Quantity", "create", "withExtension", "withProperty",
+    }
+)
+
+
+def _choice_type_suffix(type_name: str) -> str | None:
+    parts = type_name.strip().strip("`").split(".")
+    if len(parts) > 1 and parts[-2].lower() == "system":
+        return None
+    bare = parts[-1]
+    return {
+        "base64binary": "Base64Binary",
+        "boolean": "Boolean",
+        "canonical": "Canonical",
+        "code": "Code",
+        "codeableconcept": "CodeableConcept",
+        "coding": "Coding",
+        "date": "Date",
+        "datetime": "DateTime",
+        "decimal": "Decimal",
+        "id": "Id",
+        "instant": "Instant",
+        "integer": "Integer",
+        "integer64": "Integer64",
+        "markdown": "Markdown",
+        "oid": "Oid",
+        "positiveint": "PositiveInt",
+        "quantity": "Quantity",
+        "string": "String",
+        "time": "Time",
+        "unsignedint": "UnsignedInt",
+        "uri": "Uri",
+        "url": "Url",
+        "uuid": "Uuid",
+    }.get(bare.lower(), bare[:1].upper() + bare[1:])
+
+
+def _resolve_choice_type_assertion(resource_dict: dict, expression: str) -> list | None:
+    """Resolve simple choice-type ``is``/``as`` expressions missed by fallback evaluation."""
+    match = _CHOICE_ASSERTION_METHOD_RE.fullmatch(expression) or _CHOICE_ASSERTION_INFIX_RE.fullmatch(expression)
+    if not match:
+        return None
+
+    path = match.group("path")
+    op = match.group("op").lower()
+    parts = path.split(".")
+    if len(parts) > 2:
+        return None
+    if len(parts) == 2 and parts[0] != resource_dict.get("resourceType"):
+        return None
+    base_name = parts[-1]
+
+    field_names = _get_choice_type_lookup().get(base_name)
+    if not field_names:
+        return None
+
+    suffix = _choice_type_suffix(match.group("type"))
+    if suffix is None:
+        return [False] if op == "is" else []
+    target_field = f"{base_name}{suffix}"
+    if target_field not in field_names:
+        return [False] if op == "is" else []
+
+    val = resource_dict.get(target_field)
+    if op == "is":
+        return [val is not None]
+    if val is None:
+        return []
+    return [val]
+
+
 def fhirpath_udf(
     resources: pa.Array,
     expressions: pa.Array,
@@ -323,6 +527,14 @@ def fhirpath_udf(
             evaluator = _get_compiled_evaluator(expression)
             result = evaluator.evaluate(resource_dict)
 
+            choice_assertion = _resolve_choice_type_assertion(resource_dict, expression)
+            if choice_assertion is not None:
+                result = choice_assertion
+            if not result and isinstance(resource_dict, dict):
+                result = _resolve_choice_type(resource_dict, expression)
+            if not result and isinstance(resource_dict, dict):
+                result = _resolve_choice_oftype(resource_dict, expression)
+
             # Convert result to list for Arrow
             if result is None:
                 results.append([])
@@ -330,7 +542,9 @@ def fhirpath_udf(
                 # Serialize complex objects to valid JSON strings
                 serialized = []
                 for item in result:
-                    if isinstance(item, (dict, list)):
+                    if item is None:
+                        serialized.append("")
+                    elif isinstance(item, (dict, list)):
                         serialized.append(_json_serialize(item))
                     elif isinstance(item, bool):
                         serialized.append("true" if item else "false")
@@ -476,6 +690,10 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         evaluator = _get_compiled_evaluator(expression)
         result = evaluator.evaluate(resource_dict)
 
+        choice_assertion = _resolve_choice_type_assertion(resource_dict, expression)
+        if choice_assertion is not None:
+            result = choice_assertion
+
         # Fallback: resolve choice type fields that fhirpathpy misses for primitives
         if not result and isinstance(resource_dict, dict):
             result = _resolve_choice_type(resource_dict, expression)
@@ -488,6 +706,8 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         if isinstance(result, list):
             # Convert all items to strings for consistent return type
             def _to_str(item):
+                if item is None:
+                    return ""
                 if isinstance(item, bool):
                     return "true" if item else "false"
                 if isinstance(item, float):
@@ -556,6 +776,63 @@ _INVALID_EXPR_PATTERNS = re.compile(
 )
 
 
+def _has_balanced_delimiters(expression: str) -> bool:
+    depth_paren = 0
+    depth_bracket = 0
+    i = 0
+    in_string = False
+    in_delimited_identifier = False
+
+    while i < len(expression):
+        ch = expression[i]
+
+        if in_string or in_delimited_identifier:
+            if ch == "\\" and i + 1 < len(expression):
+                i += 2
+                continue
+            if in_string and ch == "'":
+                in_string = False
+            elif in_delimited_identifier and ch == "`":
+                in_delimited_identifier = False
+            i += 1
+            continue
+
+        if ch == "'":
+            in_string = True
+            i += 1
+            continue
+        if ch == "`":
+            in_delimited_identifier = True
+            i += 1
+            continue
+        if ch == "/" and i + 1 < len(expression) and expression[i + 1] == "/":
+            i += 2
+            while i < len(expression) and expression[i] not in "\r\n":
+                i += 1
+            continue
+        if ch == "/" and i + 1 < len(expression) and expression[i + 1] == "*":
+            i += 2
+            while i < len(expression):
+                if expression[i] == "*" and i + 1 < len(expression) and expression[i + 1] == "/":
+                    i += 2
+                    break
+                i += 1
+            continue
+        if ch == "(":
+            depth_paren += 1
+        elif ch == ")":
+            depth_paren -= 1
+        elif ch == "[":
+            depth_bracket += 1
+        elif ch == "]":
+            depth_bracket -= 1
+        if depth_paren < 0 or depth_bracket < 0:
+            return False
+        i += 1
+
+    return depth_paren == 0 and depth_bracket == 0
+
+
 def fhirpath_is_valid_udf(expression: str | None) -> bool:
     """Check if a FHIRPath expression is syntactically valid.
 
@@ -568,18 +845,10 @@ def fhirpath_is_valid_udf(expression: str | None) -> bool:
     if not stripped:
         return False
     # Reject common invalid patterns that fhirpathpy may accept
-    if _INVALID_EXPR_PATTERNS.search(stripped):
+    precheck_text = _strip_comments_for_precheck(stripped)
+    if _INVALID_EXPR_PATTERNS.search(precheck_text):
         return False
-    # Check for unbalanced parentheses
-    depth = 0
-    for ch in stripped:
-        if ch == '(':
-            depth += 1
-        elif ch == ')':
-            depth -= 1
-        if depth < 0:
-            return False
-    if depth != 0:
+    if not _has_balanced_delimiters(stripped):
         return False
     try:
         if _evaluate_literal_temporal_arithmetic(expression) is not None:
@@ -587,9 +856,46 @@ def fhirpath_is_valid_udf(expression: str | None) -> bool:
         evaluator = _get_compiled_evaluator(expression)
         evaluator.evaluate({"resourceType": "Patient", "id": "_validation"})
         return True
+    except FHIRPathError as exc:
+        if _is_valid_empty_result_error(exc):
+            return True
+        return False
+    except NotImplementedError as exc:
+        return _not_implemented_function_name(exc) in _KNOWN_FUNCTION_NAMES
     except Exception:
         # Catch all exceptions — a validation function must never throw
         return False
+
+
+def _not_implemented_function_name(exc: NotImplementedError) -> str | None:
+    message = str(exc)
+    for prefix in ("Not implemented: ", "Not implemented "):
+        if message.startswith(prefix):
+            return message[len(prefix):].strip()
+    return None
+
+
+def _is_valid_empty_result_error(exc: FHIRPathError) -> bool:
+    """Return true for spec-valid expressions that evaluate to empty on data.
+
+    `fhirpath_is_valid` is an expression validity helper, not a result
+    non-emptiness helper. The Python fallback validates by running a compiled
+    expression against a minimal Patient resource, so runtime empty-result
+    errors from incompatible comparison/arithmetic operands must not be
+    conflated with syntax errors, bad type specifiers, wrong arity, or
+    singleton violations.
+    """
+    message = str(exc)
+    if message.startswith("Type of ") and "InequalityExpression" in message:
+        return True
+    if (
+        message.startswith("Cannot [")
+        and "fhir4ds.fhirpath.engine.nodes.FP_" not in message
+    ):
+        return True
+    if message.startswith("Expected number or quantity, got: "):
+        return True
+    return False
 
 
 def fhirpath_text_udf(resource: str | None, expression: str | None) -> str | None:
@@ -648,32 +954,45 @@ def fhirpath_date_udf(resource: str | None, expression: str | None) -> str | Non
 
     value = result[0]
     if isinstance(value, str):
-        # Try to parse as a date
-        try:
-            # Handle FHIR date formats (YYYY, YYYY-MM, YYYY-MM-DD)
-            if len(value) >= 10:
-                # Full date
-                return value[:10]
-            elif len(value) == 7:
-                # Month precision – day component invented as -01
-                _logger.warning(
-                    "Date '%s' has only month precision; padding to '%s-01'",
-                    value, value,
-                )
-                return value + "-01"
-            elif len(value) == 4:
-                # Year precision – month and day invented as -01-01
-                _logger.warning(
-                    "Date '%s' has only year precision; padding to '%s-01-01'",
-                    value, value,
-                )
-                return value + "-01-01"
-            else:
-                # Invalid format
-                return None
-        except (ValueError, IndexError):
-            return None
+        return _normalize_fhir_date_string(value)
     return None
+
+
+def _normalize_fhir_date_string(value: str) -> str | None:
+    """Return a valid FHIR date component, preserving precision."""
+    if "T" in value:
+        date_part, _, _time_part = value.partition("T")
+        # A DateTime can be exposed as a date only when a full date exists.
+        if len(date_part) != 10:
+            return None
+    else:
+        date_part = value
+
+    parts = date_part.split("-")
+    if len(parts) not in (1, 2, 3):
+        return None
+    if len(parts[0]) != 4 or not parts[0].isdigit():
+        return None
+
+    if len(parts) == 1:
+        return date_part
+
+    if len(parts[1]) != 2 or not parts[1].isdigit():
+        return None
+    month = int(parts[1])
+    if month < 1 or month > 12:
+        return None
+
+    if len(parts) == 2:
+        return date_part
+
+    if len(parts[2]) != 2 or not parts[2].isdigit():
+        return None
+    day = int(parts[2])
+    max_day = calendar.monthrange(int(parts[0]), month)[1]
+    if day < 1 or day > max_day:
+        return None
+    return date_part
 
 
 def fhirpath_bool_udf(resource: str | None, expression: str | None) -> bool | None:
@@ -692,16 +1011,55 @@ def fhirpath_bool_udf(resource: str | None, expression: str | None) -> bool | No
         >>> print(result)
         True
     """
+    if resource is None or expression is None:
+        return None
+
     try:
-        result = fhirpath_scalar(resource, expression)
+        if isinstance(resource, str):
+            resource_dict = _parse_json(resource)
+        elif isinstance(resource, dict):
+            resource_dict = resource
+        else:
+            return None
+
+        temporal_result = _evaluate_literal_temporal_arithmetic(expression)
+        if temporal_result is not None:
+            result = temporal_result
+        else:
+            evaluator = _get_compiled_evaluator(expression)
+            result = evaluator.evaluate(resource_dict)
+            choice_assertion = _resolve_choice_type_assertion(resource_dict, expression)
+            if choice_assertion is not None:
+                result = choice_assertion
+            if not result and isinstance(resource_dict, dict):
+                result = _resolve_choice_type(resource_dict, expression)
+            if not result and isinstance(resource_dict, dict):
+                result = _resolve_choice_oftype(resource_dict, expression)
+
+        if isinstance(result, list):
+            result_items = result
+        elif result is None:
+            result_items = []
+        else:
+            result_items = [result]
+    except orjson.JSONDecodeError:
+        if _STRICT_MODE:
+            raise
+        return None
     except FHIRPathSyntaxError:
         raise
     except (NotImplementedError, FHIRPathError):
         # Unimplemented functions return NULL in boolean context (used by ViewDef)
         return None
-    if not result:
+    except (ValueError, TypeError, KeyError, AttributeError, IndexError) as e:
+        _logger.warning("FHIRPath boolean evaluation failed for '%s': %s", expression, e)
+        if _STRICT_MODE:
+            raise
         return None
-    val = result[0]
+
+    if not result_items:
+        return None
+    val = result_items[0]
     if isinstance(val, bool):
         return val
     if isinstance(val, str):
@@ -712,7 +1070,7 @@ def fhirpath_bool_udf(resource: str | None, expression: str | None) -> bool | No
                 val, expression,
             )
             return None
-        return low in ("true", "1")
+        return low == "true"
     if isinstance(val, (int, float)):
         if val in (0, 1, 0.0, 1.0):
             return bool(val)
@@ -762,6 +1120,9 @@ def fhirpath_number_udf(resource: str | None, expression: str | None) -> float |
             evaluator = _get_compiled_evaluator(expression)
             result = evaluator.evaluate(resource_dict)
 
+            choice_assertion = _resolve_choice_type_assertion(resource_dict, expression)
+            if choice_assertion is not None:
+                result = choice_assertion
             if not result and isinstance(resource_dict, dict):
                 result = _resolve_choice_type(resource_dict, expression)
             if not result and isinstance(resource_dict, dict):
@@ -823,6 +1184,9 @@ def fhirpath_json_udf(resource: str | None, expression: str | None) -> str | Non
             evaluator = _get_compiled_evaluator(expression)
             result = evaluator.evaluate(resource_dict)
 
+            choice_assertion = _resolve_choice_type_assertion(resource_dict, expression)
+            if choice_assertion is not None:
+                result = choice_assertion
             if not result and isinstance(resource_dict, dict):
                 result = _resolve_choice_type(resource_dict, expression)
             if not result and isinstance(resource_dict, dict):
@@ -835,6 +1199,8 @@ def fhirpath_json_udf(resource: str | None, expression: str | None) -> str | Non
         # FHIRPath nodes need special handling; primitives pass through.
         def _to_native(item):
             from ..engine.nodes import FP_TimeBase, FP_Quantity
+            if item is None:
+                return None
             if isinstance(item, bool):
                 return item
             if isinstance(item, (int, float)):
@@ -952,44 +1318,82 @@ def fhirpath_quantity_udf(resource: str | None, expression: str | None) -> str |
 # fhirpath_repeat: recursive traversal for SQL-on-FHIR v2 ``repeat``
 # ---------------------------------------------------------------------------
 
-def _navigate_simple_path(obj: dict, path: str) -> list:
-    """Navigate a dotted property path in a JSON object.
+def _repeat_json_serialize(obj: object) -> str:
+    """Serialize repeated nodes, falling back for deeply nested structures."""
+    try:
+        return _json_serialize(obj)
+    except (TypeError, RecursionError):
+        return _json_serialize_iterative(obj)
 
-    For ``repeat``, paths are simple dotted property names (e.g. ``item``
-    or ``answer.item``), not full FHIRPath expressions.
 
-    Returns a list of dict children found at the end of the path.
+def _evaluate_repeat_expression(current: dict, path: str) -> list[dict]:
+    evaluator = _get_compiled_evaluator(path)
+    return [item for item in evaluator.evaluate(current) if isinstance(item, dict)]
+
+
+def _repeat_traverse(root: dict, paths: list[str]) -> list[str]:
+    """Depth-first repeat traversal using FHIRPath expressions.
+
+    SQL-on-FHIR ``repeat`` applies each FHIRPath expression at the current
+    node, recurses into each result, and unions results across paths/levels.
+    JSON input is finite, so traversal needs a visited set for duplicate path
+    hits rather than an arbitrary depth cap. The traversal uses explicit frames
+    so a valid deeply nested JSON tree does not trip Python's recursion limit.
     """
-    parts = path.split(".")
-    candidates = [obj]
-    for part in parts:
-        next_candidates: list = []
-        for c in candidates:
-            if isinstance(c, dict) and part in c:
-                val = c[part]
-                if isinstance(val, list):
-                    next_candidates.extend(val)
-                else:
-                    next_candidates.append(val)
-        candidates = next_candidates
-    # Only return dict-typed children (JSON objects)
-    return [c for c in candidates if isinstance(c, dict)]
+    results: list[str] = []
+    seen: set[str] = set()
+    stack: list[dict[str, object]] = [
+        {"current": root, "path_index": 0, "children": None, "child_index": 0}
+    ]
 
+    while stack:
+        frame = stack[-1]
+        path_index = frame["path_index"]
+        if not isinstance(path_index, int):
+            raise TypeError("repeat traversal frame path_index must be an integer")
 
-def _repeat_dfs(current: dict, paths: list, results: list, max_depth: int = 200, depth: int = 0) -> None:
-    """Depth-first recursive traversal collecting all repeat path results.
+        if frame["children"] is None:
+            if path_index >= len(paths):
+                stack.pop()
+                continue
+            try:
+                frame["children"] = _evaluate_repeat_expression(
+                    frame["current"],  # type: ignore[arg-type]
+                    paths[path_index],
+                )
+            except Exception:
+                _logger.debug(
+                    "fhirpath_repeat path failed: %s",
+                    paths[path_index],
+                    exc_info=True,
+                )
+                frame["path_index"] = path_index + 1
+                frame["children"] = None
+                frame["child_index"] = 0
+                continue
+            frame["child_index"] = 0
 
-    Per SQL-on-FHIR v2 §Select.repeat, the repeat directive recursively
-    applies each path expression and collects all matching elements in
-    document order (depth-first).
-    """
-    if depth >= max_depth:
-        return
-    for path in paths:
-        children = _navigate_simple_path(current, path)
-        for child in children:
-            results.append(orjson.dumps(child).decode())
-            _repeat_dfs(child, paths, results, max_depth, depth + 1)
+        children = frame["children"]
+        child_index = frame["child_index"]
+        if not isinstance(children, list) or not isinstance(child_index, int):
+            raise TypeError("repeat traversal frame is malformed")
+
+        if child_index >= len(children):
+            frame["path_index"] = path_index + 1
+            frame["children"] = None
+            frame["child_index"] = 0
+            continue
+
+        child = children[child_index]
+        frame["child_index"] = child_index + 1
+        child_json = _repeat_json_serialize(child)
+        if child_json in seen:
+            continue
+        seen.add(child_json)
+        results.append(child_json)
+        stack.append({"current": child, "path_index": 0, "children": None, "child_index": 0})
+
+    return results
 
 
 def fhirpath_repeat_udf(resource: str, paths_json: str) -> list:
@@ -1008,14 +1412,29 @@ def fhirpath_repeat_udf(resource: str, paths_json: str) -> list:
     """
     if resource is None or paths_json is None:
         return []
-    try:
-        obj = orjson.loads(resource)
+
+    def evaluate_repeat() -> list:
+        obj = _parse_json(resource)
         paths = orjson.loads(paths_json)
-        if not isinstance(paths, list) or not paths:
+        if (
+            not isinstance(paths, list)
+            or not paths
+            or any(not isinstance(path, str) or not path for path in paths)
+        ):
             return []
-        results: list = []
-        _repeat_dfs(obj, paths, results)
-        return results
+        return _repeat_traverse(obj, paths)
+
+    needed_limit = (_json_max_nesting_depth(resource) * 4) + 1000
+    try:
+        with _RECURSION_LIMIT_LOCK:
+            current_limit = sys.getrecursionlimit()
+            try:
+                if needed_limit > current_limit:
+                    sys.setrecursionlimit(needed_limit)
+                return evaluate_repeat()
+            finally:
+                if sys.getrecursionlimit() != current_limit:
+                    sys.setrecursionlimit(current_limit)
     except Exception:
         _logger.debug("fhirpath_repeat failed", exc_info=True)
         return []

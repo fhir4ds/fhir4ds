@@ -1,6 +1,8 @@
 #include "cql/datetime.hpp"
+#include <cctype>
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
 #include <sstream>
 
 namespace cql {
@@ -14,6 +16,29 @@ static int days_in_month(int year, int month) {
 		return 29;
 	}
 	return dim[month];
+}
+
+static bool parse_timezone_offset(char *&end, int &offset_minutes) {
+	int sign = (*end == '+') ? 1 : -1;
+	const char *p = end + 1;
+	if (std::strlen(p) < 5) {
+		return false;
+	}
+	if (!std::isdigit(static_cast<unsigned char>(p[0])) ||
+	    !std::isdigit(static_cast<unsigned char>(p[1])) ||
+	    p[2] != ':' ||
+	    !std::isdigit(static_cast<unsigned char>(p[3])) ||
+	    !std::isdigit(static_cast<unsigned char>(p[4]))) {
+		return false;
+	}
+	int tz_hour = (p[0] - '0') * 10 + (p[1] - '0');
+	int tz_min = (p[3] - '0') * 10 + (p[4] - '0');
+	if (tz_hour > 14 || tz_min > 59 || (tz_hour == 14 && tz_min > 0)) {
+		return false;
+	}
+	end = const_cast<char *>(p + 5);
+	offset_minutes = sign * (tz_hour * 60 + tz_min);
+	return true;
 }
 
 static Optional<DateTimeValue> parse_time_value(const std::string &str) {
@@ -79,18 +104,11 @@ static Optional<DateTimeValue> parse_time_value(const std::string &str) {
 		end++;
 	} else if (*end == '+' || *end == '-') {
 		dt.has_tz = true;
-		int sign = (*end == '+') ? 1 : -1;
-		s = end + 1;
-		int tz_hour = static_cast<int>(std::strtol(s, &end, 10));
-		int tz_min = 0;
-		if (*end == ':') {
-			s = end + 1;
-			tz_min = static_cast<int>(std::strtol(s, &end, 10));
-		}
-		if (tz_hour < 0 || tz_hour > 23 || tz_min < 0 || tz_min > 59) {
+		int offset = 0;
+		if (!parse_timezone_offset(end, offset)) {
 			return NullOpt<DateTimeValue>();
 		}
-		dt.tz_offset_minutes = sign * (tz_hour * 60 + tz_min);
+		dt.tz_offset_minutes = offset;
 	}
 
 	if (*end != '\0') {
@@ -114,7 +132,7 @@ Optional<DateTimeValue> DateTimeValue::parse(const std::string &str) {
 
 	// Parse year
 	dt.year = static_cast<int32_t>(std::strtol(s, &end, 10));
-	if (end == s || dt.year < 0) {
+	if (end == s || dt.year < 1 || dt.year > 9999) {
 		return NullOpt<DateTimeValue>();
 	}
 	dt.precision = Precision::Year;
@@ -145,6 +163,10 @@ Optional<DateTimeValue> DateTimeValue::parse(const std::string &str) {
 		dt.day = 1;
 		return dt;
 	}
+	if (*end == 'T' && *(end + 1) == '\0') {
+		dt.day = 1;
+		return dt;
+	}
 	if (*end != '-') {
 		return NullOpt<DateTimeValue>();
 	}
@@ -152,12 +174,15 @@ Optional<DateTimeValue> DateTimeValue::parse(const std::string &str) {
 
 	// Parse day
 	dt.day = static_cast<int32_t>(std::strtol(s, &end, 10));
-	if (end == s || dt.day < 1 || dt.day > 31) {
+	if (end == s || dt.day < 1 || dt.day > days_in_month(dt.year, dt.month)) {
 		return NullOpt<DateTimeValue>();
 	}
 	dt.precision = Precision::Day;
 
 	if (*end == '\0') {
+		return dt;
+	}
+	if (*end == 'T' && *(end + 1) == '\0') {
 		return dt;
 	}
 
@@ -218,18 +243,11 @@ Optional<DateTimeValue> DateTimeValue::parse(const std::string &str) {
 			end++;
 		} else if (*end == '+' || *end == '-') {
 			dt.has_tz = true;
-			int sign = (*end == '+') ? 1 : -1;
-			s = end + 1;
-			int tz_hour = static_cast<int>(std::strtol(s, &end, 10));
-			int tz_min = 0;
-			if (*end == ':') {
-				s = end + 1;
-				tz_min = static_cast<int>(std::strtol(s, &end, 10));
-			}
-			if (tz_hour < 0 || tz_hour > 23 || tz_min < 0 || tz_min > 59) {
+			int offset = 0;
+			if (!parse_timezone_offset(end, offset)) {
 				return NullOpt<DateTimeValue>();
 			}
-			dt.tz_offset_minutes = sign * (tz_hour * 60 + tz_min);
+			dt.tz_offset_minutes = offset;
 		}
 	}
 
@@ -288,8 +306,16 @@ std::string DateTimeValue::to_string() const {
 		oss << buf;
 	}
 	if (has_time) {
-		snprintf(buf, sizeof(buf), "T%02d:%02d:%02d", hour, minute, second);
+		snprintf(buf, sizeof(buf), "T%02d", hour);
 		oss << buf;
+		if (precision >= Precision::Minute) {
+			snprintf(buf, sizeof(buf), ":%02d", minute);
+			oss << buf;
+		}
+		if (precision >= Precision::Second) {
+			snprintf(buf, sizeof(buf), ":%02d", second);
+			oss << buf;
+		}
 		if (precision >= Precision::Millisecond) {
 			snprintf(buf, sizeof(buf), ".%03d", millisecond);
 			oss << buf;

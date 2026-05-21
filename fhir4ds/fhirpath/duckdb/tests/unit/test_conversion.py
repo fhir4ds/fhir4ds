@@ -402,17 +402,19 @@ class TestToInteger:
         assert to_integer(-10) == -10
 
     def test_to_integer_from_decimal(self) -> None:
-        """Test toInteger from decimal (truncates toward zero)."""
-        assert to_integer(3.14) == 3
-        assert to_integer(3.99) == 3
-        assert to_integer(-3.99) == -3
+        """Test toInteger rejects decimal input."""
+        assert to_integer(1.0) is None
+        assert to_integer(0.0) is None
+        assert to_integer(3.14) is None
+        assert to_integer(Decimal("1.0")) is None
 
     def test_to_integer_from_string(self) -> None:
         """Test toInteger from string."""
         assert to_integer("42") == 42
         assert to_integer("-10") == -10
-        assert to_integer("3.14") == 3  # Truncates
-        assert to_integer("  42  ") == 42  # Trims whitespace
+        assert to_integer("+10") == 10
+        assert to_integer("3.14") is None
+        assert to_integer("  42  ") is None
 
     def test_to_integer_from_boolean(self) -> None:
         """Test toInteger from boolean."""
@@ -452,7 +454,7 @@ class TestToDecimal:
         """Test toDecimal from string."""
         assert to_decimal("3.14") == Decimal("3.14")
         assert to_decimal("-10.5") == Decimal("-10.5")
-        assert to_decimal("  42.0  ") == Decimal("42.0")
+        assert to_decimal("+42.0") == Decimal("42.0")
 
     def test_to_decimal_from_boolean(self) -> None:
         """Test toDecimal from boolean."""
@@ -464,6 +466,12 @@ class TestToDecimal:
         assert to_decimal("hello") is None
         assert to_decimal("") is None
         assert to_decimal("  ") is None
+        assert to_decimal(" 42.0") is None
+        assert to_decimal("1e2") is None
+        assert to_decimal("1.") is None
+        assert to_decimal(".1") is None
+        assert to_decimal("NaN") is None
+        assert to_decimal("Infinity") is None
 
     def test_to_decimal_from_none(self) -> None:
         """Test toDecimal from None."""
@@ -551,6 +559,9 @@ class TestToDate:
         assert to_date("hello") is None
         assert to_date("") is None
         assert to_date("not-a-date") is None
+        assert to_date("2015-02-04T99") is None
+        assert to_date("2015-02-04Z") is None
+        assert to_date(" 2024-01-15") is None
 
     def test_to_date_from_none(self) -> None:
         """Test toDate from None."""
@@ -576,9 +587,9 @@ class TestToTime:
         assert result == time(10, 30, 45)
 
     def test_to_time_from_string_with_timezone(self) -> None:
-        """Test toTime from string with timezone."""
+        """Test toTime rejects timezone-bearing Time strings."""
         result = to_time("10:30:45Z")
-        assert result == time(10, 30, 45)
+        assert result is None
 
     def test_to_time_from_string_datetime(self) -> None:
         """Test toTime from datetime string (extracts time part)."""
@@ -612,33 +623,45 @@ class TestToBoolean:
         """Test toBoolean from integer."""
         assert to_boolean(1) is True
         assert to_boolean(0) is False
-        assert to_boolean(42) is True
-        assert to_boolean(-1) is True
+        assert to_boolean(42) is None
+        assert to_boolean(-1) is None
 
     def test_to_boolean_from_decimal(self) -> None:
         """Test toBoolean from decimal."""
         assert to_boolean(1.0) is True
         assert to_boolean(0.0) is False
-        assert to_boolean(3.14) is True
+        assert to_boolean(Decimal("1.0")) is True
+        assert to_boolean(Decimal("0.0")) is False
+        assert to_boolean(3.14) is None
 
     def test_to_boolean_from_string_true(self) -> None:
         """Test toBoolean from string 'true'."""
         assert to_boolean("true") is True
         assert to_boolean("TRUE") is True
         assert to_boolean("True") is True
-        assert to_boolean("  true  ") is True
+        assert to_boolean("t") is True
+        assert to_boolean("T") is True
+        assert to_boolean("y") is True
+        assert to_boolean("Y") is True
+        assert to_boolean("  true  ") is None
 
     def test_to_boolean_from_string_false(self) -> None:
         """Test toBoolean from string 'false'."""
         assert to_boolean("false") is False
         assert to_boolean("FALSE") is False
         assert to_boolean("False") is False
+        assert to_boolean("f") is False
+        assert to_boolean("F") is False
+        assert to_boolean("n") is False
+        assert to_boolean("N") is False
 
     def test_to_boolean_from_string_numbers(self) -> None:
         """Test toBoolean from string numbers."""
         assert to_boolean("1") is True
         assert to_boolean("0") is False
-        assert to_boolean("2.5") is True
+        assert to_boolean("1.0") is True
+        assert to_boolean("0.0") is False
+        assert to_boolean("2.5") is None
 
     def test_to_boolean_from_string_yes_no(self) -> None:
         """Test toBoolean from string yes/no."""
@@ -677,25 +700,24 @@ class TestToQuantity:
     def test_to_quantity_from_integer(self) -> None:
         """Test toQuantity from integer."""
         result = to_quantity(100)
-        assert result == {"value": 100, "unit": ""}
+        assert result == {"value": 100, "unit": "1"}
 
     def test_to_quantity_from_decimal(self) -> None:
         """Test toQuantity from decimal."""
         result = to_quantity(3.14)
-        assert result == {"value": 3.14, "unit": ""}
+        assert result == {"value": 3.14, "unit": "1"}
 
     def test_to_quantity_from_string_with_unit(self) -> None:
         """Test toQuantity from string with unit."""
         result = to_quantity("100 'mg'")
         assert result == {"value": 100.0, "unit": "mg"}
 
-        result = to_quantity('50 "ml"')
-        assert result == {"value": 50.0, "unit": "ml"}
+        assert to_quantity('50 "ml"') is None
 
     def test_to_quantity_from_string_without_unit(self) -> None:
         """Test toQuantity from string without unit."""
         result = to_quantity("100")
-        assert result == {"value": 100.0, "unit": ""}
+        assert result == {"value": 100.0, "unit": "1"}
 
     def test_to_quantity_from_string_with_bare_unit(self) -> None:
         """Test toQuantity from string with bare unit (no quotes)."""
@@ -704,18 +726,29 @@ class TestToQuantity:
 
     def test_to_quantity_from_boolean(self) -> None:
         """Test toQuantity from boolean."""
-        assert to_quantity(True) == {"value": 1, "unit": ""}
-        assert to_quantity(False) == {"value": 0, "unit": ""}
+        assert to_quantity(True) == {"value": 1, "unit": "1"}
+        assert to_quantity(False) == {"value": 0, "unit": "1"}
 
     def test_to_quantity_with_target_unit(self) -> None:
         """Test toQuantity with target unit parameter."""
         result = to_quantity(100, "kg")
-        assert result == {"value": 100, "unit": "kg"}
+        assert result is None
+        assert to_quantity(100, "1") == {"value": 100, "unit": "1"}
 
     def test_to_quantity_from_invalid_string(self) -> None:
         """Test toQuantity from invalid string."""
         assert to_quantity("hello") is None
         assert to_quantity("") is None
+        assert to_quantity(" 1") is None
+        assert to_quantity("1 wk") is None
+        assert to_quantity("1 ''") is None
+
+    def test_to_quantity_unit_conversion_edges(self) -> None:
+        """Test direct helper unit conversions match public FHIRPath semantics."""
+        assert to_quantity("1 'kg'", "g") == {"value": 1000.0, "unit": "g"}
+        assert to_quantity("1 'kg'", "s") is None
+        assert to_quantity({"value": 1, "unit": "kg"}, "g") == {"value": 1000.0, "unit": "g"}
+        assert to_quantity({"value": 1, "unit": "kg"}, "s") is None
 
     def test_to_quantity_from_none(self) -> None:
         """Test toQuantity from None."""

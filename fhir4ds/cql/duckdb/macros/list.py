@@ -49,12 +49,14 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
 
     # ============================================
     # Skip - Skip first n elements
-    # Returns empty list if n >= length, handles n > len gracefully
+    # Returns full list for NULL n, empty list for negative or n >= length.
     # ============================================
     con.execute(
         "CREATE MACRO IF NOT EXISTS Skip(lst, n) AS "
-        "CASE WHEN lst IS NULL OR n IS NULL OR n < 0 THEN NULL "
-        "WHEN n >= system.array_length(lst) THEN [] "
+        "CASE WHEN lst IS NULL THEN NULL "
+        "WHEN n IS NULL THEN lst "
+        "WHEN n < 0 THEN lst[1:0] "
+        "WHEN n >= system.array_length(lst) THEN lst[1:0] "
         "ELSE lst[n + 1:] END"
     )
 
@@ -71,18 +73,176 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     )
 
     # ============================================
-    # Distinct - Remove duplicates from list (CQL §20.25)
-    # Preserves original order and retains one null if any
-    # Returns empty list for empty input (not NULL)
+    # CQL list equality helpers. DuckDB's built-in list_contains/list_intersect
+    # do not implement CQL's null-equal set semantics, and Quantity values are
+    # transported as JSON strings that require quantityCompare for equality.
+    # ============================================
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListElementEqual(left_value, right_value) AS "
+        "CASE "
+        "WHEN left_value IS NULL AND right_value IS NULL THEN TRUE "
+        "WHEN left_value IS NULL OR right_value IS NULL THEN FALSE "
+        "WHEN typeof(left_value) != typeof(right_value) "
+        "AND (system.contains(typeof(left_value), 'INT') "
+        "OR starts_with(typeof(left_value), 'DECIMAL') "
+        "OR typeof(left_value) IN ('FLOAT', 'DOUBLE')) "
+        "AND (system.contains(typeof(right_value), 'INT') "
+        "OR starts_with(typeof(right_value), 'DECIMAL') "
+        "OR typeof(right_value) IN ('FLOAT', 'DOUBLE')) "
+        "THEN COALESCE(TRY_CAST(left_value AS DECIMAL(38,8)) = "
+        "TRY_CAST(right_value AS DECIMAL(38,8)), FALSE) "
+        "WHEN typeof(left_value) != typeof(right_value) THEN FALSE "
+        "WHEN left_value = right_value THEN TRUE "
+        "WHEN starts_with(ltrim(CAST(left_value AS VARCHAR)), '{') "
+        "AND starts_with(ltrim(CAST(right_value AS VARCHAR)), '{') "
+        "AND system.contains(CAST(left_value AS VARCHAR), '\"value\"') "
+        "AND system.contains(CAST(left_value AS VARCHAR), '\"unit\"') "
+        "AND system.contains(CAST(right_value AS VARCHAR), '\"value\"') "
+        "AND system.contains(CAST(right_value AS VARCHAR), '\"unit\"') "
+        "THEN COALESCE(quantityCompare(CAST(left_value AS VARCHAR), "
+        "CAST(right_value AS VARCHAR), '=='), FALSE) "
+        "ELSE FALSE END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListContainsEq(lst, elem) AS "
+        "CASE WHEN lst IS NULL THEN FALSE "
+        "WHEN elem IS NULL THEN system.array_length(lst) != list_count(lst) "
+        "ELSE COALESCE((SELECT bool_or(CQLListElementEqual(_cql_contains_item, elem)) "
+        "FROM UNNEST(COALESCE(lst, [])) AS _cql_contains_u(_cql_contains_item)), FALSE) END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListTemporalElementEqual(left_value, right_value) AS "
+        "CASE "
+        "WHEN left_value IS NULL AND right_value IS NULL THEN TRUE "
+        "WHEN left_value IS NULL OR right_value IS NULL THEN FALSE "
+        "ELSE cqlDateTimeEqual(CAST(left_value AS VARCHAR), CAST(right_value AS VARCHAR)) END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListContainsTemporalEq(lst, elem) AS "
+        "CASE WHEN lst IS NULL THEN FALSE "
+        "WHEN elem IS NULL THEN system.array_length(lst) != list_count(lst) "
+        "WHEN EXISTS (SELECT 1 FROM UNNEST(COALESCE(lst, [])) AS _cql_contains_u(_cql_contains_item) "
+        "WHERE CQLListTemporalElementEqual(_cql_contains_item, elem) IS TRUE) THEN TRUE "
+        "WHEN EXISTS (SELECT 1 FROM UNNEST(COALESCE(lst, [])) AS _cql_contains_u(_cql_contains_item) "
+        "WHERE CQLListTemporalElementEqual(_cql_contains_item, elem) IS NULL) THEN NULL "
+        "ELSE FALSE END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListDistinctEq(lst) AS "
+        "CASE WHEN lst IS NULL THEN NULL "
+        "ELSE COALESCE((SELECT list(_cql_distinct_item ORDER BY _cql_distinct_pos) "
+        "FROM (SELECT _cql_distinct_item, _cql_distinct_pos "
+        "FROM (SELECT unnest(lst) AS _cql_distinct_item, "
+        "generate_subscripts(lst, 1) AS _cql_distinct_pos) _cql_distinct_items "
+        "WHERE NOT EXISTS (SELECT 1 FROM (SELECT unnest(lst) AS _cql_prev_item, "
+        "generate_subscripts(lst, 1) AS _cql_prev_pos) _cql_prev "
+        "WHERE _cql_prev_pos < _cql_distinct_pos "
+        "AND CQLListElementEqual(_cql_prev_item, _cql_distinct_item))) _cql_distinct), "
+        "lst[1:0]) END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListExceptEq(left_lst, right_lst) AS "
+        "CASE WHEN left_lst IS NULL THEN NULL "
+        "WHEN right_lst IS NULL THEN CQLListDistinctEq(left_lst) "
+        "ELSE COALESCE((SELECT list(_cql_except_item ORDER BY _cql_except_pos) "
+        "FROM (SELECT unnest(CQLListDistinctEq(left_lst)) AS _cql_except_item, "
+        "generate_subscripts(CQLListDistinctEq(left_lst), 1) AS _cql_except_pos) "
+        "_cql_except_items "
+        "WHERE NOT CQLListContainsEq(right_lst, _cql_except_item)), left_lst[1:0]) END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListIntersectEq(left_lst, right_lst) AS "
+        "CASE WHEN left_lst IS NULL OR right_lst IS NULL THEN NULL "
+        "ELSE COALESCE((SELECT list(_cql_intersect_item ORDER BY _cql_intersect_pos) "
+        "FROM (SELECT unnest(CQLListDistinctEq(left_lst)) AS _cql_intersect_item, "
+        "generate_subscripts(CQLListDistinctEq(left_lst), 1) AS _cql_intersect_pos) "
+        "_cql_intersect_items "
+        "WHERE CQLListContainsEq(right_lst, _cql_intersect_item)), left_lst[1:0]) END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListHasAllEq(left_lst, right_lst) AS "
+        "CASE WHEN left_lst IS NULL OR right_lst IS NULL THEN NULL "
+        "ELSE COALESCE((SELECT bool_and(CQLListContainsEq(left_lst, _cql_has_all_item)) "
+        "FROM UNNEST(COALESCE(right_lst, [])) AS _cql_has_all_u(_cql_has_all_item)), TRUE) END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListHasAllTemporalEq(left_lst, right_lst) AS "
+        "CASE WHEN left_lst IS NULL OR right_lst IS NULL THEN NULL "
+        "WHEN EXISTS (SELECT 1 FROM UNNEST(COALESCE(right_lst, [])) AS _cql_has_all_u(_cql_has_all_item) "
+        "WHERE CQLListContainsTemporalEq(left_lst, _cql_has_all_item) IS FALSE) THEN FALSE "
+        "WHEN EXISTS (SELECT 1 FROM UNNEST(COALESCE(right_lst, [])) AS _cql_has_all_u(_cql_has_all_item) "
+        "WHERE CQLListContainsTemporalEq(left_lst, _cql_has_all_item) IS NULL) THEN NULL "
+        "ELSE TRUE END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListEqualEq(left_lst, right_lst) AS "
+        "CASE WHEN left_lst IS NULL OR right_lst IS NULL THEN NULL "
+        "WHEN system.array_length(left_lst) != system.array_length(right_lst) THEN FALSE "
+        "ELSE COALESCE((SELECT bool_and(CQLListElementEqual(_cql_equal_l, _cql_equal_r)) "
+        "FROM (SELECT unnest(left_lst) AS _cql_equal_l, "
+        "generate_subscripts(left_lst, 1) AS _cql_equal_pos) _cql_equal_left "
+        "JOIN (SELECT unnest(right_lst) AS _cql_equal_r, "
+        "generate_subscripts(right_lst, 1) AS _cql_equal_pos) _cql_equal_right "
+        "USING (_cql_equal_pos)), TRUE) END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListEqualTemporalEq(left_lst, right_lst) AS "
+        "CASE WHEN left_lst IS NULL OR right_lst IS NULL THEN NULL "
+        "WHEN system.array_length(left_lst) != system.array_length(right_lst) THEN FALSE "
+        "WHEN EXISTS (SELECT 1 "
+        "FROM (SELECT unnest(left_lst) AS _cql_equal_l, "
+        "generate_subscripts(left_lst, 1) AS _cql_equal_pos) _cql_equal_left "
+        "JOIN (SELECT unnest(right_lst) AS _cql_equal_r, "
+        "generate_subscripts(right_lst, 1) AS _cql_equal_pos) _cql_equal_right "
+        "USING (_cql_equal_pos) "
+        "WHERE CQLListTemporalElementEqual(_cql_equal_l, _cql_equal_r) IS FALSE) THEN FALSE "
+        "WHEN EXISTS (SELECT 1 "
+        "FROM (SELECT unnest(left_lst) AS _cql_equal_l, "
+        "generate_subscripts(left_lst, 1) AS _cql_equal_pos) _cql_equal_left "
+        "JOIN (SELECT unnest(right_lst) AS _cql_equal_r, "
+        "generate_subscripts(right_lst, 1) AS _cql_equal_pos) _cql_equal_right "
+        "USING (_cql_equal_pos) "
+        "WHERE CQLListTemporalElementEqual(_cql_equal_l, _cql_equal_r) IS NULL) THEN NULL "
+        "ELSE TRUE END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListElementEquivalent(left_value, right_value) AS "
+        "CASE "
+        "WHEN left_value IS NULL AND right_value IS NULL THEN TRUE "
+        "WHEN left_value IS NULL OR right_value IS NULL THEN FALSE "
+        "WHEN starts_with(ltrim(CAST(left_value AS VARCHAR)), '{') "
+        "AND starts_with(ltrim(CAST(right_value AS VARCHAR)), '{') "
+        "AND system.contains(CAST(left_value AS VARCHAR), '\"value\"') "
+        "AND system.contains(CAST(left_value AS VARCHAR), '\"unit\"') "
+        "AND system.contains(CAST(right_value AS VARCHAR), '\"value\"') "
+        "AND system.contains(CAST(right_value AS VARCHAR), '\"unit\"') "
+        "THEN COALESCE(quantityCompare(CAST(left_value AS VARCHAR), "
+        "CAST(right_value AS VARCHAR), '=='), FALSE) "
+        "WHEN typeof(left_value) = 'VARCHAR' AND typeof(right_value) = 'VARCHAR' "
+        "THEN trim(regexp_replace(lower(CAST(left_value AS VARCHAR)), '\\s+', ' ', 'g')) = "
+        "trim(regexp_replace(lower(CAST(right_value AS VARCHAR)), '\\s+', ' ', 'g')) "
+        "ELSE CQLListElementEqual(left_value, right_value) END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListEquivalentEq(left_lst, right_lst) AS "
+        "CASE WHEN left_lst IS NULL AND right_lst IS NULL THEN TRUE "
+        "WHEN left_lst IS NULL OR right_lst IS NULL THEN FALSE "
+        "WHEN system.array_length(left_lst) != system.array_length(right_lst) THEN FALSE "
+        "ELSE COALESCE((SELECT bool_and(CQLListElementEquivalent(_cql_equiv_l, _cql_equiv_r)) "
+        "FROM (SELECT unnest(left_lst) AS _cql_equiv_l, "
+        "generate_subscripts(left_lst, 1) AS _cql_equiv_pos) _cql_equiv_left "
+        "JOIN (SELECT unnest(right_lst) AS _cql_equiv_r, "
+        "generate_subscripts(right_lst, 1) AS _cql_equiv_pos) _cql_equiv_right "
+        "USING (_cql_equiv_pos)), TRUE) END"
+    )
+
+    # ============================================
+    # Distinct - Remove duplicates from list (CQL §10.2)
+    # Preserves original order and retains one null if any.
     # ============================================
     con.execute(
         'CREATE OR REPLACE MACRO "Distinct"(lst) AS '
-        "CASE WHEN lst IS NULL THEN NULL "
-        "WHEN system.array_length(lst) = 0 THEN lst "
-        "ELSE COALESCE((SELECT list(val ORDER BY pos) FROM ("
-        "SELECT val, MIN(pos) as pos FROM ("
-        "SELECT unnest(lst) AS val, generate_subscripts(lst, 1) AS pos"
-        ") GROUP BY val)), []) END"
+        "CQLListDistinctEq(lst)"
     )
 
     # ============================================
@@ -103,11 +263,12 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # Named CQLIndexOf to avoid conflict with C++ FHIRPath extension's IndexOf
     # ============================================
     con.execute(
-        "CREATE MACRO IF NOT EXISTS CQLIndexOf(lst, elem) AS "
+        "CREATE OR REPLACE MACRO CQLIndexOf(lst, elem) AS "
         "CASE WHEN lst IS NULL OR elem IS NULL THEN NULL "
-        "WHEN list_position(lst, elem) IS NULL THEN -1 "
-        "WHEN list_position(lst, elem) = 0 THEN -1 "
-        "ELSE list_position(lst, elem) - 1 END"
+        "ELSE COALESCE((SELECT MIN(_cql_index_pos) - 1 "
+        "FROM (SELECT unnest(lst) AS _cql_index_item, "
+        "generate_subscripts(lst, 1) AS _cql_index_pos) _cql_index_items "
+        "WHERE CQLListElementEqual(_cql_index_item, elem)), -1) END"
     )
 
     # ============================================
@@ -118,12 +279,14 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute(
         "CREATE MACRO IF NOT EXISTS Combine(lst) AS "
         "CASE WHEN lst IS NULL THEN NULL "
+        "WHEN system.array_length(list_filter(lst, x -> x IS NOT NULL)) = 0 THEN NULL "
         "ELSE system.array_to_string(list_filter(lst, x -> x IS NOT NULL), '') END"
     )
     con.execute(
         "CREATE MACRO IF NOT EXISTS CombineSep(lst, sep) AS "
         "CASE WHEN lst IS NULL THEN NULL "
-        "ELSE system.array_to_string(list_filter(lst, x -> x IS NOT NULL), sep) END"
+        "WHEN system.array_length(list_filter(lst, x -> x IS NOT NULL)) = 0 THEN NULL "
+        "ELSE system.array_to_string(list_filter(lst, x -> x IS NOT NULL), COALESCE(sep, '')) END"
     )
 
     # ============================================
@@ -140,7 +303,28 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute(
         "CREATE MACRO IF NOT EXISTS GeometricMean(lst) AS "
         "CASE WHEN lst IS NULL THEN NULL "
-        "ELSE exp(list_aggregate(list_transform(lst, _v -> ln(TRY_CAST(_v AS DOUBLE))), 'avg')) END"
+        "ELSE system.exp(list_aggregate(list_transform(lst, _v -> system.ln(TRY_CAST(_v AS DOUBLE))), 'avg')) END"
+    )
+
+    # CQL Mode returns a single statistical mode. If no non-null mode exists
+    # or multiple values are tied for most frequent, return NULL.
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS CQLListMode(lst) AS "
+        "CASE WHEN lst IS NULL THEN NULL ELSE ("
+        "SELECT CASE WHEN COUNT(*) = 1 THEN MIN(_value) ELSE NULL END "
+        "FROM ("
+        "SELECT _value, COUNT(*) AS _count "
+        "FROM (SELECT UNNEST(list_filter(lst, _v -> _v IS NOT NULL)) AS _value) _items "
+        "GROUP BY _value"
+        ") _counts "
+        "WHERE _count = ("
+        "SELECT MAX(_count) FROM ("
+        "SELECT _value, COUNT(*) AS _count "
+        "FROM (SELECT UNNEST(list_filter(lst, _v -> _v IS NOT NULL)) AS _value) _max_items "
+        "GROUP BY _value"
+        ") _max_counts"
+        ")"
+        ") END"
     )
 
     # ============================================

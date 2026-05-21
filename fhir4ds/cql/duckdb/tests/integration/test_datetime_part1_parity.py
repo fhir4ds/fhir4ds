@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import duckdb
+import pytest
 
 from fhir4ds.cql.duckdb import register
 from fhir4ds.cql.duckdb.extension import _register_python_supplements
@@ -52,7 +53,7 @@ define DurationDays: days between @2024-01-01 and @2024-01-31
     assert translated["DateCtor"].to_sql() == "'2024-01-15'"
     assert translated["DateTimeCtor"].to_sql() == "'2024-01-15T10:30:00'"
     assert "SUBSTR" in str(translated["YearComponent"])
-    assert "differenceInMonths" in str(translated["DifferenceMonths"])
+    assert "cqlDifferenceBetween" in str(translated["DifferenceMonths"])
     assert "cqlDurationBetween" in str(translated["DurationDays"])
 
 
@@ -60,12 +61,31 @@ def test_cql_datetime_part1_duckdb_surface_matches_cpp_registration() -> None:
     expressions = [
         "SELECT dateComponent('2024-06-15', 'year')",
         "SELECT dateComponent('2024-06-15', 'month')",
+        "SELECT dateComponent('T23:20:15.555', 'hour')",
+        "SELECT dateComponent('2014', 'month')",
+        "SELECT dateComponent('2014-01', 'day')",
         "SELECT dateAddQuantity('2024-01-31', '{\"value\":1,\"code\":\"mo\"}')",
         "SELECT dateAddQuantity('2024-01-01T10:00:00', '{\"value\":5,\"code\":\"h\"}')",
+        "SELECT dateAddQuantity('2014T', '{\"value\":24,\"code\":\"mo\"}')",
         "SELECT cqlBeforeP('2024-01-01', '2024-02-01', 'month')",
         "SELECT cqlAfterP('2024-02-01', '2024-01-01', 'month')",
         "SELECT cqlDurationBetween('2024-01-01', '2024-01-31', 'day')",
+        "SELECT cqlDurationBetween('2012-01-02', '2012', 'month')",
+        "SELECT cqlDurationBetween('2005T', '2010T', 'year')",
+        "SELECT cqlDifferenceBetween('2012-01-02', '2012', 'month')",
+        "SELECT cqlDifferenceBetween('2000-10-10T10:05:45.500-06:00', '2000-10-10T10:05:45.900-07:00', 'millisecond')",
         "SELECT cqlDurationBetween('2024', '2025', 'month')",
+        "SELECT dateAddQuantity('2024-01-01T10:00:00+14:30', '{\"value\":1,\"unit\":\"hour\"}')",
+        "SELECT dateSubtractQuantity('2024-01-01T10:00:00+14:30', '{\"value\":1,\"unit\":\"hour\"}')",
+        "SELECT dateComponent('2024-01-01T10:00:00+14:30', 'hour')",
+        "SELECT cqlBeforeP('2024-01-01T10:00:00+14:30','2024-01-01T11:00:00+14:30','hour')",
+        "SELECT cqlDurationBetween('2024-01-01T10:00:00+14:30','2024-01-01T11:00:00+14:30','hour')",
+        "SELECT cqlDifferenceBetween('2024-01-01T10:00:00+14:30','2024-01-01T11:00:00+14:30','hour')",
+        "SELECT dateComponent('2024-13', 'month')",
+        "SELECT cqlBeforeP('2024-13', '2025-01', 'month')",
+        "SELECT dateAddQuantity('T12', '{\"value\":61,\"unit\":\"minute\"}')",
+        "SELECT dateAddQuantity('T12:30', '{\"value\":45,\"unit\":\"second\"}')",
+        "SELECT dateSubtractQuantity('T00', '{\"value\":1,\"unit\":\"hour\"}')",
         "SELECT differenceInMonths('2024-01-31', '2024-02-01')",
         "SELECT DaysBetween('2024-02-28', '2024-03-01')",
     ]
@@ -78,3 +98,117 @@ def test_cql_datetime_part1_duckdb_surface_matches_cpp_registration() -> None:
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_datetime_part1_skeptic_regressions() -> None:
+    cql = """library DateTime1Skeptic version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define DynamicDateTimeHour: DateTime(year from @2024-01-01, 2, 3, 4)
+define DynamicDateTimeNegativeHalfTimezone: DateTime(year from @2024-01-01, 1, 1, 12, 0, 0, 0, -7.5)
+define DynamicDateTimePositiveHalfTimezone: DateTime(year from @2024-01-01, 1, 1, 12, 0, 0, 0, 5.5)
+define YearPrecisionDateTime: DateTime(2003)
+define MonthPrecisionDateTime: DateTime(2003, 10)
+define AddYearPrecisionDateTime: DateTime(2014) + 24 months
+define DateFromYearPrecisionDateTime: date from DateTime(2012)
+define DateFromMonthPrecisionDateTime: date from DateTime(2012, 5)
+define DateFromDayPrecisionDateTime: date from DateTime(2012, 5, 10)
+define DateFromHourPrecisionDateTime: date from DateTime(2012, 5, 10, 6)
+define TimeFromDateTime: time from DateTime(2012, 1, 1, 12, 30, 0, 0, -7)
+define TimeFromDayPrecisionDateTime: time from DateTime(2012, 1, 1)
+define DifferenceMonthsUncertain: difference in months between @2012-01-02 and @2012
+define DifferenceMonthsUncertainCompare: difference in months between @2012-01-02 and @2012 > 5
+define DifferenceMillisecondsTimezone: difference in milliseconds between DateTime(2000, 10, 10, 10, 5, 45, 500, -6.0) and DateTime(2000, 10, 10, 10, 5, 45, 900, -7.0)
+define DurationYearsUncertain: years between DateTime(2005) and DateTime(2010)
+define DurationYearsParenthesizedCompareTrue: (years between DateTime(2005) and DateTime(2010)) < 6
+define DurationYearsParenthesizedCompareUncertain: (years between DateTime(2005) and DateTime(2010)) < 5
+define DurationDaysParenthesizedScalarCompare: (days between @2024-01-01 and @2024-01-02) < 2
+define DurationDifferenceArithmeticDivision: Truncate(280 - (difference in days between @2024-01-01 and @2024-01-08)) / 7
+define DurationDifferenceArithmeticDiv: (280 - (difference in days between @2024-01-01 and @2024-01-08)) div 7
+define DurationMonthsUncertain: months between @2012-01-02 and @2012
+define DurationMonthsUncertainCompare: months between @2012-01-02 and @2012 > 5
+define AddInvalidTimezone: @2024-01-01T10:00:00+14:30 + 1 hour
+define BeforeInvalidTimezone: @2024-01-01T10:00:00+14:30 before hour of @2024-01-01T11:00:00+14:30
+define DurationInvalidTimezone: hours between @2024-01-01T10:00:00+14:30 and @2024-01-01T11:00:00+14:30
+define DifferenceInvalidTimezone: difference in hours between @2024-01-01T10:00:00+14:30 and @2024-01-01T11:00:00+14:30
+define DynamicDateInvalidMonth: Date(year from @2024-01-01, 13)
+define DynamicDateTimeInvalidHour: DateTime(year from @2024-01-01, 1, 1, 24)
+define DynamicDateTimeInvalidTimezone: DateTime(year from @2024-01-01, 1, 1, 12, 0, 0, 0, 14.5)
+define MonthFromInvalidDynamicDate: month from Date(year from @2024-01-01, 13)
+define InvalidDynamicDateBefore: Date(year from @2024-01-01, 13) before month of Date(year from @2025-01-01, 1)
+define TimeWithMillisecond: Time(12, 30, 15, 250)
+define MillisecondFromTime: millisecond from Time(12, 30, 15, 250)
+define TimeInvalidHour: Time(24, 0)
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "DynamicDateTimeHour": "2024-02-03T04",
+        "DynamicDateTimeNegativeHalfTimezone": "2024-01-01T12:00:00.000-07:30",
+        "DynamicDateTimePositiveHalfTimezone": "2024-01-01T12:00:00.000+05:30",
+        "YearPrecisionDateTime": "2003T",
+        "MonthPrecisionDateTime": "2003-10T",
+        "AddYearPrecisionDateTime": "2016T",
+        "DateFromYearPrecisionDateTime": "2012",
+        "DateFromMonthPrecisionDateTime": "2012-05",
+        "DateFromDayPrecisionDateTime": "2012-05-10",
+        "DateFromHourPrecisionDateTime": "2012-05-10",
+        "TimeFromDateTime": "T12:30:00.000-07:00",
+        "TimeFromDayPrecisionDateTime": None,
+        "DifferenceMonthsUncertain": '{"start":0,"end":11,"lowClosed":true,"highClosed":true}',
+        "DifferenceMonthsUncertainCompare": None,
+        "DifferenceMillisecondsTimezone": "3600400",
+        "DurationYearsUncertain": '{"start":4,"end":5,"lowClosed":true,"highClosed":true}',
+        "DurationYearsParenthesizedCompareTrue": True,
+        "DurationYearsParenthesizedCompareUncertain": None,
+        "DurationDaysParenthesizedScalarCompare": True,
+        "DurationDifferenceArithmeticDivision": 39.0,
+        "DurationDifferenceArithmeticDiv": 39.0,
+        "DurationMonthsUncertain": '{"start":0,"end":11,"lowClosed":true,"highClosed":true}',
+        "DurationMonthsUncertainCompare": None,
+        "AddInvalidTimezone": None,
+        "BeforeInvalidTimezone": None,
+        "DurationInvalidTimezone": None,
+        "DifferenceInvalidTimezone": None,
+        "DynamicDateInvalidMonth": None,
+        "DynamicDateTimeInvalidHour": None,
+        "DynamicDateTimeInvalidTimezone": None,
+        "MonthFromInvalidDynamicDate": None,
+        "InvalidDynamicDateBefore": None,
+        "TimeWithMillisecond": "T12:30:15.250",
+        "MillisecondFromTime": 250,
+        "TimeInvalidHour": None,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (expected_value,)
+            assert cpp.execute(sql).fetchone() == (expected_value,)
+    finally:
+        py.close()
+        cpp.close()
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "Date(2012.5)",
+        "Date(2012, 1.5)",
+        "DateTime(2012.5)",
+        "DateTime(2012, 1.5)",
+        "Date(2012 + 0.5)",
+        "Date(2012, 1 + 0.5)",
+        "DateTime(2012 + 0.5)",
+        "DateTime(2012, 1 + 0.5)",
+    ],
+)
+def test_cql_datetime_part1_rejects_non_integer_constructor_components(expression: str) -> None:
+    cql = f"""library DateTime1HistorianInvalid version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define InvalidCtor: {expression}
+"""
+    with pytest.raises(ValueError):
+        translate_cql(cql)

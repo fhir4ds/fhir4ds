@@ -12,7 +12,19 @@ from typing import List, Optional, Tuple
 _logger = logging.getLogger(__name__)
 
 
-def generate_foreach_unnest(path: str, resource_var: str, alias: str) -> str:
+def _fhirpath_path_argument(path: str, path_sql: str | None) -> str:
+    if path_sql is not None:
+        return path_sql
+    escaped_path = path.replace("'", "''")
+    return f"'{escaped_path}'"
+
+
+def generate_foreach_unnest(
+    path: str,
+    resource_var: str,
+    alias: str,
+    path_sql: str | None = None,
+) -> str:
     """Generate CROSS JOIN LATERAL with UNNEST for forEach.
 
     Creates a SQL fragment that unnests a FHIRPath array expression
@@ -31,13 +43,13 @@ def generate_foreach_unnest(path: str, resource_var: str, alias: str) -> str:
         >>> generate_foreach_unnest('name', 't.resource', 'name_elem')
         "CROSS JOIN LATERAL (\\n    SELECT unnest(arr) as name_elem, unnest(range(len(arr))) as name_elem__row_index\\n    FROM (VALUES (fhirpath(t.resource, 'name'))) v(arr)\\n) as name_elem_table"
     """
-    escaped_path = path.replace("'", "''")
     table_alias = f"{alias}_table"
+    path_arg = _fhirpath_path_argument(path, path_sql)
     return (
         f"CROSS JOIN LATERAL (\n"
         f"    SELECT unnest(arr) as {alias}, "
         f"unnest(range(len(arr))) as {alias}__row_index\n"
-        f"    FROM (VALUES (fhirpath({resource_var}, '{escaped_path}'))) v(arr)\n"
+        f"    FROM (VALUES (fhirpath({resource_var}, {path_arg}))) v(arr)\n"
         f") as {table_alias}"
     )
 
@@ -69,7 +81,12 @@ def generate_repeat_unnest(paths: list, resource_var: str, alias: str) -> str:
     )
 
 
-def generate_foreachornull_unnest(path: str, resource_var: str, alias: str) -> str:
+def generate_foreachornull_unnest(
+    path: str,
+    resource_var: str,
+    alias: str,
+    path_sql: str | None = None,
+) -> str:
     """Generate LEFT JOIN LATERAL with UNNEST for forEachOrNull.
 
     Creates a SQL fragment that unnests a FHIRPath array expression
@@ -88,13 +105,13 @@ def generate_foreachornull_unnest(path: str, resource_var: str, alias: str) -> s
         >>> generate_foreachornull_unnest('telecom', 't.resource', 'telecom_elem')
         "LEFT JOIN LATERAL (\\n    SELECT unnest(arr) as telecom_elem, unnest(range(len(arr))) as telecom_elem__row_index\\n    FROM (VALUES (fhirpath(t.resource, 'telecom'))) v(arr)\\n) as telecom_elem_table ON true"
     """
-    escaped_path = path.replace("'", "''")
     table_alias = f"{alias}_table"
+    path_arg = _fhirpath_path_argument(path, path_sql)
     return (
         f"LEFT JOIN LATERAL (\n"
         f"    SELECT unnest(arr) as {alias}, "
         f"unnest(range(len(arr))) as {alias}__row_index\n"
-        f"    FROM (VALUES (fhirpath({resource_var}, '{escaped_path}'))) v(arr)\n"
+        f"    FROM (VALUES (fhirpath({resource_var}, {path_arg}))) v(arr)\n"
         f") as {table_alias} ON true"
     )
 

@@ -121,7 +121,7 @@ class EvaluationContext:
         if name == 'this':
             if self.iteration_this is not None:
                 return self.iteration_this
-            return []  # $this undefined outside iteration
+            return self.context_resource if self.context_resource is not None else []
         elif name == 'index':
             if self.iteration_index is not None:
                 return self.iteration_index

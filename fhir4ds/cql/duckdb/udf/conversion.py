@@ -5,18 +5,31 @@ from __future__ import annotations
 import json
 import re
 from decimal import Decimal, InvalidOperation
+from datetime import date, datetime, time
 from typing import TYPE_CHECKING
 
-from .quantity import quantityConvert, toQuantity
+from .quantity import is_valid_quantity_object, quantityConvert, toQuantity
 
 if TYPE_CHECKING:
     import duckdb
 
 
 _BOOL_STRINGS = {"true", "false", "t", "f", "yes", "no", "y", "n", "1", "0"}
-_DATE_RE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
-_DATETIME_RE = re.compile(r"^\d{4}(-\d{2}(-\d{2}(T\d{2}(:\d{2}(:\d{2}(\.\d+)?)?)?(Z|[+-]\d{2}:\d{2})?)?)?)?$")
-_TIME_RE = re.compile(r"^T?\d{2}:\d{2}(:\d{2}(\.\d+)?)?$")
+_INTEGER_STRING_RE = re.compile(r"^[+-]?\d+$")
+_DECIMAL_STRING_RE = re.compile(r"^[+-]?\d+(?:\.\d{1,8})?$")
+_DUCKDB_DECIMAL_INTEGER_DIGITS = 30
+_DUCKDB_DECIMAL_SCALE = 8
+_DATE_RE = re.compile(r"^(?P<year>\d{4})(?:-(?P<month>\d{2})(?:-(?P<day>\d{2}))?)?$")
+_DATETIME_RE = re.compile(
+    r"^(?P<year>\d{4})(?:-(?P<month>\d{2})(?:-(?P<day>\d{2})"
+    r"(?:T(?P<hour>\d{2})(?::(?P<minute>\d{2})(?::(?P<second>\d{2})"
+    r"(?:\.(?P<millisecond>\d{1,3}))?)?)?(?P<tz>Z|[+-]\d{2}:\d{2})?)?)?)?$"
+)
+_TIME_RE = re.compile(
+    r"^T?(?P<hour>\d{2})(?::(?P<minute>\d{2})(?::(?P<second>\d{2})"
+    r"(?:\.(?P<millisecond>\d{1,3}))?)?)?(?P<tz>Z|[+-]\d{2}:\d{2})?$"
+)
+_TZ_RE = re.compile(r"^(?P<sign>[+-])(?P<hour>\d{2}):(?P<minute>\d{2})$")
 
 
 def _as_text(value) -> str | None:
@@ -35,38 +48,144 @@ def _finite_decimal(text: str) -> Decimal | None:
     return value
 
 
-def ConvertsToBoolean(value) -> bool | None:
-    text = _as_text(value)
-    if text is None:
-        return None
-    lowered = text.lower()
-    if lowered in _BOOL_STRINGS:
+def _fits_duckdb_decimal(value: Decimal) -> bool:
+    if not value.is_finite():
+        return False
+    if value.as_tuple().exponent < -_DUCKDB_DECIMAL_SCALE:
+        return False
+    if value.is_zero():
         return True
-    dec = _finite_decimal(text)
-    return dec is not None and dec in (Decimal(0), Decimal(1))
+    integer_digits = value.copy_abs().adjusted() + 1
+    return integer_digits <= _DUCKDB_DECIMAL_INTEGER_DIGITS
+
+
+def _valid_year(year: str) -> bool:
+    return 1 <= int(year) <= 9999
+
+
+def _valid_month(month: str | None) -> bool:
+    return month is None or 1 <= int(month) <= 12
+
+
+def _valid_date_parts(year: str, month: str | None, day: str | None) -> bool:
+    if not _valid_year(year) or not _valid_month(month):
+        return False
+    if day is None:
+        return True
+    try:
+        date(int(year), int(month), int(day))
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _valid_time_parts(hour: str | None, minute: str | None, second: str | None) -> bool:
+    if hour is None:
+        return True
+    if not 0 <= int(hour) <= 23:
+        return False
+    if minute is not None and not 0 <= int(minute) <= 59:
+        return False
+    if second is not None and not 0 <= int(second) <= 59:
+        return False
+    return True
+
+
+def _valid_timezone(tz: str | None) -> bool:
+    if tz is None or tz == "Z":
+        return True
+    match = _TZ_RE.fullmatch(tz)
+    if match is None:
+        return False
+    hour = int(match.group("hour"))
+    minute = int(match.group("minute"))
+    return 0 <= hour <= 14 and 0 <= minute <= 59
+
+
+def _is_valid_cql_date(text: str) -> bool:
+    match = _DATE_RE.fullmatch(text)
+    if match is None:
+        return False
+    return _valid_date_parts(match.group("year"), match.group("month"), match.group("day"))
+
+
+def _is_valid_cql_datetime(text: str) -> bool:
+    match = _DATETIME_RE.fullmatch(text)
+    if match is None:
+        return False
+    groups = match.groupdict()
+    if groups["tz"] is not None and groups["hour"] is None:
+        return False
+    return (
+        _valid_date_parts(groups["year"], groups["month"], groups["day"])
+        and _valid_time_parts(groups["hour"], groups["minute"], groups["second"])
+        and _valid_timezone(groups["tz"])
+    )
+
+
+def _is_valid_cql_time(text: str) -> bool:
+    match = _TIME_RE.fullmatch(text)
+    if match is None:
+        return False
+    groups = match.groupdict()
+    return _valid_time_parts(groups["hour"], groups["minute"], groups["second"]) and _valid_timezone(groups["tz"])
+
+
+def ConvertsToBoolean(value) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, (int, float, Decimal)):
+        dec = _finite_decimal(str(value))
+        return dec is not None and dec in (Decimal(0), Decimal(1))
+    if isinstance(value, str):
+        return value.lower() in _BOOL_STRINGS
+    return False
 
 
 def ConvertsToInteger(value) -> bool | None:
-    text = _as_text(value)
-    if text is None:
+    if value is None:
         return None
-    dec = _finite_decimal(text)
-    return dec is not None and dec == dec.to_integral_value() and -(2**31) <= int(dec) <= 2**31 - 1
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, int):
+        return -(2**31) <= value <= 2**31 - 1
+    if isinstance(value, str):
+        if _INTEGER_STRING_RE.fullmatch(value) is None:
+            return False
+        integer = int(value)
+        return -(2**31) <= integer <= 2**31 - 1
+    return False
 
 
 def ConvertsToLong(value) -> bool | None:
-    text = _as_text(value)
-    if text is None:
+    if value is None:
         return None
-    dec = _finite_decimal(text)
-    return dec is not None and dec == dec.to_integral_value() and -(2**63) <= int(dec) <= 2**63 - 1
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, int):
+        return -(2**63) <= value <= 2**63 - 1
+    if isinstance(value, str):
+        if _INTEGER_STRING_RE.fullmatch(value) is None:
+            return False
+        integer = int(value)
+        return -(2**63) <= integer <= 2**63 - 1
+    return False
 
 
 def ConvertsToDecimal(value) -> bool | None:
-    text = _as_text(value)
-    if text is None:
+    if value is None:
         return None
-    return _finite_decimal(text) is not None
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, (int, float, Decimal)):
+        dec = _finite_decimal(str(value))
+        return dec is not None and _fits_duckdb_decimal(dec)
+    if isinstance(value, str):
+        dec = _finite_decimal(value)
+        return _DECIMAL_STRING_RE.fullmatch(value) is not None and dec is not None and _fits_duckdb_decimal(dec)
+    return False
 
 
 def ConvertsToString(value) -> bool | None:
@@ -74,24 +193,38 @@ def ConvertsToString(value) -> bool | None:
 
 
 def ConvertsToDate(value) -> bool | None:
-    text = _as_text(value)
-    if text is None:
+    if value is None:
         return None
-    return _DATE_RE.match(text) is not None or ConvertsToDateTime(text)
+    if isinstance(value, (datetime, date)):
+        return True
+    if not isinstance(value, str):
+        return False
+    text = value
+    if "T" in text:
+        return _is_valid_cql_datetime(text)
+    return _is_valid_cql_date(text)
 
 
 def ConvertsToDateTime(value) -> bool | None:
-    text = _as_text(value)
-    if text is None:
+    if value is None:
         return None
-    return _DATETIME_RE.match(text) is not None
+    if isinstance(value, (datetime, date)):
+        return True
+    if not isinstance(value, str):
+        return False
+    text = value
+    return _is_valid_cql_datetime(text)
 
 
 def ConvertsToTime(value) -> bool | None:
-    text = _as_text(value)
-    if text is None:
+    if value is None:
         return None
-    return _TIME_RE.match(text) is not None
+    if isinstance(value, time):
+        return True
+    if not isinstance(value, str):
+        return False
+    text = value
+    return _is_valid_cql_time(text)
 
 
 def ConvertsToQuantity(value) -> bool | None:
@@ -101,16 +234,22 @@ def ConvertsToQuantity(value) -> bool | None:
     if text.strip().startswith("{"):
         try:
             data = json.loads(text)
-            return isinstance(data, dict) and data.get("value") is not None
+            return is_valid_quantity_object(data)
         except (TypeError, ValueError):
             return False
-    return toQuantity(text) is not None
+    try:
+        return toQuantity(text) is not None
+    except (TypeError, ValueError):
+        return False
 
 
 def ConvertsToRatio(value) -> bool | None:
     text = _as_text(value)
     if text is None:
         return None
+    ratio = _parse_ratio_text(text)
+    if ratio is not None:
+        return True
     try:
         data = json.loads(text)
     except (TypeError, ValueError):
@@ -119,7 +258,87 @@ def ConvertsToRatio(value) -> bool | None:
         return False
     numerator = data.get("numerator")
     denominator = data.get("denominator")
-    return isinstance(numerator, dict) and isinstance(denominator, dict)
+    return _is_valid_quantity_object(numerator) and _is_valid_quantity_object(denominator)
+
+
+def _is_valid_quantity_object(value) -> bool:
+    return is_valid_quantity_object(value)
+
+
+def _split_ratio_text(text: str) -> tuple[str, str] | None:
+    in_quote = False
+    for idx, char in enumerate(text):
+        if char == "'":
+            in_quote = not in_quote
+        elif char == ":" and not in_quote:
+            return text[:idx].strip(), text[idx + 1:].strip()
+    return None
+
+
+def _parse_ratio_text(text: str) -> dict | None:
+    parts = _split_ratio_text(text)
+    if parts is None:
+        return None
+    numerator_json = toQuantity(parts[0])
+    denominator_json = toQuantity(parts[1])
+    if numerator_json is None or denominator_json is None:
+        return None
+    numerator = json.loads(numerator_json)
+    denominator = json.loads(denominator_json)
+    if not _is_valid_quantity_object(numerator) or not _is_valid_quantity_object(denominator):
+        return None
+    return {"numerator": numerator, "denominator": denominator}
+
+
+def ToDate(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if not isinstance(value, str):
+        return None
+    text = value
+    if "T" in text:
+        if not _is_valid_cql_datetime(text):
+            return None
+        return text.split("T", 1)[0]
+    return text if _is_valid_cql_date(text) else None
+
+
+def ToDateTime(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if not isinstance(value, str):
+        return None
+    text = value
+    if not _is_valid_cql_datetime(text):
+        return None
+    return text[:-1] + "+00:00" if text.endswith("Z") else text
+
+
+def ToTime(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, time):
+        return value.isoformat()
+    if not isinstance(value, str):
+        return None
+    text = value
+    if not _is_valid_cql_time(text):
+        return None
+    if text.endswith("Z"):
+        text = text[:-1]
+    else:
+        tz_match = re.search(r"[+-]\d{2}:\d{2}$", text)
+        if tz_match:
+            text = text[:tz_match.start()]
+    return text[1:] if text.startswith("T") else text
 
 
 def ConvertQuantity(value, target_unit: str | None) -> str | None:
@@ -141,13 +360,18 @@ def CanConvertQuantity(value, target_unit: str | None) -> bool | None:
 def ToLong(value) -> int | None:
     if not ConvertsToLong(value):
         return None
-    return int(Decimal(str(value)))
+    if isinstance(value, bool):
+        return 1 if value else 0
+    return int(value)
 
 
 def ToRatio(value) -> str | None:
     text = _as_text(value)
     if text is None:
         return None
+    ratio = _parse_ratio_text(text)
+    if ratio is not None:
+        return json.dumps(ratio, separators=(",", ":"))
     try:
         data = json.loads(text)
     except (TypeError, ValueError):
@@ -191,6 +415,9 @@ __all__ = [
     "ConvertsToTime",
     "CanConvertQuantity",
     "ConvertQuantity",
+    "ToDate",
+    "ToDateTime",
     "ToLong",
     "ToRatio",
+    "ToTime",
 ]

@@ -9,10 +9,12 @@ struct ParsedQuantity {
 	double value;
 	std::string code;
 	std::string system;
+	int precision;
 };
 
 Optional<ParsedQuantity> parse_quantity_json(const std::string &json);
 Optional<std::string> format_quantity_json(const ParsedQuantity &q);
+bool is_valid_quantity_unit(const std::string &unit);
 Optional<double> quantity_value_fn(const std::string &json);
 Optional<std::string> quantity_unit_fn(const std::string &json);
 Optional<bool> quantity_compare(const std::string &q1_json, const std::string &q2_json, const std::string &op);

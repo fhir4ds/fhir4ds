@@ -9,14 +9,17 @@ from ...parser.ast_nodes import (
     BinaryExpression,
     Identifier,
     Literal,
+    Property,
     UnaryExpression,
 )
+from ...translator.function_inliner import ParameterPlaceholder
 from ...translator.context import SQLTranslationContext
 from ...translator.expressions import ExpressionTranslator
 from ...translator.types import (
     SQLBinaryOp,
     SQLCase,
     SQLFunctionCall,
+    SQLIdentifier,
     SQLLiteral,
     SQLNull,
     SQLParameterRef,
@@ -40,6 +43,26 @@ def _make_context_with_schema():
     ctx.column_mappings = schema.column_mappings
     ctx.choice_type_prefixes = schema.choice_type_prefixes
     return ctx
+
+
+def test_parameter_placeholder_sqlcase_property_uses_case_as_fhirpath_source():
+    """Choice-type `as` casts lower to SQL CASE and still support property navigation."""
+    translator = ExpressionTranslator(SQLTranslationContext(resource_type="Patient"))
+    source_sql = SQLCase(
+        when_clauses=[(SQLLiteral(True), SQLIdentifier("choice_resource"))],
+        else_clause=SQLNull(),
+    )
+    prop = Property(
+        source=ParameterPlaceholder(name="choice", sql_expr=source_sql),
+        path="performed",
+    )
+
+    result = translator.translate(prop)
+
+    assert result.to_sql() == (
+        "fhirpath_text(CASE WHEN TRUE THEN choice_resource ELSE NULL END, "
+        "'performed')"
+    )
 
 
 # ---------------------------------------------------------------------------

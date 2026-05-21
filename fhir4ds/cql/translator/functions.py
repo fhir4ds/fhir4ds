@@ -354,7 +354,7 @@ class FunctionTranslator:
         SQL patterns:
         - CURRENT_TIMESTAMP  -- Now()
         - CURRENT_DATE  -- Today()
-        - CURRENT_TIME  -- TimeOfDay()
+        - 'T' || SUBSTR(CAST(CURRENT_TIME AS VARCHAR), 1, 8)  -- TimeOfDay()
         - make_timestamp(year, month, day, hour, min, sec)  -- DateTime()
         - make_date(year, month, day)  -- Date()
         - make_time(hour, minute, second)  -- Time()
@@ -367,7 +367,7 @@ class FunctionTranslator:
             return SQLFunctionCall(name="CURRENT_DATE", args=[])
 
         if name == "timeofday":
-            return SQLFunctionCall(name="CURRENT_TIME", args=[])
+            return SQLRaw(raw_sql="'T' || SUBSTR(CAST(CURRENT_TIME AS VARCHAR), 1, 8)")
 
         if name == "datetime":
             return self._build_timestamp(args)

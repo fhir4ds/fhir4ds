@@ -146,6 +146,29 @@ class TestPostgresSourceConstructor:
         src = PostgresSource("postgresql://user:pass@localhost/db", mappings)
         assert len(src._mappings) == 2
 
+    def test_register_escapes_connection_string_literal(self, monkeypatch):
+        import fhir4ds.sources.relational as relational
+
+        executed = []
+
+        class FakeCon:
+            def execute(self, sql):
+                executed.append(sql)
+                return self
+
+        monkeypatch.setattr(relational, "validate_schema", lambda con, name: None)
+        mapping = PostgresTableMapping("t", "id", "Patient", "res", "pid")
+        src = PostgresSource(
+            "postgresql://user:pass@localhost/db'; DROP TABLE resources; --",
+            [mapping],
+        )
+
+        src.register(FakeCon())
+
+        attach_sql = next(sql for sql in executed if "ATTACH IF NOT EXISTS" in sql)
+        assert "db''; DROP TABLE resources; --" in attach_sql
+        assert "db'; DROP TABLE resources" not in attach_sql
+
 
 # ---------------------------------------------------------------------------
 # unregister() before register()

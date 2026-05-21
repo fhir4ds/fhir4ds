@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import duckdb
+import pytest
 
 from fhir4ds.fhirpath.duckdb import register_fhirpath
 from fhir4ds.fhirpath.duckdb.udf import (
@@ -19,6 +20,14 @@ from fhir4ds.fhirpath.duckdb.udf import (
 def _connection() -> duckdb.DuckDBPyConnection:
     con = duckdb.connect(config={"allow_unsigned_extensions": True})
     register_fhirpath(con)
+    return con
+
+
+def _fallback_connection(monkeypatch: pytest.MonkeyPatch) -> duckdb.DuckDBPyConnection:
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    con = duckdb.connect()
+    loaded = register_fhirpath(con)
+    assert loaded is False
     return con
 
 
@@ -73,3 +82,162 @@ def test_boolean_logic_operators_match_cpp() -> None:
             assert cpp == py
     finally:
         con.close()
+
+
+def test_multi_item_boolean_operands_return_empty_in_native_and_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "t": True,
+            "f": False,
+            "arr": [True, False],
+        }
+    )
+    expressions = [
+        "arr or t",
+        "arr and f",
+        "arr implies t",
+        "t implies arr",
+        "arr xor t",
+        "arr.not()",
+    ]
+
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        for expression in expressions:
+            native_result = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            fallback_result = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert native_result == fallback_result == ([], None, None)
+    finally:
+        native.close()
+        fallback.close()
+
+
+@pytest.mark.parametrize(
+    ("expression", "expected_json", "expected_bool"),
+    [
+        ("t and t", "[true]", True),
+        ("t and f", "[false]", False),
+        ("f and t", "[false]", False),
+        ("f and f", "[false]", False),
+        ("t and {}", None, None),
+        ("f and {}", "[false]", False),
+        ("{} and t", None, None),
+        ("{} and f", "[false]", False),
+        ("{} and {}", None, None),
+        ("t or t", "[true]", True),
+        ("t or f", "[true]", True),
+        ("f or t", "[true]", True),
+        ("f or f", "[false]", False),
+        ("t or {}", "[true]", True),
+        ("f or {}", None, None),
+        ("{} or t", "[true]", True),
+        ("{} or f", None, None),
+        ("{} or {}", None, None),
+        ("t xor t", "[false]", False),
+        ("t xor f", "[true]", True),
+        ("f xor t", "[true]", True),
+        ("f xor f", "[false]", False),
+        ("t xor {}", None, None),
+        ("f xor {}", None, None),
+        ("{} xor t", None, None),
+        ("{} xor f", None, None),
+        ("{} xor {}", None, None),
+        ("t implies t", "[true]", True),
+        ("t implies f", "[false]", False),
+        ("t implies {}", None, None),
+        ("f implies t", "[true]", True),
+        ("f implies f", "[true]", True),
+        ("f implies {}", "[true]", True),
+        ("{} implies t", "[true]", True),
+        ("{} implies f", None, None),
+        ("{} implies {}", None, None),
+        ("t.not()", "[false]", False),
+        ("f.not()", "[true]", True),
+        ("{}.not()", None, None),
+    ],
+)
+def test_boolean_logic_truth_tables_native_and_fallback(
+    expression: str,
+    expected_json: str | None,
+    expected_bool: bool | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "t": True,
+            "f": False,
+        }
+    )
+    expected_text = None if expected_bool is None else str(expected_bool).lower()
+
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        native_result = native.execute(
+            "SELECT fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+            [resource, expression, resource, expression, resource, expression],
+        ).fetchone()
+        fallback_result = fallback.execute(
+            "SELECT fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+            [resource, expression, resource, expression, resource, expression],
+        ).fetchone()
+        assert native_result == fallback_result == (expected_text, expected_json, expected_bool)
+    finally:
+        native.close()
+        fallback.close()
+
+
+@pytest.mark.parametrize(
+    ("expression", "expected_json", "expected_bool"),
+    [
+        ("s and t", "[true]", True),
+        ("s.not()", "[false]", False),
+        ("t or f and f", "[true]", True),
+        ("t xor t or t", "[true]", True),
+        ("f implies f implies f", "[false]", False),
+        ("f implies arr", "[true]", True),
+    ],
+)
+def test_boolean_logic_singleton_precedence_and_short_circuit_parity(
+    expression: str,
+    expected_json: str,
+    expected_bool: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "t": True,
+            "f": False,
+            "s": "male",
+            "arr": [True, False],
+        }
+    )
+    expected_text = str(expected_bool).lower()
+
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        native_result = native.execute(
+            "SELECT fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+            [resource, expression, resource, expression, resource, expression],
+        ).fetchone()
+        fallback_result = fallback.execute(
+            "SELECT fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+            [resource, expression, resource, expression, resource, expression],
+        ).fetchone()
+        assert native_result == fallback_result == (expected_text, expected_json, expected_bool)
+    finally:
+        native.close()
+        fallback.close()

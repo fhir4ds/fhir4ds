@@ -60,9 +60,14 @@ def test_cql_conversion_check_duckdb_surface_matches_cpp_registration() -> None:
         "SELECT ConvertsToInteger('42')",
         "SELECT ConvertsToInteger('2147483648')",
         "SELECT ConvertsToLong('9223372036854775807')",
+        "SELECT ConvertsToQuantity(5)",
         "SELECT ConvertsToQuantity('5 ''mg''')",
+        "SELECT ConvertsToQuantity('5 ''year''')",
+        "SELECT ConvertsToQuantity('5 ''not-a-unit''')",
         "SELECT ConvertsToQuantity('5 mg')",
+        "SELECT ConvertsToQuantity('{\"value\":\"abc\",\"unit\":\"mg\"}')",
         f"SELECT ConvertsToRatio('{ratio}')",
+        "SELECT ConvertsToRatio('1 ''not-a-unit'':2 ''mg''')",
         "SELECT ConvertsToString('abc')",
         "SELECT ConvertsToTime('T10:30:00')",
         "SELECT CanConvertQuantity('1000 ''mg''', 'g')",
@@ -74,6 +79,40 @@ def test_cql_conversion_check_duckdb_surface_matches_cpp_registration() -> None:
     try:
         for expression in expressions:
             assert cpp.execute(expression).fetchone() == py.execute(expression).fetchone()
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_conversion_check_spec_boundaries_match_cpp_registration() -> None:
+    cases = [
+        ("SELECT ConvertsToBoolean('1.0')", False),
+        ("SELECT ConvertsToBoolean(' 1')", False),
+        ("SELECT ConvertsToBoolean(1.0)", True),
+        ("SELECT ConvertsToDecimal('1e2')", False),
+        ("SELECT ConvertsToDecimal(' 1')", False),
+        ("SELECT ConvertsToDecimal('1.')", False),
+        ("SELECT ConvertsToDecimal('.5')", False),
+        ("SELECT ConvertsToDecimal('1.12345678')", True),
+        ("SELECT ConvertsToDecimal('1.123456789')", False),
+        ("SELECT ConvertsToDecimal('1000000000000000000000000000000')", False),
+        ("SELECT ConvertsToDecimal(true)", True),
+        ("SELECT ConvertsToDate(2024)", False),
+        ("SELECT ConvertsToDateTime(2024)", False),
+        ("SELECT ConvertsToDate(TIMESTAMP '2024-01-15 10:30:00')", True),
+        ("SELECT ConvertsToQuantity('.5 ''mg''')", False),
+        ("SELECT ConvertsToQuantity('5 ''not-a-unit''')", False),
+        ("SELECT ConvertsToQuantity('{\"value\":5,\"unit\":\"not-a-unit\"}')", False),
+        ("SELECT ConvertsToRatio('.5 ''mg'':2 ''mg''')", False),
+        ("SELECT ConvertsToRatio('1 ''not-a-unit'':2 ''mg''')", False),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in cases:
+            assert py.execute(expression).fetchone() == (expected,)
+            assert cpp.execute(expression).fetchone() == (expected,)
     finally:
         py.close()
         cpp.close()

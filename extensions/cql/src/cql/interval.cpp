@@ -1,9 +1,12 @@
 #include "cql/interval.hpp"
+#include "cql/quantity.hpp"
 #include "yyjson.hpp"
 
 using namespace duckdb_yyjson; // NOLINT
 #include <cstdlib>
+#include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <limits>
 #include <sstream>
 
@@ -35,6 +38,70 @@ static std::string escapeJsonString(const std::string &s) {
 	return out;
 }
 
+static bool is_day_precision_datetime_marker(const std::string &s) {
+	return s.size() == 11 && s[4] == '-' && s[7] == '-' && s[10] == 'T';
+}
+
+static std::string format_day_precision_datetime(const DateTimeValue &dt) {
+	char buf[16];
+	std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT", dt.year, dt.month, dt.day);
+	return std::string(buf);
+}
+
+static std::string format_decimal_value(double value) {
+	if (std::fabs(value) < 5e-13) {
+		value = 0.0;
+	}
+	std::ostringstream oss;
+	oss << std::fixed << std::setprecision(8) << value;
+	std::string out = oss.str();
+	auto dot = out.find('.');
+	if (dot != std::string::npos) {
+		while (out.size() > dot + 2 && out[out.size() - 1] == '0') {
+			out.erase(out.size() - 1);
+		}
+		if (out[out.size() - 1] == '.') {
+			out += '0';
+		}
+	}
+	return out;
+}
+
+static bool is_four_digit_year(const std::string &s) {
+	return s.size() == 4 && s[0] >= '0' && s[0] <= '9' && s[1] >= '0' && s[1] <= '9' &&
+	       s[2] >= '0' && s[2] <= '9' && s[3] >= '0' && s[3] <= '9';
+}
+
+static bool looks_temporal_interval_bound(const std::string &s) {
+	if (s.empty()) {
+		return false;
+	}
+	if (is_four_digit_year(s)) {
+		return true;
+	}
+	if (s[0] == 'T') {
+		return true;
+	}
+	if (s.find('T') != std::string::npos || s.find(':') != std::string::npos) {
+		return true;
+	}
+	return s.find('-') != std::string::npos && s[0] != '-';
+}
+
+static std::string quantity_json_for_bound(yyjson_val *value_node, const std::string &unit) {
+	std::ostringstream oss;
+	oss << "{\"value\":";
+	char *value_json = yyjson_val_write(value_node, 0, NULL);
+	if (value_json) {
+		oss << value_json;
+		free(value_json);
+	} else {
+		oss << "null";
+	}
+	oss << ",\"unit\":\"" << escapeJsonString(unit) << "\"}";
+	return oss.str();
+}
+
 // =====================================================================
 // BoundValue implementation
 // =====================================================================
@@ -64,7 +131,21 @@ case BoundType::Quantity:
 if (!qty_numeric || !other.qty_numeric) {
 return -2;
 }
-return (*qty_numeric < *other.qty_numeric) ? -1 : (*qty_numeric > *other.qty_numeric) ? 1 : 0;
+{
+	auto less = quantity_compare(raw_str, other.raw_str, "<");
+	if (less && *less) {
+		return -1;
+	}
+	auto greater = quantity_compare(raw_str, other.raw_str, ">");
+	if (greater && *greater) {
+		return 1;
+	}
+	auto equal = quantity_compare(raw_str, other.raw_str, "==");
+	if (equal && *equal) {
+		return 0;
+	}
+	return -2;
+}
 }
 return -2;
 }
@@ -89,7 +170,14 @@ std::string BoundValue::to_string() const {
 	// For DateTime/Time, always use canonical DateTimeValue format
 	// (normalizes space-separated timestamps to ISO 8601 T-separated)
 	if (type == BoundType::DateTime || type == BoundType::Time) {
-		return dt_val ? dt_val->to_string() : "";
+		if (!dt_val) {
+			return "";
+		}
+		if (is_day_precision_datetime_marker(raw_str) && !dt_val->has_time &&
+		    dt_val->precision == DateTimeValue::Precision::Day) {
+			return format_day_precision_datetime(*dt_val);
+		}
+		return dt_val->to_string();
 	}
 	// For other types, prefer raw_str for round-trip fidelity
 	if (!raw_str.empty()) {
@@ -105,9 +193,7 @@ std::string BoundValue::to_string() const {
 		return "";
 	case BoundType::Decimal:
 		if (dec_val) {
-			std::ostringstream oss;
-			oss << *dec_val;
-			return oss.str();
+			return format_decimal_value(*dec_val);
 		}
 		return "";
 	case BoundType::Quantity:
@@ -139,7 +225,7 @@ unit_node = yyjson_obj_get(root, "code");
 if (unit_node && yyjson_is_str(unit_node)) {
 bv.qty_unit = yyjson_get_str(unit_node);
 }
-bv.raw_str = str;
+bv.raw_str = quantity_json_for_bound(val_node, bv.qty_unit);
 yyjson_doc_free(doc);
 return Optional<BoundValue>(bv);
 }
@@ -220,6 +306,23 @@ return Optional<BoundValue>(bv);
 return NullOpt<BoundValue>();
 }
 
+Optional<BoundValue> BoundValue::from_interval_bound_string(const std::string &str) {
+if (str.empty()) {
+return NullOpt<BoundValue>();
+}
+if (str[0] != '{' && looks_temporal_interval_bound(str)) {
+auto dt = DateTimeValue::parse(str);
+if (dt) {
+BoundValue bv;
+bv.type = dt->is_time ? BoundType::Time : BoundType::DateTime;
+bv.dt_val = dt;
+bv.raw_str = str;
+return Optional<BoundValue>(bv);
+}
+}
+return BoundValue::from_string(str);
+}
+
 Optional<BoundValue> BoundValue::from_number(double val, bool is_integer) {
 BoundValue bv;
 if (is_integer) {
@@ -231,9 +334,7 @@ bv.raw_str = oss.str();
 } else {
 bv.type = BoundType::Decimal;
 bv.dec_val = Optional<double>(val);
-std::ostringstream oss;
-oss << val;
-bv.raw_str = oss.str();
+bv.raw_str = format_decimal_value(val);
 }
 return Optional<BoundValue>(bv);
 }
@@ -246,7 +347,7 @@ if (!val || yyjson_is_null(val)) {
 return NullOpt<BoundValue>();
 }
 if (yyjson_is_str(val)) {
-return BoundValue::from_string(yyjson_get_str(val));
+return BoundValue::from_interval_bound_string(yyjson_get_str(val));
 }
 if (yyjson_is_int(val) || yyjson_is_sint(val)) {
 return BoundValue::from_number(static_cast<double>(yyjson_get_sint(val)), true);
@@ -268,15 +369,73 @@ u = yyjson_obj_get(val, "code");
 if (u && yyjson_is_str(u)) {
 bv.qty_unit = yyjson_get_str(u);
 }
-char *json_str = yyjson_val_write(val, 0, NULL);
-if (json_str) {
-bv.raw_str = json_str;
-free(json_str);
-}
+bv.raw_str = quantity_json_for_bound(v, bv.qty_unit);
 return Optional<BoundValue>(bv);
 }
 }
 return NullOpt<BoundValue>();
+}
+
+static int interval_precision_rank(DateTimeValue::Precision precision) {
+	switch (precision) {
+	case DateTimeValue::Precision::Year:
+		return 0;
+	case DateTimeValue::Precision::Month:
+		return 1;
+	case DateTimeValue::Precision::Day:
+		return 2;
+	case DateTimeValue::Precision::Hour:
+		return 3;
+	case DateTimeValue::Precision::Minute:
+		return 4;
+	case DateTimeValue::Precision::Second:
+		return 5;
+	case DateTimeValue::Precision::Millisecond:
+		return 6;
+	}
+	return 6;
+}
+
+static DateTimeValue::Precision interval_precision_from_rank(int rank) {
+	switch (rank) {
+	case 0:
+		return DateTimeValue::Precision::Year;
+	case 1:
+		return DateTimeValue::Precision::Month;
+	case 2:
+		return DateTimeValue::Precision::Day;
+	case 3:
+		return DateTimeValue::Precision::Hour;
+	case 4:
+		return DateTimeValue::Precision::Minute;
+	case 5:
+		return DateTimeValue::Precision::Second;
+	default:
+		return DateTimeValue::Precision::Millisecond;
+	}
+}
+
+static Optional<int> compare_interval_order_nullable(const BoundValue &left, const BoundValue &right) {
+	if ((left.type == BoundType::DateTime || left.type == BoundType::Time) &&
+	    left.type == right.type && left.dt_val && right.dt_val) {
+		int left_rank = interval_precision_rank(left.dt_val->precision);
+		int right_rank = interval_precision_rank(right.dt_val->precision);
+		DateTimeValue::Precision coarsest = interval_precision_from_rank(std::min(left_rank, right_rank));
+		int cmp = left.dt_val->compare_at_precision(*right.dt_val, coarsest);
+		if (cmp != 0) {
+			return Optional<int>(cmp);
+		}
+		if (left_rank != right_rank) {
+			return NullOpt<int>();
+		}
+		return Optional<int>(0);
+	}
+
+	int cmp = left.compare(right);
+	if (cmp == -2) {
+		return NullOpt<int>();
+	}
+	return Optional<int>(cmp);
 }
 
 static cql::DateTimeValue AddDaysForInterval(const cql::DateTimeValue &dt, int64_t days) {
@@ -297,6 +456,40 @@ static cql::DateTimeValue AddDaysForInterval(const cql::DateTimeValue &dt, int64
 	result.year = year;
 	result.month = month;
 	result.day = day;
+	return result;
+}
+
+static bool IsLeapYearForInterval(int32_t year) {
+	return (year % 4 == 0) && (year % 100 != 0 || year % 400 == 0);
+}
+
+static int32_t DaysInMonthForInterval(int32_t year, int32_t month) {
+	static const int32_t dim[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+	if (month < 1 || month > 12) {
+		return 0;
+	}
+	if (month == 2 && IsLeapYearForInterval(year)) {
+		return 29;
+	}
+	return dim[month];
+}
+
+static cql::DateTimeValue AddMonthsForInterval(const cql::DateTimeValue &dt, int32_t months) {
+	cql::DateTimeValue result = dt;
+	int32_t m = dt.month - 1 + months;
+	if (m >= 0) {
+		result.year = dt.year + m / 12;
+		result.month = (m % 12) + 1;
+	} else {
+		int32_t abs_m = -m;
+		int32_t years_back = (abs_m + 11) / 12;
+		result.year = dt.year - years_back;
+		result.month = 12 - ((abs_m - 1) % 12);
+	}
+	int32_t max_day = DaysInMonthForInterval(result.year, result.month);
+	if (max_day > 0 && result.day > max_day) {
+		result.day = max_day;
+	}
 	return result;
 }
 
@@ -326,6 +519,26 @@ static cql::DateTimeValue AddMillisecondsForInterval(const cql::DateTimeValue &d
 	return result;
 }
 
+static cql::DateTimeValue StepDateTimeForIntervalPrecision(const cql::DateTimeValue &dt, int direction) {
+	switch (dt.precision) {
+	case cql::DateTimeValue::Precision::Year:
+		return AddMonthsForInterval(dt, 12 * direction);
+	case cql::DateTimeValue::Precision::Month:
+		return AddMonthsForInterval(dt, direction);
+	case cql::DateTimeValue::Precision::Day:
+		return AddDaysForInterval(dt, direction);
+	case cql::DateTimeValue::Precision::Hour:
+		return AddMillisecondsForInterval(dt, static_cast<int64_t>(direction) * 60 * 60 * 1000);
+	case cql::DateTimeValue::Precision::Minute:
+		return AddMillisecondsForInterval(dt, static_cast<int64_t>(direction) * 60 * 1000);
+	case cql::DateTimeValue::Precision::Second:
+		return AddMillisecondsForInterval(dt, static_cast<int64_t>(direction) * 1000);
+	case cql::DateTimeValue::Precision::Millisecond:
+		return AddMillisecondsForInterval(dt, direction);
+	}
+	return AddMillisecondsForInterval(dt, direction);
+}
+
 static Optional<BoundValue> successor_bound(const BoundValue &value) {
 	BoundValue result = value;
 	switch (value.type) {
@@ -341,11 +554,7 @@ static Optional<BoundValue> successor_bound(const BoundValue &value) {
 			return NullOpt<BoundValue>();
 		}
 		result.dec_val = Optional<double>(*value.dec_val + 1e-8);
-		{
-			std::ostringstream oss;
-			oss << *result.dec_val;
-			result.raw_str = oss.str();
-		}
+		result.raw_str = format_decimal_value(*result.dec_val);
 		return Optional<BoundValue>(result);
 	case BoundType::Quantity:
 		if (!value.qty_numeric) {
@@ -364,14 +573,13 @@ static Optional<BoundValue> successor_bound(const BoundValue &value) {
 		if (!value.dt_val) {
 			return NullOpt<BoundValue>();
 		}
-		if (!value.dt_val->has_time ||
-		    (value.dt_val->hour == 0 && value.dt_val->minute == 0 &&
-		     value.dt_val->second == 0 && value.dt_val->millisecond == 0)) {
-			result.dt_val = Optional<DateTimeValue>(AddDaysForInterval(*value.dt_val, 1));
-		} else {
-			result.dt_val = Optional<DateTimeValue>(AddMillisecondsForInterval(*value.dt_val, 1));
+		bool day_precision_datetime = is_day_precision_datetime_marker(value.raw_str);
+		result.dt_val = Optional<DateTimeValue>(StepDateTimeForIntervalPrecision(*value.dt_val, 1));
+		if (result.dt_val->year > 9999) {
+			return NullOpt<BoundValue>();
 		}
-		result.raw_str = result.dt_val->to_string();
+		result.raw_str = day_precision_datetime ? format_day_precision_datetime(*result.dt_val)
+		                                        : result.dt_val->to_string();
 		return Optional<BoundValue>(result);
 	}
 	return NullOpt<BoundValue>();
@@ -392,11 +600,7 @@ static Optional<BoundValue> predecessor_bound(const BoundValue &value) {
 			return NullOpt<BoundValue>();
 		}
 		result.dec_val = Optional<double>(*value.dec_val - 1e-8);
-		{
-			std::ostringstream oss;
-			oss << *result.dec_val;
-			result.raw_str = oss.str();
-		}
+		result.raw_str = format_decimal_value(*result.dec_val);
 		return Optional<BoundValue>(result);
 	case BoundType::Quantity:
 		if (!value.qty_numeric) {
@@ -415,17 +619,13 @@ static Optional<BoundValue> predecessor_bound(const BoundValue &value) {
 		if (!value.dt_val) {
 			return NullOpt<BoundValue>();
 		}
-		if (!value.dt_val->has_time ||
-		    (value.dt_val->hour == 0 && value.dt_val->minute == 0 &&
-		     value.dt_val->second == 0 && value.dt_val->millisecond == 0)) {
-			result.dt_val = Optional<DateTimeValue>(AddDaysForInterval(*value.dt_val, -1));
-		} else {
-			result.dt_val = Optional<DateTimeValue>(AddMillisecondsForInterval(*value.dt_val, -1));
-		}
-		if (result.dt_val->year < 1) {
+		bool day_precision_datetime = is_day_precision_datetime_marker(value.raw_str);
+		result.dt_val = Optional<DateTimeValue>(StepDateTimeForIntervalPrecision(*value.dt_val, -1));
+		if (result.dt_val->year < 1 || result.dt_val->year > 9999) {
 			return NullOpt<BoundValue>();
 		}
-		result.raw_str = result.dt_val->to_string();
+		result.raw_str = day_precision_datetime ? format_day_precision_datetime(*result.dt_val)
+		                                        : result.dt_val->to_string();
 		return Optional<BoundValue>(result);
 	}
 	return NullOpt<BoundValue>();
@@ -637,19 +837,23 @@ return contains_interval(other) && !(*this == other);
 }
 
 bool operator==(const Interval &a, const Interval &b) {
+auto a_start = effective_start_bound(a);
+auto a_end = effective_end_bound(a);
+auto b_start = effective_start_bound(b);
+auto b_end = effective_end_bound(b);
 bool low_eq = false;
-if (!a.low && !b.low) {
+if (!a_start && !b_start) {
 low_eq = true;
-} else if (a.low && b.low) {
-low_eq = (a.low->compare(*b.low) == 0);
+} else if (a_start && b_start) {
+low_eq = (a_start->compare(*b_start) == 0);
 }
 bool high_eq = false;
-if (!a.high && !b.high) {
+if (!a_end && !b_end) {
 high_eq = true;
-} else if (a.high && b.high) {
-high_eq = (a.high->compare(*b.high) == 0);
+} else if (a_end && b_end) {
+high_eq = (a_end->compare(*b_end) == 0);
 }
-return low_eq && high_eq && a.low_closed == b.low_closed && a.high_closed == b.high_closed;
+return low_eq && high_eq;
 }
 
 bool Interval::overlaps(const Interval &other) const {
@@ -694,21 +898,13 @@ return meets_before(other) || meets_after(other);
 }
 
 bool Interval::meets_before(const Interval &other) const {
-if (!high || !other.low) {
-return false;
-}
-int cmp = high->compare(*other.low);
-if (cmp == -2) {
-return false;
-}
-if (cmp == 0) {
-return high_closed || other.low_closed;
-}
-if (!high_closed || !other.low_closed) {
-return false;
-}
-auto successor = successor_bound(*high);
-return successor && successor->compare(*other.low) == 0;
+	auto this_end = effective_end_bound(*this);
+	auto other_start = effective_start_bound(other);
+	if (!this_end || !other_start) {
+	return false;
+	}
+	auto successor = successor_bound(*this_end);
+	return successor && successor->compare(*other_start) == 0;
 }
 
 bool Interval::meets_after(const Interval &other) const {
@@ -750,17 +946,39 @@ return cmp != -2 && cmp > 0;
 }
 
 bool Interval::starts_same(const Interval &other) const {
-if (!low || !other.low) {
-return !low && !other.low;
+auto this_start = effective_start_bound(*this);
+auto other_start = effective_start_bound(other);
+if (!this_start || !other_start) {
+return false;
 }
-return low->compare(*other.low) == 0;
+if (this_start->compare(*other_start) != 0) {
+return false;
+}
+auto this_end = effective_end_bound(*this);
+auto other_end = effective_end_bound(other);
+if (!this_end || !other_end) {
+return false;
+}
+int cmp = this_end->compare(*other_end);
+return cmp != -2 && cmp <= 0;
 }
 
 bool Interval::ends_same(const Interval &other) const {
-if (!high || !other.high) {
-return !high && !other.high;
+auto this_end = effective_end_bound(*this);
+auto other_end = effective_end_bound(other);
+if (!this_end || !other_end) {
+return false;
 }
-return high->compare(*other.high) == 0;
+if (this_end->compare(*other_end) != 0) {
+return false;
+}
+auto this_start = effective_start_bound(*this);
+auto other_start = effective_start_bound(other);
+if (!this_start || !other_start) {
+return false;
+}
+int cmp = this_start->compare(*other_start);
+return cmp != -2 && cmp >= 0;
 }
 
 Optional<int64_t> Interval::width_days() const {
@@ -780,36 +998,38 @@ return NullOpt<int64_t>();
 }
 
 Optional<std::string> Interval::width_string() const {
-if (!low || !high) {
+auto start = effective_start_bound(*this);
+auto end = effective_end_bound(*this);
+if (!start || !end) {
 return NullOpt<std::string>();
 }
 switch (bound_type) {
 case BoundType::Integer:
-if (low->int_val && high->int_val) {
+if (start->int_val && end->int_val) {
 std::ostringstream oss;
-oss << (*high->int_val - *low->int_val);
+oss << (*end->int_val - *start->int_val);
 return Optional<std::string>(oss.str());
 }
 break;
 case BoundType::Decimal:
-if (low->dec_val && high->dec_val) {
-std::ostringstream oss;
-oss << (*high->dec_val - *low->dec_val);
-return Optional<std::string>(oss.str());
+if (start->dec_val && end->dec_val) {
+return Optional<std::string>(format_decimal_value(*end->dec_val - *start->dec_val));
 }
 break;
 case BoundType::Quantity:
-if (low->qty_numeric && high->qty_numeric) {
-std::ostringstream oss;
-double w = *high->qty_numeric - *low->qty_numeric;
-oss << "{\"value\":" << w << ",\"unit\":\"" << escapeJsonString(low->qty_unit) << "\",\"code\":\"" << escapeJsonString(low->qty_unit) << "\"}";
-return Optional<std::string>(oss.str());
+{
+auto start_q = parse_quantity_json(start->raw_str);
+auto end_converted = quantity_convert(end->raw_str, start->qty_unit);
+auto end_q = end_converted ? parse_quantity_json(*end_converted) : NullOpt<ParsedQuantity>();
+if (start_q && end_q) {
+	return format_quantity_json({end_q->value - start_q->value, start->qty_unit, start_q->system});
+}
 }
 break;
 case BoundType::DateTime:
-if (low->dt_val && high->dt_val) {
+if (start->dt_val && end->dt_val) {
 std::ostringstream oss;
-oss << (high->dt_val->to_julian_day() - low->dt_val->to_julian_day());
+oss << (end->dt_val->to_julian_day() - start->dt_val->to_julian_day());
 return Optional<std::string>(oss.str());
 }
 break;
@@ -819,12 +1039,49 @@ break;
 return NullOpt<std::string>();
 }
 
+Optional<std::string> Interval::size_string() const {
+auto start = effective_start_bound(*this);
+auto end = effective_end_bound(*this);
+if (!start || !end) {
+return NullOpt<std::string>();
+}
+switch (bound_type) {
+case BoundType::Integer:
+if (start->int_val && end->int_val) {
+	int64_t size = *end->int_val - *start->int_val + 1;
+	return Optional<std::string>(std::to_string(size < 0 ? 0 : size));
+}
+break;
+case BoundType::Decimal:
+if (start->dec_val && end->dec_val) {
+	return Optional<std::string>(format_decimal_value(*end->dec_val - *start->dec_val + 1e-8));
+}
+break;
+case BoundType::Quantity:
+{
+auto start_q = parse_quantity_json(start->raw_str);
+auto end_converted = quantity_convert(end->raw_str, start->qty_unit);
+auto end_q = end_converted ? parse_quantity_json(*end_converted) : NullOpt<ParsedQuantity>();
+if (start_q && end_q) {
+	return format_quantity_json({end_q->value - start_q->value + 1e-8, start->qty_unit, start_q->system});
+}
+}
+break;
+case BoundType::DateTime:
+case BoundType::Time:
+break;
+}
+return NullOpt<std::string>();
+}
+
 std::string Interval::start_string() const {
-return low ? low->to_string() : "";
+auto start = effective_start_bound(*this);
+return start ? start->to_string() : "";
 }
 
 std::string Interval::end_string() const {
-return high ? high->to_string() : "";
+auto end = effective_end_bound(*this);
+return end ? end->to_string() : "";
 }
 
 static void append_bound_json(std::ostringstream &oss, const char *key, const Optional<BoundValue> &bound) {
@@ -901,17 +1158,21 @@ return result;
 // =====================================================================
 
 Optional<bool> Interval::on_or_after(const Interval &a, const Interval &b) {
-if (!a.low || !b.high) return NullOpt<bool>();
-int cmp = a.low->compare(*b.high);
-if (cmp == -2) return NullOpt<bool>();
-return Optional<bool>(cmp >= 0);
+	auto a_start = effective_start_bound(a);
+	auto b_end = effective_end_bound(b);
+	if (!a_start || !b_end) return NullOpt<bool>();
+	auto cmp = compare_interval_order_nullable(*a_start, *b_end);
+	if (!cmp) return NullOpt<bool>();
+	return Optional<bool>(*cmp >= 0);
 }
 
 Optional<bool> Interval::on_or_before(const Interval &a, const Interval &b) {
-if (!a.high || !b.low) return NullOpt<bool>();
-int cmp = a.high->compare(*b.low);
-if (cmp == -2) return NullOpt<bool>();
-return Optional<bool>(cmp <= 0);
+	auto a_end = effective_end_bound(a);
+	auto b_start = effective_start_bound(b);
+	if (!a_end || !b_start) return NullOpt<bool>();
+	auto cmp = compare_interval_order_nullable(*a_end, *b_start);
+	if (!cmp) return NullOpt<bool>();
+	return Optional<bool>(*cmp <= 0);
 }
 
 Optional<Interval> Interval::intersect(const Interval &a, const Interval &b) {
@@ -924,11 +1185,21 @@ if (!a.low && !b.low) {
 // Both unbounded below
 result.low_closed = a.low_closed && b.low_closed;
 } else if (!a.low) {
+if (a.low_closed) {
 result.low = b.low;
 result.low_closed = b.low_closed;
+} else {
+result.low = NullOpt<BoundValue>();
+result.low_closed = a.low_closed;
+}
 } else if (!b.low) {
+if (b.low_closed) {
 result.low = a.low;
 result.low_closed = a.low_closed;
+} else {
+result.low = NullOpt<BoundValue>();
+result.low_closed = b.low_closed;
+}
 } else {
 int cmp = a.low->compare(*b.low);
 if (cmp == -2) return NullOpt<Interval>();
@@ -944,11 +1215,27 @@ result.low_closed = a.low_closed && b.low_closed;
 }
 }
 
-if (!a.high || !b.high) {
-result.high = NullOpt<BoundValue>();
-result.high_closed = !a.high ? a.high_closed : b.high_closed;
-} else {
-int cmp = a.high->compare(*b.high);
+	if (!a.high && !b.high) {
+	result.high = NullOpt<BoundValue>();
+	result.high_closed = a.high_closed && b.high_closed;
+	} else if (!a.high) {
+	if (a.high_closed) {
+	result.high = b.high;
+	result.high_closed = b.high_closed;
+	} else {
+	result.high = NullOpt<BoundValue>();
+	result.high_closed = a.high_closed;
+	}
+	} else if (!b.high) {
+	if (b.high_closed) {
+	result.high = a.high;
+	result.high_closed = a.high_closed;
+	} else {
+	result.high = NullOpt<BoundValue>();
+	result.high_closed = b.high_closed;
+	}
+	} else {
+	int cmp = a.high->compare(*b.high);
 if (cmp == -2) return NullOpt<Interval>();
 if (cmp < 0) {
 result.high = a.high;
@@ -980,44 +1267,48 @@ return NullOpt<Interval>();
 
 Interval result;
 result.bound_type = a.bound_type;
+auto a_start = effective_start_bound(a);
+auto b_start = effective_start_bound(b);
+auto a_end = effective_end_bound(a);
+auto b_end = effective_end_bound(b);
 
-// Min of lows
-if (!a.low) {
+// Min of effective starts
+if (!a_start) {
 result.low_closed = a.low_closed;
-} else if (!b.low) {
+} else if (!b_start) {
 result.low_closed = b.low_closed;
 } else {
-int cmp = a.low->compare(*b.low);
+int cmp = a_start->compare(*b_start);
 if (cmp == -2) return NullOpt<Interval>();
 if (cmp < 0) {
-result.low = a.low;
-result.low_closed = a.low_closed;
+result.low = a_start;
+result.low_closed = true;
 } else if (cmp > 0) {
-result.low = b.low;
-result.low_closed = b.low_closed;
+result.low = b_start;
+result.low_closed = true;
 } else {
-result.low = a.low;
-result.low_closed = a.low_closed || b.low_closed;
+result.low = a_start;
+result.low_closed = true;
 }
 }
 
-// Max of highs
-if (!a.high) {
+// Max of effective ends
+if (!a_end) {
 result.high_closed = a.high_closed;
-} else if (!b.high) {
+} else if (!b_end) {
 result.high_closed = b.high_closed;
 } else {
-int cmp = a.high->compare(*b.high);
+int cmp = a_end->compare(*b_end);
 if (cmp == -2) return NullOpt<Interval>();
 if (cmp > 0) {
-result.high = a.high;
-result.high_closed = a.high_closed;
+result.high = a_end;
+result.high_closed = true;
 } else if (cmp < 0) {
-result.high = b.high;
-result.high_closed = b.high_closed;
+result.high = b_end;
+result.high_closed = true;
 } else {
-result.high = a.high;
-result.high_closed = a.high_closed || b.high_closed;
+result.high = a_end;
+result.high_closed = true;
 }
 }
 

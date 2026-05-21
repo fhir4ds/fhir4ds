@@ -29,22 +29,74 @@ def registerAggregateMacros(con: "duckdb.DuckDBPyConnection") -> None:
     COUNT(DISTINCT x), SUM(x) FILTER (...), window functions, etc.
     """
     # ============================================
-    # Statistical aggregates
+    # Statistical list aggregates.
+    #
+    # CQL aggregate functions take List<T> arguments. Translated query-form
+    # aggregates call DuckDB row aggregates with the system.* prefix when they
+    # need row aggregation, so these public names can keep CQL list semantics.
     # ============================================
-    con.execute("CREATE MACRO IF NOT EXISTS Median(x) AS system.median(x)")
-    con.execute("CREATE MACRO IF NOT EXISTS Mode(x) AS system.mode(x)")
-    con.execute("CREATE MACRO IF NOT EXISTS StdDev(x) AS system.stddev_samp(x)")
-    con.execute("CREATE MACRO IF NOT EXISTS StdDevPop(x) AS system.stddev_pop(x)")
-    con.execute("CREATE MACRO IF NOT EXISTS Variance(x) AS system.var_samp(x)")
-    con.execute("CREATE MACRO IF NOT EXISTS VarPop(x) AS system.var_pop(x)")
+    numeric_list = (
+        "list_filter("
+        "list_transform(x, _v -> TRY_CAST(_v AS DOUBLE)), "
+        "_v -> _v IS NOT NULL"
+        ")"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO Median(x) AS "
+        f"CASE WHEN x IS NULL THEN NULL ELSE list_aggregate({numeric_list}, 'median') END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO Mode(x) AS "
+        "CQLListMode(x)"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO StdDev(x) AS "
+        f"CASE WHEN x IS NULL THEN NULL ELSE list_aggregate({numeric_list}, 'stddev_samp') END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO PopulationStdDev(x) AS "
+        f"CASE WHEN x IS NULL THEN NULL ELSE list_aggregate({numeric_list}, 'stddev_pop') END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO StdDevPop(x) AS "
+        f"CASE WHEN x IS NULL THEN NULL ELSE list_aggregate({numeric_list}, 'stddev_pop') END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO Variance(x) AS "
+        f"CASE WHEN x IS NULL THEN NULL ELSE list_aggregate({numeric_list}, 'var_samp') END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO PopulationVariance(x) AS "
+        f"CASE WHEN x IS NULL THEN NULL ELSE list_aggregate({numeric_list}, 'var_pop') END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO VarPop(x) AS "
+        f"CASE WHEN x IS NULL THEN NULL ELSE list_aggregate({numeric_list}, 'var_pop') END"
+    )
 
     # ============================================
     # Boolean aggregates
     # ============================================
-    con.execute("CREATE MACRO IF NOT EXISTS AllTrue(x) AS system.bool_and(x)")
-    con.execute("CREATE MACRO IF NOT EXISTS AnyTrue(x) AS system.bool_or(x)")
-    con.execute("CREATE MACRO IF NOT EXISTS AllFalse(x) AS NOT system.bool_or(x)")
-    con.execute("CREATE MACRO IF NOT EXISTS AnyFalse(x) AS NOT system.bool_and(x)")
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS AllTrue(x) AS "
+        "CASE WHEN x IS NULL THEN true "
+        "ELSE COALESCE(list_bool_and(list_filter(x, _v -> _v IS NOT NULL)), true) END"
+    )
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS AnyTrue(x) AS "
+        "CASE WHEN x IS NULL THEN false "
+        "ELSE COALESCE(list_bool_or(list_filter(x, _v -> _v IS NOT NULL)), false) END"
+    )
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS AllFalse(x) AS "
+        "CASE WHEN x IS NULL THEN true "
+        "ELSE COALESCE(NOT list_bool_or(list_filter(x, _v -> _v IS NOT NULL)), true) END"
+    )
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS AnyFalse(x) AS "
+        "CASE WHEN x IS NULL THEN false "
+        "ELSE COALESCE(NOT list_bool_and(list_filter(x, _v -> _v IS NOT NULL)), false) END"
+    )
 
 
 __all__ = ["registerAggregateMacros"]

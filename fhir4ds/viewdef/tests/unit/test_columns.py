@@ -9,6 +9,7 @@ import pytest
 from ...parser import Column
 from ...generator import SQLGenerator
 from ...types import ColumnType
+from ...errors import ValidationError
 
 
 class TestTypeMapping:
@@ -39,11 +40,47 @@ class TestTypeMapping:
         gen = SQLGenerator()
         assert gen._get_udf_for_type(None) == "fhirpath_text"
 
-    def test_unknown_type_defaults_to_text(self):
-        """Test unknown type defaults to fhirpath_text."""
+    def test_unknown_type_raises(self):
+        """Unknown types are rejected instead of silently becoming text."""
         gen = SQLGenerator()
-        assert gen._get_udf_for_type("unknownType") == "fhirpath_text"
-        assert gen._get_udf_for_type("custom") == "fhirpath_text"
+        with pytest.raises(ValidationError, match="Unsupported ViewDefinition column type"):
+            gen._get_udf_for_type("unknownType")
+        with pytest.raises(ValidationError, match="Unsupported ViewDefinition column type"):
+            gen._get_udf_for_type("custom")
+
+    def test_full_fhir_type_uri_mapping(self):
+        """Full FHIR StructureDefinition URIs map like their relative type names."""
+        gen = SQLGenerator()
+        assert (
+            gen._get_udf_for_type("http://hl7.org/fhir/StructureDefinition/Coding")
+            == "fhirpath_json"
+        )
+        assert (
+            gen._get_udf_for_type("http://hl7.org/fhir/StructureDefinition/integer")
+            == "fhirpath_number"
+        )
+
+    def test_element_id_type_mapping(self):
+        """FHIR element-ID type notation maps to JSON output without type-name guards."""
+        gen = SQLGenerator()
+        assert gen._get_udf_for_type("Observation.referenceRange") == "fhirpath_json"
+        assert (
+            gen._get_udf_for_type(
+                "http://hl7.org/fhir/StructureDefinition/Observation#Observation.referenceRange"
+            )
+            == "fhirpath_json"
+        )
+
+        col = Column(
+            path="referenceRange",
+            name="rr",
+            type="Observation.referenceRange",
+            collection=True,
+        )
+        expr = gen.generate_column_expr(col, "t.resource")
+
+        assert "fhirpath(t.resource, 'referenceRange')" in expr
+        assert "type().name" not in expr
 
 
 class TestNumericTypes:

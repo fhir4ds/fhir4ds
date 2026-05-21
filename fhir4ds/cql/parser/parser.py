@@ -102,12 +102,12 @@ class CQLParser:
     an Abstract Syntax Tree (AST) representing the CQL program structure.
 
     Operator Precedence (lowest to highest):
-        - or
-        - xor
-        - and
         - implies
+        - or, xor
+        - and
+        - membership (in, contains)
         - equality (=, !=, ~, !~)
-        - comparison (<, >, <=, >=)
+        - comparison (<, >, <=, >=) and interval/timing operators
         - type operator (is, as)
         - addition (+, -, &, |)
         - multiplication (*, /, div, mod)
@@ -499,45 +499,37 @@ class CQLParser:
 
     def parse_expression(self) -> Expression:
         """Entry point for expression parsing."""
-        return self.parse_or_expression()
+        return self.parse_implies_expression()
 
-    def parse_or_expression(self) -> Expression:
-        """Parse OR expression (lowest precedence)."""
-        left = self.parse_xor_expression()
+    def parse_implies_expression(self) -> Expression:
+        """Parse IMPLIES expression."""
+        left = self.parse_or_expression()
 
-        while self.match_and_advance(TokenType.OR):
-            right = self.parse_xor_expression()
-            left = BinaryExpression(operator="or", left=left, right=right)
+        while self.match_and_advance(TokenType.IMPLIES):
+            right = self.parse_or_expression()
+            left = BinaryExpression(operator="implies", left=left, right=right)
 
         return left
 
-    def parse_xor_expression(self) -> Expression:
-        """Parse XOR expression."""
+    def parse_or_expression(self) -> Expression:
+        """Parse OR/XOR disjunction expressions."""
         left = self.parse_and_expression()
 
-        while self.match_and_advance(TokenType.XOR):
+        while self.match(TokenType.OR, TokenType.XOR):
+            operator = "or" if self.current().type == TokenType.OR else "xor"
+            self.advance()
             right = self.parse_and_expression()
-            left = BinaryExpression(operator="xor", left=left, right=right)
+            left = BinaryExpression(operator=operator, left=left, right=right)
 
         return left
 
     def parse_and_expression(self) -> Expression:
         """Parse AND expression."""
-        left = self.parse_implies_expression()
-
-        while self.match_and_advance(TokenType.AND):
-            right = self.parse_implies_expression()
-            left = BinaryExpression(operator="and", left=left, right=right)
-
-        return left
-
-    def parse_implies_expression(self) -> Expression:
-        """Parse IMPLIES expression."""
         left = self.parse_equality_expression()
 
-        while self.match_and_advance(TokenType.IMPLIES):
+        while self.match_and_advance(TokenType.AND):
             right = self.parse_equality_expression()
-            left = BinaryExpression(operator="implies", left=left, right=right)
+            left = BinaryExpression(operator="and", left=left, right=right)
 
         return left
 
@@ -1811,7 +1803,7 @@ class CQLParser:
         precision = precision_token.value.lower().rstrip('s')
 
         self.expect(TokenType.BETWEEN, "Expected 'between'")
-        left = self.parse_implies_expression()
+        left = self.parse_equality_expression()
         self.expect(TokenType.AND, "Expected 'and'")
         right = self.parse_implies_expression()
 
@@ -1826,7 +1818,7 @@ class CQLParser:
         precision = precision_token.value.lower().rstrip('s')
 
         self.expect(TokenType.BETWEEN, "Expected 'between'")
-        left = self.parse_implies_expression()
+        left = self.parse_equality_expression()
         self.expect(TokenType.AND, "Expected 'and'")
         right = self.parse_implies_expression()
 
@@ -1992,7 +1984,7 @@ class CQLParser:
         precision = precision_token.value.lower()
 
         self.expect(TokenType.OF, "Expected 'of'")
-        operand = self.parse_expression()
+        operand = self.parse_type_expression()
 
         # Return as a BinaryExpression with the precision as metadata
         return BinaryExpression(operator="precision of", left=Literal(value=precision, type="String"), right=operand)

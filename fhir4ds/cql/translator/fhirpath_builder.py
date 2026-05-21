@@ -363,6 +363,7 @@ def build_reference_expr(base_path: str = "") -> FHIRPathBuilder:
 def build_multi_coding_exists_expr(
     base_path: str,
     codes: list,
+    is_coding_type: bool = False,
 ) -> str:
     """
     Build a FHIRPath expression for checking if any of multiple codes match.
@@ -372,6 +373,7 @@ def build_multi_coding_exists_expr(
     Args:
         base_path: The base property path (e.g., "code").
         codes: List of dicts with 'system' and 'code' keys.
+        is_coding_type: If true, base_path already resolves to a Coding.
 
     Returns:
         FHIRPath expression string.
@@ -383,9 +385,10 @@ def build_multi_coding_exists_expr(
         )
         conditions.append(condition)
     or_conditions = " or ".join(conditions)
-    return str(
-        FHIRPathBuilder(base_path).coding().where(or_conditions).exists()
-    )
+    builder = FHIRPathBuilder(base_path)
+    if not is_coding_type:
+        builder = builder.coding()
+    return str(builder.where(or_conditions).exists())
 
 
 def build_where_return_expr(

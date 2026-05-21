@@ -16,9 +16,6 @@ def equality(ctx, x, y):
     if util.is_empty(x) or util.is_empty(y):
         return None
 
-    if type(x[0]) in DATETIME_NODES_LIST or type(y[0]) in DATETIME_NODES_LIST:
-        return datetime_equality(ctx, x, y)
-
     if len(x) != len(y):
         return False
 
@@ -28,18 +25,29 @@ def equality(ctx, x, y):
             return None
         return all(results)
 
+    if type(x[0]) in DATETIME_NODES_LIST or type(y[0]) in DATETIME_NODES_LIST:
+        return datetime_equality(ctx, x, y)
+
     a = util.parse_value(x[0])
     b = util.parse_value(y[0])
 
-    # UCUM year/month abbreviations ('a', 'mo') are NOT comparable to calendar
-    # keywords (year, month) for equality (=). They represent different systems:
-    # UCUM = approximate durations, calendar = exact calendar concepts.
+    # Calendar duration keywords and definite UCUM duration units above seconds
+    # are explicitly unequal for equality (=), not incomparable/empty.
     if isinstance(a, nodes.FP_Quantity) and isinstance(b, nodes.FP_Quantity):
-        _ucum_ym = {"'a'", "'mo'"}
-        _cal_ym = {"year", "years", "month", "months"}
-        if (a.unit in _ucum_ym and b.unit in _cal_ym) or \
-           (a.unit in _cal_ym and b.unit in _ucum_ym):
-            return None  # incompatible → empty
+        _ucum_duration = {"'a'", "'mo'", "'wk'", "'d'", "'h'", "'min'", "a", "mo", "wk", "d", "h", "min"}
+        _cal_duration = {
+            "year", "years", "month", "months", "week", "weeks", "day", "days",
+            "hour", "hours", "minute", "minutes",
+        }
+        if (a.unit in _ucum_duration and b.unit in _cal_duration) or \
+           (a.unit in _cal_duration and b.unit in _ucum_duration):
+            if not ctx.get("strict_mode"):
+                return False
+            _ucum_ym = {"'a'", "'mo'", "a", "mo"}
+            _cal_ym = {"year", "years", "month", "months"}
+            if (a.unit in _ucum_ym and b.unit in _cal_ym) or \
+               (a.unit in _cal_ym and b.unit in _ucum_ym):
+                return None
 
     if (
         isinstance(a, nodes.FP_Quantity)
@@ -47,6 +55,19 @@ def equality(ctx, x, y):
         and getattr(b, "unit", None) in nodes.FP_Quantity.mapUCUMCodeToTimeUnits.values()
     ):
         return a.deep_equal(b)
+
+    if isinstance(a, nodes.FP_Quantity) and isinstance(b, nodes.FP_Quantity):
+        if a.unit == b.unit:
+            return a.value == b.value
+        l_base = _quantity_base(a)
+        r_base = _quantity_base(b)
+        if l_base is None or r_base is None:
+            return a == b
+        l_value, l_unit = l_base
+        r_value, r_unit = r_base
+        if l_unit != r_unit:
+            return None
+        return l_value == r_value
 
     # FHIRPath §6.1.1: equality between incompatible types returns empty.
     # Only implicit conversions are allowed; Integer↔String is explicit.
@@ -96,11 +117,7 @@ def equivalence(ctx, x, y):
     if util.is_empty(x) or util.is_empty(y):
         return False
 
-    # For list equivalence (~ operator), lists should be compared element by element
-    # with order-insensitive matching per FHIRPath spec
-    # Check if both x and y are lists of primitive values
     if len(x) > 1 or len(y) > 1:
-        # Flatten both lists and compare as sets (order-insensitive)
         def flatten_items(items):
             result = []
             for item in items:
@@ -108,7 +125,7 @@ def equivalence(ctx, x, y):
                 if isinstance(data, list):
                     result.extend(data)
                 else:
-                    result.append(data)
+                    result.append(item)
             return result
 
         x_flat = flatten_items(x)
@@ -117,13 +134,19 @@ def equivalence(ctx, x, y):
         if len(x_flat) != len(y_flat):
             return False
 
-        # For equivalence, compare sorted lists
-        try:
-            return sorted(x_flat) == sorted(y_flat)
-        except TypeError:
-            # If items can't be sorted, compare as multisets
-            from collections import Counter
-            return Counter(str(item) for item in x_flat) == Counter(str(item) for item in y_flat)
+        matched = [False] * len(y_flat)
+        for left in x_flat:
+            found = False
+            for idx, right in enumerate(y_flat):
+                if matched[idx]:
+                    continue
+                if equivalence(ctx, [left], [right]) is True:
+                    matched[idx] = True
+                    found = True
+                    break
+            if not found:
+                return False
+        return True
 
     a = util.get_data(x[0])
     b = util.get_data(y[0])
@@ -264,21 +287,23 @@ def remove_duplicate_extension(list):
     return list
 
 
-def _try_convert_to_number(value):
-    """
-    Try to convert a string to a number (int or Decimal).
-    Returns the converted number if successful, otherwise returns the original value.
-    """
-    if isinstance(value, str):
-        try:
-            # Try int first
-            if '.' not in value and 'e' not in value.lower():
-                return int(value)
-            # Then try Decimal for floats
-            return Decimal(value)
-        except (ValueError, Exception):
-            pass
-    return value
+def _get_comparison_data(value):
+    """Return comparison data while preserving typed FHIR XML primitive numerics."""
+    if isinstance(value, nodes.ResourceNode):
+        type_info = value.get_type_info()
+        type_name = type_info.name if type_info else None
+        if isinstance(value.data, str):
+            if type_name in {"integer", "integer64", "unsignedInt", "positiveInt"}:
+                try:
+                    return int(value.data)
+                except ValueError:
+                    return value.data
+            if type_name == "decimal":
+                try:
+                    return Decimal(value.data)
+                except Exception:
+                    return value.data
+    return util.get_data(value)
 
 
 def typecheck(a, b):
@@ -301,8 +326,8 @@ def typecheck(a, b):
     check_length(a)
     check_length(b)
 
-    a = util.get_data(a[0])
-    b = util.get_data(b[0])
+    a = _get_comparison_data(a[0])
+    b = _get_comparison_data(b[0])
 
     # Try to convert Quantity dicts to FP_Quantity
     a_parsed = util.parse_value(a)
@@ -310,19 +335,6 @@ def typecheck(a, b):
     if isinstance(a_parsed, nodes.FP_Quantity) or isinstance(b_parsed, nodes.FP_Quantity):
         a = a_parsed
         b = b_parsed
-
-    # Try to convert string values that represent numbers to actual numbers.
-    # This handles cases where FHIR XML has numeric values as strings.
-    # Only apply numeric conversion when the other operand is not a date/time type,
-    # because year-only date strings like "2007" would otherwise be coerced to int.
-    a_is_time = isinstance(a, nodes.FP_TimeBase)
-    b_is_time = isinstance(b, nodes.FP_TimeBase)
-    if not a_is_time and not b_is_time:
-        a_converted = _try_convert_to_number(a)
-        b_converted = _try_convert_to_number(b)
-        if util.is_number(a_converted) or util.is_number(b_converted):
-            a = a_converted
-            b = b_converted
 
     lClass = a.__class__
     rClass = b.__class__

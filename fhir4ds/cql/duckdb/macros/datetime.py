@@ -28,9 +28,13 @@ def registerDateTimeMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # ============================================
     # Current time functions (no conflict with built-ins)
     # ============================================
-    con.execute("CREATE MACRO IF NOT EXISTS Now() AS CURRENT_TIMESTAMP")
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS Now() AS "
+        "regexp_replace(REPLACE(CAST(CURRENT_TIMESTAMP AS VARCHAR), ' ', 'T'), "
+        "'([+-][0-9]{2})$', '\\1:00')"
+    )
     con.execute("CREATE MACRO IF NOT EXISTS Today() AS CURRENT_DATE")
-    con.execute("CREATE MACRO IF NOT EXISTS TimeOfDay() AS CURRENT_TIME")
+    con.execute("CREATE MACRO IF NOT EXISTS TimeOfDay() AS 'T' || SUBSTR(CAST(CURRENT_TIME AS VARCHAR), 1, 8)")
 
     # ============================================
     # Date part extraction (use system. prefix to avoid recursion)

@@ -23,6 +23,64 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
+def _strip_comments_for_precheck(expression: str) -> str:
+    """Remove FHIRPath comments before wrapper-only syntax heuristics run."""
+    result: list[str] = []
+    i = 0
+    in_string = False
+    in_delimited_identifier = False
+
+    while i < len(expression):
+        ch = expression[i]
+
+        if in_string or in_delimited_identifier:
+            result.append(ch)
+            if ch == "\\" and i + 1 < len(expression):
+                result.append(expression[i + 1])
+                i += 2
+                continue
+            if in_string and ch == "'":
+                in_string = False
+            elif in_delimited_identifier and ch == "`":
+                in_delimited_identifier = False
+            i += 1
+            continue
+
+        if ch == "'":
+            in_string = True
+            result.append(ch)
+            i += 1
+            continue
+        if ch == "`":
+            in_delimited_identifier = True
+            result.append(ch)
+            i += 1
+            continue
+        if ch == "/" and i + 1 < len(expression) and expression[i + 1] == "/":
+            result.extend((" ", " "))
+            i += 2
+            while i < len(expression) and expression[i] not in "\r\n":
+                result.append(" ")
+                i += 1
+            continue
+        if ch == "/" and i + 1 < len(expression) and expression[i + 1] == "*":
+            result.extend((" ", " "))
+            i += 2
+            while i < len(expression):
+                if expression[i] == "*" and i + 1 < len(expression) and expression[i + 1] == "/":
+                    result.extend((" ", " "))
+                    i += 2
+                    break
+                result.append("\n" if expression[i] in "\r\n" else " ")
+                i += 1
+            continue
+
+        result.append(ch)
+        i += 1
+
+    return "".join(result)
+
+
 class FHIRPathEvaluator:
     """
     FHIRPath expression evaluator.
@@ -71,17 +129,18 @@ class FHIRPathEvaluator:
 
     def _initialize_parser(self) -> None:
         """Initialize the fhirpath parser (optional)."""
-        # Try vendored fhirpathpy first (sibling package at src/fhirpathpy)
-        try:
-            import fhirpathpy
-            self._fhirpath_module = fhirpathpy
-            return
-        except ImportError:
-            pass
-        # Try fhirpath-py as another fallback
+        # Prefer the in-repo engine. It carries the DuckDB wrapper invariants
+        # and recent FHIRPath singleton/strict-mode fixes that fhirpathpy lacks.
         try:
             import fhir4ds.fhirpath as _fhirpath
             self._fhirpath_module = _fhirpath
+            return
+        except ImportError:
+            pass
+        # Fall back to vendored fhirpathpy if the core engine is unavailable.
+        try:
+            import fhirpathpy
+            self._fhirpath_module = fhirpathpy
             return
         except ImportError:
             pass
@@ -124,10 +183,20 @@ class FHIRPathEvaluator:
 
         return False
 
-    # Pattern matching numeric literals directly followed by letters without a
-    # dot separator. Valid: "123.convertsToInteger()", Invalid: "123abc".
+    # Pattern matching numeric literals directly followed by non-unit names.
+    # Valid: "1month", "123.convertsToInteger()"; invalid: "123abc".
+    _TIME_QUANTITY_UNITS = frozenset({
+        "year", "years",
+        "month", "months",
+        "week", "weeks",
+        "day", "days",
+        "hour", "hours",
+        "minute", "minutes",
+        "second", "seconds",
+        "millisecond", "milliseconds",
+    })
     _INVALID_TOKEN_RE = re.compile(
-        r'(?<![a-zA-Z_.])(\d+)([a-zA-Z_])'
+        r'(?<![a-zA-Z_.])(\d+(?:\.\d+)?)([a-zA-Z_]\w*)'
     )
 
     # FHIRPath §3 — Reject structurally malformed path expressions that the
@@ -159,17 +228,25 @@ class FHIRPathEvaluator:
 
         self._expression = expression
 
-        # Validate: reject expressions where a numeric literal is directly followed
-        # by alphabetic characters (e.g., "123abc"), which indicates garbage after
-        # a valid prefix that many parsers silently accept.
+        # Validate: reject expressions where a numeric literal is directly
+        # followed by a non-unit identifier (e.g., "123abc"), which indicates
+        # garbage after a valid prefix that many parsers silently accept.
         stripped = expression.strip()
-        # Strip string literals before checking (they can contain anything)
-        no_strings = re.sub(r"'[^']*'", '', stripped)
+        # Strip string literals and delimited identifiers before checking (they
+        # can contain escaped token-looking text such as `omega\u03A9`).
+        no_strings = _strip_comments_for_precheck(stripped)
+        no_strings = re.sub(r"'(?:\\.|[^\\'])*'", 'S', no_strings)
+        no_strings = re.sub(r"`(?:\\.|[^\\`])*`", 'I', no_strings)
         # Strip Date/Time literals before checking
-        no_strings = re.sub(r'@[T0-9:.\-+Z]+', '', no_strings)
-        m = self._INVALID_TOKEN_RE.search(no_strings)
-        if m:
-            pos = m.start()
+        no_strings = re.sub(r'@[T0-9:.\-+Z]+', 'D', no_strings)
+        invalid_token = None
+        for m in self._INVALID_TOKEN_RE.finditer(no_strings):
+            if m.group(2) in self._TIME_QUANTITY_UNITS:
+                continue
+            invalid_token = m
+            break
+        if invalid_token:
+            pos = invalid_token.start()
             raise FHIRPathSyntaxError(
                 f"Invalid FHIRPath expression: unexpected characters at position {pos} "
                 f"in '{expression}'"
@@ -250,15 +327,7 @@ class FHIRPathEvaluator:
                 fhirpath_context = self._build_fhirpath_context(resource, context)
                 # Get the FHIR model for choice type resolution
                 fhir_model = get_fhir_model()
-                try:
-                    result = self._fhirpath_module.evaluate(resource, self._expression, fhirpath_context, fhir_model)
-                except ValueError as ve:
-                    # fhirpathpy raises ValueError for undefined environment variables
-                    # FHIRPath spec says undefined variables should return empty collection
-                    if 'undefined environment variable' in str(ve):
-                        result = []
-                    else:
-                        raise
+                result = self._fhirpath_module.evaluate(resource, self._expression, fhirpath_context, fhir_model)
             elif callable(self._compiled_expression):
                 result = self._compiled_expression(resource)
             elif hasattr(self._compiled_expression, 'evaluate'):
@@ -365,10 +434,11 @@ class FHIRPathEvaluator:
         if let_match:
             return self._evaluate_let_expression(resource, let_match, context)
 
-        # Handle variable references: $name
+        # Handle variable references: $name and $name.path. FHIRPath allows
+        # invoking/navigation from the current focus through $this, so split the
+        # variable token before evaluating any trailing expression.
         if expression.startswith('$'):
-            var_name = expression[1:]
-            return context.get_variable(var_name)
+            return self._evaluate_variable_expression(resource, expression, context)
 
         # Handle context variables: %context, %resource, %rootResource
         if expression.startswith('%'):
@@ -376,6 +446,43 @@ class FHIRPathEvaluator:
 
         # Handle path navigation
         return self._simple_evaluate(resource, expression, context)
+
+    _VARIABLE_EXPRESSION_RE = re.compile(r'^\$([A-Za-z_]\w*)(?:\.(.+))?$')
+
+    def _evaluate_variable_expression(
+        self,
+        resource: Any,
+        expression: str,
+        context: EvaluationContext,
+    ) -> Any:
+        """Evaluate a variable reference with optional chained navigation."""
+        match = self._VARIABLE_EXPRESSION_RE.match(expression)
+        if not match:
+            return context.get_variable(expression[1:])
+
+        var_name = match.group(1)
+        tail = match.group(2)
+        value = context.get_variable(var_name)
+
+        if not tail:
+            return value
+        if value in (None, []):
+            return []
+
+        inputs = value if isinstance(value, list) else [value]
+        results: list[Any] = []
+        tail_evaluator = FHIRPathEvaluator()
+        tail_evaluator.compile(tail)
+        for item in inputs:
+            if item is None:
+                continue
+            item_context = context.with_focus(item)
+            item_result = tail_evaluator.evaluate(item, context=item_context)
+            if isinstance(item_result, list):
+                results.extend(item_result)
+            elif item_result is not None:
+                results.append(item_result)
+        return results
 
     def _parse_let_expression(self, expression: str) -> dict[str, Any] | None:
         """

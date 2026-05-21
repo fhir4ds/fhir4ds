@@ -301,6 +301,57 @@ class FluentFunctionTranslator:
                 )
             )
 
+    @staticmethod
+    def _valueset_url_from_literal(value: Any) -> Optional[str]:
+        """Extract a canonical ValueSet URL from either legacy or structured form."""
+        if not isinstance(value, str):
+            return None
+        text = value.strip()
+        if not text:
+            return None
+        if not text.startswith("{"):
+            return text
+        try:
+            parsed = json.loads(text)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        identifier = parsed.get("id")
+        if not isinstance(identifier, str) or not identifier:
+            return None
+        version = parsed.get("version")
+        if isinstance(version, str) and version:
+            return f"{identifier}|{version}"
+        return identifier
+
+    def _resolve_valueset_argument(
+        self,
+        valueset_arg: SQLExpression,
+        context: SQLTranslationContext,
+    ) -> str:
+        """Resolve a fluent ValueSet argument for terminology membership UDFs."""
+        if isinstance(valueset_arg, SQLLiteral):
+            return self._valueset_url_from_literal(valueset_arg.value) or ""
+        if isinstance(valueset_arg, SQLIdentifier):
+            resolved = context.valuesets.get(valueset_arg.name)
+            if resolved is None and hasattr(context, "includes"):
+                for _lib in context.includes.values():
+                    if hasattr(_lib, "valuesets") and valueset_arg.name in _lib.valuesets:
+                        resolved = _lib.valuesets[valueset_arg.name]
+                        break
+            return self._valueset_url_from_literal(resolved) or resolved or ""
+        if isinstance(valueset_arg, SQLRaw):
+            raw = valueset_arg.raw_sql
+            literal_value: Optional[str] = None
+            if raw.startswith("'") and raw.endswith("'"):
+                literal_value = raw[1:-1].replace("''", "'")
+            elif raw.startswith('"') and raw.endswith('"'):
+                literal_value = raw[1:-1]
+            if literal_value is not None:
+                return self._valueset_url_from_literal(literal_value) or literal_value
+        return ""
+
 
     def translate_fluent_call(
         self,
@@ -1239,26 +1290,7 @@ class FluentFunctionTranslator:
         if not args:
             return SQLLiteral(value=False)
 
-        valueset_arg = args[0]
-        vs_url = ""
-        if isinstance(valueset_arg, SQLLiteral):
-            vs_url = str(valueset_arg.value)
-        elif isinstance(valueset_arg, SQLIdentifier):
-            resolved = context.valuesets.get(valueset_arg.name)
-            if resolved is None and hasattr(context, "includes"):
-                for _lib in context.includes.values():
-                    if hasattr(_lib, "valuesets") and valueset_arg.name in _lib.valuesets:
-                        resolved = _lib.valuesets[valueset_arg.name]
-                        break
-            vs_url = resolved or ""
-        else:
-            # Extract URL from AST node directly instead of round-tripping through SQL
-            if isinstance(valueset_arg, SQLRaw):
-                raw = valueset_arg.raw_sql
-                if raw.startswith("'") and raw.endswith("'"):
-                    vs_url = raw[1:-1].replace("''", "'")
-                elif raw.startswith('"') and raw.endswith('"'):
-                    vs_url = raw[1:-1]
+        vs_url = self._resolve_valueset_argument(args[0], context)
 
         # fhirpath_text(enc.resource, 'id')
         enc_id_expr = SQLFunctionCall(
@@ -1456,26 +1488,7 @@ class FluentFunctionTranslator:
         if not args:
             return SQLLiteral(value=False)
 
-        valueset_arg = args[0]
-        vs_url = ""
-        if isinstance(valueset_arg, SQLLiteral):
-            vs_url = str(valueset_arg.value)
-        elif isinstance(valueset_arg, SQLIdentifier):
-            resolved = context.valuesets.get(valueset_arg.name)
-            if resolved is None and hasattr(context, "includes"):
-                for _lib in context.includes.values():
-                    if hasattr(_lib, "valuesets") and valueset_arg.name in _lib.valuesets:
-                        resolved = _lib.valuesets[valueset_arg.name]
-                        break
-            vs_url = resolved or ""
-        else:
-            # Extract URL from AST node directly instead of round-tripping through SQL
-            if isinstance(valueset_arg, SQLRaw):
-                raw = valueset_arg.raw_sql
-                if raw.startswith("'") and raw.endswith("'"):
-                    vs_url = raw[1:-1].replace("''", "'")
-                elif raw.startswith('"') and raw.endswith('"'):
-                    vs_url = raw[1:-1]
+        vs_url = self._resolve_valueset_argument(args[0], context)
 
         enc_id_expr = SQLFunctionCall(
             name="fhirpath_text",

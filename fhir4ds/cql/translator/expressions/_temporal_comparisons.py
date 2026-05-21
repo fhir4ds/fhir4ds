@@ -50,6 +50,39 @@ class TemporalComparisonMixin:
 
         precisions = ["year", "month", "week", "day", "hour", "minute", "second", "millisecond"]
 
+        def _same_call(name: str, left_value: SQLExpression, right_value: SQLExpression, precision: str) -> SQLFunctionCall:
+            return SQLFunctionCall(
+                name=name,
+                args=[
+                    SQLCast(expression=left_value, target_type="VARCHAR"),
+                    SQLCast(expression=right_value, target_type="VARCHAR"),
+                    SQLLiteral(value=precision),
+                ],
+            )
+
+        def _is_interval(value: SQLExpression) -> bool:
+            return self._is_fhir_interval_expression(value)
+
+        def _as_interval(value: SQLExpression) -> SQLExpression:
+            return value if _is_interval(value) else self._point_as_interval(value)
+
+        def _same_interval(precision: str) -> SQLExpression:
+            left_interval = _as_interval(left)
+            right_interval = _as_interval(right)
+            starts_same = _same_call(
+                "cqlSameAsP",
+                SQLFunctionCall(name="intervalStart", args=[left_interval]),
+                SQLFunctionCall(name="intervalStart", args=[right_interval]),
+                precision,
+            )
+            ends_same = _same_call(
+                "cqlSameAsP",
+                SQLFunctionCall(name="intervalEnd", args=[left_interval]),
+                SQLFunctionCall(name="intervalEnd", args=[right_interval]),
+                precision,
+            )
+            return SQLBinaryOp(operator="AND", left=starts_same, right=ends_same)
+
         # Check for "same <precision> or before/after" patterns first
         # The CQL parser emits two forms depending on source syntax:
         #   "same month or before"      (from: same month or before X)
@@ -67,34 +100,19 @@ class TemporalComparisonMixin:
                 # CQL §19.16: Compare at specified precision with timezone
                 # normalization. Returns null if either operand is coarser than
                 # the specified precision (uncertain per CQL §18.4).
-                return SQLFunctionCall(
-                    name="cqlSameOrBeforeP",
-                    args=[
-                        SQLCast(expression=left, target_type="VARCHAR"),
-                        SQLCast(expression=right, target_type="VARCHAR"),
-                        SQLLiteral(value=precision),
-                    ],
-                )
+                left_value = SQLFunctionCall(name="intervalEnd", args=[left]) if _is_interval(left) else left
+                right_value = SQLFunctionCall(name="intervalStart", args=[right]) if _is_interval(right) else right
+                return _same_call("cqlSameOrBeforeP", left_value, right_value, precision)
 
             if operator == pattern_after or operator == pattern_after_alt:
-                return SQLFunctionCall(
-                    name="cqlSameOrAfterP",
-                    args=[
-                        SQLCast(expression=left, target_type="VARCHAR"),
-                        SQLCast(expression=right, target_type="VARCHAR"),
-                        SQLLiteral(value=precision),
-                    ],
-                )
+                left_value = SQLFunctionCall(name="intervalStart", args=[left]) if _is_interval(left) else left
+                right_value = SQLFunctionCall(name="intervalEnd", args=[right]) if _is_interval(right) else right
+                return _same_call("cqlSameOrAfterP", left_value, right_value, precision)
 
             if operator == pattern_as or operator == pattern_as_alt:
-                return SQLFunctionCall(
-                    name="cqlSameAsP",
-                    args=[
-                        SQLCast(expression=left, target_type="VARCHAR"),
-                        SQLCast(expression=right, target_type="VARCHAR"),
-                        SQLLiteral(value=precision),
-                    ],
-                )
+                if _is_interval(left) or _is_interval(right):
+                    return _same_interval(precision)
+                return _same_call("cqlSameAsP", left, right, precision)
 
         # Handle generic "same or before/after" without precision.
         # CQL §19.15-16: compare at minimum precision of both operands,

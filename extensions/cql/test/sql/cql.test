@@ -44,6 +44,40 @@ SELECT AgeInDaysAt('{"birthDate":"2000-01-01"}', '2000-01-31');
 ----
 30
 
+# =====================================================================
+# String regex UDFs
+# =====================================================================
+
+# CQL regex helpers use partial matching and support backreferences.
+query I
+SELECT cqlRegexMatches('aa', '(.)\1');
+----
+true
+
+# CQL regex helpers support lookahead in the native/browser surface.
+query I
+SELECT cqlRegexMatches('ab', '(?=b)');
+----
+true
+
+# Single-line mode: unescaped dot matches newline.
+query I
+SELECT cqlRegexMatches('a' || chr(10) || 'b', 'a.b');
+----
+true
+
+# ReplaceMatches helper supports backreference patterns.
+query I
+SELECT cqlRegexReplaceMatches('book', '(.)\1', 'X');
+----
+bXk
+
+# SplitOnMatches helper supports zero-width lookahead separators.
+query I
+SELECT array_to_string(cqlRegexSplitOnMatches('ab', '(?=b)'), '|');
+----
+a|b
+
 # Test NULL handling for age
 query I
 SELECT AgeInYears(NULL);
@@ -71,6 +105,49 @@ query I
 SELECT weeksBetween('2024-01-01', '2024-01-15');
 ----
 2
+
+# DurationBetween with one coarser operand returns uncertainty, not scalar low boundary.
+query I
+SELECT cqlDurationBetween('2012-01-02', '2012', 'month');
+----
+{"start":0,"end":11,"lowClosed":true,"highClosed":true}
+
+query I
+SELECT cqlDurationBetween('2005T', '2010T', 'year');
+----
+{"start":4,"end":5,"lowClosed":true,"highClosed":true}
+
+# DifferenceBetween with one coarser operand returns uncertainty, not scalar low boundary.
+query I
+SELECT cqlDifferenceBetween('2012-01-02', '2012', 'month');
+----
+{"start":0,"end":11,"lowClosed":true,"highClosed":true}
+
+# Uncertain comparisons preserve CQL three-valued logic.
+query I
+SELECT cqlUncertainCompare(cqlDifferenceBetween('2012-01-02', '2012', 'month'), '5', '>');
+----
+NULL
+
+query I
+SELECT cqlDifferenceBetween('2000-10-10T10:05:45.500-06:00', '2000-10-10T10:05:45.900-07:00', 'millisecond');
+----
+3600400
+
+query I
+SELECT dateAddQuantity('2005-05-10T05', '{"value":5,"unit":"hour"}');
+----
+2005-05-10T10
+
+query I
+SELECT dateAddQuantity('2005-05-10T05:05', '{"value":5,"unit":"minute"}');
+----
+2005-05-10T05:10
+
+query I
+SELECT dateAddQuantity('2014T', '{"value":24,"unit":"month"}');
+----
+2016T
 
 # Test dateTimeNow returns a string
 query I
@@ -289,6 +366,21 @@ SELECT dateComponent('2024-06-15', 'day');
 ----
 15
 
+query I
+SELECT dateComponent('T23:20:15.555', 'hour');
+----
+23
+
+query I
+SELECT dateComponent('2014', 'month');
+----
+NULL
+
+query I
+SELECT dateComponent('2014-01', 'day');
+----
+NULL
+
 # Test dateTimeTimeOfDay returns a time string
 query I
 SELECT length(dateTimeTimeOfDay()) > 0;
@@ -352,6 +444,18 @@ query I
 SELECT ratioNumeratorUnit('{"numerator": {"value": 5, "code": "mg"}, "denominator": {"value": 1, "code": "mL"}}');
 ----
 mg
+
+# RatioToString
+query I
+SELECT RatioToString('{"numerator": {"value": 10, "unit": "mg"}, "denominator": {"value": 2, "unit": "mL"}}');
+----
+10.0 'mg':2.0 'mL'
+
+# RatioToString invalid unit returns NULL
+query I
+SELECT RatioToString('{"numerator": {"value": 10, "unit": "not-a-unit"}, "denominator": {"value": 2, "unit": "mL"}}');
+----
+NULL
 
 # Ratio NULL input
 query I
@@ -425,7 +529,7 @@ true
 
 # quantityAdd - cross-unit (g + mg)
 query I
-SELECT quantityAdd('{"value": 1, "code": "g"}', '{"value": 500, "code": "mg"}') LIKE '%1.5%';
+SELECT quantityAdd('{"value": 1, "code": "g"}', '{"value": 500, "code": "mg"}') LIKE '%"value":1500%' AND quantityAdd('{"value": 1, "code": "g"}', '{"value": 500, "code": "mg"}') LIKE '%"code":"mg"%';
 ----
 true
 
@@ -475,11 +579,11 @@ SELECT SingletonFrom(CAST([] AS VARCHAR[]));
 ----
 NULL
 
-# SingletonFrom with >1 elements returns NULL
-query I
+# SingletonFrom with >1 elements raises a runtime error
+statement error
 SELECT SingletonFrom(['a', 'b']);
 ----
-NULL
+Invalid Input Error
 
 # SingletonFrom with NULL input
 query I
@@ -836,7 +940,7 @@ SELECT mathFloor('2.9');
 ----
 2
 
-# mathRound — half-up (CQL spec)
+# mathRound — CQL ties round toward positive infinity
 query I
 SELECT mathRound('2.5', '0');
 ----
@@ -850,7 +954,12 @@ SELECT mathRound('2.4', '0');
 query I
 SELECT mathRound('-2.5', '0');
 ----
--3
+-2
+
+query I
+SELECT mathRound('-2.55', '1');
+----
+-2.5
 
 # mathSqrt
 query I
@@ -900,6 +1009,12 @@ SELECT mathPower('4', '0.5');
 ----
 2
 
+# mathPower unrepresentable result → NULL
+query I
+SELECT mathPower('-2', '0.5');
+----
+NULL
+
 # mathLog base 10
 query I
 SELECT mathLog('100', '10');
@@ -925,6 +1040,37 @@ NULL
 
 query I
 SELECT mathRound(NULL, '0');
+----
+NULL
+
+# predecessor/successor boundary values that cannot be represented → NULL
+query I
+SELECT predecessorOf('0001-01-01');
+----
+NULL
+
+query I
+SELECT successorOf('9999-12-31');
+----
+NULL
+
+query I
+SELECT predecessorOf('T00:00:00.000');
+----
+NULL
+
+query I
+SELECT successorOf('T23:59:59.999');
+----
+NULL
+
+query I
+SELECT predecessorOf(CAST('-9223372036854775808' AS BIGINT));
+----
+NULL
+
+query I
+SELECT successorOf(CAST('9223372036854775807' AS BIGINT));
 ----
 NULL
 
@@ -963,6 +1109,17 @@ SELECT quantityModulo('{"value":10,"code":"mg","system":"http://unitsofmeasure.o
 ----
 {"value":1.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
 
+# quantityModulo: compatible units convert the right operand to the left unit
+query I
+SELECT quantityModulo('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":3,"code":"g","system":"http://unitsofmeasure.org"}');
+----
+{"value":10.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+query I
+SELECT quantityModulo('{"value":10,"code":"g","system":"http://unitsofmeasure.org"}', '{"value":3000,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+{"value":1.0,"unit":"g","code":"g","system":"http://unitsofmeasure.org"}
+
 # quantityModulo: division by zero → NULL
 query I
 SELECT quantityModulo('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":0,"code":"mg","system":"http://unitsofmeasure.org"}');
@@ -974,6 +1131,17 @@ query I
 SELECT quantityTruncatedDivide('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":3,"code":"mg","system":"http://unitsofmeasure.org"}');
 ----
 {"value":3.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+# quantityTruncatedDivide: compatible units convert the right operand to the left unit
+query I
+SELECT quantityTruncatedDivide('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":3,"code":"g","system":"http://unitsofmeasure.org"}');
+----
+{"value":0.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+query I
+SELECT quantityTruncatedDivide('{"value":10,"code":"g","system":"http://unitsofmeasure.org"}', '{"value":3000,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+{"value":3.0,"unit":"g","code":"g","system":"http://unitsofmeasure.org"}
 
 # quantityTruncatedDivide: negative
 query I
@@ -1005,6 +1173,30 @@ SELECT ToQuantity('abc');
 ----
 NULL
 
+# ToQuantity: CQL quantity format requires a digit before decimal
+query I
+SELECT ToQuantity('.5 ''cm''');
+----
+NULL
+
+# ToQuantity: exponent notation is not a CQL quantity string
+query I
+SELECT ToQuantity('1e2 ''cm''');
+----
+NULL
+
+# ToQuantity: invalid unit designator → NULL
+query I
+SELECT ToQuantity('5 ''not-a-unit''');
+----
+NULL
+
+# ToQuantity: CQL calendar duration keyword is valid
+query I
+SELECT ToQuantity('5 ''year''');
+----
+{"value":5.0,"unit":"year","code":"year","system":"http://unitsofmeasure.org"}
+
 # ToQuantity: NULL → NULL
 query I
 SELECT ToQuantity(NULL);
@@ -1016,6 +1208,18 @@ query I
 SELECT ToConcept('{"code":"123","system":"http://example.com"}');
 ----
 {"codes":[{"code":"123","system":"http://example.com"}]}
+
+# ToConcept: flatten JSON array of codes
+query I
+SELECT ToConcept('[{"code":"x"},{"code":"y"}]');
+----
+{"codes":[{"code":"x"},{"code":"y"}]}
+
+# ToConcept: primitive JSON is not a Code
+query I
+SELECT ToConcept('"x"');
+----
+NULL
 
 # ToConcept: NULL → NULL
 query I
@@ -1519,6 +1723,12 @@ SELECT mathExp('0');
 ----
 1
 
+# mathExp: overflow → error
+statement error
+SELECT mathExp('1000');
+----
+Invalid Error
+
 # mathLn: 1
 query I
 SELECT mathLn('1');
@@ -1561,11 +1771,11 @@ SELECT mathPower('0', '5');
 ----
 0
 
-# mathRound: negative half-up
+# mathRound: negative tie rounds toward positive infinity
 query I
 SELECT mathRound('-2.5', '0');
 ----
--3
+-2
 
 # mathRound: positive with precision
 query I
@@ -1628,6 +1838,17 @@ query I
 SELECT quantityAdd('{"value":10,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":5,"code":"mg","system":"http://unitsofmeasure.org"}');
 ----
 {"value":15.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+# quantityAdd: cross-unit uses most granular unit independent of operand order
+query I
+SELECT quantityAdd('{"value":1,"code":"g","system":"http://unitsofmeasure.org"}', '{"value":500,"code":"mg","system":"http://unitsofmeasure.org"}');
+----
+{"value":1500.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
+
+query I
+SELECT quantityAdd('{"value":500,"code":"mg","system":"http://unitsofmeasure.org"}', '{"value":1,"code":"g","system":"http://unitsofmeasure.org"}');
+----
+{"value":1500.0,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}
 
 # quantitySubtract: same units
 query I
@@ -1996,9 +2217,204 @@ SELECT intervalIntersect(intervalFromBounds('1','5',true,true), intervalFromBoun
 {"low": "3", "high": "5", "lowClosed": true, "highClosed": true}
 
 query I
+SELECT intervalIntersect(intervalFromBounds('__null__','5',true,true), intervalFromBounds('3','7',true,true));
+----
+{"low": "3", "high": "5", "lowClosed": true, "highClosed": true}
+
+query I
+SELECT intervalIntersect(intervalFromBounds('3','__null__',true,true), intervalFromBounds('1','5',true,true));
+----
+{"low": "3", "high": "5", "lowClosed": true, "highClosed": true}
+
+query I
+SELECT intervalIntersect(intervalFromBounds('1','10',true,true), intervalFromBounds('5','__null__',true,false));
+----
+{"low": "5", "high": null, "lowClosed": true, "highClosed": false}
+
+query I
+SELECT intervalMeetsBefore(intervalFromBounds('1','3',true,true), intervalFromBounds('3','5',true,true));
+----
+false
+
+query I
+SELECT intervalMeets(intervalFromBounds('T03','T04',true,true), intervalFromBounds('T05','T06',true,true));
+----
+true
+
+query I
+SELECT intervalOnOrAfter(intervalFromBounds('3','6',false,true), intervalFromBounds('1','4',true,true));
+----
+true
+
+query I
+SELECT intervalOnOrBefore(intervalFromBounds('1','4',true,false), intervalFromBounds('3','6',true,true));
+----
+true
+
+query I
+SELECT intervalOnOrAfter(intervalFromBounds('2014','2014',true,true), intervalFromBounds('2014-06-01','2014-06-02',true,true));
+----
+NULL
+
+query I
+SELECT intervalOnOrBefore(intervalFromBounds('2014','2014',true,true), intervalFromBounds('2014-06-01','2014-06-02',true,true));
+----
+NULL
+
+query I
+SELECT intervalOverlaps(intervalFromBounds('{"value":1,"unit":"g"}','{"value":3,"unit":"g"}',true,true), intervalFromBounds('{"value":1,"unit":"cm"}','{"value":2,"unit":"cm"}',true,true));
+----
+NULL
+
+query I
+SELECT intervalFromBounds('{"value":1000,"unit":"mg"}','{"value":2,"unit":"g"}',true,true);
+----
+{"low": {"value":1000,"unit":"mg"}, "high": {"value":2,"unit":"g"}, "lowClosed": true, "highClosed": true}
+
+query I
+SELECT intervalIntersect(intervalFromBounds('{"value":1,"unit":"g"}','{"value":3,"unit":"g"}',true,true), intervalFromBounds('{"value":1500,"unit":"mg"}','{"value":2500,"unit":"mg"}',true,true));
+----
+{"low": {"value":1500,"unit":"mg"}, "high": {"value":2500,"unit":"mg"}, "lowClosed": true, "highClosed": true}
+
+query I
+SELECT intervalEquivalent(NULL, NULL);
+----
+true
+
+query I
+SELECT intervalEquivalent(NULL, intervalFromBounds('1','2',true,true));
+----
+false
+
+query I
+SELECT intervalOverlapsPrecise(intervalFromBounds('2014','2014',true,true), intervalFromBounds('2014-06-01','2014-06-02',true,true), 'day');
+----
+NULL
+
+query I
+SELECT intervalContainsPrecise(intervalFromBounds('2014-06-01T00','2014-06-01T01',true,true), '2014-06-01T12', 'day');
+----
+true
+
+query I
+SELECT intervalContainsPrecise(intervalFromBounds('2014-01-01','2014-12-31',true,true), '2014', 'day');
+----
+NULL
+
+query I
+SELECT pointFrom(intervalFromBounds('4','5',false,true));
+----
+5
+
+query I
+SELECT pointFrom(intervalFromBounds('4','5',true,false));
+----
+4
+
+query I
+SELECT intervalWidth(intervalFromBounds('4','9',false,true));
+----
+4
+
+query I
+SELECT intervalContains(intervalUnion(intervalFromBounds('0','3',false,true), intervalFromBounds('1','6',true,true)), '0');
+----
+false
+
+query I
+SELECT intervalStart(intervalUnion(intervalFromBounds('0','3',false,true), intervalFromBounds('1','6',true,true)));
+----
+1
+
+query I
+SELECT intervalContains(intervalUnion(intervalFromBounds('1','3',true,false), intervalFromBounds('1','2',true,true)), '3');
+----
+false
+
+query I
+SELECT intervalEnd(intervalUnion(intervalFromBounds('1','3',true,false), intervalFromBounds('1','2',true,true)));
+----
+2
+
+query I
+SELECT intervalStart(intervalFromBounds('1.0','5.0',false,true));
+----
+1.00000001
+
+query I
+SELECT intervalEnd(intervalFromBounds('1.0','5.0',true,false));
+----
+4.99999999
+
+query I
+SELECT intervalWidth(intervalFromBounds('1.0','5.0',true,false));
+----
+3.99999999
+
+query I
+SELECT interval_size(intervalFromBounds('1.0','5.0',true,true));
+----
+4.00000001
+
+query I
+SELECT interval_size(intervalFromBounds('1.0','5.0',true,false));
+----
+4.0
+
+query I
+SELECT pointFrom(intervalFromBounds('1.0','1.00000002',false,false));
+----
+1.00000001
+
+query I
+SELECT intervalWidth(intervalFromBounds('{"value":1,"unit":"g"}','{"value":2000,"unit":"mg"}',true,true));
+----
+{"value":1.0,"unit":"g","code":"g","system":"http://unitsofmeasure.org"}
+
+query I
+SELECT intervalProperlyContains(intervalFromBounds('1','5',true,true), '1');
+----
+false
+
+query I
+SELECT intervalProperlyContains(intervalFromBounds('1','5',true,true), '5');
+----
+false
+
+query I
+SELECT intervalProperlyContains(intervalFromBounds('1','1',true,true), '1');
+----
+false
+
+query I
+SELECT intervalStartsSame(intervalFromBounds('0','5',false,true), intervalFromBounds('1','5',true,true));
+----
+true
+
+query I
+SELECT intervalStartsSame(intervalFromBounds('1','10',true,true), intervalFromBounds('1','5',true,true));
+----
+false
+
+query I
+SELECT intervalEndsSame(intervalFromBounds('0','5',true,true), intervalFromBounds('1','5',true,true));
+----
+false
+
+query I
 SELECT HighBoundary('2024-01', 8);
 ----
 2024-01-31
+
+query I
+SELECT HighBoundary('2024', 17);
+----
+NULL
+
+query I
+SELECT LowBoundary('T10:30', 10);
+----
+NULL
 
 query I
 SELECT quantityToInterval('{"value": 2, "unit": "day"}');

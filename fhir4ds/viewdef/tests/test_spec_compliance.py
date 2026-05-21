@@ -86,7 +86,7 @@ def assert_spec_error_is_raised(test_info, generator):
     except EXPECTED_SPEC_ERROR_TYPES:
         return
 
-    pytest.xfail("Spec expectError case is accepted by current parser/generator")
+    pytest.fail("Spec expectError case is accepted by current parser/generator")
 
 
 @pytest.fixture(scope="module")

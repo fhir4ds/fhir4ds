@@ -13,9 +13,13 @@ Ratio format: FHIR Ratio JSON {"numerator": {"value": 5, "unit": "mg"}, "denomin
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
+import math
 from typing import TYPE_CHECKING
 
 import orjson
+
+from .quantity import is_valid_quantity_object
 
 if TYPE_CHECKING:
     import duckdb
@@ -26,6 +30,8 @@ if TYPE_CHECKING:
 import logging
 
 _logger = logging.getLogger(__name__)
+
+
 def _parse_ratio(value: str) -> dict | None:
     """Parse FHIR Ratio JSON."""
     if not value:
@@ -37,13 +43,26 @@ def _parse_ratio(value: str) -> dict | None:
         return None
 
 
+def _decimal_value(value) -> float | None:
+    try:
+        decimal_value = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    if not decimal_value.is_finite():
+        return None
+    float_value = float(decimal_value)
+    return float_value if math.isfinite(float_value) else None
+
+
 def ratioNumeratorValue(ratio: str | None) -> float | None:
     """Get numerator value from ratio."""
     r = _parse_ratio(ratio)
     if not r:
         return None
     num = r.get("numerator", {})
-    return num.get("value")
+    if not isinstance(num, dict):
+        return None
+    return _decimal_value(num.get("value"))
 
 
 def ratioDenominatorValue(ratio: str | None) -> float | None:
@@ -52,7 +71,9 @@ def ratioDenominatorValue(ratio: str | None) -> float | None:
     if not r:
         return None
     denom = r.get("denominator", {})
-    return denom.get("value")
+    if not isinstance(denom, dict):
+        return None
+    return _decimal_value(denom.get("value"))
 
 
 def ratioValue(ratio: str | None) -> float | None:
@@ -72,6 +93,8 @@ def ratioNumeratorUnit(ratio: str | None) -> str | None:
     if not r:
         return None
     num = r.get("numerator", {})
+    if not isinstance(num, dict):
+        return None
     return num.get("unit") or num.get("code")
 
 
@@ -81,7 +104,31 @@ def ratioDenominatorUnit(ratio: str | None) -> str | None:
     if not r:
         return None
     denom = r.get("denominator", {})
+    if not isinstance(denom, dict):
+        return None
     return denom.get("unit") or denom.get("code")
+
+
+def _format_quantity_text(quantity) -> str | None:
+    if not is_valid_quantity_object(quantity):
+        return None
+    value = _decimal_value(quantity.get("value"))
+    if value is None:
+        return None
+    unit = quantity.get("unit") or quantity.get("code") or "1"
+    return f"{value} '{unit}'"
+
+
+def RatioToString(ratio: str | None) -> str | None:
+    """Format a CQL Ratio as ``<quantity>:<quantity>`` text."""
+    r = _parse_ratio(ratio)
+    if not isinstance(r, dict):
+        return None
+    numerator = _format_quantity_text(r.get("numerator"))
+    denominator = _format_quantity_text(r.get("denominator"))
+    if numerator is None or denominator is None:
+        return None
+    return f"{numerator}:{denominator}"
 
 
 # ========================================
@@ -115,6 +162,12 @@ def registerRatioUdfs(con: "duckdb.DuckDBPyConnection") -> None:
         ratioDenominatorUnit,
         null_handling="special"
     )
+    con.create_function(
+        "RatioToString",
+        RatioToString,
+        return_type="VARCHAR",
+        null_handling="special"
+    )
 
 
 __all__ = [
@@ -124,4 +177,5 @@ __all__ = [
     "ratioValue",
     "ratioNumeratorUnit",
     "ratioDenominatorUnit",
+    "RatioToString",
 ]

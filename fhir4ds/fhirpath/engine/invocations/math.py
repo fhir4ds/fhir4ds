@@ -37,6 +37,55 @@ def ensure_number_singleton(x):
     return data
 
 
+def ensure_integer_singleton(x):
+    data = util.get_data(x)
+
+    if not isinstance(data, int) or isinstance(data, bool):
+        if not isinstance(data, list) or len(data) != 1:
+            raise FHIRPathError("Expected list with integer, but got " + str(data))
+
+        value = util.get_data(data[0])
+
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise FHIRPathError("Expected integer, but got " + str(x))
+
+        return value
+    return data
+
+
+_FHIRPATH_INT32_MIN = -2147483648
+_FHIRPATH_INT32_MAX = 2147483647
+
+
+def _numeric_arithmetic_result(x, y, result):
+    if (
+        isinstance(x, int)
+        and not isinstance(x, bool)
+        and isinstance(y, int)
+        and not isinstance(y, bool)
+        and not (_FHIRPATH_INT32_MIN <= result <= _FHIRPATH_INT32_MAX)
+    ):
+        return Decimal(result)
+    return result
+
+
+def _quantity_add_or_sub(x, y, sign):
+    if x.unit == y.unit:
+        result = x.value + sign * y.value
+        return nodes.FP_Quantity(nodes.FP_Quantity._normalize_quantity_value(result), x.unit)
+
+    x_base = nodes.FP_Quantity.conv_unit_to_base(x.unit, x.value)
+    y_base = nodes.FP_Quantity.conv_unit_to_base(y.unit, y.value)
+    if x_base.unit != y_base.unit:
+        return []
+
+    result = x_base.value + sign * y_base.value
+    return nodes.FP_Quantity(
+        nodes.FP_Quantity._normalize_quantity_value(result),
+        x_base.unit,
+    )
+
+
 def amp(ctx, x="", y=""):
     if isinstance(x, list) and len(x) > 1:
         raise FHIRPathError("Cannot concatenate a collection with more than one item")
@@ -69,15 +118,10 @@ def minus(ctx, xs_, ys_):
     y = util.get_data(util.val_data_converted(ys[0]))
 
     if util.is_number(x) and util.is_number(y):
-        return x - y
+        return _numeric_arithmetic_result(x, y, x - y)
 
     if isinstance(x, nodes.FP_Quantity) and isinstance(y, nodes.FP_Quantity):
-        if x.unit == y.unit:
-            return nodes.FP_Quantity(x.value - y.value, x.unit)
-        converted = nodes.FP_Quantity.conv_unit_to(y.unit, y.value, x.unit)
-        if converted is not None:
-            return nodes.FP_Quantity(x.value - converted.value, x.unit)
-        return []
+        return _quantity_add_or_sub(x, y, -1)
 
     if isinstance(x, nodes.FP_TimeBase) and isinstance(y, nodes.FP_Quantity):
         return x.plus(nodes.FP_Quantity(-y.value, y.unit))
@@ -91,6 +135,8 @@ def minus(ctx, xs_, ys_):
 
 
 def mul(ctx, x, y):
+    if util.is_number(x) and util.is_number(y):
+        return _numeric_arithmetic_result(x, y, x * y)
     return x * y
 
 
@@ -151,15 +197,10 @@ def plus(ctx, xs_, ys_):
         return x + y
 
     if util.is_number(x) and util.is_number(y):
-        return x + y
+        return _numeric_arithmetic_result(x, y, x + y)
 
     if isinstance(x, nodes.FP_Quantity) and isinstance(y, nodes.FP_Quantity):
-        if x.unit == y.unit:
-            return nodes.FP_Quantity(x.value + y.value, x.unit)
-        converted = nodes.FP_Quantity.conv_unit_to(y.unit, y.value, x.unit)
-        if converted is not None:
-            return nodes.FP_Quantity(x.value + converted.value, x.unit)
-        return []
+        return _quantity_add_or_sub(x, y, 1)
 
     if isinstance(x, nodes.FP_TimeBase) and isinstance(y, nodes.FP_Quantity):
         return x.plus(y)
@@ -262,11 +303,17 @@ def rround(ctx, x, acc=None):
         return []
 
     num = Decimal(ensure_number_singleton(x))
-    if acc is None or is_empty(acc):
+    if acc is None:
         # FHIRPath §5.5: ties round towards positive infinity (ROUND_HALF_UP)
         return int(num.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
 
-    num2 = ensure_number_singleton(acc)
+    if is_empty(acc):
+        return []
+
+    num2 = ensure_integer_singleton(acc)
+    if num2 < 0:
+        raise FHIRPathError("round() precision must be >= 0")
+
     degree = 10 ** Decimal(num2)
 
     # Use ROUND_HALF_UP for spec-compliant rounding

@@ -123,6 +123,7 @@ def register_cql(
     from fhir4ds.cql.duckdb.udf.age import registerAgeUdfs
     from fhir4ds.cql.duckdb.udf.aggregate import registerAggregateUdfs
     from fhir4ds.cql.duckdb.udf.clinical import registerClinicalUdfs
+    from fhir4ds.cql.duckdb.udf.conversion import registerConversionCheckUdfs
     from fhir4ds.cql.duckdb.udf.datetime import registerDatetimeUdfs
     from fhir4ds.cql.duckdb.udf.interval import registerIntervalUdfs
     from fhir4ds.cql.duckdb.udf.valueset import registerValuesetUdfs
@@ -219,7 +220,8 @@ def register_cql(
 
     for fn, label in [
         (registerAgeUdfs, "age"), (registerAggregateUdfs, "aggregate"),
-        (registerClinicalUdfs, "clinical"), (registerDatetimeUdfs, "datetime"),
+        (registerClinicalUdfs, "clinical"), (registerConversionCheckUdfs, "conversion"),
+        (registerDatetimeUdfs, "datetime"),
         (registerIntervalUdfs, "interval"), (registerValuesetUdfs, "valueset"),
         (registerRatioUdfs, "ratio"), (registerQuantityUdfs, "quantity"),
         (registerListUdfs, "list"), (registerVariableUdfs, "variable"),

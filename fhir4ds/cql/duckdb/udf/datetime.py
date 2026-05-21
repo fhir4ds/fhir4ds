@@ -22,9 +22,58 @@ if TYPE_CHECKING:
 
 import calendar
 import logging
+import math
 from datetime import timedelta, datetime as _dt_class
 
 _logger = logging.getLogger(__name__)
+
+
+def _split_timezone_suffix(value: str) -> tuple[str, str]:
+    """Split and validate a CQL timezone suffix."""
+    s = value.strip()
+    if not s:
+        return s, ""
+
+    is_time_only = s.startswith("T") or (
+        len(s) >= 2 and s[:2].isdigit() and (len(s) == 2 or s[2] == ":")
+    )
+    looks_date_like = len(s) >= 4 and s[:4].isdigit() and (len(s) == 4 or s[4] in "-T ")
+    if not is_time_only and not looks_date_like:
+        return s, ""
+    search_start = 1 if is_time_only else 10
+
+    sign_positions = [
+        pos for pos in (s.find("+", search_start), s.find("-", search_start)) if pos >= 0
+    ]
+    if sign_positions:
+        idx = min(sign_positions)
+        suffix = s[idx:]
+        if (
+            len(suffix) != 6
+            or suffix[0] not in "+-"
+            or suffix[3] != ":"
+            or not suffix[1:3].isdigit()
+            or not suffix[4:6].isdigit()
+        ):
+            raise ValueError(f"Invalid timezone offset {suffix!r}")
+        hours = int(suffix[1:3])
+        minutes = int(suffix[4:6])
+        if hours > 14 or minutes > 59 or (hours == 14 and minutes != 0):
+            raise ValueError(f"Invalid timezone offset {suffix!r}")
+        return s[:idx], suffix
+
+    if s.endswith("Z") and len(s) > search_start:
+        return s[:-1], "Z"
+    return s, ""
+
+
+def _has_invalid_timezone_suffix(value: str) -> bool:
+    try:
+        _split_timezone_suffix(value)
+        return False
+    except ValueError:
+        return True
+
 
 # Unit aliases for dateAddQuantity - maps unit string to (handler_type, timedelta_key)
 _TIMEDELTA_UNITS: dict[str, str] = {
@@ -66,6 +115,8 @@ def _parse_time(value: str) -> "time | None":
         return None
     try:
         s = value.lstrip("T").strip()
+        body, tz_suffix = _split_timezone_suffix(s)
+        s = body + ("+00:00" if tz_suffix == "Z" else tz_suffix)
         # Normalize fractional seconds to 6 digits for fromisoformat compatibility
         if '.' in s:
             base, frac = s.split('.', 1)
@@ -84,7 +135,8 @@ def _parse_datetime(value: str) -> datetime | None:
     if not value:
         return None
     try:
-        val = value.strip().replace("Z", "+00:00")
+        val, tz_suffix = _split_timezone_suffix(value.strip())
+        val = val + ("+00:00" if tz_suffix == "Z" else tz_suffix)
 
         # Handle partial-precision strings
         # Year-only with T suffix: '2014T' → datetime(2014, 1, 1)
@@ -93,6 +145,10 @@ def _parse_datetime(value: str) -> datetime | None:
         # Year-month with T suffix: '2014-01T' → datetime(2014, 1, 1)
         if val.endswith('T') and len(val) == 8 and val[4] == '-':
             return datetime(int(val[:4]), int(val[5:7]), 1)
+        # Day-precision DateTime with no time components: '2014-01-15T'
+        if val.endswith('T') and len(val) == 11 and val[4] == '-' and val[7] == '-':
+            d = date.fromisoformat(val[:10])
+            return datetime(d.year, d.month, d.day)
         # Year-only: '2014' → datetime(2014, 1, 1)
         if len(val) == 4 and val.isdigit():
             return datetime(int(val), 1, 1)
@@ -137,6 +193,8 @@ def _parse_to_datetime(iso_str: str) -> datetime | None:
     if iso_str is None:
         return None
     s = iso_str.strip()
+    if _has_invalid_timezone_suffix(s):
+        return None
     is_time = s.startswith('T') or (len(s) < 10 and ':' in s and '-' not in s)
     if is_time:
         comps = _parse_components(s)
@@ -259,6 +317,30 @@ def _compute_duration(s: datetime, e: datetime, unit: str, is_week: bool) -> int
     return int(total_seconds / 86400)
 
 
+def _compute_difference(s: datetime, e: datetime, unit: str, is_week: bool) -> int | None:
+    """Compute CQL difference boundary crossings between two datetimes."""
+    if unit in ('year', 'years'):
+        return e.year - s.year
+    if unit in ('month', 'months'):
+        return (e.year - s.year) * 12 + (e.month - s.month)
+    if is_week or unit in ('week', 'weeks'):
+        return int((e.date() - s.date()).days / 7)
+    if unit in ('day', 'days'):
+        return (e.date() - s.date()).days
+    total_seconds = _elapsed_seconds(s, e)
+    if total_seconds is None:
+        return None
+    if unit in ('hour', 'hours'):
+        return int(total_seconds / 3600)
+    if unit in ('minute', 'minutes'):
+        return int(total_seconds / 60)
+    if unit in ('second', 'seconds'):
+        return int(total_seconds)
+    if unit in ('millisecond', 'milliseconds'):
+        return int(total_seconds * 1000)
+    return (e.date() - s.date()).days
+
+
 def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) -> str:
     """CQL §22.21 DurationBetween with uncertainty interval support.
 
@@ -276,18 +358,17 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
     s_idx = _PRECISION_INDEX.get(s_prec, 0)
     e_idx = _PRECISION_INDEX.get(e_prec, 0)
 
-    # CQL §22.21: If both arguments have precision <= the unit precision,
-    # result is an uncertainty interval. If at least one has finer precision,
-    # the result is certain (computed using low boundaries for partial values).
-    # Special case: Date values (no time component, detected by absence of 'T')
-    # at day precision are fully specified — no sub-day uncertainty unlike
-    # DateTime. A day-precision DateTime (e.g., 2024-01-15T00:00:00) still has
-    # sub-day uncertainty because time components are specified but imprecise.
+    # CQL §22.21: A result is certain when both operands carry at least the
+    # requested precision. Missing components only create uncertainty when an
+    # operand is coarser than the requested unit.
     is_date_only = 'T' not in start_str and 'T' not in end_str
     date_unit = unit_key in ('year', 'month', 'day', 'week')
-    has_finer_precision = s_idx > unit_idx or e_idx > unit_idx
     date_fully_specified = is_date_only and date_unit and s_prec == 'day' and e_prec == 'day'
-    if has_finer_precision or date_fully_specified:
+    if date_unit and not date_fully_specified:
+        both_sufficient_precision = s_idx > unit_idx and e_idx > unit_idx
+    else:
+        both_sufficient_precision = s_idx >= unit_idx and e_idx >= unit_idx
+    if both_sufficient_precision or date_fully_specified:
         # Both have sufficient precision — certain result
         s = _parse_to_datetime(start_str)
         e = _parse_to_datetime(end_str)
@@ -309,6 +390,52 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
     if min_val is None or max_val is None:
         return None
 
+    if min_val == max_val:
+        return str(min_val)
+
+    return orjson.dumps({
+        "start": min_val, "end": max_val,
+        "lowClosed": True, "highClosed": True
+    }).decode('utf-8')
+
+
+def _difference_between_with_uncertainty(start_str: str, end_str: str, unit: str) -> str:
+    """CQL §22.22 DifferenceBetween with uncertainty interval support."""
+    s_prec = _infer_precision(start_str)
+    e_prec = _infer_precision(end_str)
+
+    unit_key = unit.rstrip('s')
+    is_week = unit_key == 'week'
+    if is_week:
+        unit_key = 'day'
+
+    unit_idx = _PRECISION_INDEX.get(unit_key, 2)
+    s_idx = _PRECISION_INDEX.get(s_prec, 0)
+    e_idx = _PRECISION_INDEX.get(e_prec, 0)
+
+    is_date_only = 'T' not in start_str and 'T' not in end_str
+    date_unit = unit_key in ('year', 'month', 'day', 'week')
+    both_sufficient_precision = s_idx >= unit_idx and e_idx >= unit_idx
+    date_fully_specified = is_date_only and date_unit and s_prec == 'day' and e_prec == 'day'
+    if both_sufficient_precision or date_fully_specified:
+        s = _parse_to_datetime(start_str)
+        e = _parse_to_datetime(end_str)
+        if s is None or e is None:
+            return None
+        difference = _compute_difference(s, e, unit, is_week)
+        return None if difference is None else str(difference)
+
+    s_low = _low_boundary(start_str)
+    s_high = _high_boundary(start_str)
+    e_low = _low_boundary(end_str)
+    e_high = _high_boundary(end_str)
+
+    min_val = _compute_difference(s_high, e_low, unit, is_week)
+    max_val = _compute_difference(s_low, e_high, unit, is_week)
+    if min_val is None or max_val is None:
+        return None
+    if min_val > max_val:
+        min_val, max_val = max_val, min_val
     if min_val == max_val:
         return str(min_val)
 
@@ -415,6 +542,16 @@ def cqlDurationBetween(start_str: str | None, end_str: str | None, unit: str | N
         return None
     try:
         return _duration_between_with_uncertainty(str(start_str), str(end_str), str(unit))
+    except (ValueError, TypeError):
+        return None
+
+
+def cqlDifferenceBetween(start_str: str | None, end_str: str | None, unit: str | None) -> str | None:
+    """CQL §22.22 DifferenceBetween with uncertainty interval support."""
+    if start_str is None or end_str is None or unit is None:
+        return None
+    try:
+        return _difference_between_with_uncertainty(str(start_str), str(end_str), str(unit))
     except (ValueError, TypeError):
         return None
 
@@ -566,7 +703,7 @@ def cqlUncertainCompare(a: str | None, b: str | None, op: str | None) -> bool | 
 def dateTimeNow() -> str:
     """CQL Now() - current datetime."""
     from datetime import datetime, timezone
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def dateTimeToday() -> str:
@@ -578,7 +715,7 @@ def dateTimeToday() -> str:
 def dateTimeTimeOfDay() -> str:
     """CQL TimeOfDay() - current time."""
     from datetime import datetime, timezone
-    return datetime.now(timezone.utc).time().replace(tzinfo=None).isoformat()
+    return datetime.now(timezone.utc).strftime("T%H:%M:%S")
 
 
 # ========================================
@@ -739,28 +876,30 @@ def dateComponent(value: str | None, component: str) -> int | None:
     if value is None:
         return None
     try:
-        dt = _parse_datetime(value)
-        if not dt:
-            dt = _parse_date(value)
-            if not dt:
-                return None
-            # It's a date, only year/month/day available
-            component_map = {
-                'year': dt.year,
-                'month': dt.month,
-                'day': dt.day,
-            }
-        else:
-            component_map = {
-                'year': dt.year,
-                'month': dt.month,
-                'day': dt.day,
-                'hour': dt.hour,
-                'minute': dt.minute,
-                'second': dt.second,
-                'millisecond': dt.microsecond // 1000,
-            }
-        return component_map.get(component.lower())
+        comp = component.lower()
+        prec = _infer_precision(value)
+        prec_idx = _PRECISION_INDEX.get(prec, -1)
+        if prec_idx < 0:
+            return None
+        comps = _parse_components(value)
+        stripped = value.strip()
+        is_time_only = stripped.startswith('T') or (len(stripped) < 10 and ':' in stripped and '-' not in stripped)
+        component_rank = {
+            'year': 0,
+            'month': 1,
+            'day': 2,
+            'hour': 3,
+            'minute': 4,
+            'second': 5,
+            'millisecond': 6,
+        }.get(comp)
+        if component_rank is None or component_rank > prec_idx:
+            return None
+        if is_time_only and component_rank < 3:
+            return None
+        if not is_time_only and component_rank >= 3 and 'T' not in stripped and ' ' not in stripped:
+            return None
+        return comps[comp]
     except (ValueError, TypeError, AttributeError, KeyError) as e:
         _logger.warning("UDF dateComponent failed: %s", e)
         return None
@@ -785,28 +924,17 @@ def dateTimeSameAs(a: str | None, b: str | None, precision: str | None = None) -
     if a is None or b is None:
         return None
 
-    dt_a = _parse_datetime(a) or _parse_date(a)
-    dt_b = _parse_datetime(b) or _parse_date(b)
+    if precision is None:
+        return cqlDateTimeEqual(str(a), str(b))
 
-    if dt_a is None or dt_b is None:
+    try:
+        cmp, certain = _compare_at_specified_precision(str(a), str(b), str(precision).lower())
+    except (ValueError, KeyError):
         return None
-
-    precision_map = {
-        'year': ['year'],
-        'month': ['year', 'month'],
-        'day': ['year', 'month', 'day'],
-        'hour': ['year', 'month', 'day', 'hour'],
-        'minute': ['year', 'month', 'day', 'hour', 'minute'],
-        'second': ['year', 'month', 'day', 'hour', 'minute', 'second'],
-        'millisecond': ['year', 'month', 'day', 'hour', 'minute', 'second', 'microsecond'],
-    }
-
-    fields = precision_map.get(precision.lower() if precision else 'day', ['year', 'month', 'day'])
-
-    for field in fields:
-        if getattr(dt_a, field, None) != getattr(dt_b, field, None):
-            return False
-
+    if cmp != 0:
+        return False
+    if not certain:
+        return None
     return True
 
 
@@ -818,26 +946,19 @@ def dateTimeSameOrBefore(a: str | None, b: str | None, precision: str | None = N
     if a is None or b is None:
         return None
 
-    dt_a = _parse_datetime(a) or _parse_date(a)
-    dt_b = _parse_datetime(b) or _parse_date(b)
+    if precision is None:
+        return cqlSameOrBefore(str(a), str(b))
 
-    if dt_a is None or dt_b is None:
+    try:
+        cmp, certain = _compare_at_specified_precision(str(a), str(b), str(precision).lower())
+    except (ValueError, KeyError):
         return None
-
-    precision_order = ['year', 'month', 'day', 'hour', 'minute', 'second', 'microsecond']
-    target_precision = precision.lower() if precision else 'day'
-
-    if target_precision in precision_order:
-        idx = precision_order.index(target_precision)
-        for i, field in enumerate(precision_order[:idx + 1]):
-            a_val = getattr(dt_a, field, None)
-            b_val = getattr(dt_b, field, None)
-            if a_val is not None and b_val is not None:
-                if a_val < b_val:
-                    return True
-                if a_val > b_val:
-                    return False
-
+    if cmp < 0:
+        return True
+    if cmp > 0:
+        return False
+    if not certain:
+        return None
     return True
 
 
@@ -849,26 +970,19 @@ def dateTimeSameOrAfter(a: str | None, b: str | None, precision: str | None = No
     if a is None or b is None:
         return None
 
-    dt_a = _parse_datetime(a) or _parse_date(a)
-    dt_b = _parse_datetime(b) or _parse_date(b)
+    if precision is None:
+        return cqlSameOrAfter(str(a), str(b))
 
-    if dt_a is None or dt_b is None:
+    try:
+        cmp, certain = _compare_at_specified_precision(str(a), str(b), str(precision).lower())
+    except (ValueError, KeyError):
         return None
-
-    precision_order = ['year', 'month', 'day', 'hour', 'minute', 'second', 'microsecond']
-    target_precision = precision.lower() if precision else 'day'
-
-    if target_precision in precision_order:
-        idx = precision_order.index(target_precision)
-        for i, field in enumerate(precision_order[:idx + 1]):
-            a_val = getattr(dt_a, field, None)
-            b_val = getattr(dt_b, field, None)
-            if a_val is not None and b_val is not None:
-                if a_val > b_val:
-                    return True
-                if a_val < b_val:
-                    return False
-
+    if cmp > 0:
+        return True
+    if cmp < 0:
+        return False
+    if not certain:
+        return None
     return True
 
 
@@ -966,28 +1080,19 @@ def _format_result_at_input_precision(result: datetime, input_str: str) -> str:
     prec = _infer_precision(input_str)
     prec_idx = _PRECISION_INDEX.get(prec, 6)
 
-    # Check for timezone in input
-    tz_suffix = ''
     stripped = input_str.strip()
-    for tz_char in ('+', 'Z'):
-        idx = stripped.find(tz_char, 10) if len(stripped) > 10 else -1
-        if idx > 0:
-            # Preserve original timezone offset in result
-            tz_suffix = stripped[idx:]
-            break
-    # Check for negative tz offset
-    if not tz_suffix and len(stripped) > 10:
-        for i in range(len(stripped) - 1, 9, -1):
-            if stripped[i] == '-' and i > 10:
-                tz_suffix = stripped[i:]
-                break
+    _, tz_suffix = _split_timezone_suffix(stripped)
 
     # Build ISO 8601 string at the input precision level
     iso = f"{result.year:04d}"
     if prec_idx >= 1:
         iso += f"-{result.month:02d}"
+    if prec_idx < 2 and 'T' in stripped:
+        iso += "T"
     if prec_idx >= 2:
         iso += f"-{result.day:02d}"
+        if prec_idx == 2 and 'T' in stripped:
+            iso += "T"
     if prec_idx >= 3:
         iso += f"T{result.hour:02d}"
     if prec_idx >= 4:
@@ -1000,6 +1105,81 @@ def _format_result_at_input_precision(result: datetime, input_str: str) -> str:
     if tz_suffix:
         iso += tz_suffix
     return iso
+
+
+def _format_time_result_at_input_precision(result: datetime, input_str: str) -> str:
+    """Format a time-only arithmetic result at the input time precision."""
+    prec = _infer_precision(input_str)
+    _, tz_suffix = _split_timezone_suffix(input_str.strip())
+    iso = f"T{result.hour:02d}"
+    if _PRECISION_INDEX.get(prec, 6) >= _PRECISION_INDEX["minute"]:
+        iso += f":{result.minute:02d}"
+    if _PRECISION_INDEX.get(prec, 6) >= _PRECISION_INDEX["second"]:
+        iso += f":{result.second:02d}"
+    if _PRECISION_INDEX.get(prec, 6) >= _PRECISION_INDEX["millisecond"]:
+        ms = result.microsecond // 1000
+        iso += f".{ms:03d}"
+    if tz_suffix:
+        iso += tz_suffix
+    return iso
+
+
+def _parse_date_quantity_payload(quantity_json: str) -> tuple[dict, float, str] | None:
+    """Parse date/time Quantity JSON for row-resilient public helper calls."""
+    data = orjson.loads(quantity_json)
+    if not isinstance(data, dict):
+        return None
+
+    value = data.get("value")
+    unit = data.get("unit") or data.get("code")
+    if (
+        value is None
+        or isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or not isinstance(unit, str)
+    ):
+        return None
+
+    return data, float(value), unit
+
+
+def _normalized_date_quantity_unit(unit_lower: str) -> str | None:
+    if unit_lower in _YEAR_UNITS:
+        return "year"
+    if unit_lower in _MONTH_UNITS:
+        return "month"
+    if unit_lower in ("week", "weeks", "wk"):
+        return "week"
+    if unit_lower in ("day", "days", "d"):
+        return "day"
+    if unit_lower in ("hour", "hours", "h"):
+        return "hour"
+    if unit_lower in ("minute", "minutes", "min"):
+        return "minute"
+    if unit_lower in ("second", "seconds", "s"):
+        return "second"
+    if unit_lower in ("millisecond", "milliseconds", "ms"):
+        return "millisecond"
+    return None
+
+
+def _is_supported_date_quantity_value(value: float, unit_lower: str) -> bool:
+    normalized = _normalized_date_quantity_unit(unit_lower)
+    if normalized is None:
+        return False
+    abs_value = abs(value)
+    limits = {
+        "year": 10000.0,
+        "month": 120000.0,
+        "week": 600000.0,
+        "day": 4000000.0,
+        "hour": 100000000.0,
+        "minute": 6000000000.0,
+        "second": 4000000.0 * 86400.0,
+        "millisecond": 4000000.0 * 86400.0 * 1000.0,
+    }
+    return abs_value <= limits[normalized]
 
 
 def dateAddQuantity(date_val: str | None, quantity_json: str | None) -> str | None:
@@ -1020,28 +1200,28 @@ def dateAddQuantity(date_val: str | None, quantity_json: str | None) -> str | No
     """
     if date_val is None or quantity_json is None:
         return None
+    if _has_invalid_timezone_suffix(str(date_val)):
+        return None
 
     try:
-        data = orjson.loads(quantity_json)
-        value = data.get("value")
-        unit = data.get("unit") or data.get("code")
+        parsed_quantity = _parse_date_quantity_payload(quantity_json)
+    except (orjson.JSONDecodeError, TypeError):
+        return None
+    if parsed_quantity is None:
+        return None
+    _data, value, unit = parsed_quantity
+    unit_lower = unit.lower()
+    if not _is_supported_date_quantity_value(value, unit_lower):
+        return None
 
-        if value is None or unit is None:
-            return None
-
-        value = float(value)
-        unit_lower = unit.lower()
-
+    try:
         # Time-only value (e.g. 'T15:59:59.999')
         t = _parse_time(date_val)
         if t is not None:
-            from datetime import time as _time_class
             ref_dt = _dt_class(2000, 1, 1, t.hour, t.minute, t.second, t.microsecond)
             if unit_lower in _TIMEDELTA_UNITS:
                 result_dt = ref_dt + timedelta(**{_TIMEDELTA_UNITS[unit_lower]: value})
-                result_time = result_dt.time()
-                ms = result_time.microsecond // 1000
-                return f"T{result_time.hour:02d}:{result_time.minute:02d}:{result_time.second:02d}.{ms:03d}"
+                return _format_time_result_at_input_precision(result_dt, str(date_val))
             return None
 
         input_prec = _infer_precision(date_val)
@@ -1124,7 +1304,7 @@ def dateAddQuantity(date_val: str | None, quantity_json: str | None) -> str | No
             return None
 
         return _format_result_at_input_precision(result, date_val)
-    except (orjson.JSONDecodeError, ValueError, TypeError, OverflowError) as e:
+    except (ValueError, OverflowError) as e:
         raise ValueError(f"DateTime arithmetic overflow: {e}") from e
 
 
@@ -1143,12 +1323,15 @@ def dateSubtractQuantity(date_val: str | None, quantity_json: str | None) -> str
         return None
 
     try:
-        data = orjson.loads(quantity_json)
-        data["value"] = -float(data.get("value", 0))
-        negated_json = orjson.dumps(data).decode("utf-8")
-        return dateAddQuantity(date_val, negated_json)
-    except (orjson.JSONDecodeError, ValueError, TypeError) as e:
-        raise ValueError(f"DateTime arithmetic overflow: {e}") from e
+        parsed_quantity = _parse_date_quantity_payload(quantity_json)
+    except (orjson.JSONDecodeError, TypeError):
+        return None
+    if parsed_quantity is None:
+        return None
+    data, value, _unit = parsed_quantity
+    data["value"] = -value
+    negated_json = orjson.dumps(data).decode("utf-8")
+    return dateAddQuantity(date_val, negated_json)
 
 
 # ========================================
@@ -1174,12 +1357,10 @@ def _infer_precision(iso_str: str) -> str:
     '2014-01-15T10:30:00.000' → millisecond
     """
     s = iso_str.strip()
-    # Strip timezone suffix for length calculation
-    for tz_char in ('+', '-', 'Z'):
-        idx = s.find(tz_char, 10) if len(s) > 10 else -1
-        if idx > 0:
-            s = s[:idx]
-            break
+    try:
+        s, _ = _split_timezone_suffix(s)
+    except ValueError:
+        return 'millisecond'
 
     # Time-only: T-prefixed or bare HH:MM:SS
     if s.startswith('T') or (len(s) < 10 and ':' in s and '-' not in s):
@@ -1226,13 +1407,34 @@ def _infer_precision(iso_str: str) -> str:
 def _parse_components(iso_str: str) -> dict:
     """Parse ISO 8601 string into component dict with precision."""
     s = iso_str.strip()
+    s, tz_suffix = _split_timezone_suffix(s)
+
+    def _validate_components(comps: dict, *, has_time: bool) -> None:
+        year = comps['year']
+        month = comps['month']
+        day = comps['day']
+        if not 1 <= year <= 9999:
+            raise ValueError(f"Invalid year {year}")
+        if not 1 <= month <= 12:
+            raise ValueError(f"Invalid month {month}")
+        if not 1 <= day <= calendar.monthrange(year, month)[1]:
+            raise ValueError(f"Invalid day {day}")
+        if has_time:
+            if not 0 <= comps['hour'] <= 23:
+                raise ValueError(f"Invalid hour {comps['hour']}")
+            if not 0 <= comps['minute'] <= 59:
+                raise ValueError(f"Invalid minute {comps['minute']}")
+            if not 0 <= comps['second'] <= 59:
+                raise ValueError(f"Invalid second {comps['second']}")
+            if not 0 <= comps['millisecond'] <= 999:
+                raise ValueError(f"Invalid millisecond {comps['millisecond']}")
 
     # Detect Time-only strings: 'T'-prefixed or bare HH:MM:SS patterns
     is_time_only = s.startswith('T') or (len(s) < 10 and ':' in s and '-' not in s)
     if is_time_only:
         time_s = s.lstrip('T')
         comps = {'year': 1, 'month': 1, 'day': 1, 'hour': 0, 'minute': 0,
-                 'second': 0, 'millisecond': 0, 'tz': ''}
+                 'second': 0, 'millisecond': 0, 'tz': tz_suffix}
         time_parts = time_s.split(':')
         if len(time_parts) >= 1:
             comps['hour'] = int(time_parts[0])
@@ -1244,23 +1446,8 @@ def _parse_components(iso_str: str) -> dict:
             if len(sec_parts) > 1:
                 ms_str = sec_parts[1][:3].ljust(3, '0')
                 comps['millisecond'] = int(ms_str)
+        _validate_components(comps, has_time=True)
         return comps
-
-    tz_suffix = ''
-    # Extract timezone
-    for tz_char in ('+', 'Z'):
-        idx = s.find(tz_char, 10) if len(s) > 10 else -1
-        if idx > 0:
-            tz_suffix = s[idx:]
-            s = s[:idx]
-            break
-    # Check for negative tz offset (after pos 10 to avoid date dash)
-    if len(s) > 10:
-        for i in range(len(s) - 1, 9, -1):
-            if s[i] == '-' and i > 10:
-                tz_suffix = s[i:]
-                s = s[:i]
-                break
 
     comps = {'year': 1, 'month': 1, 'day': 1, 'hour': 0, 'minute': 0,
              'second': 0, 'millisecond': 0, 'tz': tz_suffix}
@@ -1297,6 +1484,7 @@ def _parse_components(iso_str: str) -> dict:
                 ms_str = sec_parts[1][:3].ljust(3, '0')
                 comps['millisecond'] = int(ms_str)
 
+    _validate_components(comps, has_time=bool(time_str))
     return comps
 
 
@@ -1385,7 +1573,12 @@ def cqlNormalizeTZ(dt: str | None) -> str | None:
     return _format_at_precision(utc_comps, prec)
 
 
-def _compare_at_min_precision(a_str: str, b_str: str) -> tuple:
+def _compare_at_min_precision(
+    a_str: str,
+    b_str: str,
+    *,
+    promote_date_to_datetime: bool = False,
+) -> tuple:
     """Compare two datetime strings at min(a_precision, b_precision).
 
     Returns (result, is_certain):
@@ -1424,21 +1617,21 @@ def _compare_at_min_precision(a_str: str, b_str: str) -> tuple:
         if a_val > b_val:
             return (1, True)
 
-    # All compared components are equal
-    # If precisions differ, the result is uncertain (CQL §18.4)
+    # All compared components are equal. Public CQL comparison operators must
+    # treat differing precision as uncertain, but interval-boundary helpers use
+    # closed endpoint normalization and need full-day Date bounds promoted.
     if a_idx != b_idx:
-        # CQL §7.1.3: Type promotion — Date to DateTime.
-        # When one operand is DateTime (has 'T' separator with time components)
-        # and the other is a Date (YYYY-MM-DD, no 'T', exactly 10 chars),
-        # promote the Date by adding T00:00:00.000 (start of day) and re-compare.
-        # This only applies when the Date has full day precision (10 chars).
+        if not promote_date_to_datetime:
+            return (0, False)
+
+        # Interval boundary compatibility: promote a full Date to midnight
+        # DateTime when the other side has explicit time components.
         a_has_time_sep = 'T' in a_str or ' ' in a_str[10:11]
         b_has_time_sep = 'T' in b_str or ' ' in b_str[10:11]
         a_is_date_only = (not a_has_time_sep and len(a_str.split('+')[0].split('Z')[0]) == 10)
         b_is_date_only = (not b_has_time_sep and len(b_str.split('+')[0].split('Z')[0]) == 10)
 
         if a_is_date_only and b_has_time_sep and not b_is_date_only:
-            # Promote a (Date) to DateTime with midnight
             promoted = a_str + 'T00:00:00.000'
             a_comps2 = _parse_components(promoted)
             b_comps2 = b_comps
@@ -1447,7 +1640,7 @@ def _compare_at_min_precision(a_str: str, b_str: str) -> tuple:
                 b_comps2 = _normalize_to_utc(b_comps2)
             new_max = _PRECISION_INDEX[_infer_precision(promoted)]
             compare_to = min(new_max, b_idx)
-            for i, field in enumerate(_PRECISION_ORDER[:compare_to + 1]):
+            for field in _PRECISION_ORDER[:compare_to + 1]:
                 av = a_comps2[field]
                 bv = b_comps2[field]
                 if av < bv:
@@ -1457,7 +1650,6 @@ def _compare_at_min_precision(a_str: str, b_str: str) -> tuple:
             return (0, True)
 
         if b_is_date_only and a_has_time_sep and not a_is_date_only:
-            # Promote b (Date) to DateTime with midnight
             promoted = b_str + 'T00:00:00.000'
             a_comps2 = a_comps
             b_comps2 = _parse_components(promoted)
@@ -1466,7 +1658,7 @@ def _compare_at_min_precision(a_str: str, b_str: str) -> tuple:
                 b_comps2 = _normalize_to_utc(b_comps2)
             new_max = _PRECISION_INDEX[_infer_precision(promoted)]
             compare_to = min(a_idx, new_max)
-            for i, field in enumerate(_PRECISION_ORDER[:compare_to + 1]):
+            for field in _PRECISION_ORDER[:compare_to + 1]:
                 av = a_comps2[field]
                 bv = b_comps2[field]
                 if av < bv:
@@ -1604,6 +1796,9 @@ def _compare_at_specified_precision(a_str: str, b_str: str, precision: str) -> t
     - is_certain: False if either operand is coarser than the target precision
     """
     # Unwrap interval JSON to its start datetime if needed
+    if precision not in _PRECISION_INDEX:
+        raise KeyError(f"Invalid temporal precision: {precision}")
+
     a_str = _extract_datetime_from_interval(a_str)
     b_str = _extract_datetime_from_interval(b_str)
 
@@ -1850,6 +2045,7 @@ def registerDatetimeUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("cqlUncertainCompare", cqlUncertainCompare, null_handling="special")
     # Uncertainty-aware DurationBetween (returns VARCHAR — int string or interval JSON)
     con.create_function("cqlDurationBetween", cqlDurationBetween, null_handling="special")
+    con.create_function("cqlDifferenceBetween", cqlDifferenceBetween, null_handling="special")
 
 
 __all__ = [
@@ -1870,6 +2066,7 @@ __all__ = [
     "differenceInYears",
     "differenceInMonths",
     "differenceInDays",
+    "cqlDifferenceBetween",
     "dateComponent",
     # DateTime comparison functions
     "dateTimeSameAs",

@@ -16,6 +16,7 @@ from ..udf.ratio import (
     ratioValue,
     ratioNumeratorUnit,
     ratioDenominatorUnit,
+    RatioToString,
     registerRatioUdfs,
 )
 
@@ -185,6 +186,12 @@ def test_numerator_unit_missing():
     assert result is None
 
 
+def test_numerator_unit_malformed_component():
+    """Malformed numerator shapes return NULL instead of raising."""
+    ratio = '{"numerator": 5, "denominator": {"value": 1}}'
+    assert ratioNumeratorUnit(ratio) is None
+
+
 # ========================================
 # ratioDenominatorUnit tests
 # ========================================
@@ -211,6 +218,12 @@ def test_denominator_unit_missing():
     ratio = '{"numerator": {"value": 5}, "denominator": {"value": 1}}'
     result = ratioDenominatorUnit(ratio)
     assert result is None
+
+
+def test_denominator_unit_malformed_component():
+    """Malformed denominator shapes return NULL instead of raising."""
+    ratio = '{"numerator": {"value": 5}, "denominator": 5}'
+    assert ratioDenominatorUnit(ratio) is None
 
 
 # ========================================
@@ -266,6 +279,7 @@ def test_registration_all_functions():
         ("ratioValue", [ratio], 5.0),
         ("ratioNumeratorUnit", [ratio], "mg"),
         ("ratioDenominatorUnit", [ratio], "mL"),
+        ("RatioToString", [ratio], "10.0 'mg':2.0 'mL'"),
     ]
 
     for func_name, params, expected in functions:
@@ -273,6 +287,17 @@ def test_registration_all_functions():
         assert result[0] == expected, f"{func_name} returned {result[0]}, expected {expected}"
 
     con.close()
+
+
+def test_ratio_to_string_valid(simple_ratio):
+    """Test CQL Ratio ToString formatting."""
+    assert RatioToString(simple_ratio) == "5.0 'mg':1.0 'mL'"
+
+
+def test_ratio_to_string_invalid_unit():
+    """Test RatioToString rejects invalid Quantity units."""
+    ratio = '{"numerator": {"value": 5, "unit": "not-a-unit"}, "denominator": {"value": 1, "unit": "mL"}}'
+    assert RatioToString(ratio) is None
 
 
 # ========================================

@@ -5,9 +5,11 @@ Handles DateTime(), Date(), Time() constructors and date component extraction
 """
 from __future__ import annotations
 
+import calendar
 from typing import List
 
-from ...parser.ast_nodes import DateComponent
+from ...parser.ast_nodes import DateComponent, DateTimeLiteral, Literal, TimeLiteral
+from ...translator.context import ExprUsage
 from ...translator.types import (
     SQLBinaryOp,
     SQLCase,
@@ -29,6 +31,119 @@ class DateComponentMixin:
     on ExpressionTranslator.
     """
 
+    def _validated_temporal_constructor(self, expression: SQLExpression, component: str) -> SQLExpression:
+        """Return constructor output only when the temporal parser accepts it."""
+        component_value = SQLFunctionCall(
+            name="dateComponent",
+            args=[expression, SQLLiteral(component)],
+        )
+        return SQLCase(
+            when_clauses=[
+                (
+                    SQLBinaryOp(operator="IS NOT", left=component_value, right=SQLNull()),
+                    expression,
+                )
+            ],
+            else_clause=SQLNull(),
+        )
+
+    def _bounded_component(self, expression: SQLExpression, minimum: int, maximum: int) -> SQLExpression:
+        return SQLBinaryOp(
+            operator="AND",
+            left=SQLBinaryOp(operator=">=", left=expression, right=SQLLiteral(minimum)),
+            right=SQLBinaryOp(operator="<=", left=expression, right=SQLLiteral(maximum)),
+        )
+
+    def _validated_time_constructor(
+        self,
+        expression: SQLExpression,
+        component: str,
+        hour: SQLExpression,
+        minute: SQLExpression,
+        second: SQLExpression,
+        millisecond: SQLExpression,
+    ) -> SQLExpression:
+        """Return Time constructor output only when all provided fields are in range."""
+        range_check = SQLBinaryOp(
+            operator="AND",
+            left=SQLBinaryOp(
+                operator="AND",
+                left=self._bounded_component(hour, 0, 23),
+                right=self._bounded_component(minute, 0, 59),
+            ),
+            right=SQLBinaryOp(
+                operator="AND",
+                left=self._bounded_component(second, 0, 59),
+                right=self._bounded_component(millisecond, 0, 999),
+            ),
+        )
+        validated = self._validated_temporal_constructor(expression, component)
+        return SQLCase(
+            when_clauses=[(range_check, validated)],
+            else_clause=SQLNull(),
+        )
+
+    def _time_component_constructor(self, args: List[SQLExpression]) -> SQLExpression:
+        """Translate Time(hour[, minute[, second[, millisecond]]]) component construction."""
+        hour = args[0]
+        minute = args[1] if len(args) > 1 else SQLLiteral(value=0)
+        second = args[2] if len(args) > 2 else SQLLiteral(value=0)
+        millisecond = args[3] if len(args) > 3 else SQLLiteral(value=0)
+
+        if len(args) == 1:
+            candidate = SQLFunctionCall(
+                name="printf",
+                args=[SQLLiteral('T%02d'), hour],
+            )
+            return self._validated_time_constructor(candidate, "hour", hour, minute, second, millisecond)
+        if len(args) == 2:
+            candidate = SQLFunctionCall(
+                name="printf",
+                args=[SQLLiteral('T%02d:%02d'), hour, minute],
+            )
+            return self._validated_time_constructor(candidate, "minute", hour, minute, second, millisecond)
+        if len(args) == 3:
+            candidate = SQLFunctionCall(
+                name="printf",
+                args=[SQLLiteral('T%02d:%02d:%02d'), hour, minute, second],
+            )
+            return self._validated_time_constructor(candidate, "second", hour, minute, second, millisecond)
+        candidate = SQLFunctionCall(
+            name="printf",
+            args=[SQLLiteral('T%02d:%02d:%02d.%03d'), hour, minute, second, millisecond],
+        )
+        return self._validated_time_constructor(candidate, "millisecond", hour, minute, second, millisecond)
+
+    def _translate_time_pre(self, func, translator=None) -> SQLExpression | None:
+        """Disambiguate one-argument Time(hour) from `time from <temporal>` extraction."""
+        if len(getattr(func, "arguments", []) or []) != 1:
+            return None
+
+        raw_arg = func.arguments[0]
+        if isinstance(raw_arg, Literal):
+            if isinstance(raw_arg.value, int) and not isinstance(raw_arg.value, bool):
+                return self._time_component_constructor([
+                    self.translate(raw_arg, usage=ExprUsage.SCALAR)
+                ])
+            raise ValueError("Time constructor components must be Integer values")
+
+        if isinstance(raw_arg, DateComponent) and raw_arg.component.lower() != "timezoneoffset":
+            return self._time_component_constructor([
+                self.translate(raw_arg, usage=ExprUsage.SCALAR)
+            ])
+
+        if isinstance(raw_arg, (DateTimeLiteral, TimeLiteral)):
+            if func.name == "time":
+                return None
+            raise ValueError("Time constructor components must be Integer values")
+
+        if func.name != "time":
+            return self._time_component_constructor([
+                self.translate(raw_arg, usage=ExprUsage.SCALAR)
+            ])
+
+        return None
+
     def _translate_datetime_constructor(self, args: List[SQLExpression]) -> SQLExpression:
         """Translate a DateTime constructor.
 
@@ -43,6 +158,12 @@ class DateComponentMixin:
         if not args:
             return SQLNull()
 
+        for component in args[:min(len(args), 7)]:
+            if isinstance(component, SQLLiteral) and (
+                not isinstance(component.value, int) or isinstance(component.value, bool)
+            ):
+                raise ValueError("DateTime constructor components must be Integer values")
+
         # Validate year bounds (1-9999) for literal year values
         year_arg = args[0]
         if isinstance(year_arg, SQLLiteral) and isinstance(year_arg.value, int):
@@ -52,18 +173,43 @@ class DateComponentMixin:
                     f"bounds of 0001-9999"
                 )
 
+        def _validate_literal_components(vals: list[int]) -> None:
+            year = vals[0]
+            if year < 1 or year > 9999:
+                raise ValueError(
+                    f"The year {year} falls outside the accepted bounds of 0001-9999"
+                )
+            if len(vals) >= 2 and not 1 <= vals[1] <= 12:
+                raise ValueError(f"Invalid DateTime month {vals[1]}")
+            if len(vals) >= 3:
+                max_day = calendar.monthrange(year, vals[1])[1]
+                if not 1 <= vals[2] <= max_day:
+                    raise ValueError(f"Invalid DateTime day {vals[2]}")
+            if len(vals) >= 4 and not 0 <= vals[3] <= 23:
+                raise ValueError(f"Invalid DateTime hour {vals[3]}")
+            if len(vals) >= 5 and not 0 <= vals[4] <= 59:
+                raise ValueError(f"Invalid DateTime minute {vals[4]}")
+            if len(vals) >= 6 and not 0 <= vals[5] <= 59:
+                raise ValueError(f"Invalid DateTime second {vals[5]}")
+            if len(vals) >= 7 and not 0 <= vals[6] <= 999:
+                raise ValueError(f"Invalid DateTime millisecond {vals[6]}")
+
         # Check if all provided args are integer literals — if so, emit a
         # compile-time ISO 8601 string literal preserving precision.
-        all_literal = all(isinstance(a, SQLLiteral) and isinstance(a.value, (int, float)) for a in args[:min(len(args), 7)])
+        all_literal = all(
+            isinstance(a, SQLLiteral) and isinstance(a.value, int) and not isinstance(a.value, bool)
+            for a in args[:min(len(args), 7)]
+        )
         if all_literal and len(args) <= 8:
             vals = [int(a.value) for a in args[:min(len(args), 7)]]
+            _validate_literal_components(vals)
             n = len(vals)
             if n == 1:
-                iso = f"{vals[0]:04d}"
+                iso = f"{vals[0]:04d}T"
             elif n == 2:
-                iso = f"{vals[0]:04d}-{vals[1]:02d}"
+                iso = f"{vals[0]:04d}-{vals[1]:02d}T"
             elif n == 3:
-                iso = f"{vals[0]:04d}-{vals[1]:02d}-{vals[2]:02d}"
+                iso = f"{vals[0]:04d}-{vals[1]:02d}-{vals[2]:02d}T"
             elif n == 4:
                 iso = f"{vals[0]:04d}-{vals[1]:02d}-{vals[2]:02d}T{vals[3]:02d}"
             elif n == 5:
@@ -85,10 +231,12 @@ class DateComponentMixin:
                     if isinstance(inner, SQLLiteral) and isinstance(inner.value, (int, float)):
                         tz_val = -float(inner.value)
                 if tz_val is not None:
+                    if tz_val < -14 or tz_val > 14:
+                        raise ValueError(f"Invalid DateTime timezone offset {tz_val}")
                     sign = '+' if tz_val >= 0 else '-'
                     abs_h = abs(tz_val)
                     tz_h = int(abs_h)
-                    tz_m = int((abs_h - tz_h) * 60)
+                    tz_m = round((abs_h - tz_h) * 60)
                     iso += f"{sign}{tz_h:02d}:{tz_m:02d}"
 
             return SQLLiteral(value=iso)
@@ -96,10 +244,11 @@ class DateComponentMixin:
         # Non-literal args: fall back to runtime printf()
         if len(args) == 1:
             year = args[0]
-            if isinstance(year, SQLLiteral) and isinstance(year.value, int):
-                return SQLLiteral(value=f"{year.value:04d}")
-            # Non-integer single arg: pass through as-is (already a date/datetime/string)
-            return year
+            candidate = SQLFunctionCall(
+                name="printf",
+                args=[SQLLiteral('%04dT'), year],
+            )
+            return self._validated_temporal_constructor(candidate, "year")
 
         # Build runtime string using printf — use AST nodes (not SQLRaw with
         # .to_sql()) to avoid premature placeholder resolution (CQL §22.26).
@@ -109,15 +258,17 @@ class DateComponentMixin:
 
         # Determine format based on number of args for correct precision
         if len(args) == 2:
-            return SQLFunctionCall(
+            candidate = SQLFunctionCall(
                 name="printf",
-                args=[SQLLiteral('%04d-%02d'), year, month],
+                args=[SQLLiteral('%04d-%02dT'), year, month],
             )
+            return self._validated_temporal_constructor(candidate, "month")
         if len(args) == 3:
-            return SQLFunctionCall(
+            candidate = SQLFunctionCall(
                 name="printf",
-                args=[SQLLiteral('%04d-%02d-%02d'), year, month, day],
+                args=[SQLLiteral('%04d-%02d-%02dT'), year, month, day],
             )
+            return self._validated_temporal_constructor(candidate, "day")
 
         hour = args[3] if len(args) > 3 else SQLLiteral(value=0)
         minute = args[4] if len(args) > 4 else SQLLiteral(value=0)
@@ -126,19 +277,22 @@ class DateComponentMixin:
         if len(args) <= 6:
             n = len(args)
             if n == 4:
-                return SQLFunctionCall(
+                candidate = SQLFunctionCall(
                     name="printf",
-                    args=[SQLLiteral('%04d-%02dT%02d'), year, month, day, hour],
+                    args=[SQLLiteral('%04d-%02d-%02dT%02d'), year, month, day, hour],
                 )
+                return self._validated_temporal_constructor(candidate, "hour")
             if n == 5:
-                return SQLFunctionCall(
+                candidate = SQLFunctionCall(
                     name="printf",
                     args=[SQLLiteral('%04d-%02d-%02dT%02d:%02d'), year, month, day, hour, minute],
                 )
-            return SQLFunctionCall(
+                return self._validated_temporal_constructor(candidate, "minute")
+            candidate = SQLFunctionCall(
                 name="printf",
                 args=[SQLLiteral('%04d-%02d-%02dT%02d:%02d:%02d'), year, month, day, hour, minute, second],
             )
+            return self._validated_temporal_constructor(candidate, "second")
 
         # 7+ args: milliseconds
         millisecond = args[6]
@@ -149,13 +303,46 @@ class DateComponentMixin:
 
         if len(args) > 7:
             tz_offset = args[7]
+            abs_tz = SQLFunctionCall(
+                name="ABS",
+                args=[SQLCast(tz_offset, "DOUBLE")],
+            )
+            tz_hour = SQLCast(
+                SQLFunctionCall(name="FLOOR", args=[abs_tz]),
+                "INTEGER",
+            )
+            tz_minute = SQLCast(
+                SQLFunctionCall(
+                    name="system.round",
+                    args=[
+                        SQLBinaryOp(
+                            operator="*",
+                            left=SQLBinaryOp(
+                                operator="-",
+                                left=abs_tz,
+                                right=SQLFunctionCall(name="FLOOR", args=[abs_tz]),
+                            ),
+                            right=SQLLiteral(value=60),
+                        )
+                    ],
+                ),
+                "INTEGER",
+            )
+            sign = SQLCase(
+                when_clauses=[(
+                    SQLBinaryOp(operator="<", left=SQLCast(tz_offset, "DOUBLE"), right=SQLLiteral(value=0)),
+                    SQLLiteral(value="-"),
+                )],
+                else_clause=SQLLiteral(value="+"),
+            )
             tz_str = SQLFunctionCall(
                 name="printf",
-                args=[SQLLiteral('%+03.0f:00'), SQLCast(tz_offset, "DOUBLE")],
+                args=[SQLLiteral('%s%02d:%02d'), sign, tz_hour, tz_minute],
             )
-            return SQLBinaryOp(operator="||", left=base_call, right=tz_str)
+            candidate = SQLBinaryOp(operator="||", left=base_call, right=tz_str)
+            return self._validated_temporal_constructor(candidate, "millisecond")
 
-        return base_call
+        return self._validated_temporal_constructor(base_call, "millisecond")
 
     def _translate_date_constructor(self, args: List[SQLExpression]) -> SQLExpression:
         """Translate a Date constructor.
@@ -166,9 +353,24 @@ class DateComponentMixin:
         if not args:
             return SQLNull()
 
-        all_literal = all(isinstance(a, SQLLiteral) and isinstance(a.value, int) for a in args)
+        for component in args if len(args) > 1 else []:
+            if isinstance(component, SQLLiteral) and (
+                not isinstance(component.value, int) or isinstance(component.value, bool)
+            ):
+                raise ValueError("Date constructor components must be Integer values")
+
+        all_literal = all(isinstance(a, SQLLiteral) and isinstance(a.value, int) and not isinstance(a.value, bool) for a in args)
         if all_literal:
             vals = [a.value for a in args]
+            year = vals[0]
+            if year < 1 or year > 9999:
+                raise ValueError(f"The year {year} falls outside the accepted bounds of 0001-9999")
+            if len(vals) >= 2 and not 1 <= vals[1] <= 12:
+                raise ValueError(f"Invalid Date month {vals[1]}")
+            if len(vals) >= 3:
+                max_day = calendar.monthrange(year, vals[1])[1]
+                if not 1 <= vals[2] <= max_day:
+                    raise ValueError(f"Invalid Date day {vals[2]}")
             n = len(vals)
             if n == 1:
                 return SQLLiteral(value=f"{vals[0]:04d}")
@@ -179,26 +381,47 @@ class DateComponentMixin:
 
         if len(args) == 1:
             year = args[0]
+            if isinstance(year, SQLLiteral) and (
+                not isinstance(year.value, (int, str)) or isinstance(year.value, bool)
+            ):
+                raise ValueError("Date constructor components must be Integer values")
             if isinstance(year, SQLLiteral) and isinstance(year.value, int):
+                if year.value < 1 or year.value > 9999:
+                    raise ValueError(
+                        f"The year {year.value} falls outside the accepted bounds of 0001-9999"
+                    )
                 return SQLLiteral(value=f"{year.value:04d}")
             # CQL §22.6: date from DateTime — extract date portion.
             # When the parser emits FunctionRef(name='date', args=[datetime_expr]),
             # treat 1-arg non-integer call as "date from X" extraction.
             if isinstance(year, SQLLiteral) and isinstance(year.value, str) and len(year.value) > 4:
-                # DateTime/Date literal: extract first 10 chars (YYYY-MM-DD)
-                return SQLLiteral(value=year.value[:10])
-            # Non-literal expression: use LEFT() to extract date portion.
+                normalized = year.value.replace(" ", "T")
+                if normalized.startswith("T"):
+                    return SQLNull()
+                return SQLLiteral(value=normalized.split("T", 1)[0])
+            # Non-literal expression: extract the date portion up to T.
             # Build AST nodes (not SQLRaw with .to_sql()) to avoid premature
             # placeholder resolution — CQL §22.6.
-            return SQLFunctionCall(
-                name="LEFT",
-                args=[
-                    SQLFunctionCall(
-                        name="REPLACE",
-                        args=[SQLCast(year, "VARCHAR"), SQLLiteral(' '), SQLLiteral('T')],
+            source = SQLFunctionCall(
+                name="REPLACE",
+                args=[SQLCast(year, "VARCHAR"), SQLLiteral(' '), SQLLiteral('T')],
+            )
+            t_pos = SQLFunctionCall(name="STRPOS", args=[source, SQLLiteral('T')])
+            return SQLCase(
+                when_clauses=[
+                    (SQLBinaryOp(operator="=", left=t_pos, right=SQLLiteral(1)), SQLNull()),
+                    (
+                        SQLBinaryOp(operator=">", left=t_pos, right=SQLLiteral(1)),
+                        SQLFunctionCall(
+                            name="LEFT",
+                            args=[
+                                source,
+                                SQLBinaryOp(operator="-", left=t_pos, right=SQLLiteral(1)),
+                            ],
+                        ),
                     ),
-                    SQLLiteral(10),
                 ],
+                else_clause=source,
             )
 
         year = args[0]
@@ -206,14 +429,16 @@ class DateComponentMixin:
         day = args[2] if len(args) > 2 else SQLLiteral(value=1)
 
         if len(args) == 2:
-            return SQLFunctionCall(
+            candidate = SQLFunctionCall(
                 name="printf",
                 args=[SQLLiteral('%04d-%02d'), year, month],
             )
-        return SQLFunctionCall(
+            return self._validated_temporal_constructor(candidate, "month")
+        candidate = SQLFunctionCall(
             name="printf",
             args=[SQLLiteral('%04d-%02d-%02d'), year, month, day],
         )
+        return self._validated_temporal_constructor(candidate, "day")
 
     def _translate_time_constructor(self, args: List[SQLExpression]) -> SQLExpression:
         """Translate a Time constructor."""
@@ -221,16 +446,47 @@ class DateComponentMixin:
             return SQLNull()
 
         if len(args) >= 2:
-            hour = args[0]
-            minute = args[1]
-            second = args[2] if len(args) > 2 else SQLLiteral(value=0)
+            return self._time_component_constructor(args)
 
-            return SQLFunctionCall(
-                name="make_time",
-                args=[hour, minute, second],
-            )
-
-        return args[0] if args else SQLNull()
+        source = SQLFunctionCall(
+            name="REPLACE",
+            args=[SQLCast(args[0], "VARCHAR"), SQLLiteral(' '), SQLLiteral('T')],
+        )
+        t_pos = SQLFunctionCall(name="STRPOS", args=[source, SQLLiteral('T')])
+        is_time = SQLBinaryOp(
+            operator="=",
+            left=SQLFunctionCall(name="SUBSTR", args=[source, SQLLiteral(1), SQLLiteral(1)]),
+            right=SQLLiteral('T'),
+        )
+        has_datetime_time = SQLBinaryOp(
+            operator="AND",
+            left=SQLBinaryOp(operator=">", left=t_pos, right=SQLLiteral(0)),
+            right=SQLBinaryOp(
+                operator=">",
+                left=SQLFunctionCall(name="LENGTH", args=[source]),
+                right=t_pos,
+            ),
+        )
+        return SQLCase(
+            when_clauses=[
+                (is_time, source),
+                (
+                    has_datetime_time,
+                    SQLBinaryOp(
+                        operator="||",
+                        left=SQLLiteral("T"),
+                        right=SQLFunctionCall(
+                            name="SUBSTR",
+                            args=[
+                                source,
+                                SQLBinaryOp(operator="+", left=t_pos, right=SQLLiteral(1)),
+                            ],
+                        ),
+                    ),
+                ),
+            ],
+            else_clause=SQLNull(),
+        )
 
     def _translate_date_component(self, node: DateComponent, boolean_context: bool = False) -> SQLExpression:
         """Handle: year from @2024-01-15, date from dateTime, timezoneoffset from dateTime.
@@ -252,15 +508,26 @@ class DateComponentMixin:
 
         # Handle 'date from X' - extract date portion (first 10 chars of ISO string)
         if component_lower == 'date':
-            return SQLFunctionCall(
-                name="LEFT",
-                args=[
-                    SQLFunctionCall(
-                        name="REPLACE",
-                        args=[SQLCast(operand, "VARCHAR"), SQLLiteral(' '), SQLLiteral('T')],
+            source = SQLFunctionCall(
+                name="REPLACE",
+                args=[SQLCast(operand, "VARCHAR"), SQLLiteral(' '), SQLLiteral('T')],
+            )
+            t_pos = SQLFunctionCall(name="STRPOS", args=[source, SQLLiteral('T')])
+            return SQLCase(
+                when_clauses=[
+                    (SQLBinaryOp(operator="=", left=t_pos, right=SQLLiteral(1)), SQLNull()),
+                    (
+                        SQLBinaryOp(operator=">", left=t_pos, right=SQLLiteral(1)),
+                        SQLFunctionCall(
+                            name="LEFT",
+                            args=[
+                                source,
+                                SQLBinaryOp(operator="-", left=t_pos, right=SQLLiteral(1)),
+                            ],
+                        ),
                     ),
-                    SQLLiteral(10),
                 ],
+                else_clause=source,
             )
 
         # Map component names to (start_position, length, min_string_length)

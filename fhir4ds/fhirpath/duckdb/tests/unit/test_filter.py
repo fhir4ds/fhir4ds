@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 
 from ...collection import FHIRPathCollection, EMPTY, wrap_as_collection
+from ...errors import FHIRPathError
 from ...functions.filter import (
     where,
     select,
@@ -92,6 +93,18 @@ class TestWhere:
         assert result.values[0]["name"] == "John"
         assert result.values[1]["name"] == "Bob"
 
+    def test_where_rejects_non_singleton_boolean_criteria(self) -> None:
+        """FHIRPath where() criteria must evaluate to one Boolean or empty."""
+        col = FHIRPathCollection([1, 2])
+        with pytest.raises(FHIRPathError):
+            where(col, lambda x: [True, False])
+
+    def test_where_rejects_non_boolean_criteria(self) -> None:
+        """FHIRPath where() does not apply singleton truthiness to criteria."""
+        col = FHIRPathCollection([1])
+        with pytest.raises(FHIRPathError):
+            where(col, lambda x: x)
+
 
 class TestSelect:
     """Tests for the select() projection function."""
@@ -129,6 +142,16 @@ class TestSelect:
         result = select(col, lambda x: x.get("name"))
         assert result.to_list() == ["John", "Jane"]
 
+    def test_select_propagates_evaluator_errors(self) -> None:
+        """Direct helper API should not silently drop failed projections."""
+        col = FHIRPathCollection([{"name": "John"}])
+
+        def evaluator(expression, item):
+            raise ValueError("bad projection")
+
+        with pytest.raises(FHIRPathError):
+            select(col, "bad", evaluator=evaluator)
+
 
 class TestRepeat:
     """Tests for the repeat() iteration function."""
@@ -136,9 +159,8 @@ class TestRepeat:
     def test_repeat_simple(self) -> None:
         """Test simple repeat iteration."""
         col = FHIRPathCollection([1])
-        # Returns None for non-dicts, so should just return [1]
         result = repeat(col, lambda x: x + 1 if isinstance(x, int) and x < 3 else None)
-        assert result.to_list() == [1, 2, 3]
+        assert result.to_list() == [2, 3]
 
     def test_repeat_empty_collection(self) -> None:
         """Test that empty collection returns EMPTY."""
@@ -151,6 +173,12 @@ class TestRepeat:
         col = FHIRPathCollection([1])
         result = repeat(col, lambda x: x)  # Same value, no new results
         assert result.to_list() == [1]
+
+    def test_repeat_deduplicates_projection_batch_only(self) -> None:
+        """repeat() emits unique projection results, not input seeds."""
+        col = FHIRPathCollection([{"linkId": "root"}])
+        result = repeat(col, lambda x: [{"linkId": "child"}, {"linkId": "child"}])
+        assert result.to_list() == [{"linkId": "child"}]
 
 
 # =============================================================================
@@ -244,6 +272,12 @@ class TestTake:
         result = take(col, 0)
         assert result.to_list() == []
 
+    def test_take_negative(self) -> None:
+        """FHIRPath take(num <= 0) returns empty."""
+        col = FHIRPathCollection([1, 2, 3])
+        assert take(col, -1).to_list() == []
+        assert col.take(-1).to_list() == []
+
     def test_take_empty(self) -> None:
         """Test take of empty collection."""
         col = FHIRPathCollection([])
@@ -271,6 +305,12 @@ class TestSkip:
         col = FHIRPathCollection([1, 2, 3])
         result = skip(col, 0)
         assert result.to_list() == [1, 2, 3]
+
+    def test_skip_negative(self) -> None:
+        """FHIRPath skip(num <= 0) returns the input collection."""
+        col = FHIRPathCollection([1, 2, 3])
+        assert skip(col, -1).to_list() == [1, 2, 3]
+        assert col.skip(-1).to_list() == [1, 2, 3]
 
     def test_skip_empty(self) -> None:
         """Test skip of empty collection."""
@@ -315,6 +355,16 @@ class TestOfType:
         ])
         result = of_type(col, "Resource")
         assert len(result) == 2
+
+    def test_of_type_concrete_resource_and_domain_resource(self) -> None:
+        """ofType() includes FHIR subclasses for non-primitive resource types."""
+        patient = {"resourceType": "Patient", "id": "1"}
+        bundle = {"resourceType": "Bundle", "id": "2"}
+        col = FHIRPathCollection([patient, bundle, {"id": "not-resource"}])
+
+        assert of_type(col, "Patient").to_list() == [patient]
+        assert of_type(col, "DomainResource").to_list() == [patient]
+        assert of_type(col, "Resource").to_list() == [patient, bundle]
 
     def test_of_type_unknown(self) -> None:
         """Test filtering by unknown type returns empty."""
@@ -764,6 +814,13 @@ class TestMembership:
         result = membership(element, collection)
         assert result.is_empty
 
+    def test_in_uses_fhirpath_equality(self) -> None:
+        """Test membership uses FHIRPath equality, including numeric normalization."""
+        element = FHIRPathCollection([1.0])
+        collection = FHIRPathCollection([1])
+        result = membership(element, collection)
+        assert result.to_list() == [True]
+
 
 class TestContains:
     """Tests for the contains operator."""
@@ -786,6 +843,13 @@ class TestContains:
         """Test contains with strings."""
         collection = FHIRPathCollection(["apple", "banana", "cherry"])
         element = FHIRPathCollection(["banana"])
+        result = contains(collection, element)
+        assert result.to_list() == [True]
+
+    def test_contains_uses_fhirpath_equality(self) -> None:
+        """Test contains uses FHIRPath equality, including numeric normalization."""
+        collection = FHIRPathCollection([1])
+        element = FHIRPathCollection([1.0])
         result = contains(collection, element)
         assert result.to_list() == [True]
 

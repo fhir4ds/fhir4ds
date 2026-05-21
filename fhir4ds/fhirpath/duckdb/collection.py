@@ -16,6 +16,13 @@ if TYPE_CHECKING:
 T = TypeVar('T')
 
 
+def _values_equal(left: Any, right: Any) -> bool:
+    """Return equality according to FHIRPath `=` semantics."""
+    from ..engine.invocations import equality as equality_invocations
+
+    return equality_invocations.equality({}, [left], [right]) is True
+
+
 class EmptyCollectionSentinel:
     """
     Sentinel value representing an empty collection in propagation.
@@ -150,7 +157,7 @@ class FHIRPathCollection:
         Returns:
             True if value is in collection.
         """
-        return value in self.values
+        return any(_values_equal(item, value) for item in self.values)
 
     def first(self) -> Any:
         """
@@ -189,6 +196,8 @@ class FHIRPathCollection:
         Returns:
             New collection with at most n elements.
         """
+        if n <= 0:
+            return FHIRPathCollection([])
         return FHIRPathCollection(self.values[:n])
 
     def skip(self, n: int) -> FHIRPathCollection:
@@ -201,6 +210,8 @@ class FHIRPathCollection:
         Returns:
             New collection without first n elements.
         """
+        if n <= 0:
+            return FHIRPathCollection(self.values[:])
         return FHIRPathCollection(self.values[n:])
 
     def where(self, predicate: Callable[[Any], bool]) -> FHIRPathCollection:
@@ -260,13 +271,9 @@ class FHIRPathCollection:
         Returns:
             Collection with duplicates removed.
         """
-        seen = []
         result = []
         for v in self.values:
-            # Use repr for comparison to handle unhashable types
-            v_repr = repr(v)
-            if v_repr not in seen:
-                seen.append(v_repr)
+            if not any(_values_equal(v, existing) for existing in result):
                 result.append(v)
         return FHIRPathCollection(result)
 
@@ -302,8 +309,7 @@ class FHIRPathCollection:
         Returns:
             Collection with common elements.
         """
-        other_reprs = {repr(v) for v in other.values}
-        result = [v for v in self.values if repr(v) in other_reprs]
+        result = [v for v in self.values if any(_values_equal(v, other_v) for other_v in other.values)]
         return FHIRPathCollection(result).distinct()
 
     def exclude(self, other: FHIRPathCollection) -> FHIRPathCollection:
@@ -316,8 +322,11 @@ class FHIRPathCollection:
         Returns:
             Collection without elements from other.
         """
-        other_reprs = {repr(v) for v in other.values}
-        result = [v for v in self.values if repr(v) not in other_reprs]
+        result = [
+            v
+            for v in self.values
+            if not any(_values_equal(v, other_v) for other_v in other.values)
+        ]
         return FHIRPathCollection(result)
 
     # Conversion methods

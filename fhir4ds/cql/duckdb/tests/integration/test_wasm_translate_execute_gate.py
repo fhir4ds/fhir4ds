@@ -60,16 +60,16 @@ EXPECTED = {
     "SameOrBeforeDay": True,
     "BeforeDay": True,
     "AfterDay": True,
-    "DifferenceDays": 2,
+    "DifferenceDays": "2",
     "DatePlusDay": "2024-01-02",
     "TimeEqual": True,
-    "TimeDiffHours": 3,
+    "TimeDiffHours": "3",
     "TimePlusHours": "T20:59:59.999",
     "TimezoneBeforeHour": True,
-    "DstDifferenceHoursLiteral": 1,
-    "DstDifferenceMinutesLiteral": 45,
-    "DstDifferenceHoursCtor": 1,
-    "DstDifferenceMinutesCtor": 45,
+    "DstDifferenceHoursLiteral": "1",
+    "DstDifferenceMinutesLiteral": "45",
+    "DstDifferenceHoursCtor": "1",
+    "DstDifferenceMinutesCtor": "45",
     "PartialPrecisionUncertain": None,
     "DurationUncertainDays": '{"start":16,"end":44,"lowClosed":true,"highClosed":true}',
     "HighBoundaryDecimal": 1.58799999,
@@ -117,3 +117,10 @@ def test_supported_cql_executes_in_no_python_runtime() -> None:
         for name, sql_expr in translated.items():
             result = con.execute(f"SELECT {sql_expr}").fetchone()[0]
             assert result == EXPECTED[name], name
+
+
+def test_no_python_math_macros_follow_cql_edge_cases() -> None:
+    with no_python_connection() as con:
+        assert con.execute("SELECT Power(-2, 0.5)").fetchone()[0] is None
+        assert con.execute("SELECT Round(-2.5)::VARCHAR").fetchone()[0] == "-2.00000000"
+        assert con.execute("SELECT RoundTo(-2.55, 1)::VARCHAR").fetchone()[0] == "-2.50000000"

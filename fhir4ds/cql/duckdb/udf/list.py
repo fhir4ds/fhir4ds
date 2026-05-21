@@ -2,7 +2,7 @@
 Vectorized CQL List Operation UDFs
 
 Implements CQL list functions that require complex logic:
-- SingletonFrom(list) - Return single element or NULL
+- SingletonFrom(list) - Return single element, NULL for empty/null, error for multi-item
 - ElementAt(list, index) - Get element at 0-based index
 
 Supports both scalar (row-by-row) and Arrow vectorized implementations.
@@ -10,7 +10,7 @@ Supports both scalar (row-by-row) and Arrow vectorized implementations.
 
 from __future__ import annotations
 
-import logging
+import json
 import os
 from typing import TYPE_CHECKING, Any
 
@@ -19,8 +19,6 @@ import pyarrow as pa
 
 if TYPE_CHECKING:
     import duckdb as duckdb_types
-
-logger = logging.getLogger(__name__)
 
 # Feature flag for rollback
 _USE_ARROW = os.environ.get("CQL_USE_ARROW_UDFS", "1") == "1"
@@ -48,7 +46,7 @@ def singletonFrom_scalar(lst: list[Any] | None) -> Any:
     if len(lst) == 0:
         return None
     if len(lst) == 1:
-        return lst[0]
+        return _varchar_result_value(lst[0])
     # >1 element: raise runtime error per CQL spec §20.30
     raise ValueError(
         f"SingletonFrom: Expected a list with at most one element, "
@@ -78,7 +76,19 @@ def elementAt_scalar(lst: list[Any] | None, index: int | None) -> Any:
     if index < 0 or index >= len(lst):
         return None
 
-    return lst[index]
+    return _varchar_result_value(lst[index])
+
+
+def _varchar_result_value(value: Any) -> Any:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return value
+
+
+def _varchar_list_value(value: Any) -> Any:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return value
 
 
 # ========================================
@@ -90,7 +100,7 @@ def singletonFrom_arrow(lists: pa.Array) -> pa.Array:
     CQL SingletonFrom(list) - vectorized Arrow version.
 
     Returns the single element if list has exactly 1 element.
-    Returns NULL if list is empty, NULL, or has >1 elements.
+    Returns NULL if list is empty or NULL. Raises for >1 elements per CQL.
     """
     results = []
 
@@ -105,12 +115,10 @@ def singletonFrom_arrow(lists: pa.Array) -> pa.Array:
         if len(lst) == 1:
             results.append(lst[0])
             continue
-        # >1 element: return NULL and log warning
-        logger.warning(
-            "SingletonFrom called on list with %d elements; returning NULL per CQL spec",
-            len(lst)
+        raise ValueError(
+            f"SingletonFrom: Expected a list with at most one element, "
+            f"but found a list with {len(lst)} elements."
         )
-        results.append(None)
 
     # Infer the output type from the input list element type
     # For mixed types, use a generic type
@@ -218,9 +226,21 @@ def registerListUdfs(con: "duckdb.DuckDBPyConnection") -> None:
         return_type='VARCHAR[]',
         null_handling="special"
     )
+    con.create_function(
+        "cqlChildren",
+        cqlChildren_scalar,
+        return_type='VARCHAR[]',
+        null_handling="special"
+    )
+    con.create_function(
+        "cqlDescendants",
+        cqlDescendants_scalar,
+        return_type='VARCHAR[]',
+        null_handling="special"
+    )
 
 
-def jsonConcat_scalar(left: Any, right: Any) -> list[Any]:
+def jsonConcat_scalar(left: Any, right: Any) -> list[Any] | None:
     """
     Concatenate two values into a list, handling JSON types.
 
@@ -230,29 +250,144 @@ def jsonConcat_scalar(left: Any, right: Any) -> list[Any]:
     - If both are scalars, create a 2-element list
     - NULL values are skipped
     """
+    if left is None and right is None:
+        return None
+
     result = []
 
     # Handle left
     if left is not None:
         if isinstance(left, list):
-            result.extend(left)
+            result.extend(_varchar_list_value(item) for item in left)
         else:
-            result.append(left)
+            result.append(_varchar_list_value(left))
 
     # Handle right
     if right is not None:
         if isinstance(right, list):
-            result.extend(right)
+            result.extend(_varchar_list_value(item) for item in right)
         else:
-            result.append(right)
+            result.append(_varchar_list_value(right))
 
     return result
+
+
+def _decode_structural_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, (dict, list, bool, int, float)):
+        return value
+    if isinstance(value, bytes):
+        value = value.decode("utf-8")
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped and stripped[0] in "{[":
+            try:
+                return json.loads(stripped)
+            except json.JSONDecodeError:
+                return value
+    return value
+
+
+def _is_cql_typed_structural_item(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and set(value) == {"__fhir4ds_cql_type", "value"}
+        and value.get("__fhir4ds_cql_type") in {
+            "Boolean",
+            "Integer",
+            "Decimal",
+            "String",
+            "Long",
+            "Date",
+            "DateTime",
+            "Time",
+        }
+    )
+
+
+def _encode_structural_item(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, separators=(",", ":"))
+    if isinstance(value, bool):
+        type_name = "Boolean"
+    elif isinstance(value, int):
+        type_name = "Integer"
+    elif isinstance(value, float):
+        type_name = "Decimal"
+    elif isinstance(value, str):
+        type_name = "String"
+    else:
+        return str(value)
+    return json.dumps(
+        {"__fhir4ds_cql_type": type_name, "value": value},
+        separators=(",", ":"),
+    )
+
+
+def _children_values(value: Any) -> list[Any]:
+    value = _decode_structural_value(value)
+    if value is None:
+        return []
+    if _is_cql_typed_structural_item(value):
+        return []
+    if isinstance(value, dict):
+        result: list[Any] = []
+        for child in value.values():
+            decoded = _decode_structural_value(child)
+            if isinstance(decoded, list):
+                result.extend(_decode_structural_value(item) for item in decoded)
+            else:
+                result.append(decoded)
+        return result
+    if isinstance(value, list):
+        result: list[Any] = []
+        for item in value:
+            result.extend(_children_values(item))
+        return result
+    return []
+
+
+def _descendant_values(value: Any) -> list[Any]:
+    value = _decode_structural_value(value)
+    if value is None:
+        return []
+    if _is_cql_typed_structural_item(value):
+        return []
+    if isinstance(value, list):
+        result: list[Any] = []
+        for item in value:
+            result.extend(_descendant_values(item))
+        return result
+    result = []
+    for child in _children_values(value):
+        result.append(child)
+        result.extend(_descendant_values(child))
+    return result
+
+
+def cqlChildren_scalar(value: Any) -> list[str | None] | None:
+    """CQL Children(argument): immediate values of structured elements."""
+    if value is None:
+        return None
+    return [_encode_structural_item(item) for item in _children_values(value)]
+
+
+def cqlDescendants_scalar(value: Any) -> list[str | None] | None:
+    """CQL Descendants(argument): recursive values of structured elements."""
+    if value is None:
+        return None
+    return [_encode_structural_item(item) for item in _descendant_values(value)]
 
 
 # Legacy aliases for backward compatibility
 singletonFrom = singletonFrom_scalar
 elementAt = elementAt_scalar
 jsonConcat = jsonConcat_scalar
+cqlChildren = cqlChildren_scalar
+cqlDescendants = cqlDescendants_scalar
 
 
 __all__ = [
@@ -264,6 +399,8 @@ __all__ = [
     "singletonFrom_scalar",
     "elementAt_scalar",
     "jsonConcat_scalar",
+    "cqlChildren_scalar",
+    "cqlDescendants_scalar",
     # Arrow functions
     "singletonFrom_arrow",
     "elementAt_arrow",
@@ -271,4 +408,6 @@ __all__ = [
     "singletonFrom",
     "elementAt",
     "jsonConcat",
+    "cqlChildren",
+    "cqlDescendants",
 ]

@@ -51,6 +51,16 @@ _PYTHON_PREFERRED_CPP_CONFLICTS = {
     "intervalMeetsAfter",
     "intervalStartsSame",
     "intervalEndsSame",
+    "intervalEquals",
+    "intervalEquivalent",
+    "intervalContainsPrecise",
+    "intervalOverlapsPrecise",
+    "intervalIncludesPrecise",
+    "intervalIncludedInPrecise",
+    "intervalBeforePrecise",
+    "intervalAfterPrecise",
+    "intervalOverlapsBeforePrecise",
+    "intervalOverlapsAfterPrecise",
     "intervalFromBounds",
     "intervalIntersect",
     "intervalUnion",
@@ -66,6 +76,7 @@ _PYTHON_PREFERRED_CPP_CONFLICTS = {
     "LowBoundary",
     "predecessorOf",
     "successorOf",
+    "ToQuantity",
 }
 
 
@@ -129,18 +140,6 @@ def _register_python_supplements(
     if include_fhirpath:
         from fhir4ds.fhirpath.duckdb.extension import register_fhirpath
         register_fhirpath(con)
-
-    # SQL macros always register — they supplement both C++ and Python UDFs
-    from .macros import register_all_macros
-    try:
-        register_all_macros(con)
-    except (
-        duckdb.CatalogException,
-        duckdb.InvalidInputException,
-        duckdb.NotImplementedException,
-        duckdb.BinderException,
-    ):
-        pass  # some macros may conflict with C++ functions; that's OK
 
     # When C++ is loaded, wrap the connection so create_function can skip
     # C++-owned names or shadow known conformance-sensitive conflicts.
@@ -222,6 +221,27 @@ def _register_python_supplements(
             return getattr(self._real, name)
 
     reg_con = _SafeConnection(con) if cpp_loaded else con
+
+    # Regex-backed string macros depend on these helper UDFs. Register them
+    # before macro creation for Python fallback connections; native C++ builds
+    # provide the same functions and the safe wrapper skips duplicate names.
+    from .udf.string import registerRegexStringUdfs
+    try:
+        registerRegexStringUdfs(reg_con)
+    except Exception as e:
+        _logger.warning("Regex string UDF registration failed: %s", e)
+
+    # SQL macros always register — they supplement both C++ and Python UDFs.
+    from .macros import register_all_macros
+    try:
+        register_all_macros(con)
+    except (
+        duckdb.CatalogException,
+        duckdb.InvalidInputException,
+        duckdb.NotImplementedException,
+        duckdb.BinderException,
+    ):
+        pass  # some macros may conflict with C++ functions; that's OK
 
     from .udf.age import registerAgeUdfs
     from .udf.aggregate import registerAggregateUdfs

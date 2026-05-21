@@ -22,6 +22,12 @@ from .fhir_types_generated import (
     TYPE_HIERARCHY,
 )
 
+_FHIRPATH_PRIMITIVE_PARENTS = {
+    # The generated FHIR type hierarchy stops at uri, but the FHIRPath type
+    # surface treats uri and its subtypes as string-compatible primitives.
+    "uri": "string",
+}
+
 
 def build_fhir_model() -> Dict[str, Any]:
     """
@@ -86,10 +92,16 @@ def build_fhir_model() -> Dict[str, Any]:
     model["path2Type"].update(_get_common_path_to_type_mappings())
 
     # Build type2Parent from TYPE_HIERARCHY
-    model["type2Parent"] = dict(TYPE_HIERARCHY)
+    model["type2Parent"] = {
+        **TYPE_HIERARCHY,
+        **_FHIRPATH_PRIMITIVE_PARENTS,
+    }
 
     # Build pathsDefinedElsewhere for BackboneElement paths
     model["pathsDefinedElsewhere"] = _get_backbone_element_paths()
+    for path, alias in model["pathsDefinedElsewhere"].items():
+        if path == alias and "." in path:
+            model["type2Parent"].setdefault(path, "BackboneElement")
 
     return model
 

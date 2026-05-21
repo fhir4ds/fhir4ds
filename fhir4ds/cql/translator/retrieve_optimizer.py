@@ -882,13 +882,23 @@ def _optimize_raw_fhirpath_resource_calls(
     raw_alias_to_cte = _merge_raw_alias_mapping(raw_sql, alias_to_cte, registry)
 
     def replace(match: re.Match[str]) -> str:
+        func_name = match.group(1)
         alias = match.group(2)
         path = match.group(3).replace("''", "'")
         cte_name = raw_alias_to_cte.get(alias, alias)
-        column_name = registry.lookup(cte_name, path)
-        if not column_name:
+        column_info = None
+        for info in registry.get_columns(cte_name).values():
+            if info.fhirpath == path:
+                column_info = info
+                break
+        if not column_info:
             return match.group(0)
-        return f"{alias}.{column_name}"
+        if (
+            func_name == "fhirpath_number"
+            and column_info.sql_type.upper() not in {"DOUBLE", "FLOAT", "INTEGER", "BIGINT", "DECIMAL"}
+        ):
+            return match.group(0)
+        return f"{alias}.{column_info.column_name}"
 
     return _RAW_FHIRPATH_RESOURCE_RE.sub(replace, raw_sql)
 
@@ -1010,6 +1020,7 @@ def _try_optimize_fhirpath_call(
     subquery_optimized = _try_optimize_scalar_subquery_fhirpath_call(
         resource_arg,
         path,
+        call.name,
         registry,
         alias_to_cte,
     )
@@ -1035,8 +1046,19 @@ def _try_optimize_fhirpath_call(
         cte_name = alias
 
     # Look up the column in the registry
-    column_name = registry.lookup(cte_name, path)
+    column_info = None
+    for info in registry.get_columns(cte_name).values():
+        if info.fhirpath == path:
+            column_info = info
+            break
+    column_name = column_info.column_name if column_info else None
     if column_name:
+        if (
+            call.name == "fhirpath_number"
+            and column_info
+            and column_info.sql_type.upper() not in {"DOUBLE", "FLOAT", "INTEGER", "BIGINT", "DECIMAL"}
+        ):
+            return None
         # Found a precomputed column - return a reference to it
         return SQLQualifiedIdentifier(parts=[alias, column_name])
 
@@ -1079,6 +1101,7 @@ def _replace_select_columns(select: SQLSelect, columns: List[SQLExpression]) -> 
 def _try_optimize_scalar_subquery_fhirpath_call(
     resource_arg: SQLExpression,
     path: str,
+    func_name: str,
     registry: ColumnRegistry,
     alias_to_cte: Dict[str, str],
 ) -> Optional[SQLExpression]:
@@ -1100,14 +1123,23 @@ def _try_optimize_scalar_subquery_fhirpath_call(
     if selected_alias and selected_alias != source_alias:
         return None
 
-    column_name = registry.lookup(source_cte, path)
-    if not column_name:
+    column_info = None
+    for info in registry.get_columns(source_cte).values():
+        if info.fhirpath == path:
+            column_info = info
+            break
+    if not column_info:
+        return None
+    if (
+        func_name == "fhirpath_number"
+        and column_info.sql_type.upper() not in {"DOUBLE", "FLOAT", "INTEGER", "BIGINT", "DECIMAL"}
+    ):
         return None
 
     projected = SQLSubquery(
         query=_replace_select_columns(
             select,
-            [SQLQualifiedIdentifier(parts=[source_alias, column_name])],
+            [SQLQualifiedIdentifier(parts=[source_alias, column_info.column_name])],
         )
     )
     return _optimize_fhirpath_calls(projected, registry, alias_to_cte)
@@ -1220,10 +1252,27 @@ def _recurse_ast(
         )
 
     elif isinstance(ast, SQLBinaryOp):
+        left = _optimize_fhirpath_calls(ast.left, registry, alias_to_cte)
+        right = _optimize_fhirpath_calls(ast.right, registry, alias_to_cte)
+        if ast.operator in {">", "<", ">=", "<=", "=", "!="}:
+            left_is_numeric = (
+                isinstance(left, SQLLiteral)
+                and isinstance(left.value, (int, float))
+                and not isinstance(left.value, bool)
+            )
+            right_is_numeric = (
+                isinstance(right, SQLLiteral)
+                and isinstance(right.value, (int, float))
+                and not isinstance(right.value, bool)
+            )
+            if right_is_numeric and isinstance(left, (SQLQualifiedIdentifier, SQLSubquery)):
+                left = SQLCast(expression=left, target_type="DOUBLE", try_cast=True)
+            elif left_is_numeric and isinstance(right, (SQLQualifiedIdentifier, SQLSubquery)):
+                right = SQLCast(expression=right, target_type="DOUBLE", try_cast=True)
         return SQLBinaryOp(
             operator=ast.operator,
-            left=_optimize_fhirpath_calls(ast.left, registry, alias_to_cte),
-            right=_optimize_fhirpath_calls(ast.right, registry, alias_to_cte)
+            left=left,
+            right=right
         )
 
     elif isinstance(ast, SQLUnaryOp):

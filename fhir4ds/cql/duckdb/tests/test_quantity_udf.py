@@ -267,9 +267,20 @@ def test_quantity_add_different_units():
     result = quantityAdd(q1, q2)
     assert result is not None
     parsed = json.loads(result)
-    # Result should be 1500 mg (in grams since q1 is in g)
-    assert parsed["value"] == 1.5  # 1g + 0.5g = 1.5g
-    assert parsed["code"] == "g"
+    # CQL Add returns the most granular unit of either input.
+    assert parsed["value"] == 1500.0
+    assert parsed["code"] == "mg"
+
+
+def test_quantity_add_missing_unit_defaults_to_unity():
+    """Test addition treats missing units as CQL default unit '1'."""
+    q1 = '{"value": 5}'
+    q2 = '{"value": 3, "code": "1"}'
+    result = quantityAdd(q1, q2)
+    assert result is not None
+    parsed = json.loads(result)
+    assert parsed["value"] == 8.0
+    assert parsed["code"] == "1"
 
 
 def test_quantity_add_incompatible_units():
