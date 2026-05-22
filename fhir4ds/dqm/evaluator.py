@@ -6,6 +6,7 @@ import json
 import logging
 import warnings
 from datetime import date, datetime, timezone
+from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -113,7 +114,7 @@ class MeasureEvaluator:
             raise FileNotFoundError(f"CQL library not found: {cql_library_path}")
 
         try:
-            from fhir4ds.cql import parse_cql, CQLToSQLTranslator
+            from fhir4ds.cql import CQLToSQLTranslator, parse_cql
         except ImportError as e:
             raise DQMError(f"cql-py is required: {e}") from e
 
@@ -334,9 +335,10 @@ class MeasureEvaluator:
                 if not all(col in frame.columns for col in component_cols):
                     summaries.append(base)
                     continue
+                columns = tuple(component_cols)
                 keys = frame.apply(
-                    lambda row: tuple(
-                        self._stratifier_value(row[col]) for col in component_cols
+                    lambda row, columns=columns: tuple(
+                        self._stratifier_value(row[col]) for col in columns
                     ),
                     axis=1,
                 )
@@ -349,7 +351,7 @@ class MeasureEvaluator:
                             "value": value,
                             "text": self._stratum_value_text(value),
                         }
-                        for component, value in zip(stratifier.components, key)
+                        for component, value in zip(stratifier.components, key, strict=True)
                     ]
                     base["strata"].append(
                         {
@@ -507,6 +509,8 @@ class MeasureEvaluator:
 
         if pop_map is None:
             raise DQMError("No evaluation has been run yet. Call evaluate() first.")
+        if report_type == "individual":
+            self._validate_individual_report_frame(df)
 
         summary_input: Any = result if isinstance(result, MeasureResult) else df
         summary = self.summary_report(summary_input)
@@ -538,7 +542,7 @@ class MeasureEvaluator:
                     continue
                 if isinstance(count, float):
                     count = int(count)
-                populations.append({
+                population_report = {
                     "code": {
                         "coding": [{
                             "system": "http://terminology.hl7.org/CodeSystem/measure-population",
@@ -546,8 +550,25 @@ class MeasureEvaluator:
                         }]
                     },
                     "count": count,
-                })
+                }
+                if pop.source_population_id:
+                    population_report["id"] = pop.source_population_id
+                    population_report["extension"] = [{
+                        "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-MeasureReport.group.population.linkId",
+                        "valueString": pop.source_population_id,
+                    }]
+                if report_type == "individual":
+                    support = self._supporting_evidence_extensions(df, pop)
+                    if support:
+                        population_report.setdefault("extension", []).extend(support)
+                populations.append(population_report)
             group_report: dict[str, Any] = {"population": populations}
+            if group.source_group_id:
+                group_report["id"] = group.source_group_id
+                group_report["extension"] = [{
+                    "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-MeasureReport.group.linkId",
+                    "valueString": group.source_group_id,
+                }]
             stratifier_summaries = group_summary.get("stratifiers", [])
             if stratifier_summaries:
                 group_report["stratifier"] = [
@@ -566,6 +587,17 @@ class MeasureEvaluator:
             "group": groups,
         }
 
+        if report_type == "individual":
+            report["meta"] = {
+                "profile": [
+                    "http://hl7.org/fhir/us/davinci-deqm/StructureDefinition/indv-measurereport-deqm"
+                ]
+            }
+            patient_id = self._single_patient_id(df)
+            if patient_id:
+                report["subject"] = {"reference": f"Patient/{patient_id}"}
+            report["text"] = self._individual_report_text(report, patient_id)
+
         if report_type == "summary":
             report["extension"] = [{
                 "url": "http://hl7.org/fhir/us/davinci-deqm/StructureDefinition/performanceRate",
@@ -573,6 +605,161 @@ class MeasureEvaluator:
             }]
 
         return report
+
+    def _validate_individual_report_frame(self, df: pd.DataFrame) -> None:
+        if "patient_id" not in df.columns:
+            raise DQMError("Individual MeasureReport requires a patient_id column.")
+        patient_ids = df["patient_id"].dropna().astype(str).unique()
+        if len(patient_ids) != 1:
+            raise DQMError(
+                "Individual MeasureReport requires exactly one patient row; "
+                f"found {len(patient_ids)} patients."
+            )
+
+    def _single_patient_id(self, df: pd.DataFrame) -> str | None:
+        if "patient_id" not in df.columns:
+            return None
+        patient_ids = df["patient_id"].dropna().astype(str).unique()
+        return patient_ids[0] if len(patient_ids) == 1 else None
+
+    def _supporting_evidence_extensions(
+        self, df: pd.DataFrame, pop: Any,
+    ) -> list[dict[str, Any]]:
+        if not pop.supporting_evidence or len(df) != 1:
+            return []
+        row = df.iloc[0]
+        extensions: list[dict[str, Any]] = []
+        for ev in pop.supporting_evidence:
+            col_name = f"evidence_{self._col_name(ev.name)}"
+            if col_name not in df.columns:
+                continue
+            extension_children: list[dict[str, Any]] = [
+                {"url": "name", "valueCode": ev.name}
+            ]
+            if ev.description:
+                extension_children.append({"url": "description", "valueString": ev.description})
+            if ev.code:
+                extension_children.append({"url": "code", "valueCodeableConcept": ev.code})
+            extension_children.extend(self._supporting_evidence_value_extensions(row[col_name]))
+            extensions.append({
+                "url": "http://hl7.org/fhir/StructureDefinition/cqf-supportingEvidence",
+                "extension": extension_children,
+            })
+        return extensions
+
+    def _supporting_evidence_value_extensions(self, value: Any) -> list[dict[str, Any]]:
+        value = self._normalize_evidence_value(value)
+        if self._is_null_like(value):
+            return [{
+                "url": "value",
+                "extension": [
+                    {
+                        "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                        "valueCode": "unknown",
+                    },
+                    {
+                        "url": "http://hl7.org/fhir/StructureDefinition/cqf-cqlType",
+                        "valueString": "System.Any",
+                    },
+                ],
+            }]
+        if isinstance(value, (list, tuple, np.ndarray)):
+            if len(value) == 0:
+                return [{
+                    "url": "value",
+                    "extension": [
+                        {
+                            "url": "http://hl7.org/fhir/StructureDefinition/cqf-isEmptyList",
+                            "valueBoolean": True,
+                        },
+                        {
+                            "url": "http://hl7.org/fhir/StructureDefinition/cqf-cqlType",
+                            "valueString": "List<System.Any>",
+                        },
+                    ],
+                }]
+            result: list[dict[str, Any]] = []
+            for item in value:
+                result.extend(self._supporting_evidence_value_extensions(item))
+            return result
+        return [self._supporting_evidence_single_value(value)]
+
+    def _supporting_evidence_single_value(self, value: Any) -> dict[str, Any]:
+        value = self._normalize_evidence_value(value)
+        if isinstance(value, bool):
+            return {"url": "value", "valueBoolean": value}
+        if isinstance(value, int) and not isinstance(value, bool):
+            return {"url": "value", "valueInteger": value}
+        if isinstance(value, float):
+            return {"url": "value", "valueDecimal": value}
+        if isinstance(value, dict):
+            fhir_value = self._dict_to_fhir_value(value)
+            if fhir_value:
+                return {"url": "value", **fhir_value}
+            return {
+                "url": "value",
+                "extension": [
+                    self._tuple_field_extension(key, val)
+                    for key, val in value.items()
+                ],
+            }
+        return {"url": "value", "valueString": str(value)}
+
+    def _dict_to_fhir_value(self, value: dict[str, Any]) -> dict[str, Any] | None:
+        resource_type = value.get("resourceType")
+        resource_id = value.get("id")
+        if resource_type and resource_id:
+            return {"valueReference": {"reference": f"{resource_type}/{resource_id}"}}
+        if "reference" in value and isinstance(value["reference"], str):
+            return {"valueReference": {"reference": value["reference"]}}
+        if "coding" in value or ("text" in value and any(k in value for k in ("coding", "code"))):
+            return {"valueCodeableConcept": value}
+        if "system" in value and "code" in value:
+            return {"valueCoding": value}
+        if "value" in value and any(k in value for k in ("unit", "code", "system")):
+            return {"valueQuantity": value}
+        if "start" in value or "end" in value:
+            return {"valuePeriod": value}
+        return None
+
+    def _tuple_field_extension(self, key: str, value: Any) -> dict[str, Any]:
+        child = self._supporting_evidence_single_value(value)
+        child["url"] = key if key else "field"
+        return child
+
+    def _normalize_evidence_value(self, value: Any) -> Any:
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith(("{", "[")):
+                try:
+                    return json.loads(stripped)
+                except json.JSONDecodeError:
+                    return value
+        return value
+
+    def _is_null_like(self, value: Any) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, float) and np.isnan(value):
+            return True
+        return bool(pd.isna(value)) if not isinstance(value, (dict, list, tuple, np.ndarray)) else False
+
+    def _individual_report_text(
+        self, report: dict[str, Any], patient_id: str | None,
+    ) -> dict[str, str]:
+        subject = escape(patient_id or "unknown")
+        parts = [f"Measure report for Patient/{subject}."]
+        for group in report.get("group", []):
+            for pop in group.get("population", []):
+                code = pop.get("code", {}).get("coding", [{}])[0].get("code", "population")
+                count = pop.get("count", 0)
+                parts.append(f"{escape(code)}: {'met' if count else 'not met'}.")
+        return {
+            "status": "generated",
+            "div": f"<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>{' '.join(parts)}</p></div>",
+        }
 
     def _measure_report_stratifier(
         self, stratifier_summary: dict[str, Any], group: GroupMap

@@ -1,7 +1,7 @@
 """Tests for MeasureEvaluator."""
 
-import pytest
 import pandas as pd
+import pytest
 
 from fhir4ds.dqm.evaluator import MeasureEvaluator
 from fhir4ds.dqm.models import MeasureResult
@@ -13,6 +13,7 @@ from fhir4ds.dqm.types import (
     PopulationMap,
     StratifierComponent,
     StratifierEntry,
+    SupportingEvidenceDef,
 )
 
 
@@ -362,6 +363,92 @@ class TestToMeasureReport:
         assert "initial-population" in pop_codes
         assert "denominator" in pop_codes
         assert "numerator" in pop_codes
+
+    def test_to_measure_report_preserves_authored_group_id(self):
+        """MeasureReport group should link back to authored Measure.group.id."""
+        evaluator = MeasureEvaluator(conn=None)
+        mr = _make_measure_result()
+        mr.pop_map.groups[0].source_group_id = "primary"
+
+        report = evaluator.to_measure_report(
+            mr, period_start="2024-01-01", period_end="2024-12-31"
+        )
+
+        assert report["group"][0]["id"] == "primary"
+
+    def test_individual_measure_report_includes_supporting_evidence(self):
+        """Individual MeasureReport should serialize authored supporting evidence."""
+        evaluator = MeasureEvaluator(conn=None)
+        mr = _make_measure_result()
+        pop = mr.pop_map.groups[0].populations[1]
+        pop.source_population_id = "denominator"
+        pop.supporting_evidence = [
+            SupportingEvidenceDef(
+                name="QualifyingEncounter",
+                cql_expression="Qualifying Encounter",
+                description="The encounter that qualified the patient.",
+                code={
+                    "coding": [
+                        {
+                            "system": "http://example.org/evidence",
+                            "code": "qualifying-encounter",
+                        }
+                    ]
+                },
+            )
+        ]
+        mr.dataframe = pd.DataFrame(
+            {
+                "patient_id": ["P1"],
+                "initial_population": [True],
+                "denominator": [True],
+                "numerator": [False],
+                "evidence_QualifyingEncounter": [
+                    {"resourceType": "Encounter", "id": "enc-1"}
+                ],
+            }
+        )
+
+        report = evaluator.to_measure_report(
+            mr,
+            period_start="2024-01-01",
+            period_end="2024-12-31",
+            report_type="individual",
+        )
+
+        assert report["subject"]["reference"] == "Patient/P1"
+        assert report["meta"]["profile"] == [
+            "http://hl7.org/fhir/us/davinci-deqm/StructureDefinition/indv-measurereport-deqm"
+        ]
+        denominator = next(
+            population
+            for population in report["group"][0]["population"]
+            if population["code"]["coding"][0]["code"] == "denominator"
+        )
+        support = next(
+            ext
+            for ext in denominator["extension"]
+            if ext["url"] == "http://hl7.org/fhir/StructureDefinition/cqf-supportingEvidence"
+        )
+        assert {"url": "name", "valueCode": "QualifyingEncounter"} in support["extension"]
+        assert {
+            "url": "value",
+            "valueReference": {"reference": "Encounter/enc-1"},
+        } in support["extension"]
+
+    def test_individual_measure_report_requires_one_patient(self):
+        """Individual MeasureReport should not silently summarize multiple patients."""
+        evaluator = MeasureEvaluator(conn=None)
+        mr = _make_measure_result()
+
+        from fhir4ds.dqm.errors import DQMError
+        with pytest.raises(DQMError, match="exactly one patient"):
+            evaluator.to_measure_report(
+                mr,
+                period_start="2024-01-01",
+                period_end="2024-12-31",
+                report_type="individual",
+            )
 
     def test_to_measure_report_legacy_dataframe(self):
         """to_measure_report should still work with a plain DataFrame (legacy)."""

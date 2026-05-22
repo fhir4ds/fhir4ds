@@ -10,6 +10,7 @@ from pathlib import Path
 from fhir4ds.dqm.batch import inspect_config, run_batch, validate_config
 from fhir4ds.dqm.config import (
     AuditSpec,
+    DefinitionOutputSpec,
     DQMConfigError,
     DQMRunConfig,
     MeasureSpec,
@@ -108,6 +109,24 @@ def _add_config_and_run_args(parser: argparse.ArgumentParser) -> None:
         default="summary",
     )
     parser.add_argument(
+        "--definitions",
+        choices=["none", "all"],
+        default="none",
+        help="Write evaluated CQL define statements as per-measure machine-readable output",
+    )
+    parser.add_argument(
+        "--definition-format",
+        action="append",
+        choices=["csv", "json", "parquet"],
+        dest="definition_formats",
+        help="Definition output format; may be repeated",
+    )
+    parser.add_argument(
+        "--include-sde-definitions",
+        action="store_true",
+        help="Include SDE-prefixed definitions in --definitions all output",
+    )
+    parser.add_argument(
         "--fail-fast",
         action="store_true",
         help="Stop after the first measure failure",
@@ -155,6 +174,11 @@ def _load_config_from_args(args: argparse.Namespace) -> DQMRunConfig:
             directory=Path(args.output),
             formats=args.formats or ["json"],
             measure_reports=args.measure_reports,
+            definitions=DefinitionOutputSpec(
+                mode=args.definitions,
+                formats=args.definition_formats or args.formats or ["json"],
+                include_sde=args.include_sde_definitions,
+            ),
         ),
         libraries=[Path(path) for path in args.library_dir],
         terminology=TerminologySpec(valuesets=[Path(path) for path in args.valuesets]),

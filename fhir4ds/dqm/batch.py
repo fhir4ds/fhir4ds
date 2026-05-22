@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Any
 
 import fhir4ds
-from fhir4ds.cql import FHIRDataLoader
+from fhir4ds.cql import FHIRDataLoader, evaluate_measure
+from fhir4ds.cql.parser import parse_cql
+from fhir4ds.cql.parser.ast_nodes import Definition
 from fhir4ds.sources import FileSystemSource
 
-from .config import DQMConfigError, DQMRunConfig, MeasureSpec, SourceSpec
+from .config import DefinitionOutputSpec, DQMConfigError, DQMRunConfig, MeasureSpec, SourceSpec
 from .evaluator import MeasureEvaluator
 from .parser import MeasureParser
 from .types import AuditMode
@@ -117,6 +119,12 @@ def inspect_config(config: DQMRunConfig) -> dict[str, Any]:
             "directory": str(config.outputs.directory),
             "formats": config.outputs.formats,
             "measure_reports": config.outputs.measure_reports,
+            "definitions": {
+                "mode": config.outputs.definitions.mode,
+                "formats": config.outputs.definitions.formats,
+                "include_sde": config.outputs.definitions.include_sde,
+                "names": config.outputs.definitions.definitions,
+            },
         },
         "audit": {
             "mode": config.audit.mode.value,
@@ -181,7 +189,14 @@ def _run_one_measure(
             generate_narratives=config.audit.narratives,
         )
         summary = evaluator.summary_report(result)
-        outputs = _write_measure_outputs(evaluator, config, measure_id, result, summary)
+        outputs = _write_measure_outputs(
+            evaluator,
+            config,
+            measure_id,
+            result,
+            summary,
+            cql_path,
+        )
         return MeasureRunRecord(
             measure_id=measure_id,
             status="ok",
@@ -205,6 +220,7 @@ def _write_measure_outputs(
     measure_id: str,
     result: Any,
     summary: dict[str, Any],
+    cql_path: Path,
 ) -> dict[str, str]:
     output_dir = config.outputs.directory / _safe_name(measure_id)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -224,6 +240,15 @@ def _write_measure_outputs(
     _write_json(summary_path, summary)
     outputs["summary"] = str(summary_path)
 
+    definition_outputs = _write_definition_outputs(
+        evaluator,
+        config,
+        output_dir,
+        cql_path,
+        result,
+    )
+    outputs.update(definition_outputs)
+
     report_mode = config.outputs.measure_reports
     if report_mode in {"summary", "both"}:
         report = evaluator.to_measure_report(
@@ -236,12 +261,21 @@ def _write_measure_outputs(
         _write_json(report_path, report)
         outputs["measure_report_summary"] = str(report_path)
     if report_mode in {"individual", "both"}:
+        supporting_evidence_df = _evaluate_supporting_evidence(
+            evaluator,
+            config,
+            cql_path,
+            result,
+        )
         reports_dir = output_dir / "individual-reports"
         reports_dir.mkdir(exist_ok=True)
         for row in result.dataframe.to_dict("records"):
             patient_id = str(row.get("patient_id", "unknown"))
+            patient_df = result.dataframe[result.dataframe["patient_id"] == row.get("patient_id")]
+            if supporting_evidence_df is not None:
+                patient_df = _merge_supporting_evidence(patient_df, supporting_evidence_df)
             patient_result = result.__class__(
-                dataframe=result.dataframe[result.dataframe["patient_id"] == row.get("patient_id")],
+                dataframe=patient_df,
                 populations=result.populations,
                 parameters=result.parameters,
                 measure_url=result.measure_url,
@@ -253,11 +287,180 @@ def _write_measure_outputs(
                 period_end=config.period_end,
                 report_type="individual",
             )
-            report["subject"] = {"reference": f"Patient/{patient_id}"}
             _write_json(reports_dir / f"{_safe_name(patient_id)}.json", report)
         outputs["measure_report_individual_dir"] = str(reports_dir)
 
     return outputs
+
+
+def _evaluate_supporting_evidence(
+    evaluator: MeasureEvaluator,
+    config: DQMRunConfig,
+    cql_path: Path,
+    result: Any,
+) -> Any | None:
+    pop_map = result.pop_map
+    if pop_map is None:
+        return None
+    output_columns = {
+        f"evidence_{MeasureEvaluator._col_name(ev.name)}": ev.cql_expression
+        for group in pop_map.groups
+        for pop in group.populations
+        for ev in pop.supporting_evidence
+    }
+    if not output_columns:
+        return None
+    return evaluate_measure(
+        library_path=str(cql_path),
+        conn=evaluator.conn,
+        output_columns=output_columns,
+        parameters=config.parameters,
+        patient_ids=_result_patient_ids(result),
+        include_paths=_include_paths_for_cql(config, cql_path),
+        audit_mode=AuditMode.NONE.value,
+    )
+
+
+def _merge_supporting_evidence(patient_df: Any, supporting_evidence_df: Any) -> Any:
+    if patient_df.empty or supporting_evidence_df.empty:
+        return patient_df
+    patient_id = str(patient_df.iloc[0]["patient_id"])
+    evidence_rows = supporting_evidence_df[
+        supporting_evidence_df["patient_id"].astype(str) == patient_id
+    ]
+    if evidence_rows.empty:
+        return patient_df
+    merged = patient_df.copy()
+    evidence_row = evidence_rows.iloc[0]
+    for column in supporting_evidence_df.columns:
+        if column == "patient_id":
+            continue
+        merged.loc[:, column] = evidence_row[column]
+    return merged
+
+
+def _write_definition_outputs(
+    evaluator: MeasureEvaluator,
+    config: DQMRunConfig,
+    output_dir: Path,
+    cql_path: Path,
+    result: Any,
+) -> dict[str, str]:
+    spec = config.outputs.definitions
+    if spec.mode == "none":
+        return {}
+
+    column_mapping, schema = _build_definition_output_mapping(cql_path, spec)
+    definitions_df = evaluate_measure(
+        library_path=str(cql_path),
+        conn=evaluator.conn,
+        output_columns=column_mapping,
+        parameters=config.parameters,
+        patient_ids=_result_patient_ids(result),
+        include_paths=_include_paths_for_cql(config, cql_path),
+        audit_mode=AuditMode.NONE.value,
+    )
+
+    outputs: dict[str, str] = {}
+    for fmt in spec.formats:
+        path = output_dir / f"definitions.{fmt}"
+        if fmt == "csv":
+            definitions_df.to_csv(path, index=False)
+        elif fmt == "json":
+            definitions_df.to_json(path, orient="records", indent=2, date_format="iso")
+        elif fmt == "parquet":
+            definitions_df.to_parquet(path, index=False)
+        outputs[f"definitions_{fmt}"] = str(path)
+
+    schema_path = output_dir / "definitions.schema.json"
+    _write_json(schema_path, schema)
+    outputs["definitions_schema"] = str(schema_path)
+    return outputs
+
+
+def _result_patient_ids(result: Any) -> list[str]:
+    if "patient_id" not in result.dataframe.columns:
+        return []
+    return [str(patient_id) for patient_id in result.dataframe["patient_id"].tolist()]
+
+
+def _build_definition_output_mapping(
+    cql_path: Path,
+    spec: DefinitionOutputSpec,
+) -> tuple[dict[str, str], dict[str, Any]]:
+    library = parse_cql(cql_path.read_text())
+    all_definitions = [
+        stmt.name
+        for stmt in library.statements
+        if isinstance(stmt, Definition)
+    ]
+    available = set(all_definitions)
+    if spec.mode == "selected":
+        missing = [name for name in spec.definitions if name not in available]
+        if missing:
+            raise DQMConfigError(
+                f"Selected definition(s) not found in {cql_path.name}: {missing}"
+            )
+        definition_names = list(spec.definitions)
+    else:
+        definition_names = [
+            name
+            for name in all_definitions
+            if spec.include_sde or not name.startswith("SDE")
+        ]
+
+    used_columns: set[str] = {"patient_id"}
+    column_mapping: dict[str, str] = {}
+    definition_schema: list[dict[str, str]] = []
+    for definition_name in definition_names:
+        column_name = _unique_column_name(_safe_column_name(definition_name), used_columns)
+        used_columns.add(column_name)
+        column_mapping[column_name] = definition_name
+        definition_schema.append(
+            {
+                "column": column_name,
+                "definition": definition_name,
+                "library": cql_path.stem,
+            }
+        )
+
+    schema = {
+        "resourceType": "CQLDefinitionOutputSchema",
+        "library": cql_path.stem,
+        "mode": spec.mode,
+        "include_sde": spec.include_sde,
+        "patient_id_column": "patient_id",
+        "definitions": definition_schema,
+    }
+    return column_mapping, schema
+
+
+def _safe_column_name(value: str) -> str:
+    chars = [ch.lower() if ch.isalnum() else "_" for ch in value.strip()]
+    name = "".join(chars).strip("_")
+    while "__" in name:
+        name = name.replace("__", "_")
+    return name or "definition"
+
+
+def _unique_column_name(candidate: str, used: set[str]) -> str:
+    if candidate not in used:
+        return candidate
+    suffix = 2
+    while f"{candidate}_{suffix}" in used:
+        suffix += 1
+    return f"{candidate}_{suffix}"
+
+
+def _include_paths_for_cql(config: DQMRunConfig, cql_path: Path) -> list[str]:
+    paths: list[str] = []
+    seen: set[str] = set()
+    for path in [*config.libraries, cql_path.parent]:
+        path_str = str(path)
+        if path_str not in seen:
+            paths.append(path_str)
+            seen.add(path_str)
+    return paths
 
 
 def _create_connection(source: SourceSpec):

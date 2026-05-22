@@ -49,12 +49,23 @@ class AuditSpec:
 
 
 @dataclass
+class DefinitionOutputSpec:
+    """Machine-readable evaluated CQL definition output configuration."""
+
+    mode: str = "none"
+    formats: list[str] = field(default_factory=list)
+    include_sde: bool = False
+    definitions: list[str] = field(default_factory=list)
+
+
+@dataclass
 class OutputSpec:
     """Output configuration."""
 
     directory: Path
     formats: list[str] = field(default_factory=lambda: ["json"])
     measure_reports: str = "summary"
+    definitions: DefinitionOutputSpec = field(default_factory=DefinitionOutputSpec)
 
 
 @dataclass
@@ -246,10 +257,55 @@ def _parse_outputs(raw: Any, base: Path) -> OutputSpec:
         report_mode = raw_report_mode
     if report_mode not in {"none", "summary", "individual", "both"}:
         raise DQMConfigError("'outputs.measure_reports' must be none, summary, individual, or both")
+    definition_outputs = _parse_definition_outputs(raw.get("definitions"), normalized)
     return OutputSpec(
         directory=_resolve_path(directory, base),
         formats=normalized,
         measure_reports=report_mode,
+        definitions=definition_outputs,
+    )
+
+
+def _parse_definition_outputs(raw: Any, default_formats: list[str]) -> DefinitionOutputSpec:
+    if raw is None or raw is False:
+        return DefinitionOutputSpec()
+    if raw is True:
+        return DefinitionOutputSpec(mode="all", formats=list(default_formats))
+    if isinstance(raw, str):
+        raw = {"mode": raw}
+    if not isinstance(raw, dict):
+        raise DQMConfigError("'outputs.definitions' must be an object, string, or boolean")
+
+    mode = raw.get("mode", "none")
+    if mode not in {"none", "all", "selected"}:
+        raise DQMConfigError("'outputs.definitions.mode' must be none, all, or selected")
+
+    formats = raw.get("formats")
+    if formats is None:
+        formats = default_formats
+    elif isinstance(formats, str):
+        formats = [formats]
+    if not isinstance(formats, list) or not all(isinstance(fmt, str) for fmt in formats):
+        raise DQMConfigError("'outputs.definitions.formats' must be a string or list of strings")
+    normalized_formats = [fmt.lower() for fmt in formats]
+    allowed = {"csv", "json", "parquet"}
+    invalid = sorted(set(normalized_formats) - allowed)
+    if invalid:
+        raise DQMConfigError(f"Unsupported definition output format(s): {invalid}")
+
+    definitions = raw.get("names") or raw.get("definitions") or []
+    if isinstance(definitions, str):
+        definitions = [definitions]
+    if not isinstance(definitions, list) or not all(isinstance(name, str) for name in definitions):
+        raise DQMConfigError("'outputs.definitions.names' must be a string or list of strings")
+    if mode == "selected" and not definitions:
+        raise DQMConfigError("'outputs.definitions.names' is required when mode is selected")
+
+    return DefinitionOutputSpec(
+        mode=mode,
+        formats=normalized_formats,
+        include_sde=bool(raw.get("include_sde", False)),
+        definitions=definitions,
     )
 
 
