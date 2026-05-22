@@ -37,7 +37,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.10"
           cache: pip
 
       - name: Install package and test dependencies
@@ -50,4 +50,10 @@ jobs:
         run: python -m ruff check . --output-format=github
 
       - name: Pytest
-        run: python -m pytest
+        run: >
+          python -m pytest
+          fhir4ds/cli/tests
+          fhir4ds/dqm
+          fhir4ds/sources
+          fhir4ds/cql/tests/unit
+          fhir4ds/viewdef

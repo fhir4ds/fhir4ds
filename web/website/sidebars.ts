@@ -21,6 +21,7 @@ const sidebars: SidebarsConfig = {
       link: {type: 'doc', id: 'user-guide/engine'},
       items: [
         'user-guide/engine',
+        'user-guide/cli',
         {
           type: 'category',
           label: 'Data Sources',
