@@ -61,6 +61,7 @@ class MeasureEvaluator:
         patient_ids: list[str] | None = None,
         include_paths: list[str] | None = None,
         generate_narratives: bool = False,
+        include_supporting_evidence: bool = False,
     ) -> MeasureResult:
         """Evaluate a FHIR Measure against the resources table.
 
@@ -85,6 +86,9 @@ class MeasureEvaluator:
             generate_narratives: If True (requires audit), enriches each
                    audit struct in-place with a ``narrative`` field containing
                    a plain-English explanation.  No separate columns are added.
+            include_supporting_evidence: If True, include Measure-authored
+                   supporting evidence definitions as ``evidence_*`` output
+                   columns for downstream individual MeasureReport generation.
 
         Returns:
             MeasureResult containing the DataFrame, population map, and parameters.
@@ -129,6 +133,7 @@ class MeasureEvaluator:
                 patient_ids=patient_ids,
                 audit_mode=effective_mode,
                 include_paths=include_paths,
+                include_supporting_evidence=include_supporting_evidence,
                 parse_cql=parse_cql,
                 translator_cls=CQLToSQLTranslator,
             )
@@ -730,11 +735,13 @@ class MeasureEvaluator:
     def _normalize_evidence_value(self, value: Any) -> Any:
         if isinstance(value, np.generic):
             return value.item()
+        if isinstance(value, dict) and "result" in value and "evidence" in value:
+            return value.get("result")
         if isinstance(value, str):
             stripped = value.strip()
             if stripped.startswith(("{", "[")):
                 try:
-                    return json.loads(stripped)
+                    return self._normalize_evidence_value(json.loads(stripped))
                 except json.JSONDecodeError:
                     return value
         return value
@@ -838,6 +845,7 @@ class MeasureEvaluator:
         patient_ids: list[str] | None,
         audit_mode: AuditMode,
         include_paths: list[str] | None,
+        include_supporting_evidence: bool,
         parse_cql: Any,
         translator_cls: Any,
     ) -> pd.DataFrame:
@@ -885,7 +893,7 @@ class MeasureEvaluator:
                     self._stratifier_component_col(strat_index, comp_index)
                 ] = component.cql_expression
 
-        if audit_mode != AuditMode.NONE:
+        if audit_mode != AuditMode.NONE or include_supporting_evidence:
             for pop in group.populations:
                 for ev in pop.supporting_evidence:
                     output_columns[f"evidence_{self._col_name(ev.name)}"] = ev.cql_expression

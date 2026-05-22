@@ -189,6 +189,39 @@ def test_dqm_cli_individual_report_supporting_evidence(tmp_path):
     assert {"url": "value", "valueBoolean": True} in support["extension"]
 
 
+def test_dqm_cli_individual_report_reuses_primary_supporting_evidence(tmp_path):
+    data_dir, measure_path, cql_path = _write_simple_measure(tmp_path)
+    output_dir = tmp_path / "out"
+    config_path = tmp_path / "dqm.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "measures": [{"path": str(measure_path), "cql": str(cql_path)}],
+                "source": {"type": "directory", "path": str(data_dir)},
+                "period": {"start": "2026-01-01", "end": "2026-12-31"},
+                "audit": {"mode": "population"},
+                "outputs": {
+                    "directory": str(output_dir),
+                    "formats": ["json"],
+                    "measure_reports": "individual",
+                },
+            }
+        )
+    )
+
+    exit_code = main(["dqm", "run", "--config", str(config_path)])
+
+    assert exit_code == 0
+    results = json.loads((output_dir / "TestMeasure" / "results.json").read_text())
+    assert "evidence_HelperDefine" in results[0]
+    report = json.loads(
+        (output_dir / "TestMeasure" / "individual-reports" / "p1.json").read_text()
+    )
+    support_json = json.dumps(report["group"][0]["population"])
+    assert '"valueBoolean": true' in support_json
+    assert "trace" not in support_json
+
+
 def test_dqm_inspect_reports_measure_metadata(tmp_path):
     data_dir, measure_path, cql_path = _write_simple_measure(tmp_path)
     config = DQMRunConfig(

@@ -187,6 +187,7 @@ def _run_one_measure(
             patient_ids=config.patient_ids,
             include_paths=[str(path) for path in config.libraries],
             generate_narratives=config.audit.narratives,
+            include_supporting_evidence=config.outputs.measure_reports in {"individual", "both"},
         )
         summary = evaluator.summary_report(result)
         outputs = _write_measure_outputs(
@@ -261,19 +262,11 @@ def _write_measure_outputs(
         _write_json(report_path, report)
         outputs["measure_report_summary"] = str(report_path)
     if report_mode in {"individual", "both"}:
-        supporting_evidence_df = _evaluate_supporting_evidence(
-            evaluator,
-            config,
-            cql_path,
-            result,
-        )
         reports_dir = output_dir / "individual-reports"
         reports_dir.mkdir(exist_ok=True)
         for row in result.dataframe.to_dict("records"):
             patient_id = str(row.get("patient_id", "unknown"))
             patient_df = result.dataframe[result.dataframe["patient_id"] == row.get("patient_id")]
-            if supporting_evidence_df is not None:
-                patient_df = _merge_supporting_evidence(patient_df, supporting_evidence_df)
             patient_result = result.__class__(
                 dataframe=patient_df,
                 populations=result.populations,
@@ -291,52 +284,6 @@ def _write_measure_outputs(
         outputs["measure_report_individual_dir"] = str(reports_dir)
 
     return outputs
-
-
-def _evaluate_supporting_evidence(
-    evaluator: MeasureEvaluator,
-    config: DQMRunConfig,
-    cql_path: Path,
-    result: Any,
-) -> Any | None:
-    pop_map = result.pop_map
-    if pop_map is None:
-        return None
-    output_columns = {
-        f"evidence_{MeasureEvaluator._col_name(ev.name)}": ev.cql_expression
-        for group in pop_map.groups
-        for pop in group.populations
-        for ev in pop.supporting_evidence
-    }
-    if not output_columns:
-        return None
-    return evaluate_measure(
-        library_path=str(cql_path),
-        conn=evaluator.conn,
-        output_columns=output_columns,
-        parameters=config.parameters,
-        patient_ids=_result_patient_ids(result),
-        include_paths=_include_paths_for_cql(config, cql_path),
-        audit_mode=AuditMode.NONE.value,
-    )
-
-
-def _merge_supporting_evidence(patient_df: Any, supporting_evidence_df: Any) -> Any:
-    if patient_df.empty or supporting_evidence_df.empty:
-        return patient_df
-    patient_id = str(patient_df.iloc[0]["patient_id"])
-    evidence_rows = supporting_evidence_df[
-        supporting_evidence_df["patient_id"].astype(str) == patient_id
-    ]
-    if evidence_rows.empty:
-        return patient_df
-    merged = patient_df.copy()
-    evidence_row = evidence_rows.iloc[0]
-    for column in supporting_evidence_df.columns:
-        if column == "patient_id":
-            continue
-        merged.loc[:, column] = evidence_row[column]
-    return merged
 
 
 def _write_definition_outputs(

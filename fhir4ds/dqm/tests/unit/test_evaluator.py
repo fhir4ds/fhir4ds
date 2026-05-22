@@ -1,5 +1,7 @@
 """Tests for MeasureEvaluator."""
 
+import json
+
 import pandas as pd
 import pytest
 
@@ -435,6 +437,58 @@ class TestToMeasureReport:
             "url": "value",
             "valueReference": {"reference": "Encounter/enc-1"},
         } in support["extension"]
+
+    def test_individual_measure_report_unwraps_audit_supporting_evidence(self):
+        """Supporting evidence should not serialize internal audit trace fields."""
+        evaluator = MeasureEvaluator(conn=None)
+        mr = _make_measure_result()
+        pop = mr.pop_map.groups[0].populations[1]
+        pop.supporting_evidence = [
+            SupportingEvidenceDef(
+                name="HasBirthDate",
+                cql_expression="Has Birth Date",
+            )
+        ]
+        mr.dataframe = pd.DataFrame(
+            {
+                "patient_id": ["P1"],
+                "initial_population": [True],
+                "denominator": [True],
+                "numerator": [False],
+                "evidence_HasBirthDate": [
+                    {
+                        "result": True,
+                        "evidence": [
+                            {
+                                "target": "Patient/P1",
+                                "attribute": "birthDate",
+                                "trace": ["Has Birth Date"],
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+        report = evaluator.to_measure_report(
+            mr,
+            period_start="2024-01-01",
+            period_end="2024-12-31",
+            report_type="individual",
+        )
+
+        denominator = next(
+            population
+            for population in report["group"][0]["population"]
+            if population["code"]["coding"][0]["code"] == "denominator"
+        )
+        support = next(
+            ext
+            for ext in denominator["extension"]
+            if ext["url"] == "http://hl7.org/fhir/StructureDefinition/cqf-supportingEvidence"
+        )
+        assert {"url": "value", "valueBoolean": True} in support["extension"]
+        assert "trace" not in json.dumps(support)
 
     def test_individual_measure_report_requires_one_patient(self):
         """Individual MeasureReport should not silently summarize multiple patients."""
