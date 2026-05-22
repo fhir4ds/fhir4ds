@@ -57,7 +57,10 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Quality Measurement',
-          items: ['user-guide/quality/dqm'],
+          items: [
+            'user-guide/quality/dqm',
+            'user-guide/quality/dqm-recipes',
+          ],
         },
       ],
     },
