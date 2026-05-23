@@ -19,6 +19,13 @@ from fhir4ds.dqm.config import (
     TerminologySpec,
     load_run_config,
 )
+from fhir4ds.dqm.hapi_materialization import (
+    install_materialization_schema,
+    listen_and_process,
+    load_materialization_config,
+    process_queue_once,
+    sync_measure_config,
+)
 from fhir4ds.dqm.types import AuditMode
 
 
@@ -34,12 +41,24 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
     inspect_parser = subparsers.add_parser("inspect", help="Inspect DQM configuration")
     _add_config_and_run_args(inspect_parser)
 
+    hapi_parser = subparsers.add_parser(
+        "hapi",
+        help="Manage HAPI PostgreSQL DQM materialization",
+    )
+    _add_hapi_args(hapi_parser)
+
 
 def run(args: argparse.Namespace) -> int:
     if args.dqm_command is None:
-        print("fhir4ds dqm requires a subcommand: run, validate, or inspect", file=sys.stderr)
+        print(
+            "fhir4ds dqm requires a subcommand: run, validate, inspect, or hapi",
+            file=sys.stderr,
+        )
         return 2
     try:
+        if args.dqm_command == "hapi":
+            return _run_hapi(args)
+
         config = _load_config_from_args(args)
         if args.dqm_command == "validate":
             errors = validate_config(config)
@@ -70,6 +89,74 @@ def run(args: argparse.Namespace) -> int:
     except (DQMConfigError, FileNotFoundError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
+
+
+def _add_hapi_args(parser: argparse.ArgumentParser) -> None:
+    subparsers = parser.add_subparsers(dest="hapi_command")
+
+    install_parser = subparsers.add_parser(
+        "install",
+        help="Install queue, result tables, and HAPI triggers",
+    )
+    install_parser.add_argument(
+        "--connection",
+        required=True,
+        help="PostgreSQL connection string for the HAPI database",
+    )
+
+    sync_parser = subparsers.add_parser(
+        "sync-config",
+        help="Sync materialized measure config into PostgreSQL",
+    )
+    sync_parser.add_argument("--config", required=True, help="HAPI materialization config")
+
+    process_parser = subparsers.add_parser(
+        "process-queue",
+        help="Process one batch of queued HAPI patient changes",
+    )
+    process_parser.add_argument("--config", required=True, help="HAPI materialization config")
+    process_parser.add_argument("--limit", type=int, help="Maximum patients to claim")
+
+    listen_parser = subparsers.add_parser(
+        "listen",
+        help="Listen for HAPI patient-change notifications and process continuously",
+    )
+    listen_parser.add_argument("--config", required=True, help="HAPI materialization config")
+
+
+def _run_hapi(args: argparse.Namespace) -> int:
+    if args.hapi_command is None:
+        print(
+            "fhir4ds dqm hapi requires a subcommand: "
+            "install, sync-config, process-queue, or listen",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.hapi_command == "install":
+        install_materialization_schema(args.connection)
+        print("Installed HAPI materialization schema and triggers")
+        return 0
+
+    config = load_materialization_config(args.config)
+    if args.hapi_command == "sync-config":
+        count = sync_measure_config(config)
+        print(f"Synced {count} measure configuration row(s)")
+        return 0
+    if args.hapi_command == "process-queue":
+        result = process_queue_once(config, limit=args.limit)
+        print(
+            f"Processed queue batch: run_id={result.run_id}, "
+            f"patients={len(result.claimed)}, measures={result.measures}, "
+            f"errors={len(result.errors)}"
+        )
+        return 1 if result.errors else 0
+    if args.hapi_command == "listen":
+        listen_and_process(config)
+        return 0
+
+    print(f"Unknown HAPI command: {args.hapi_command}", file=sys.stderr)
+    return 2
 
 
 def _add_config_and_run_args(parser: argparse.ArgumentParser) -> None:

@@ -19,6 +19,15 @@ fhir4ds dqm inspect --config dqm-run.json
 fhir4ds dqm run --config dqm-run.json
 ```
 
+HAPI PostgreSQL materialization:
+
+```bash
+fhir4ds dqm hapi install --connection postgresql://hapi:hapi@localhost:15432/hapi
+fhir4ds dqm hapi sync-config --config hapi-dqm.yaml
+fhir4ds dqm hapi process-queue --config hapi-dqm.yaml --limit 100
+fhir4ds dqm hapi listen --config hapi-dqm.yaml
+```
+
 The DQM command also supports a single-measure flag-based workflow:
 
 ```bash

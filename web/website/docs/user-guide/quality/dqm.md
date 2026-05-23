@@ -31,6 +31,10 @@ For source-specific examples, see
 CLI behavior and exit codes, see the
 [Command Line Interface](/docs/user-guide/cli).
 
+For HAPI FHIR PostgreSQL deployments that need event-driven recalculation and
+persisted patient-level measure results, see
+[HAPI DQM Materialization](/docs/user-guide/quality/hapi-materialization).
+
 ## 2. CLI Batch Runner
 
 The CLI exposes three DQM subcommands:

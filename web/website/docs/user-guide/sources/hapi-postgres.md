@@ -118,3 +118,7 @@ transactional HAPI server.
 `HapiPostgresSource.supports_incremental()` supports insert/update delta checks
 against current inline JSON resources. Deletes and compressed historical bodies
 are outside the v1 incremental scope.
+
+For event-driven DQM materialization with PostgreSQL triggers and
+`LISTEN/NOTIFY`, see
+[HAPI DQM Materialization](/docs/user-guide/quality/hapi-materialization).

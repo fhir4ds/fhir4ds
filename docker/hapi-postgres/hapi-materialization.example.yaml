@@ -1,0 +1,34 @@
+postgres:
+  connection_string: postgresql://hapi:hapi@localhost:15432/hapi
+
+period:
+  start: "2026-01-01"
+  end: "2026-12-31"
+
+worker:
+  batch_size: 100
+  poll_interval_seconds: 30
+  notification_channel: fhir4ds_patient_changed
+  fail_on_unsupported_storage: true
+
+defaults:
+  audit_mode: population
+  narratives: false
+  filter_to_ip: false
+
+results:
+  persist_audit: true
+
+libraries:
+  paths: []
+
+terminology:
+  valuesets: []
+
+measures:
+  - id: ExampleMeasure
+    enabled: false
+    path: /absolute/path/to/Measure-ExampleMeasure.json
+    cql: /absolute/path/to/ExampleMeasure.cql
+    version: "2026"
+    tags: ["example"]

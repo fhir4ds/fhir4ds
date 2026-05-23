@@ -21,13 +21,18 @@ fhir4ds dqm --help
 
 ## DQM Commands
 
-The `dqm` command group has three subcommands:
+The `dqm` command group includes batch-evaluation commands and HAPI
+materialization commands:
 
 | Command | Purpose |
 |---------|---------|
 | `fhir4ds dqm validate` | Validate a DQM config before running it. |
 | `fhir4ds dqm inspect` | Print a JSON summary of measures, libraries, valuesets, source, outputs, and audit settings. |
 | `fhir4ds dqm run` | Evaluate configured measures and write output artifacts. |
+| `fhir4ds dqm hapi install` | Install HAPI PostgreSQL queue/result tables and triggers. |
+| `fhir4ds dqm hapi sync-config` | Sync materialized measure config into PostgreSQL. |
+| `fhir4ds dqm hapi process-queue` | Process one batch of queued HAPI patient changes. |
+| `fhir4ds dqm hapi listen` | Listen for HAPI change notifications and process continuously. |
 
 Use the config-file workflow for repeatable production jobs:
 
@@ -87,6 +92,29 @@ Depending on the output config, each measure directory can include:
 
 For full output details, see [Digital Quality Measures](./quality/dqm) and
 [Source-to-DQM Production Recipes](./quality/dqm-recipes).
+
+## HAPI Materialization
+
+HAPI PostgreSQL materialization commands require the optional `psycopg`
+dependency:
+
+```bash
+python3 -m pip install "psycopg[binary]>=3.1"
+```
+
+Then install schema objects and run the worker:
+
+```bash
+fhir4ds dqm hapi install \
+  --connection postgresql://hapi:hapi@localhost:15432/hapi
+
+fhir4ds dqm hapi sync-config --config hapi-dqm.yaml
+fhir4ds dqm hapi process-queue --config hapi-dqm.yaml --limit 100
+fhir4ds dqm hapi listen --config hapi-dqm.yaml
+```
+
+See [HAPI DQM Materialization](./quality/hapi-materialization) for table
+layout, trigger behavior, and result persistence details.
 
 ## Audit Modes
 

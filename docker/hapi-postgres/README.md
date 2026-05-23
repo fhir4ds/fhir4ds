@@ -31,6 +31,34 @@ source.unregister(con)
 PY
 ```
 
+Materialization setup:
+
+```bash
+python3 -m pip install "psycopg[binary]>=3.1"
+
+fhir4ds dqm hapi install \
+  --connection postgresql://hapi:hapi@localhost:15432/hapi
+
+fhir4ds dqm hapi sync-config \
+  --config docker/hapi-postgres/hapi-materialization.example.yaml
+
+fhir4ds dqm hapi process-queue \
+  --config docker/hapi-postgres/hapi-materialization.example.yaml
+```
+
+`install` creates FHIR4DS-owned queue/result tables and HAPI triggers. The
+triggers enqueue patient IDs and send `LISTEN/NOTIFY` wake-up messages; measure
+calculation runs only in the FHIR4DS worker.
+
+Load a small 2025 eCQM fixture into HAPI:
+
+```bash
+python3 scripts/hapi/load_2025_measure.py \
+  --measure CMS122 \
+  --base-url http://localhost:18080/fhir \
+  --limit-patients 1
+```
+
 Cleanup:
 
 ```bash
