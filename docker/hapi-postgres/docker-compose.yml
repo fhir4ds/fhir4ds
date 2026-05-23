@@ -30,3 +30,19 @@ services:
       HAPI_FHIR_FHIR_VERSION: R4
     ports:
       - "18080:8080"
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: docker/hapi-postgres/Dockerfile.worker
+    container_name: fhir4ds-hapi-worker
+    profiles: ["worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      hapi:
+        condition: service_started
+    volumes:
+      - ../..:/workspace:ro
+      - ./hapi-materialization.compose.yaml:/config/hapi-materialization.yaml:ro
+    command: ["listen", "--config", "/config/hapi-materialization.yaml"]

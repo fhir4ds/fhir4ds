@@ -145,10 +145,17 @@ def _run_hapi(args: argparse.Namespace) -> int:
         return 0
     if args.hapi_command == "process-queue":
         result = process_queue_once(config, limit=args.limit)
+        metrics_suffix = ""
+        if result.metrics:
+            metrics_suffix = (
+                f", cache_hits={result.metrics.get('cache_hits', 0)}, "
+                f"cache_misses={result.metrics.get('cache_misses', 0)}, "
+                f"execute_ms={float(result.metrics.get('execute_ms', 0.0) or 0.0):.1f}"
+            )
         print(
             f"Processed queue batch: run_id={result.run_id}, "
             f"patients={len(result.claimed)}, measures={result.measures}, "
-            f"errors={len(result.errors)}"
+            f"errors={len(result.errors)}{metrics_suffix}"
         )
         return 1 if result.errors else 0
     if args.hapi_command == "listen":

@@ -50,6 +50,16 @@ fhir4ds dqm hapi process-queue \
 triggers enqueue patient IDs and send `LISTEN/NOTIFY` wake-up messages; measure
 calculation runs only in the FHIR4DS worker.
 
+Run the packaged worker container:
+
+```bash
+docker compose --profile worker up --build worker
+```
+
+The worker image installs `fhir4ds-v2[hapi]`, including `psycopg[binary]`. The
+compose profile uses the internal PostgreSQL hostname `postgres` and mounts the
+repo read-only at `/workspace` for local measure/config paths.
+
 Load a small 2025 eCQM fixture into HAPI:
 
 ```bash

@@ -151,6 +151,12 @@ define "Initial Population":
             cql_library_path=str(cql_path),
             patient_scope="target_table",
         )
+        cached = evaluator.compile_measure(
+            measure_bundle=measure_json,
+            cql_library_path=str(cql_path),
+            patient_scope="target_table",
+        )
+        assert cached is compiled
         sql = compiled.groups[0].sql
         assert "_fhir4ds_target_patients" in sql
         assert "_patient_demographics" not in sql
@@ -165,6 +171,13 @@ define "Initial Population":
         assert bool(p1_rows.loc["p1", "initial_population"]) is True
         assert bool(p2_rows.loc["p2", "initial_population"]) is False
         assert compiled.groups[0].prepared is True
+        metrics = evaluator.compiled_measure_metrics()
+        assert metrics["cache_hits"] == 1
+        assert metrics["cache_misses"] == 1
+        assert metrics["compile_count"] == 1
+        assert metrics["execute_count"] == 2
+        assert metrics["last_patient_count"] == 1
+        assert metrics["prepared_count"] >= 1
 
     def test_compiled_measure_omits_patient_columns_without_implicit_patient_access(
         self, conn, tmp_path

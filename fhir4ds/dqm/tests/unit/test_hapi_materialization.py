@@ -11,6 +11,7 @@ from fhir4ds.cli.main import main
 from fhir4ds.dqm.config import DQMConfigError
 from fhir4ds.dqm.hapi_materialization import (
     HapiMaterializedMeasure,
+    _compiled_metrics_delta,
     materialization_sql,
     materialized_measure_hash,
     parse_materialization_config,
@@ -33,6 +34,8 @@ def test_materialization_sql_contains_queue_result_and_triggers():
     assert "CREATE TABLE IF NOT EXISTS fhir4ds_patient_change_queue" in sql
     assert "CREATE TABLE IF NOT EXISTS fhir4ds_measure_result" in sql
     assert "CREATE TABLE IF NOT EXISTS fhir4ds_measure_audit" in sql
+    assert "compile_cache_hits" in sql
+    assert "fhir4ds_measure_result_run_idx" in sql
     assert "pg_notify(" in sql
     assert "fhir4ds_hfj_resource_change" in sql
 
@@ -45,6 +48,11 @@ def test_parse_materialization_config_resolves_paths_and_defaults(tmp_path):
         "defaults": {"audit_mode": "population", "narratives": True},
         "results": {"persist_audit": True},
         "worker": {"batch_size": 25, "poll_interval_seconds": 5},
+        "hapi_schema": {
+            "schema": "custom",
+            "resource_table": "resources",
+            "version_table": "versions",
+        },
         "measures": [
             {
                 "id": "CMS_TEST",
@@ -60,6 +68,9 @@ def test_parse_materialization_config_resolves_paths_and_defaults(tmp_path):
 
     assert config.postgres_connection_string == "postgresql://hapi:hapi@localhost/hapi"
     assert config.batch_size == 25
+    assert config.hapi_schema.schema == "custom"
+    assert config.hapi_schema.resource_table == "resources"
+    assert config.hapi_schema.version_table == "versions"
     assert config.parameters["Measurement Period"] == ("2026-01-01", "2026-12-31")
     assert len(config.measures) == 1
     measure_config = config.measures[0]
@@ -81,6 +92,20 @@ def test_parse_materialization_config_rejects_unsafe_channel(tmp_path):
     }
 
     with pytest.raises(DQMConfigError, match="notification_channel"):
+        parse_materialization_config(raw, base_dir=tmp_path)
+
+
+def test_parse_materialization_config_rejects_unknown_hapi_schema_field(tmp_path):
+    measure, _cql = _write_measure_files(tmp_path)
+    raw = {
+        "postgres": {
+            "connection_string": "postgresql://hapi:hapi@localhost/hapi",
+            "hapi_schema": {"bad_column": "x"},
+        },
+        "measures": [{"path": str(measure)}],
+    }
+
+    with pytest.raises(DQMConfigError, match="unknown field"):
         parse_materialization_config(raw, base_dir=tmp_path)
 
 
@@ -110,6 +135,26 @@ def test_split_patient_result_rows_keeps_compact_and_full_audit():
     }
     assert audit["rows"][0]["initial_population"]["evidence"][0]["target"] == "Encounter/e1"
     assert audit["rows"][0]["evidence_Helper"][0]["target"] == "Observation/o1"
+
+
+def test_compiled_metrics_delta_preserves_cumulative_snapshot():
+    before = {"cache_hits": 1, "compile_ms": 10.0, "execute_count": 2}
+    after = {
+        "cache_hits": 3,
+        "cache_misses": 1,
+        "compile_ms": 25.5,
+        "execute_count": 5,
+        "last_patient_count": 4,
+    }
+
+    metrics = _compiled_metrics_delta(before, after)
+
+    assert metrics["cache_hits"] == 2
+    assert metrics["cache_misses"] == 1
+    assert metrics["compile_ms"] == 15.5
+    assert metrics["execute_count"] == 3
+    assert metrics["last_patient_count"] == 4
+    assert metrics["cumulative"] == after
 
 
 def test_materialized_measure_hash_changes_with_parameters(tmp_path):

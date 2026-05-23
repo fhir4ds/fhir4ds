@@ -38,6 +38,14 @@ def put_resource(base_url: str, resource: dict) -> None:
         raise RuntimeError(f"HAPI PUT failed for {resource_type}/{resource_id}: {body}") from exc
 
 
+def patient_first(resources: list[dict]) -> list[dict]:
+    """Return resources with Patient records loaded before dependent records."""
+    return sorted(
+        resources,
+        key=lambda resource: 0 if resource.get("resourceType") == "Patient" else 1,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--measure", required=True, help="Measure ID, e.g. CMS122")
@@ -71,7 +79,7 @@ def main() -> int:
         return 0
 
     for case in cases:
-        for resource in case.resources:
+        for resource in patient_first(case.resources):
             put_resource(args.base_url, resource)
 
     measure_bundle = (

@@ -49,8 +49,31 @@ CREATE TABLE IF NOT EXISTS fhir4ds_measure_run (
     trigger_reason TEXT,
     patient_count INTEGER NOT NULL DEFAULT 0,
     measure_count INTEGER NOT NULL DEFAULT 0,
+    compile_cache_hits INTEGER NOT NULL DEFAULT 0,
+    compile_cache_misses INTEGER NOT NULL DEFAULT 0,
+    compile_count INTEGER NOT NULL DEFAULT 0,
+    compile_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+    execute_count INTEGER NOT NULL DEFAULT 0,
+    execute_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+    prepared_count INTEGER NOT NULL DEFAULT 0,
+    prepared_fallback_count INTEGER NOT NULL DEFAULT 0,
+    metrics_json JSONB NOT NULL DEFAULT '{}'::jsonb,
     error TEXT
 );
+
+ALTER TABLE fhir4ds_measure_run
+    ADD COLUMN IF NOT EXISTS compile_cache_hits INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS compile_cache_misses INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS compile_count INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS compile_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS execute_count INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS execute_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS prepared_count INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS prepared_fallback_count INTEGER NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS metrics_json JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE INDEX IF NOT EXISTS fhir4ds_measure_run_started_idx
+ON fhir4ds_measure_run(started_at DESC);
 
 CREATE TABLE IF NOT EXISTS fhir4ds_measure_result (
     result_id BIGSERIAL PRIMARY KEY,
@@ -76,6 +99,9 @@ WHERE active;
 CREATE INDEX IF NOT EXISTS fhir4ds_measure_result_lookup_idx
 ON fhir4ds_measure_result(patient_id, measure_id, calculated_at DESC);
 
+CREATE INDEX IF NOT EXISTS fhir4ds_measure_result_run_idx
+ON fhir4ds_measure_result(run_id);
+
 CREATE TABLE IF NOT EXISTS fhir4ds_measure_audit (
     audit_id BIGSERIAL PRIMARY KEY,
     result_id BIGINT NOT NULL REFERENCES fhir4ds_measure_result(result_id) ON DELETE CASCADE,
@@ -85,6 +111,9 @@ CREATE TABLE IF NOT EXISTS fhir4ds_measure_audit (
     size_bytes BIGINT,
     compression TEXT
 );
+
+CREATE INDEX IF NOT EXISTS fhir4ds_measure_audit_result_idx
+ON fhir4ds_measure_audit(result_id);
 
 CREATE OR REPLACE FUNCTION fhir4ds_extract_patient_id(
     p_resource_type TEXT,

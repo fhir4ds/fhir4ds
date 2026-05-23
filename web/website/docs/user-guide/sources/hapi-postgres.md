@@ -108,6 +108,7 @@ It exposes:
 
 - HAPI FHIR at `http://localhost:18080/fhir`
 - PostgreSQL at `postgresql://hapi:hapi@localhost:15432/hapi`
+- Optional FHIR4DS worker profile with `docker compose --profile worker up worker`
 
 ## Operational Notes
 

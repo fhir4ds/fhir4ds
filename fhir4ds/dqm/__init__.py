@@ -2,7 +2,12 @@
 
 from .audit import AuditEngine
 from .errors import DQMError, MeasureParseError
-from .evaluator import CompiledGroup, CompiledMeasure, MeasureEvaluator
+from .evaluator import (
+    CompiledGroup,
+    CompiledMeasure,
+    CompiledMeasureMetrics,
+    MeasureEvaluator,
+)
 from .models import MeasureResult
 from .narrative import NarrativeGenerator
 from .parser import MeasureParser
@@ -28,6 +33,7 @@ __all__ = [
     "DQMError",
     "CompiledGroup",
     "CompiledMeasure",
+    "CompiledMeasureMetrics",
     "GroupMap",
     "MeasureEvaluator",
     "MeasureParseError",

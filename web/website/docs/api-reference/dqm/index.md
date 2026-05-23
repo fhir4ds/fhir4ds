@@ -14,6 +14,9 @@ libraries, audit evidence, batch runs, and FHIR `MeasureReport` output.
 ```python
 from fhir4ds.dqm import (
     MeasureEvaluator,
+    CompiledMeasure,
+    CompiledGroup,
+    CompiledMeasureMetrics,
     AuditEngine,
     AuditMode,
     AuditOrStrategy,
@@ -85,6 +88,44 @@ Evaluates a FHIR `Measure` against the connection's `resources` view.
 | `include_supporting_evidence` | `bool` | Add `evidence_*` columns for Measure-authored supporting evidence definitions. |
 
 Returns a `MeasureResult`.
+
+### `compile_measure(...)` and `execute_compiled_measure(...)`
+
+```python
+compiled = evaluator.compile_measure(
+    measure_bundle,
+    cql_library_path,
+    parameters={"Measurement Period": ("2025-01-01", "2025-12-31")},
+    patient_scope="target_table",
+    include_paths=["./cql"],
+)
+
+first = evaluator.execute_compiled_measure(compiled, patient_ids=["p1", "p2"])
+second = evaluator.execute_compiled_measure(compiled, patient_ids=["p3"])
+metrics = evaluator.compiled_measure_metrics()
+```
+
+`compile_measure()` parses the Measure/CQL and generates reusable SQL.
+`execute_compiled_measure()` runs that SQL. With
+`patient_scope="target_table"`, patient IDs are loaded into the temporary
+`_fhir4ds_target_patients` table at execution time, so changing the patient
+batch does not invalidate the compiled SQL cache.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `patient_scope` | `str` | `"literal"` embeds `patient_ids` in generated SQL. `"target_table"` leaves patient IDs for execution time. |
+| `patient_ids` in `compile_measure` | `list[str] | None` | Allowed only with `patient_scope="literal"` and included in the cache key. |
+| `patient_ids` in `execute_compiled_measure` | `list[str]` | Required with `patient_scope="target_table"`. |
+
+Generated SQL is cached on the `MeasureEvaluator` instance. DuckDB prepared
+statements are created lazily on first execution when supported by the generated
+SQL and are scoped to the same DuckDB connection.
+
+`compiled_measure_metrics()` returns counters for cache hits/misses, compile
+time, execution time, prepared statement use, and the last execution batch size.
+Runtime-bound CQL parameters and a persistent compiled SQL cache are not part of
+this API yet; parameters that affect generated SQL remain part of the compile
+cache key.
 
 ### `summary_report(result)`
 

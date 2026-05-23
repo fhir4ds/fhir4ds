@@ -1,5 +1,5 @@
 postgres:
-  connection_string: postgresql://hapi:hapi@localhost:15432/hapi
+  connection_string: postgresql://hapi:hapi@postgres:5432/hapi
   hapi_schema:
     schema: public
     resource_table: hfj_resource
@@ -42,7 +42,7 @@ terminology:
 measures:
   - id: ExampleMeasure
     enabled: false
-    path: /absolute/path/to/Measure-ExampleMeasure.json
-    cql: /absolute/path/to/ExampleMeasure.cql
+    path: /workspace/path/to/Measure-ExampleMeasure.json
+    cql: /workspace/path/to/ExampleMeasure.cql
     version: "2026"
     tags: ["example"]

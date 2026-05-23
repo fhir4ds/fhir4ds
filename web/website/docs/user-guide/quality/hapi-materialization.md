@@ -46,6 +46,10 @@ Use a YAML or JSON materialization config:
 ```yaml
 postgres:
   connection_string: postgresql://hapi:hapi@localhost:15432/hapi
+  hapi_schema:
+    schema: public
+    resource_table: hfj_resource
+    version_table: hfj_res_ver
 
 period:
   start: "2026-01-01"
@@ -74,6 +78,11 @@ fhir4ds dqm hapi sync-config --config hapi-dqm.yaml
 The worker reads enabled rows from `fhir4ds_measure_config`. A config file may
 also carry measure definitions directly for local one-off runs.
 
+`postgres.hapi_schema` is optional. The defaults match the current HAPI JPA
+PostgreSQL table layout, and the fields can be overridden for older HAPI
+versions or local table/column customizations. The trigger install SQL currently
+targets the default HAPI table names.
+
 ## Process Changes
 
 Process one batch:
@@ -91,6 +100,13 @@ fhir4ds dqm hapi listen --config hapi-dqm.yaml
 The durable queue is the source of truth. Notifications are wake-up messages
 only; if the worker is offline, pending rows remain in the queue.
 
+The continuous `listen` worker keeps one DuckDB/evaluator runtime open and
+compiles each configured measure once per static configuration. It executes each
+claimed patient batch through a temporary target patient table. Patient IDs are
+supplied at execution time, so a new batch does not force SQL regeneration.
+CQL parameters, included libraries, audit mode, and other result-shaping options
+remain part of the compile cache key.
+
 ## Result Storage
 
 `fhir4ds_measure_result` is the indexed current/history table. Recalculation
@@ -100,6 +116,25 @@ new row.
 Full audit is stored separately in `fhir4ds_measure_audit` when
 `persist_audit` is enabled. This keeps current-result queries small while
 retaining evidence for later review.
+
+`fhir4ds_measure_run` records the batch size, measure count, status, error text,
+compiled SQL cache hits/misses, compile time, execution time, prepared statement
+counts, and `metrics_json`. The top-level run columns are per-batch deltas; for
+the continuous worker, `metrics_json.cumulative` also carries the lifetime
+worker counters.
+
+## Worker Container
+
+Build and run the worker image with the compose profile:
+
+```bash
+cd docker/hapi-postgres
+docker compose --profile worker up --build worker
+```
+
+The worker image installs `fhir4ds-v2[hapi]`, so `psycopg` is available inside
+the container. The compose profile mounts the repository read-only at
+`/workspace` and reads `/config/hapi-materialization.yaml`.
 
 ## Current Scope
 

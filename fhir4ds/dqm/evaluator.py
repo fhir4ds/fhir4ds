@@ -5,8 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 import warnings
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
 from html import escape
 from pathlib import Path
@@ -56,6 +57,24 @@ class CompiledMeasure:
     cache_key: str
 
 
+@dataclass
+class CompiledMeasureMetrics:
+    """Worker-local counters for compiled Measure reuse and execution."""
+
+    cache_hits: int = 0
+    cache_misses: int = 0
+    compile_count: int = 0
+    compile_ms: float = 0.0
+    execute_count: int = 0
+    execute_ms: float = 0.0
+    prepared_count: int = 0
+    prepared_fallback_count: int = 0
+    last_cache_key: str | None = None
+    last_compile_ms: float | None = None
+    last_execute_ms: float | None = None
+    last_patient_count: int | None = None
+
+
 class MeasureEvaluator:
     """Evaluate FHIR Measures against patient data with optional audit trails."""
 
@@ -82,6 +101,7 @@ class MeasureEvaluator:
         self._cached_profile_registry: Any = None
         self._cached_model_config: Any = None
         self._compiled_measure_cache: dict[str, CompiledMeasure] = {}
+        self._compiled_measure_metrics = CompiledMeasureMetrics()
 
     def evaluate(
         self,
@@ -258,15 +278,19 @@ class MeasureEvaluator:
             generate_narratives=generate_narratives,
             include_supporting_evidence=include_supporting_evidence,
         )
+        self._compiled_measure_metrics.last_cache_key = cache_key
         cached = self._compiled_measure_cache.get(cache_key)
         if cached is not None:
+            self._compiled_measure_metrics.cache_hits += 1
             return cached
+        self._compiled_measure_metrics.cache_misses += 1
 
         try:
             from fhir4ds.cql import CQLToSQLTranslator, parse_cql
         except ImportError as e:
             raise DQMError(f"cql-py is required: {e}") from e
 
+        compile_started = time.perf_counter()
         cql_text = cql_path.read_text()
         library = parse_cql(cql_text)
 
@@ -307,6 +331,10 @@ class MeasureEvaluator:
             cache_key=cache_key,
         )
         self._compiled_measure_cache[cache_key] = compiled
+        compile_ms = (time.perf_counter() - compile_started) * 1000
+        self._compiled_measure_metrics.compile_count += 1
+        self._compiled_measure_metrics.compile_ms += compile_ms
+        self._compiled_measure_metrics.last_compile_ms = compile_ms
         return compiled
 
     def execute_compiled_measure(
@@ -328,6 +356,7 @@ class MeasureEvaluator:
                 "literal patient scoping"
             )
 
+        execute_started = time.perf_counter()
         group_dfs: list[pd.DataFrame] = []
         try:
             for compiled_group in compiled.groups:
@@ -365,6 +394,13 @@ class MeasureEvaluator:
 
         self._last_pop_map = compiled.pop_map
         self._last_parameters = compiled.parameters
+        execute_ms = (time.perf_counter() - execute_started) * 1000
+        self._compiled_measure_metrics.execute_count += 1
+        self._compiled_measure_metrics.execute_ms += execute_ms
+        self._compiled_measure_metrics.last_execute_ms = execute_ms
+        self._compiled_measure_metrics.last_patient_count = (
+            len(patient_ids) if patient_ids is not None else None
+        )
         return MeasureResult(
             dataframe=result_df,
             populations=compiled.populations,
@@ -372,6 +408,17 @@ class MeasureEvaluator:
             measure_url=compiled.measure_url,
             pop_map=compiled.pop_map,
         )
+
+    def compiled_measure_metrics(self) -> dict[str, Any]:
+        """Return compile/execute counters for this evaluator instance."""
+        metrics = asdict(self._compiled_measure_metrics)
+        metrics["compile_ms"] = round(float(metrics["compile_ms"]), 3)
+        metrics["execute_ms"] = round(float(metrics["execute_ms"]), 3)
+        if metrics["last_compile_ms"] is not None:
+            metrics["last_compile_ms"] = round(float(metrics["last_compile_ms"]), 3)
+        if metrics["last_execute_ms"] is not None:
+            metrics["last_execute_ms"] = round(float(metrics["last_execute_ms"]), 3)
+        return metrics
 
     def summary_report(self, result: Any) -> dict:
         """Generate a summary report from evaluation results.
@@ -1274,12 +1321,14 @@ class MeasureEvaluator:
                         f"PREPARE {compiled_group.prepared_name} AS {compiled_group.sql}"
                     )
                     compiled_group.prepared = True
+                    self._compiled_measure_metrics.prepared_count += 1
                 except duckdb.Error:
                     logger.debug(
                         "DuckDB PREPARE failed for compiled measure; falling back",
                         exc_info=True,
                     )
                     compiled_group.prepared_name = None
+                    self._compiled_measure_metrics.prepared_fallback_count += 1
             if compiled_group.prepared_name and compiled_group.prepared:
                 return self.conn.execute(f"EXECUTE {compiled_group.prepared_name}")
         return self.conn.execute(compiled_group.sql)

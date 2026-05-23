@@ -17,7 +17,7 @@ from fhir4ds.dqm.config import DQMConfigError, MeasureSpec
 from fhir4ds.dqm.evaluator import MeasureEvaluator
 from fhir4ds.dqm.models import MeasureResult
 from fhir4ds.dqm.types import AuditMode
-from fhir4ds.sources import HapiPostgresSource
+from fhir4ds.sources import HapiPostgresSchema, HapiPostgresSource
 
 NOTIFICATION_CHANNEL = "fhir4ds_patient_changed"
 _PG_CHANNEL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -57,6 +57,7 @@ class HapiMaterializationConfig:
     poll_interval_seconds: float = 30.0
     notification_channel: str = NOTIFICATION_CHANNEL
     fail_on_unsupported_storage: bool = True
+    hapi_schema: HapiPostgresSchema = field(default_factory=HapiPostgresSchema)
 
     @property
     def hapi_source_connection_string(self) -> str:
@@ -79,6 +80,56 @@ class QueueProcessResult:
     claimed: list[str]
     measures: int
     errors: dict[str, str] = field(default_factory=dict)
+    metrics: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class HapiMaterializationRuntime:
+    """Long-lived DuckDB runtime for a HAPI materialization worker."""
+
+    duck_conn: Any
+    source: HapiPostgresSource
+    evaluator: MeasureEvaluator
+    loaded_valueset_keys: set[tuple[str, ...]] = field(default_factory=set)
+
+    @classmethod
+    def open(cls, config: HapiMaterializationConfig) -> HapiMaterializationRuntime:
+        duck_conn = fhir4ds.create_connection()
+        source = HapiPostgresSource(
+            config.hapi_source_connection_string,
+            schema=config.hapi_schema,
+            fail_on_unsupported_storage=config.fail_on_unsupported_storage,
+        )
+        try:
+            source.register(duck_conn)
+            runtime = cls(
+                duck_conn=duck_conn,
+                source=source,
+                evaluator=MeasureEvaluator(duck_conn),
+            )
+            runtime.load_valuesets_once(config.valueset_paths)
+            return runtime
+        except Exception:
+            source.unregister(duck_conn)
+            duck_conn.close()
+            raise
+
+    def load_valuesets_once(self, paths: list[Path]) -> None:
+        key = tuple(sorted(str(path) for path in paths))
+        if key in self.loaded_valueset_keys:
+            return
+        _load_valuesets(self.duck_conn, paths)
+        self.loaded_valueset_keys.add(key)
+
+    def close(self) -> None:
+        self.source.unregister(self.duck_conn)
+        self.duck_conn.close()
+
+    def __enter__(self) -> HapiMaterializationRuntime:
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        self.close()
 
 
 def require_psycopg() -> Any:
@@ -197,6 +248,9 @@ def parse_materialization_config(
         fail_on_unsupported_storage=bool(
             worker.get("fail_on_unsupported_storage", True)
         ),
+        hapi_schema=_parse_hapi_schema(
+            postgres.get("hapi_schema", raw.get("hapi_schema"))
+        ),
     )
 
 
@@ -279,6 +333,7 @@ def process_queue_once(
     config: HapiMaterializationConfig,
     *,
     limit: int | None = None,
+    runtime: HapiMaterializationRuntime | None = None,
 ) -> QueueProcessResult:
     """Claim pending patients, run configured measures, and persist results."""
     psycopg = require_psycopg()
@@ -297,10 +352,23 @@ def process_queue_once(
             trigger_reason="queue",
         )
         errors: dict[str, str] = {}
+        metrics: dict[str, Any] = {}
+        before_metrics = (
+            runtime.evaluator.compiled_measure_metrics() if runtime is not None else None
+        )
         try:
-            _process_claimed_patients(pg_conn, config, run_id, patients, measures, errors)
+            after_metrics = _process_claimed_patients(
+                pg_conn,
+                config,
+                run_id,
+                patients,
+                measures,
+                errors,
+                runtime=runtime,
+            )
+            metrics = _compiled_metrics_delta(before_metrics, after_metrics)
             status = "partial" if errors else "ok"
-            complete_measure_run(pg_conn, run_id, status=status)
+            complete_measure_run(pg_conn, run_id, status=status, metrics=metrics)
         except Exception as exc:
             complete_measure_run(pg_conn, run_id, status="error", error=str(exc))
             for patient in patients:
@@ -311,6 +379,7 @@ def process_queue_once(
             claimed=[patient.patient_id for patient in patients],
             measures=len(measures),
             errors=errors,
+            metrics=metrics,
         )
 
 
@@ -322,19 +391,23 @@ def listen_and_process(
     """Run the event-driven worker loop with polling fallback."""
     psycopg = require_psycopg()
     loops = 0
-    while True:
-        process_queue_once(config)
-        loops += 1
-        if stop_after is not None and loops >= stop_after:
-            return
+    with HapiMaterializationRuntime.open(config) as runtime:
+        while True:
+            process_queue_once(config, runtime=runtime)
+            loops += 1
+            if stop_after is not None and loops >= stop_after:
+                return
 
-        with psycopg.connect(config.postgres_connection_string, autocommit=True) as conn:
-            conn.execute(f"LISTEN {config.notification_channel}")
-            for _notify in conn.notifies(
-                timeout=config.poll_interval_seconds,
-                stop_after=1,
-            ):
-                pass
+            with psycopg.connect(
+                config.postgres_connection_string,
+                autocommit=True,
+            ) as conn:
+                conn.execute(f"LISTEN {config.notification_channel}")
+                for _notify in conn.notifies(
+                    timeout=config.poll_interval_seconds,
+                    stop_after=1,
+                ):
+                    pass
 
 
 def claim_pending_patients(conn: Any, limit: int) -> list[ClaimedPatient]:
@@ -437,16 +510,40 @@ def complete_measure_run(
     *,
     status: str,
     error: str | None = None,
+    metrics: dict[str, Any] | None = None,
 ) -> None:
+    metrics = metrics or {}
     conn.execute(
         """
         UPDATE fhir4ds_measure_run
         SET status = %s,
             completed_at = now(),
-            error = %s
+            error = %s,
+            compile_cache_hits = %s,
+            compile_cache_misses = %s,
+            compile_count = %s,
+            compile_ms = %s,
+            execute_count = %s,
+            execute_ms = %s,
+            prepared_count = %s,
+            prepared_fallback_count = %s,
+            metrics_json = %s::jsonb
         WHERE run_id = %s
         """,
-        [status, error, run_id],
+        [
+            status,
+            error,
+            int(metrics.get("cache_hits", 0) or 0),
+            int(metrics.get("cache_misses", 0) or 0),
+            int(metrics.get("compile_count", 0) or 0),
+            float(metrics.get("compile_ms", 0.0) or 0.0),
+            int(metrics.get("execute_count", 0) or 0),
+            float(metrics.get("execute_ms", 0.0) or 0.0),
+            int(metrics.get("prepared_count", 0) or 0),
+            int(metrics.get("prepared_fallback_count", 0) or 0),
+            json.dumps(metrics, default=str),
+            run_id,
+        ],
     )
     conn.commit()
 
@@ -587,60 +684,65 @@ def _process_claimed_patients(
     patients: list[ClaimedPatient],
     measures: list[HapiMaterializedMeasure],
     errors: dict[str, str],
-) -> None:
+    runtime: HapiMaterializationRuntime | None = None,
+) -> dict[str, Any]:
+    if runtime is None:
+        with HapiMaterializationRuntime.open(config) as owned_runtime:
+            return _process_claimed_patients(
+                pg_conn,
+                config,
+                run_id,
+                patients,
+                measures,
+                errors,
+                runtime=owned_runtime,
+            )
+
     patient_ids = [patient.patient_id for patient in patients]
     watermark_by_patient = {
         patient.patient_id: patient.input_watermark for patient in patients
     }
     patient_errors: dict[str, str] = {}
 
-    duck_conn = fhir4ds.create_connection()
-    source = HapiPostgresSource(
-        config.hapi_source_connection_string,
-        fail_on_unsupported_storage=config.fail_on_unsupported_storage,
-    )
-    source.register(duck_conn)
-    try:
-        _load_valuesets(duck_conn, config.valueset_paths)
-        evaluator = MeasureEvaluator(duck_conn)
-        for measure in measures:
-            try:
-                _load_valuesets(duck_conn, measure.valueset_paths)
-                result = _evaluate_materialized_measure(
-                    evaluator,
-                    config,
-                    measure,
-                    patient_ids,
-                )
-                _persist_successful_measure(
+    metrics: dict[str, Any] = {}
+    evaluator = runtime.evaluator
+    runtime.load_valuesets_once(config.valueset_paths)
+    for measure in measures:
+        try:
+            runtime.load_valuesets_once(measure.valueset_paths)
+            result = _evaluate_materialized_measure(
+                evaluator,
+                config,
+                measure,
+                patient_ids,
+            )
+            _persist_successful_measure(
+                pg_conn,
+                evaluator,
+                run_id,
+                patients,
+                measure,
+                result,
+                watermark_by_patient,
+            )
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            errors[measure.measure_id] = error
+            for patient_id in patient_ids:
+                patient_errors[patient_id] = error
+                persist_patient_measure_result(
                     pg_conn,
-                    evaluator,
-                    run_id,
-                    patients,
-                    measure,
-                    result,
-                    watermark_by_patient,
+                    run_id=run_id,
+                    patient_id=patient_id,
+                    measure=measure,
+                    status="error",
+                    result_json=None,
+                    summary_json=None,
+                    input_watermark=watermark_by_patient.get(patient_id),
+                    config_hash=materialized_measure_hash(measure),
+                    error=error,
                 )
-            except Exception as exc:
-                error = f"{type(exc).__name__}: {exc}"
-                errors[measure.measure_id] = error
-                for patient_id in patient_ids:
-                    patient_errors[patient_id] = error
-                    persist_patient_measure_result(
-                        pg_conn,
-                        run_id=run_id,
-                        patient_id=patient_id,
-                        measure=measure,
-                        status="error",
-                        result_json=None,
-                        summary_json=None,
-                        input_watermark=watermark_by_patient.get(patient_id),
-                        config_hash=materialized_measure_hash(measure),
-                        error=error,
-                    )
-    finally:
-        source.unregister(duck_conn)
-        duck_conn.close()
+    metrics = evaluator.compiled_measure_metrics()
 
     for patient in patients:
         error = patient_errors.get(patient.patient_id)
@@ -648,6 +750,7 @@ def _process_claimed_patients(
             mark_patient_failed(pg_conn, patient.patient_id, error)
         else:
             mark_patient_complete(pg_conn, patient.patient_id)
+    return metrics
 
 
 def _evaluate_materialized_measure(
@@ -790,6 +893,61 @@ def _validate_notification_channel(channel: str) -> str:
             "'worker.notification_channel' must be a simple PostgreSQL identifier"
         )
     return channel
+
+
+def _parse_hapi_schema(raw: Any) -> HapiPostgresSchema:
+    if raw in (None, {}):
+        return HapiPostgresSchema()
+    if not isinstance(raw, dict):
+        raise DQMConfigError("'postgres.hapi_schema' must be an object")
+
+    allowed = set(HapiPostgresSchema.__dataclass_fields__)
+    unknown = sorted(set(raw) - allowed)
+    if unknown:
+        raise DQMConfigError(
+            "'postgres.hapi_schema' contains unknown field(s): "
+            + ", ".join(unknown)
+        )
+
+    values: dict[str, str] = {}
+    for key, value in raw.items():
+        if value is None:
+            continue
+        if not isinstance(value, str) or not value:
+            raise DQMConfigError(
+                f"'postgres.hapi_schema.{key}' must be a non-empty string"
+            )
+        values[key] = value
+    return HapiPostgresSchema(**values)
+
+
+def _compiled_metrics_delta(
+    before: dict[str, Any] | None,
+    after: dict[str, Any],
+) -> dict[str, Any]:
+    if before is None:
+        return dict(after)
+
+    metrics = dict(after)
+    delta_fields = (
+        "cache_hits",
+        "cache_misses",
+        "compile_count",
+        "compile_ms",
+        "execute_count",
+        "execute_ms",
+        "prepared_count",
+        "prepared_fallback_count",
+    )
+    for field_name in delta_fields:
+        value = (after.get(field_name, 0) or 0) - (
+            before.get(field_name, 0) or 0
+        )
+        metrics[field_name] = (
+            round(float(value), 3) if field_name.endswith("_ms") else value
+        )
+    metrics["cumulative"] = dict(after)
+    return metrics
 
 
 def _compact_row(row: dict[str, Any]) -> dict[str, Any]:
