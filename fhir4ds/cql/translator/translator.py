@@ -547,6 +547,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         output_columns: Optional[Dict[str, str]] = None,
         parameters: Optional[Dict[str, Any]] = None,
         patient_ids: Optional[List[str]] = None,
+        patient_scope: str = "literal",
         resource_output: str = "reference",
     ) -> str:
         """
@@ -574,10 +575,26 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                            If empty dict, returns patient_id only.
             parameters: Runtime parameter values (not yet implemented).
             patient_ids: Optional list of patient IDs to filter.
+            patient_scope: Patient subject source. ``"literal"`` preserves the
+                           existing SQL-literal patient_ids behavior.
+                           ``"target_table"`` reads patient IDs from the
+                           temporary ``_fhir4ds_target_patients`` table so the
+                           generated SQL can be reused across batches.
 
         Returns:
             Complete SQL query string for population evaluation.
         """
+        if patient_scope not in {"literal", "target_table"}:
+            raise ValueError(
+                "patient_scope must be one of 'literal' or 'target_table', "
+                f"got {patient_scope!r}"
+            )
+        if patient_scope == "target_table" and patient_ids is not None:
+            raise ValueError(
+                "patient_ids must be supplied at execution time when "
+                "patient_scope='target_table'"
+            )
+
         # Reset and initialize context from library declarations
         self._context.clear()
         self._setup_context(library)
@@ -690,19 +707,21 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         if self._context._function_promotion_ctes:
             self._compute_function_cte_dependencies()
 
-        # Always build patient demographics CTE if it wasn't built during Phase 2 optimization.
-        # This ensures _patient_demographics is available for any definition that might
-        # reference it via AgeInYearsAt() or other demographics-aware functions.
-        if phase2_result.patient_demographics_cte is None:
-            from ..translator.cte_builder import build_patient_demographics_cte
-            cte_name, cte_ast, column_info = build_patient_demographics_cte()
-            phase2_result.register_patient_demographics_cte(cte_ast, column_info)
-            self._context.has_patient_demographics_cte = True
+        needs_patient_demographics = (
+            phase1_result.needs_patient_demographics
+            or any(
+                getattr(meta, "uses_demographics", False)
+                for meta in self._context.definition_meta.values()
+            )
+        )
 
         # Check if any definitions were produced
         if not resolved_asts:
             # No definitions - return just patient IDs
-            return self._build_patients_only_sql(patient_ids)
+            return self._build_patients_only_sql(
+                patient_ids,
+                patient_scope=patient_scope,
+            )
 
         # Get definition names in dependency order (use resolved ASTs)
         ordered_names = self._topological_sort_definitions(library, resolved_asts)
@@ -726,11 +745,16 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         seen_cte_names: set = set()
 
         # 1. Build patients CTE
-        patients_query = self._build_patients_cte(patient_ids)
+        patients_query = self._build_patients_cte(
+            patient_ids,
+            patient_scope=patient_scope,
+            include_patient_demographics=needs_patient_demographics,
+        )
         cte_defs.append(CTEDefinition(name='_patients', query=patients_query))
         seen_cte_names.add('_patients')
 
-        # 2. Build patient demographics CTE if needed for age calculations
+        # 2. Preserve legacy hook if an optimization phase still supplies a
+        # demographics CTE; current implicit Patient access is folded into _patients.
         if phase2_result.patient_demographics_cte is not None:
             cte_defs.append(CTEDefinition(
                 name='_patient_demographics',
@@ -934,12 +958,76 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             sql_text = demote_audit_in_text(sql_text)
         return sql_text
 
-    def _build_patients_cte(self, patient_ids: Optional[List[str]] = None) -> SQLSelect:
+    def _patient_resource_subquery(
+        self,
+        patient_id_expr: SQLExpression,
+    ) -> SQLSubquery:
+        """Return a scalar subquery for the current Patient resource JSON."""
+        return SQLSubquery(query=SQLSelect(
+            columns=[SQLQualifiedIdentifier(parts=["_pt_resource", "resource"])],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name="resources"),
+                alias="_pt_resource",
+            ),
+            where=SQLBinaryOp(
+                operator="AND",
+                left=SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=["_pt_resource", "resourceType"]),
+                    right=SQLLiteral(value="Patient"),
+                ),
+                right=SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=["_pt_resource", "id"]),
+                    right=patient_id_expr,
+                ),
+            ),
+            limit=1,
+        ))
+
+    def _patient_exists_condition(
+        self,
+        patient_id_expr: SQLExpression,
+    ) -> SQLExists:
+        """Return an EXISTS predicate requiring a matching Patient resource."""
+        return SQLExists(subquery=SQLSubquery(query=SQLSelect(
+            columns=[SQLLiteral(value=1)],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name="resources"),
+                alias="_pt",
+            ),
+            where=SQLBinaryOp(
+                operator="AND",
+                left=SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=["_pt", "resourceType"]),
+                    right=SQLLiteral(value="Patient"),
+                ),
+                right=SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=["_pt", "id"]),
+                    right=patient_id_expr,
+                ),
+            ),
+        )))
+
+    def _build_patients_cte(
+        self,
+        patient_ids: Optional[List[str]] = None,
+        *,
+        patient_scope: str = "literal",
+        include_patient_demographics: bool = False,
+    ) -> SQLSelect:
         """
         Build the patients CTE query.
 
         Args:
             patient_ids: Optional list of patient IDs to filter.
+            patient_scope: ``"literal"`` for the existing literal filter, or
+                ``"target_table"`` to read IDs from
+                ``_fhir4ds_target_patients``.
+            include_patient_demographics: Include the current Patient resource
+                and birth_date columns for implicit Patient-context CQL.
 
         Returns:
             SQLSelect AST node for the patients CTE body.
@@ -950,33 +1038,49 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             "Patients" as the same identifier, so we use "_patients" as the
             internal name for the base patient reference table.
         """
+        if patient_scope == "target_table":
+            patient_id_expr = SQLQualifiedIdentifier(parts=["_target", "patient_id"])
+            where_condition: SQLExpression = self._patient_exists_condition(patient_id_expr)
+            columns: List[SQLExpression] = [
+                SQLAlias(expr=patient_id_expr, alias="patient_id"),
+            ]
+            if include_patient_demographics:
+                patient_resource = self._patient_resource_subquery(patient_id_expr)
+                columns.extend([
+                    SQLAlias(expr=patient_resource, alias="patient_resource"),
+                    SQLAlias(
+                        expr=SQLFunctionCall(
+                            name="fhirpath_date",
+                            args=[patient_resource, SQLLiteral(value="birthDate")],
+                        ),
+                        alias="birth_date",
+                    ),
+                ])
+            return SQLSelect(
+                distinct=True,
+                columns=columns,
+                from_clause=SQLAlias(
+                    expr=SQLIdentifier(name="_fhir4ds_target_patients"),
+                    alias="_target",
+                ),
+                where=where_condition,
+            )
+
+        if patient_scope != "literal":
+            raise ValueError(
+                "patient_scope must be one of 'literal' or 'target_table', "
+                f"got {patient_scope!r}"
+            )
+
+        outer_patient_id = SQLQualifiedIdentifier(parts=["_outer", "patient_ref"])
         where_condition: SQLExpression = SQLBinaryOp(
             operator="AND",
             left=SQLBinaryOp(
                 operator="IS NOT",
-                left=SQLQualifiedIdentifier(parts=["_outer", "patient_ref"]),
+                left=outer_patient_id,
                 right=SQLNull(),
             ),
-            right=SQLExists(subquery=SQLSubquery(query=SQLSelect(
-                columns=[SQLLiteral(value=1)],
-                from_clause=SQLAlias(
-                    expr=SQLIdentifier(name="resources"),
-                    alias="_pt",
-                ),
-                where=SQLBinaryOp(
-                    operator="AND",
-                    left=SQLBinaryOp(
-                        operator="=",
-                        left=SQLQualifiedIdentifier(parts=["_pt", "resourceType"]),
-                        right=SQLLiteral(value="Patient"),
-                    ),
-                    right=SQLBinaryOp(
-                        operator="=",
-                        left=SQLQualifiedIdentifier(parts=["_pt", "id"]),
-                        right=SQLQualifiedIdentifier(parts=["_outer", "patient_ref"]),
-                    ),
-                ),
-            ))),
+            right=self._patient_exists_condition(outer_patient_id),
         )
         if patient_ids is not None and len(patient_ids) == 0:
             where_condition = SQLBinaryOp(
@@ -993,13 +1097,28 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 left=where_condition,
                 right=SQLBinaryOp(
                     operator="IN",
-                    left=SQLQualifiedIdentifier(parts=["_outer", "patient_ref"]),
+                    left=outer_patient_id,
                     right=SQLList(items=id_literals),
                 ),
             )
+        columns: List[SQLExpression] = [
+            SQLAlias(expr=outer_patient_id, alias="patient_id"),
+        ]
+        if include_patient_demographics:
+            patient_resource = self._patient_resource_subquery(outer_patient_id)
+            columns.extend([
+                SQLAlias(expr=patient_resource, alias="patient_resource"),
+                SQLAlias(
+                    expr=SQLFunctionCall(
+                        name="fhirpath_date",
+                        args=[patient_resource, SQLLiteral(value="birthDate")],
+                    ),
+                    alias="birth_date",
+                ),
+            ])
         return SQLSelect(
             distinct=True,
-            columns=[SQLAlias(expr=SQLQualifiedIdentifier(parts=["_outer", "patient_ref"]), alias="patient_id")],
+            columns=columns,
             from_clause=SQLAlias(
                 expr=SQLIdentifier(name="resources"),
                 alias="_outer",
@@ -1007,7 +1126,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             where=where_condition,
         )
 
-    def _build_patients_only_sql(self, patient_ids: Optional[List[str]] = None) -> str:
+    def _build_patients_only_sql(
+        self,
+        patient_ids: Optional[List[str]] = None,
+        *,
+        patient_scope: str = "literal",
+    ) -> str:
         """
         Build SQL that returns only patient IDs.
 
@@ -1017,7 +1141,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         Returns:
             SQL string.
         """
-        patients_query = self._build_patients_cte(patient_ids)
+        patients_query = self._build_patients_cte(
+            patient_ids,
+            patient_scope=patient_scope,
+        )
         cte = CTEDefinition(name='_patients', query=patients_query)
         final = SQLSelect(
             columns=[SQLIdentifier(name="patient_id")],

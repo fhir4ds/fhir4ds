@@ -662,18 +662,19 @@ def _evaluate_materialized_measure(
     )
     parameters = dict(config.parameters)
     parameters.update(measure.parameters)
-    return evaluator.evaluate(
+    compiled = evaluator.compile_measure(
         measure_bundle=measure.measure_path,
         cql_library_path=cql_path,
         parameters=parameters,
         audit_mode=measure.audit_mode,
         filter_to_ip=measure.filter_to_ip,
-        patient_ids=patient_ids,
+        patient_scope="target_table",
         include_paths=[str(path) for path in [*config.library_paths, *measure.library_paths]],
         generate_narratives=measure.generate_narratives,
         include_supporting_evidence=measure.include_supporting_evidence
         or measure.persist_audit,
     )
+    return evaluator.execute_compiled_measure(compiled, patient_ids=patient_ids)
 
 
 def _persist_successful_measure(

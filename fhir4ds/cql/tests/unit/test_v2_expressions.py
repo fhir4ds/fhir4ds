@@ -191,11 +191,10 @@ class TestIdentifiers:
         assert result.name == "SomeVar"
 
     def test_patient_identifier(self, translator: ExpressionTranslator):
-        """Test Patient identifier references patient resource via subquery."""
-        from ...translator.types import SQLSubquery
+        """Test Patient identifier references the folded _patients resource."""
         result = translator.translate(Identifier(name="Patient"))
-        # Patient identifier now returns a subquery fetching from _patient_demographics
-        assert isinstance(result, SQLSubquery)
+        assert isinstance(result, SQLQualifiedIdentifier)
+        assert result.parts == ["_pt", "patient_resource"]
 
     def test_qualified_identifier(self, translator: ExpressionTranslator):
         """Test qualified identifier: Library.name."""
@@ -813,8 +812,8 @@ class TestAgeAtFunctions:
         assert isinstance(result, SQLFunctionCall)
         assert result.name == "CalculateAgeInYearsAt"
         sql = result.to_sql()
-        assert "_patient_demographics" in sql
-        assert "_pt.patient_id" in sql
+        assert "_patient_demographics" not in sql
+        assert "_pt.birth_date" in sql
 
 
 class TestIntervalOperations:

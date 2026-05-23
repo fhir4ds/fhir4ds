@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import warnings
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from html import escape
 from pathlib import Path
@@ -22,6 +24,36 @@ from .parser import MeasureParser
 from .types import AuditMode, AuditOrStrategy, GroupMap, PopulationMap
 
 logger = logging.getLogger(__name__)
+
+
+_TARGET_PATIENT_TABLE = "_fhir4ds_target_patients"
+
+
+@dataclass
+class CompiledGroup:
+    """Reusable SQL artifact for one Measure group."""
+
+    group: GroupMap
+    sql: str
+    audit_mode: AuditMode
+    prepared_name: str | None = None
+    prepared: bool = False
+
+
+@dataclass
+class CompiledMeasure:
+    """Reusable SQL artifacts for a parsed FHIR Measure."""
+
+    groups: list[CompiledGroup]
+    pop_map: PopulationMap
+    populations: dict[str, Any]
+    parameters: dict[str, Any]
+    measure_url: str | None
+    audit_mode: AuditMode
+    filter_to_ip: bool
+    patient_scope: str
+    generate_narratives: bool
+    cache_key: str
 
 
 class MeasureEvaluator:
@@ -49,6 +81,7 @@ class MeasureEvaluator:
         self._cached_fhir_schema: Any = None
         self._cached_profile_registry: Any = None
         self._cached_model_config: Any = None
+        self._compiled_measure_cache: dict[str, CompiledMeasure] = {}
 
     def evaluate(
         self,
@@ -169,6 +202,175 @@ class MeasureEvaluator:
             parameters=parameters or {},
             measure_url=pop_map.cql_library_ref,
             pop_map=pop_map,
+        )
+
+    def compile_measure(
+        self,
+        measure_bundle: str | Path | dict,
+        cql_library_path: str | Path,
+        parameters: dict | None = None,
+        audit: bool = False,
+        audit_mode: str | AuditMode = AuditMode.NONE,
+        filter_to_ip: bool = False,
+        patient_ids: list[str] | None = None,
+        patient_scope: str = "literal",
+        include_paths: list[str] | None = None,
+        generate_narratives: bool = False,
+        include_supporting_evidence: bool = False,
+    ) -> CompiledMeasure:
+        """Compile a Measure to reusable SQL without executing it."""
+        effective_mode = AuditMode(audit_mode)
+        if effective_mode == AuditMode.NONE and audit:
+            effective_mode = AuditMode.FULL
+        if generate_narratives and effective_mode == AuditMode.NONE:
+            raise ValueError("Narratives require audit=True")
+        if patient_scope not in {"literal", "target_table"}:
+            raise ValueError(
+                "patient_scope must be one of 'literal' or 'target_table', "
+                f"got {patient_scope!r}"
+            )
+        if patient_scope == "target_table" and patient_ids is not None:
+            raise ValueError(
+                "patient_ids must be supplied to execute_compiled_measure() "
+                "when patient_scope='target_table'"
+            )
+
+        measure_dict = self._load_measure(measure_bundle)
+        pop_map = self._parser.parse(measure_dict)
+        self._last_pop_map = pop_map
+        self._last_parameters = parameters or {}
+
+        cql_path = Path(cql_library_path)
+        if not cql_path.exists():
+            raise FileNotFoundError(f"CQL library not found: {cql_library_path}")
+        if not cql_path.is_file():
+            raise ValueError(f"CQL library path must be a file: {cql_library_path}")
+
+        cache_key = self._compiled_measure_cache_key(
+            measure_dict=measure_dict,
+            cql_path=cql_path,
+            parameters=parameters or {},
+            audit_mode=effective_mode,
+            filter_to_ip=filter_to_ip,
+            patient_ids=patient_ids,
+            patient_scope=patient_scope,
+            include_paths=include_paths,
+            generate_narratives=generate_narratives,
+            include_supporting_evidence=include_supporting_evidence,
+        )
+        cached = self._compiled_measure_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            from fhir4ds.cql import CQLToSQLTranslator, parse_cql
+        except ImportError as e:
+            raise DQMError(f"cql-py is required: {e}") from e
+
+        cql_text = cql_path.read_text()
+        library = parse_cql(cql_text)
+
+        groups = [
+            self._compile_group(
+                group=group,
+                pop_map=pop_map,
+                library=library,
+                cql_path=cql_path,
+                parameters=parameters or {},
+                patient_ids=patient_ids,
+                patient_scope=patient_scope,
+                audit_mode=effective_mode,
+                include_paths=include_paths,
+                include_supporting_evidence=include_supporting_evidence,
+                parse_cql=parse_cql,
+                translator_cls=CQLToSQLTranslator,
+                cache_key=cache_key,
+                group_index=index,
+            )
+            for index, group in enumerate(pop_map.groups)
+        ]
+        populations = {
+            self._col_name(p.population_code): p.cql_expression
+            for g in pop_map.groups
+            for p in g.populations
+        }
+        compiled = CompiledMeasure(
+            groups=groups,
+            pop_map=pop_map,
+            populations=populations,
+            parameters=parameters or {},
+            measure_url=pop_map.cql_library_ref,
+            audit_mode=effective_mode,
+            filter_to_ip=filter_to_ip,
+            patient_scope=patient_scope,
+            generate_narratives=generate_narratives,
+            cache_key=cache_key,
+        )
+        self._compiled_measure_cache[cache_key] = compiled
+        return compiled
+
+    def execute_compiled_measure(
+        self,
+        compiled: CompiledMeasure,
+        patient_ids: list[str] | None = None,
+    ) -> MeasureResult:
+        """Execute a previously compiled Measure."""
+        if compiled.patient_scope == "target_table":
+            if patient_ids is None:
+                raise ValueError(
+                    "patient_ids are required when executing a compiled measure "
+                    "with patient_scope='target_table'"
+                )
+            self._populate_target_patient_table(patient_ids)
+        elif patient_ids is not None:
+            raise ValueError(
+                "patient_ids cannot override a compiled measure that used "
+                "literal patient scoping"
+            )
+
+        group_dfs: list[pd.DataFrame] = []
+        try:
+            for compiled_group in compiled.groups:
+                try:
+                    df = self._execute_compiled_group(compiled_group)
+                except Exception as exc:
+                    raise DQMError(
+                        f"Evaluation failed for group '{compiled_group.group.group_id}': {exc}"
+                    ) from exc
+                if compiled.filter_to_ip:
+                    df = self._filter_to_initial_population(df, compiled.audit_mode)
+                df["_group_id"] = compiled_group.group.group_id
+                group_dfs.append(df)
+        finally:
+            self._clear_cql_variables()
+
+        if not group_dfs:
+            raise DQMError(f"Measure '{compiled.pop_map.measure_id}' produced no results")
+
+        if compiled.audit_mode != AuditMode.NONE:
+            for i, gdf in enumerate(group_dfs):
+                group_dfs[i] = self._prune_population_evidence(gdf, compiled.pop_map)
+
+        if len(group_dfs) == 1:
+            result_df = group_dfs[0].drop(columns=["_group_id"])
+        else:
+            result_df = pd.concat(group_dfs, ignore_index=True)
+
+        if compiled.generate_narratives and compiled.audit_mode != AuditMode.NONE:
+            result_df = self._add_narratives(
+                result_df,
+                compiled.pop_map,
+                compiled.audit_mode,
+            )
+
+        self._last_pop_map = compiled.pop_map
+        self._last_parameters = compiled.parameters
+        return MeasureResult(
+            dataframe=result_df,
+            populations=compiled.populations,
+            parameters=compiled.parameters,
+            measure_url=compiled.measure_url,
+            pop_map=compiled.pop_map,
         )
 
     def summary_report(self, result: Any) -> dict:
@@ -836,6 +1038,60 @@ class MeasureEvaluator:
                 f"Invalid JSON in measure file '{measure_bundle}': {e}"
             ) from e
 
+    def _compiled_measure_cache_key(
+        self,
+        *,
+        measure_dict: dict,
+        cql_path: Path,
+        parameters: dict,
+        audit_mode: AuditMode,
+        filter_to_ip: bool,
+        patient_ids: list[str] | None,
+        patient_scope: str,
+        include_paths: list[str] | None,
+        generate_narratives: bool,
+        include_supporting_evidence: bool,
+    ) -> str:
+        """Hash static inputs that affect generated measure SQL or result shape."""
+        payload = {
+            "measure": measure_dict,
+            "cql_path": str(cql_path),
+            "cql_hash": hashlib.sha256(cql_path.read_bytes()).hexdigest(),
+            "include_hash": self._include_paths_hash(include_paths, cql_path.parent),
+            "parameters": parameters,
+            "audit_mode": audit_mode.value,
+            "filter_to_ip": filter_to_ip,
+            "patient_scope": patient_scope,
+            "patient_ids": patient_ids if patient_scope == "literal" else None,
+            "generate_narratives": generate_narratives,
+            "include_supporting_evidence": include_supporting_evidence,
+            "audit_or_strategy": self._audit_or_strategy.value,
+        }
+        text = json.dumps(payload, sort_keys=True, default=str)
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    def _include_paths_hash(
+        self,
+        include_paths: list[str] | None,
+        default_path: Path,
+    ) -> str:
+        """Hash CQL include files visible to the library loader."""
+        paths = [Path(p) for p in include_paths] if include_paths else [default_path]
+        items: list[tuple[str, str]] = []
+        for path in paths:
+            if path.is_dir():
+                candidates = sorted(path.glob("*.cql"))
+            else:
+                candidates = [path]
+            for candidate in candidates:
+                try:
+                    digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+                    items.append((str(candidate), digest))
+                except OSError:
+                    items.append((str(candidate), "missing"))
+        text = json.dumps(items, sort_keys=True)
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
     def _evaluate_group(
         self,
         group: GroupMap,
@@ -850,9 +1106,66 @@ class MeasureEvaluator:
         translator_cls: Any,
     ) -> pd.DataFrame:
         """Evaluate a single group from a FHIR Measure. Always returns DataFrame."""
-        cql_text = cql_path.read_text()
-        library = parse_cql(cql_text)
+        library = parse_cql(cql_path.read_text())
+        compiled_group = self._compile_group(
+            group=group,
+            pop_map=pop_map,
+            library=library,
+            cql_path=cql_path,
+            parameters=parameters,
+            patient_ids=patient_ids,
+            patient_scope="literal",
+            audit_mode=audit_mode,
+            include_paths=include_paths,
+            include_supporting_evidence=include_supporting_evidence,
+            parse_cql=parse_cql,
+            translator_cls=translator_cls,
+            cache_key="literal",
+            group_index=0,
+        )
+        try:
+            return self._execute_compiled_group(compiled_group)
+        except (DQMError, KeyboardInterrupt):
+            raise
+        except (duckdb.Error, ValueError, FileNotFoundError, RuntimeError,
+                SyntaxError, TypeError) as e:
+            raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
+        except Exception as e:
+            # Import actual exception classes instead of string-matching type names
+            from fhir4ds.cql.errors import ParseError, TranslationError
+            if isinstance(e, (ParseError, TranslationError)):
+                raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
+            raise
+        finally:
+            # Clear per-evaluation state to prevent memory accumulation
+            self._clear_cql_variables()
 
+    def _clear_cql_variables(self) -> None:
+        """Clear CQL variable UDF state when the optional UDF module is loaded."""
+        try:
+            from fhir4ds.cql.duckdb.udf.variable import clear_variables
+            clear_variables(self.conn)
+        except ImportError:
+            pass
+
+    def _compile_group(
+        self,
+        group: GroupMap,
+        pop_map: PopulationMap,
+        library: Any,
+        cql_path: Path,
+        parameters: dict,
+        patient_ids: list[str] | None,
+        patient_scope: str,
+        audit_mode: AuditMode,
+        include_paths: list[str] | None,
+        include_supporting_evidence: bool,
+        parse_cql: Any,
+        translator_cls: Any,
+        cache_key: str,
+        group_index: int,
+    ) -> CompiledGroup:
+        """Compile one FHIR Measure group to SQL."""
         translator = translator_cls(connection=self.conn)
 
         # Reuse cached registries to avoid ~1.5MB allocation per call
@@ -904,47 +1217,85 @@ class MeasureEvaluator:
                 output_columns=output_columns,
                 parameters=parameters,
                 patient_ids=patient_ids,
+                patient_scope=patient_scope,
             )
-            # Audit-mode SQL generates deeply nested audit_and/audit_or expressions;
-            # raise the limit to avoid DuckDB's default 1000-node cap.
-            self.conn.execute("SET max_expression_depth TO 10000")
-            df = self.conn.execute(sql).df()
-
-            # Full audit mode may produce Cartesian-product row explosion
-            # (N^K rows per patient) because retrieve CTEs are LEFT JOINed
-            # to capture per-resource evidence.  Deduplicate to one row per
-            # patient by keeping the first occurrence — evidence items across
-            # duplicate rows are identical per patient since the audit macros
-            # (audit_and / audit_or) already merge evidence lists.
-            if audit_mode == AuditMode.FULL and "patient_id" in df.columns:
-                pre_dedup = len(df)
-                df = df.drop_duplicates(subset=["patient_id"], keep="first")
-                if len(df) < pre_dedup:
-                    logger.debug(
-                        "Audit dedup: %d → %d rows (removed %d Cartesian duplicates)",
-                        pre_dedup, len(df), pre_dedup - len(df),
-                    )
-                df = df.reset_index(drop=True)
-
-            return df
         except (DQMError, KeyboardInterrupt):
             raise
         except (duckdb.Error, ValueError, FileNotFoundError, RuntimeError,
                 SyntaxError, TypeError) as e:
-            raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
+            raise DQMError(f"Compilation failed for group '{group.group_id}': {e}") from e
         except Exception as e:
             # Import actual exception classes instead of string-matching type names
             from fhir4ds.cql.errors import ParseError, TranslationError
             if isinstance(e, (ParseError, TranslationError)):
-                raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
+                raise DQMError(f"Compilation failed for group '{group.group_id}': {e}") from e
             raise
-        finally:
-            # Clear per-evaluation state to prevent memory accumulation
-            try:
-                from fhir4ds.cql.duckdb.udf.variable import clear_variables
-                clear_variables(self.conn)
-            except ImportError:
-                pass
+        prepared_name = (
+            "fhir4ds_compiled_"
+            f"{hashlib.sha256(f'{cache_key}:{group_index}'.encode()).hexdigest()[:24]}"
+        )
+        return CompiledGroup(
+            group=group,
+            sql=sql,
+            audit_mode=audit_mode,
+            prepared_name=prepared_name,
+        )
+
+    def _execute_compiled_group(self, compiled_group: CompiledGroup) -> pd.DataFrame:
+        """Execute one compiled group, preparing SQL on first use when possible."""
+        # Audit-mode SQL generates deeply nested audit_and/audit_or expressions;
+        # raise the limit to avoid DuckDB's default 1000-node cap.
+        self.conn.execute("SET max_expression_depth TO 10000")
+        df = self._execute_prepared_or_sql(compiled_group).df()
+
+        # Full audit mode may produce Cartesian-product row explosion
+        # (N^K rows per patient) because retrieve CTEs are LEFT JOINed
+        # to capture per-resource evidence.  Deduplicate to one row per
+        # patient by keeping the first occurrence — evidence items across
+        # duplicate rows are identical per patient since the audit macros
+        # (audit_and / audit_or) already merge evidence lists.
+        if compiled_group.audit_mode == AuditMode.FULL and "patient_id" in df.columns:
+            pre_dedup = len(df)
+            df = df.drop_duplicates(subset=["patient_id"], keep="first")
+            if len(df) < pre_dedup:
+                logger.debug(
+                    "Audit dedup: %d → %d rows (removed %d Cartesian duplicates)",
+                    pre_dedup, len(df), pre_dedup - len(df),
+                )
+            df = df.reset_index(drop=True)
+        return df
+
+    def _execute_prepared_or_sql(self, compiled_group: CompiledGroup) -> Any:
+        """Use a DuckDB prepared statement when supported, falling back to raw SQL."""
+        if compiled_group.prepared_name:
+            if not compiled_group.prepared:
+                try:
+                    self.conn.execute(
+                        f"PREPARE {compiled_group.prepared_name} AS {compiled_group.sql}"
+                    )
+                    compiled_group.prepared = True
+                except duckdb.Error:
+                    logger.debug(
+                        "DuckDB PREPARE failed for compiled measure; falling back",
+                        exc_info=True,
+                    )
+                    compiled_group.prepared_name = None
+            if compiled_group.prepared_name and compiled_group.prepared:
+                return self.conn.execute(f"EXECUTE {compiled_group.prepared_name}")
+        return self.conn.execute(compiled_group.sql)
+
+    def _populate_target_patient_table(self, patient_ids: list[str]) -> None:
+        """Refresh the temporary patient-scope table used by compiled SQL."""
+        self.conn.execute(
+            f"CREATE TEMP TABLE IF NOT EXISTS {_TARGET_PATIENT_TABLE} "
+            "(patient_id VARCHAR)"
+        )
+        self.conn.execute(f"DELETE FROM {_TARGET_PATIENT_TABLE}")
+        if patient_ids:
+            self.conn.executemany(
+                f"INSERT INTO {_TARGET_PATIENT_TABLE} VALUES (?)",
+                [(patient_id,) for patient_id in patient_ids],
+            )
 
     def _prune_population_evidence(
         self, df: pd.DataFrame, pop_map: PopulationMap,

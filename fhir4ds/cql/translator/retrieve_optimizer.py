@@ -1468,18 +1468,24 @@ def run_optimization_phases(
     """
     from ..parser.ast_nodes import Definition, FunctionRef
     from .placeholder import RetrievePlaceholder
-    from .cte_builder import build_patient_demographics_cte
-
     stats = OptimizationStats()
     phase1_result = Phase1Result()
     phase2_result = Phase2Result()
 
     # ========================================================================
-    # PRE-SCAN: Check for AgeInYearsAt usage in CQL library
+    # PRE-SCAN: Check for implicit current-patient age usage in CQL library
     # ========================================================================
     # This must happen BEFORE Phase 1 translation so the context flag is set
     # when the age functions are translated
-    age_at_functions = {"AgeInYearsAt", "AgeInMonthsAt", "AgeInDaysAt"}
+    age_at_functions = {
+        "AgeInYearsAt",
+        "AgeInMonthsAt",
+        "AgeInWeeksAt",
+        "AgeInDaysAt",
+        "AgeInHoursAt",
+        "AgeInMinutesAt",
+        "AgeInSecondsAt",
+    }
 
     def scan_cql_for_age_functions(node) -> bool:
         """Recursively scan CQL AST for age-at function calls."""
@@ -1558,6 +1564,9 @@ def run_optimization_phases(
 
         # Scan for AgeInYearsAt/AgeInMonthsAt/AgeInDaysAt usage
         if _contains_age_at_function(sql_ast):
+            phase1_result.needs_patient_demographics = True
+        meta = context.definition_meta.get(statement.name)
+        if meta is not None and getattr(meta, "uses_demographics", False):
             phase1_result.needs_patient_demographics = True
 
     # Scan function promotion CTE bodies for placeholders (done once, not per-definition)
@@ -1639,12 +1648,6 @@ def run_optimization_phases(
 
         stats.num_ctes_created += 1
         stats.num_properties_precomputed += len(merged_properties)
-
-    # Build patient demographics CTE if needed for age calculations
-    if phase1_result.needs_patient_demographics:
-        cte_name, cte_ast, column_info = build_patient_demographics_cte()
-        phase2_result.register_patient_demographics_cte(cte_ast, column_info)
-        stats.num_ctes_created += 1
 
     # ========================================================================
     # PHASE 3: Resolve + Optimize
@@ -1793,7 +1796,7 @@ def _count_fhirpath_calls(ast: SQLExpression) -> int:
 
 def _contains_age_at_function(ast: SQLExpression) -> bool:
     """
-    Check if an AST contains AgeInYearsAt, AgeInMonthsAt, or AgeInDaysAt function calls.
+    Check if an AST contains implicit current-patient age function calls.
 
     These functions require patient demographics (birthDate) for efficient
     age calculation in population mode.
@@ -1804,7 +1807,22 @@ def _contains_age_at_function(ast: SQLExpression) -> bool:
     Returns:
         True if any age-at function is found, False otherwise
     """
-    age_at_functions = {"AgeInYearsAt", "AgeInMonthsAt", "AgeInDaysAt"}
+    age_at_functions = {
+        "AgeInYearsAt",
+        "AgeInMonthsAt",
+        "AgeInWeeksAt",
+        "AgeInDaysAt",
+        "AgeInHoursAt",
+        "AgeInMinutesAt",
+        "AgeInSecondsAt",
+        "CalculateAgeInYearsAt",
+        "CalculateAgeInMonthsAt",
+        "CalculateAgeInWeeksAt",
+        "CalculateAgeInDaysAt",
+        "CalculateAgeInHoursAt",
+        "CalculateAgeInMinutesAt",
+        "CalculateAgeInSecondsAt",
+    }
     found = False
 
     def walk(node):

@@ -1,14 +1,12 @@
 """End-to-end integration tests for MeasureEvaluator with DuckDB."""
 
 import json
-import pytest
-import duckdb
-import pandas as pd
 from pathlib import Path
 
-from fhir4ds.dqm import MeasureEvaluator, MeasureParser
-from fhir4ds.dqm.errors import DQMError
+import duckdb
+import pytest
 
+from fhir4ds.dqm import MeasureEvaluator, MeasureParser
 
 TESTS_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "tests"
 DQM_2026 = TESTS_DIR / "data" / "dqm-content-qicore-2026" / "input"
@@ -109,6 +107,113 @@ define "Initial Population":
         df = result.dataframe
         assert "patient_id" in df.columns
         assert len(df) >= 1
+
+    def test_compiled_measure_reuses_sql_with_target_patient_table(self, conn, tmp_path):
+        """Compiled target-table SQL should run for different patient batches."""
+        from fhir4ds.cql import FHIRDataLoader
+        loader = FHIRDataLoader(conn)
+        loader.load_resource({
+            "resourceType": "Patient",
+            "id": "p1",
+            "gender": "male",
+            "birthDate": "1990-01-01",
+        })
+        loader.load_resource({
+            "resourceType": "Patient",
+            "id": "p2",
+            "gender": "female",
+            "birthDate": "1990-01-01",
+        })
+
+        measure_json = {
+            "resourceType": "Measure",
+            "id": "compiled-target-measure",
+            "library": ["http://example.com/Library/CompiledTarget"],
+            "group": [{
+                "population": [{
+                    "code": {"coding": [{"code": "initial-population"}]},
+                    "criteria": {"expression": "Initial Population"},
+                }]
+            }],
+        }
+        cql_text = '''library CompiledTarget
+using FHIR version '4.0.1'
+context Patient
+define "Initial Population":
+    Patient.gender = 'male'
+'''
+        cql_path = tmp_path / "compiled_target.cql"
+        cql_path.write_text(cql_text)
+
+        evaluator = MeasureEvaluator(conn)
+        compiled = evaluator.compile_measure(
+            measure_bundle=measure_json,
+            cql_library_path=str(cql_path),
+            patient_scope="target_table",
+        )
+        sql = compiled.groups[0].sql
+        assert "_fhir4ds_target_patients" in sql
+        assert "_patient_demographics" not in sql
+        assert "'p1'" not in sql
+        assert "'p2'" not in sql
+
+        p1_result = evaluator.execute_compiled_measure(compiled, patient_ids=["p1"])
+        p2_result = evaluator.execute_compiled_measure(compiled, patient_ids=["p2"])
+
+        p1_rows = p1_result.dataframe.set_index("patient_id")
+        p2_rows = p2_result.dataframe.set_index("patient_id")
+        assert bool(p1_rows.loc["p1", "initial_population"]) is True
+        assert bool(p2_rows.loc["p2", "initial_population"]) is False
+        assert compiled.groups[0].prepared is True
+
+    def test_compiled_measure_omits_patient_columns_without_implicit_patient_access(
+        self, conn, tmp_path
+    ):
+        """CQL without implicit Patient access should keep _patients lean."""
+        from fhir4ds.cql import FHIRDataLoader
+        loader = FHIRDataLoader(conn)
+        loader.load_resource({"resourceType": "Patient", "id": "p1"})
+        loader.load_resource({
+            "resourceType": "Encounter",
+            "id": "e1",
+            "subject": {"reference": "Patient/p1"},
+            "status": "finished",
+        })
+
+        measure_json = {
+            "resourceType": "Measure",
+            "id": "compiled-no-demographics",
+            "library": ["http://example.com/Library/CompiledNoDemographics"],
+            "group": [{
+                "population": [{
+                    "code": {"coding": [{"code": "initial-population"}]},
+                    "criteria": {"expression": "Initial Population"},
+                }]
+            }],
+        }
+        cql_path = tmp_path / "compiled_no_demographics.cql"
+        cql_path.write_text('''library CompiledNoDemographics
+using FHIR version '4.0.1'
+context Patient
+define "Finished Encounters":
+    [Encounter] E where E.status = 'finished'
+define "Initial Population":
+    exists "Finished Encounters"
+''')
+
+        evaluator = MeasureEvaluator(conn)
+        compiled = evaluator.compile_measure(
+            measure_bundle=measure_json,
+            cql_library_path=str(cql_path),
+            patient_scope="target_table",
+        )
+        sql = compiled.groups[0].sql
+        assert "_patient_demographics" not in sql
+        assert "patient_resource" not in sql
+        assert "birth_date" not in sql
+
+        result = evaluator.execute_compiled_measure(compiled, patient_ids=["p1"])
+        assert bool(result.dataframe.loc[0, "initial_population"]) is True
 
     def test_evaluate_simple_stratified_measure(self, conn, tmp_path):
         """Stratifier expressions should flow through evaluation and reporting."""

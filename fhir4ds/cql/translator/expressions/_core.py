@@ -686,19 +686,21 @@ class CoreMixin:
 
         # Check if this is Patient context reference
         if name == "Patient":
-            # In population context, use correlated subquery to get patient resource.
-            # Always flag that demographics CTE is needed so it gets created.
+            # Flag that the _patients CTE needs current-patient resource columns.
             self.context._needs_demographics = True
             # Determine the outer patient_id reference for correlation.
             outer_alias = self.context.resource_alias
             if outer_alias:
                 outer_pid = SQLQualifiedIdentifier(parts=[outer_alias, "patient_id"])
             else:
-                outer_pid = SQLQualifiedIdentifier(parts=["_pt", "patient_id"])
+                outer_alias = "_pt"
+                outer_pid = SQLQualifiedIdentifier(parts=[outer_alias, "patient_id"])
+            if outer_alias == "_pt":
+                return SQLQualifiedIdentifier(parts=["_pt", "patient_resource"])
             return SQLSubquery(query=SQLSelect(
-                columns=[SQLQualifiedIdentifier(parts=["_pd", "resource"])],
+                columns=[SQLQualifiedIdentifier(parts=["_pd", "patient_resource"])],
                 from_clause=SQLAlias(
-                    expr=SQLIdentifier(name="_patient_demographics", quoted=False),
+                    expr=SQLIdentifier(name="_patients", quoted=False),
                     alias="_pd"
                 ),
                 where=SQLBinaryOp(

@@ -128,7 +128,7 @@ class ASTHelpersMixin:
         Uses the DefinitionMeta.tracked_refs which stores CTE references collected
         during expression translation (in translate_definition).
 
-        Also adds JOIN to _patient_demographics when age functions are used.
+        Age/current-Patient helpers use columns folded into the _patients CTE.
 
         Args:
             name: The definition name.
@@ -157,12 +157,9 @@ class ASTHelpersMixin:
                 )
                 joins.append(join)
 
-        # NOTE: age calculations use correlated subqueries against
-        # _patient_demographics (SELECT ... WHERE patient_id = ... LIMIT 1)
-        # rather than a JOIN.  A LEFT JOIN here would be dead code and could
-        # cause row fan-out when multiple Patient resources share the same
-        # patient_ref (e.g., when test data for many measures is loaded
-        # into a single DB).  We intentionally omit the demographics JOIN.
+        # NOTE: implicit Patient access is supplied by _patients. A separate
+        # LEFT JOIN here would be dead code and could cause row fan-out when
+        # multiple Patient resources share the same patient_ref.
 
         return joins if joins else None
 
