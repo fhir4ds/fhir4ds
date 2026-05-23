@@ -325,6 +325,279 @@ define "Initial Population":
         result = evaluator.execute_compiled_measure(compiled, patient_ids=["p1"])
         assert bool(result.dataframe.loc[0, "initial_population"]) is True
 
+    def test_compiled_target_table_handles_forward_set_operation_sources(
+        self, conn, tmp_path
+    ):
+        """Set-operation query sources should not keep scalar patient correlation."""
+        from fhir4ds.cql import FHIRDataLoader
+        loader = FHIRDataLoader(conn)
+        loader.load_resource({"resourceType": "Patient", "id": "p1"})
+        loader.load_resource({
+            "resourceType": "Encounter",
+            "id": "e1",
+            "subject": {"reference": "Patient/p1"},
+            "status": "finished",
+            "class": {"code": "IMP"},
+        })
+
+        measure_json = {
+            "resourceType": "Measure",
+            "id": "compiled-forward-set-op",
+            "library": ["http://example.com/Library/CompiledForwardSetOp"],
+            "group": [{
+                "population": [{
+                    "code": {"coding": [{"code": "initial-population"}]},
+                    "criteria": {"expression": "Initial Population"},
+                }]
+            }],
+        }
+        cql_path = tmp_path / "compiled_forward_set_op.cql"
+        cql_path.write_text('''library CompiledForwardSetOp
+using FHIR version '4.0.1'
+context Patient
+define "Finished Encounters":
+    [Encounter] E where E.status = 'finished'
+define "Intersected Encounters":
+    ("Finished Encounters" intersect "Inpatient Encounters") Encounter
+        where Encounter.status = 'finished'
+define "Inpatient Encounters":
+    [Encounter] E where E.class.code = 'IMP'
+define "Initial Population":
+    exists "Intersected Encounters"
+''')
+
+        evaluator = MeasureEvaluator(conn)
+        compiled = evaluator.compile_measure(
+            measure_bundle=measure_json,
+            cql_library_path=str(cql_path),
+            patient_scope="target_table",
+        )
+
+        sql = compiled.groups[0].sql
+        assert "WHERE sub.patient_id = Encounter.patient_id" not in sql
+
+        result = evaluator.execute_compiled_measure(compiled, patient_ids=["p1"])
+        assert bool(result.dataframe.loc[0, "initial_population"]) is True
+
+    def test_compiled_target_table_preserves_scalar_multi_source_returns(
+        self, conn, tmp_path
+    ):
+        """Computed multi-source returns should materialize scalar value columns."""
+        from fhir4ds.cql import FHIRDataLoader
+        loader = FHIRDataLoader(conn)
+        loader.load_resource({"resourceType": "Patient", "id": "p1"})
+        loader.load_resource({
+            "resourceType": "Encounter",
+            "id": "e1",
+            "subject": {"reference": "Patient/p1"},
+            "status": "finished",
+        })
+
+        measure_json = {
+            "resourceType": "Measure",
+            "id": "compiled-scalar-multi-source",
+            "library": ["http://example.com/Library/CompiledScalarMultiSource"],
+            "group": [{
+                "population": [{
+                    "code": {"coding": [{"code": "initial-population"}]},
+                    "criteria": {"expression": "Initial Population"},
+                }]
+            }],
+        }
+        cql_path = tmp_path / "compiled_scalar_multi_source.cql"
+        cql_path.write_text('''library CompiledScalarMultiSource
+using FHIR version '4.0.1'
+context Patient
+define "Encounter Statuses":
+    [Encounter] E return E.status
+define "Matching Statuses":
+    from
+        "Encounter Statuses" Status1,
+        "Encounter Statuses" Status2
+        where Status1 = Status2
+        return ToString(Status1)
+define "Initial Population":
+    exists "Matching Statuses"
+''')
+
+        evaluator = MeasureEvaluator(conn)
+        compiled = evaluator.compile_measure(
+            measure_bundle=measure_json,
+            cql_library_path=str(cql_path),
+            patient_scope="target_table",
+        )
+
+        sql = compiled.groups[0].sql
+        assert '"Matching Statuses" AS (\nSELECT Status1.patient_id' in sql
+        assert 'AS value FROM "Encounter Statuses" AS Status1' in sql
+        assert 'SELECT sub.resource FROM "Matching Statuses"' not in sql
+
+        result = evaluator.execute_compiled_measure(compiled, patient_ids=["p1"])
+        assert bool(result.dataframe.loc[0, "initial_population"]) is True
+
+    def test_compiled_target_table_preserves_scalar_multi_source_let_returns(
+        self, conn, tmp_path
+    ):
+        """Multi-source returns through let aliases should materialize value columns."""
+        from fhir4ds.cql import FHIRDataLoader
+        loader = FHIRDataLoader(conn)
+        loader.load_resource({"resourceType": "Patient", "id": "p1"})
+        loader.load_resource({
+            "resourceType": "Observation",
+            "id": "o1",
+            "subject": {"reference": "Patient/p1"},
+            "status": "final",
+            "valueInteger": 5,
+        })
+
+        measure_json = {
+            "resourceType": "Measure",
+            "id": "compiled-scalar-multi-source-let",
+            "library": ["http://example.com/Library/CompiledScalarMultiSourceLet"],
+            "group": [{
+                "population": [{
+                    "code": {"coding": [{"code": "initial-population"}]},
+                    "criteria": {"expression": "Initial Population"},
+                }]
+            }],
+        }
+        cql_path = tmp_path / "compiled_scalar_multi_source_let.cql"
+        cql_path.write_text('''library CompiledScalarMultiSourceLet
+using FHIR version '4.0.1'
+context Patient
+define "Score Differences":
+    from
+        [Observation] FirstScore,
+        [Observation] FollowUpScore
+        let Change: (FirstScore.value as Integer) - (FollowUpScore.value as Integer)
+        return Change
+define "Initial Population":
+    exists ("Score Differences" Score where Score >= 0)
+''')
+
+        evaluator = MeasureEvaluator(conn)
+        compiled = evaluator.compile_measure(
+            measure_bundle=measure_json,
+            cql_library_path=str(cql_path),
+            patient_scope="target_table",
+        )
+
+        sql = compiled.groups[0].sql
+        assert '"Score Differences" AS (\nSELECT FirstScore.patient_id' in sql
+        assert 'AS value FROM "Observation" AS FirstScore' in sql
+        assert "Score.value" in sql
+
+        result = evaluator.execute_compiled_measure(compiled, patient_ids=["p1"])
+        assert bool(result.dataframe.loc[0, "initial_population"]) is True
+
+    def test_compiled_target_table_preserves_resource_tuple_field_returns(
+        self, conn, tmp_path
+    ):
+        """Tuple fields containing resources should stay resource-backed."""
+        from fhir4ds.cql import FHIRDataLoader
+        loader = FHIRDataLoader(conn)
+        loader.load_resource({"resourceType": "Patient", "id": "p1"})
+        loader.load_resource({
+            "resourceType": "Encounter",
+            "id": "e1",
+            "subject": {"reference": "Patient/p1"},
+            "status": "finished",
+        })
+
+        measure_json = {
+            "resourceType": "Measure",
+            "id": "compiled-resource-tuple-field",
+            "library": ["http://example.com/Library/CompiledResourceTupleField"],
+            "group": [{
+                "population": [{
+                    "code": {"coding": [{"code": "initial-population"}]},
+                    "criteria": {"expression": "Initial Population"},
+                }]
+            }],
+        }
+        cql_path = tmp_path / "compiled_resource_tuple_field.cql"
+        cql_path.write_text('''library CompiledResourceTupleField
+using FHIR version '4.0.1'
+context Patient
+define "Encounter Tuples":
+    [Encounter] E
+        return Tuple { encounter: E, marker: 'kept' }
+define "Returned Encounters":
+    "Encounter Tuples" T
+        return T.encounter
+define "Initial Population":
+    exists ("Returned Encounters" E where E.status = 'finished')
+''')
+
+        evaluator = MeasureEvaluator(conn)
+        compiled = evaluator.compile_measure(
+            measure_bundle=measure_json,
+            cql_library_path=str(cql_path),
+            patient_scope="target_table",
+        )
+
+        sql = compiled.groups[0].sql
+        assert '"Returned Encounters" AS (' in sql
+        assert "_inner._resource_data AS resource" in sql
+        assert 'FROM "Encounter Tuples" AS T' in sql
+        assert "E.resource" in sql
+
+        result = evaluator.execute_compiled_measure(compiled, patient_ids=["p1"])
+        assert bool(result.dataframe.loc[0, "initial_population"]) is True
+
+    def test_compiled_target_table_traces_forward_resource_query_columns(
+        self, conn, tmp_path
+    ):
+        """Forward resource-returning query references should use resource columns."""
+        from fhir4ds.cql import FHIRDataLoader
+        loader = FHIRDataLoader(conn)
+        loader.load_resource({"resourceType": "Patient", "id": "p1"})
+        loader.load_resource({
+            "resourceType": "Encounter",
+            "id": "e1",
+            "subject": {"reference": "Patient/p1"},
+            "status": "finished",
+        })
+
+        measure_json = {
+            "resourceType": "Measure",
+            "id": "compiled-forward-resource-query",
+            "library": ["http://example.com/Library/CompiledForwardResourceQuery"],
+            "group": [{
+                "population": [{
+                    "code": {"coding": [{"code": "initial-population"}]},
+                    "criteria": {"expression": "Initial Population"},
+                }]
+            }],
+        }
+        cql_path = tmp_path / "compiled_forward_resource_query.cql"
+        cql_path.write_text('''library CompiledForwardResourceQuery
+using FHIR version '4.0.1'
+context Patient
+define "Initial Population":
+    "Forward Returned Encounters".id contains 'e1'
+define "Forward Returned Encounters":
+    from
+        [Encounter] Encounter1,
+        [Encounter] Encounter2
+        where Encounter1.status = Encounter2.status
+        return Encounter1
+''')
+
+        evaluator = MeasureEvaluator(conn)
+        compiled = evaluator.compile_measure(
+            measure_bundle=measure_json,
+            cql_library_path=str(cql_path),
+            patient_scope="target_table",
+        )
+
+        sql = compiled.groups[0].sql
+        assert 'SELECT sub.resource FROM "Forward Returned Encounters"' in sql
+        assert 'SELECT sub.value FROM "Forward Returned Encounters"' not in sql
+
+        result = evaluator.execute_compiled_measure(compiled, patient_ids=["p1"])
+        assert bool(result.dataframe.loc[0, "initial_population"]) is True
+
     def test_evaluate_simple_stratified_measure(self, conn, tmp_path):
         """Stratifier expressions should flow through evaluation and reporting."""
         from fhir4ds.cql import FHIRDataLoader

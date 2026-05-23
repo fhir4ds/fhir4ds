@@ -467,8 +467,13 @@ class MeasureEvaluator:
                         value = value.get("result", False)
                     if value is None:
                         return False
+                    if isinstance(value, np.ndarray):
+                        return value.size > 0
+                    if isinstance(value, (list, tuple, set)):
+                        return len(value) > 0
                     try:
-                        if pd.isna(value):
+                        missing = pd.isna(value)
+                        if isinstance(missing, (bool, np.bool_)) and missing:
                             return False
                     except (TypeError, ValueError):
                         pass

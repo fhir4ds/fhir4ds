@@ -885,7 +885,9 @@ def _optimize_raw_fhirpath_resource_calls(
         func_name = match.group(1)
         alias = match.group(2)
         path = match.group(3).replace("''", "'")
-        cte_name = raw_alias_to_cte.get(alias, alias)
+        cte_name = raw_alias_to_cte.get(alias)
+        if not cte_name:
+            return match.group(0)
         column_info = None
         for info in registry.get_columns(cte_name).values():
             if info.fhirpath == path:
@@ -1042,8 +1044,7 @@ def _try_optimize_fhirpath_call(
     # Look up the CTE name for this alias
     cte_name = alias_to_cte.get(alias)
     if not cte_name:
-        # Fall back: maybe the alias IS the CTE name
-        cte_name = alias
+        return None
 
     # Look up the column in the registry
     column_info = None
@@ -1193,7 +1194,9 @@ def _try_optimize_interval_bound_call(
         return None
     alias = arg.parts[-2]
     column_name = arg.parts[-1]
-    cte_name = alias_to_cte.get(alias, alias)
+    cte_name = alias_to_cte.get(alias)
+    if not cte_name:
+        return None
     bound_col_name = f"{column_name}_{suffix}"
     if registry.has_column(cte_name, bound_col_name):
         return SQLQualifiedIdentifier(parts=[alias, bound_col_name])

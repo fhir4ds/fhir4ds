@@ -889,6 +889,8 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             meta = self._context.definition_meta.get(name)
             if meta is not None:
                 meta.has_resource = has_resource
+                if has_resource:
+                    meta.value_column = "resource"
 
             # Inject function promotion CTEs whose dependencies are all satisfied.
             # A function CTE can be emitted once every definition it references
@@ -1705,7 +1707,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 "Time", "Quantity", "Code", "Concept", "Ratio", "Tuple",
                 "Interval", "Period", "ValueSet", "CodeSystem", "Vocabulary",
             })
-            value_column = "value"
+            value_column = "resource" if has_resource else "value"
             if shape in (RowShape.PATIENT_SCALAR, RowShape.UNKNOWN) and cql_type not in _CQL_PRIMITIVE_TYPES:
                 if not cql_type.startswith("List<") and not cql_type.startswith("Interval<"):
                     value_column = "resource"

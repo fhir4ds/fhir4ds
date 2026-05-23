@@ -12,17 +12,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 194292,
     "timings_ms": {
-      "cql_parse_ms": 12.524979072622955,
-      "library_translation_ms": 2541.189832962118,
-      "sql_write_ms": 4.181858035735786,
-      "sql_generation_ms": 4051.650166977197,
-      "sql_execution_ms": 579.9500430002809,
-      "result_conversion_ms": 1.1348370462656021,
-      "comparison_ms": 1.583217061124742,
-      "total_ms": 7192.214934155345,
-      "resource_scope_ms": 1.4693830162286758,
-      "test_suite_load_ms": 406.3719939440489,
-      "measure_wall_ms": 7707.203831989318
+      "cql_parse_ms": 12.743669911287725,
+      "library_translation_ms": 2332.7414439991117,
+      "sql_write_ms": 4.331115051172674,
+      "sql_generation_ms": 3822.7054110029712,
+      "sql_execution_ms": 552.450162009336,
+      "result_conversion_ms": 1.1133459629490972,
+      "comparison_ms": 1.5919480938464403,
+      "total_ms": 6727.677096030675,
+      "resource_scope_ms": 1.3574659824371338,
+      "test_suite_load_ms": 364.8392059840262,
+      "measure_wall_ms": 7189.955653971992
     }
   },
   "CMS1017": {
@@ -38,17 +38,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 195849,
     "timings_ms": {
-      "cql_parse_ms": 29.17363797314465,
-      "library_translation_ms": 464.2245880095288,
-      "sql_write_ms": 4.476673086173832,
-      "sql_generation_ms": 685.002802987583,
-      "sql_execution_ms": 84.58517107646912,
-      "result_conversion_ms": 0.46740903053432703,
-      "comparison_ms": 0.674600014463067,
-      "total_ms": 1268.6048821778968,
-      "resource_scope_ms": 0.9041388984769583,
-      "test_suite_load_ms": 113.89698798302561,
-      "measure_wall_ms": 1416.379847098142
+      "cql_parse_ms": 27.99580793362111,
+      "library_translation_ms": 456.4141459995881,
+      "sql_write_ms": 5.968324956484139,
+      "sql_generation_ms": 633.2920299610123,
+      "sql_execution_ms": 93.03230105433613,
+      "result_conversion_ms": 0.48113102093338966,
+      "comparison_ms": 0.6256940541788936,
+      "total_ms": 1217.809434980154,
+      "resource_scope_ms": 0.9369630133733153,
+      "test_suite_load_ms": 112.64084291178733,
+      "measure_wall_ms": 1360.9153149882331
     }
   },
   "CMS1056": {
@@ -64,17 +64,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 25307,
     "timings_ms": {
-      "cql_parse_ms": 4.876128048636019,
-      "library_translation_ms": 358.2174279727042,
-      "sql_write_ms": 5.907032056711614,
-      "sql_generation_ms": 215.55958897806704,
-      "sql_execution_ms": 27.97881595324725,
-      "result_conversion_ms": 0.3389189951121807,
-      "comparison_ms": 0.24746893905103207,
-      "total_ms": 613.1253809435293,
-      "resource_scope_ms": 4.002763889729977,
-      "test_suite_load_ms": 54.63831895031035,
-      "measure_wall_ms": 702.3598050000146
+      "cql_parse_ms": 6.544759031385183,
+      "library_translation_ms": 343.0153689114377,
+      "sql_write_ms": 3.521466045640409,
+      "sql_generation_ms": 200.433166930452,
+      "sql_execution_ms": 31.66860598139465,
+      "result_conversion_ms": 0.452941982075572,
+      "comparison_ms": 0.22596202325075865,
+      "total_ms": 585.8622709056363,
+      "resource_scope_ms": 0.9692229796200991,
+      "test_suite_load_ms": 51.42031598370522,
+      "measure_wall_ms": 686.1608240287751
     }
   },
   "CMS117": {
@@ -88,19 +88,19 @@
     ],
     "patient_count": 10,
     "accuracy_pct": 100.0,
-    "sql_size_bytes": 360211,
+    "sql_size_bytes": 360166,
     "timings_ms": {
-      "cql_parse_ms": 52.92907101102173,
-      "library_translation_ms": 554.2163789505139,
-      "sql_write_ms": 6.153741967864335,
-      "sql_generation_ms": 680.3108080057427,
-      "sql_execution_ms": 289.82831991743296,
-      "result_conversion_ms": 0.3606189275160432,
-      "comparison_ms": 0.2425570273771882,
-      "total_ms": 1584.041495807469,
-      "resource_scope_ms": 0.8157050469890237,
-      "test_suite_load_ms": 28.338875039480627,
-      "measure_wall_ms": 1648.4850560082123
+      "cql_parse_ms": 50.30822998378426,
+      "library_translation_ms": 549.4323979364708,
+      "sql_write_ms": 4.700770950876176,
+      "sql_generation_ms": 678.8240580353886,
+      "sql_execution_ms": 305.7116369018331,
+      "result_conversion_ms": 0.416223076172173,
+      "comparison_ms": 0.2584410831332207,
+      "total_ms": 1589.6517579676583,
+      "resource_scope_ms": 0.8153420640155673,
+      "test_suite_load_ms": 29.589629033580422,
+      "measure_wall_ms": 1651.0647309478372
     }
   },
   "CMS1218": {
@@ -114,19 +114,19 @@
     ],
     "patient_count": 69,
     "accuracy_pct": 100.0,
-    "sql_size_bytes": 365194,
+    "sql_size_bytes": 367682,
     "timings_ms": {
-      "cql_parse_ms": 69.11494198720902,
-      "library_translation_ms": 957.7396709937602,
-      "sql_write_ms": 5.133874947205186,
-      "sql_generation_ms": 1649.8343809507787,
-      "sql_execution_ms": 306.6826240392402,
-      "result_conversion_ms": 0.5637769354507327,
-      "comparison_ms": 0.891498988494277,
-      "total_ms": 2989.9607688421384,
-      "resource_scope_ms": 0.8140370482578874,
-      "test_suite_load_ms": 196.06140698306262,
-      "measure_wall_ms": 3218.5350719373673
+      "cql_parse_ms": 65.14472595881671,
+      "library_translation_ms": 974.4582439307123,
+      "sql_write_ms": 6.129113025963306,
+      "sql_generation_ms": 1550.6796749541536,
+      "sql_execution_ms": 328.1954569974914,
+      "result_conversion_ms": 0.501587986946106,
+      "comparison_ms": 0.8862499380484223,
+      "total_ms": 2925.995052792132,
+      "resource_scope_ms": 0.9868210181593895,
+      "test_suite_load_ms": 187.6456820173189,
+      "measure_wall_ms": 3146.2038540048525
     }
   },
   "CMS122": {
@@ -142,17 +142,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 112834,
     "timings_ms": {
-      "cql_parse_ms": 10.282575036399066,
-      "library_translation_ms": 562.8214500611648,
-      "sql_write_ms": 4.860343993641436,
-      "sql_generation_ms": 531.305123004131,
-      "sql_execution_ms": 114.57555799279362,
-      "result_conversion_ms": 0.3931769169867039,
-      "comparison_ms": 0.8031160105019808,
-      "total_ms": 1225.0413430156186,
-      "resource_scope_ms": 0.929997069761157,
-      "test_suite_load_ms": 169.85814808867872,
-      "measure_wall_ms": 1426.0649079224095
+      "cql_parse_ms": 10.352186975069344,
+      "library_translation_ms": 569.4563229335472,
+      "sql_write_ms": 4.135263967327774,
+      "sql_generation_ms": 490.6635849038139,
+      "sql_execution_ms": 104.55100808758289,
+      "result_conversion_ms": 0.4063060041517019,
+      "comparison_ms": 0.7983819814398885,
+      "total_ms": 1180.3630548529327,
+      "resource_scope_ms": 1.1571620125323534,
+      "test_suite_load_ms": 150.33659199252725,
+      "measure_wall_ms": 1361.1447579460219
     }
   },
   "CMS1244": {
@@ -168,17 +168,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 44982,
     "timings_ms": {
-      "cql_parse_ms": 25.11848695576191,
-      "library_translation_ms": 182.35789996106178,
-      "sql_write_ms": 3.7187240086495876,
-      "sql_generation_ms": 454.20835609547794,
-      "sql_execution_ms": 76.22365700080991,
-      "result_conversion_ms": 0.4747529746964574,
-      "comparison_ms": 0.664797960780561,
-      "total_ms": 742.7666749572381,
-      "resource_scope_ms": 0.8394040632992983,
-      "test_suite_load_ms": 200.17965603619814,
-      "measure_wall_ms": 977.053023991175
+      "cql_parse_ms": 20.76696394942701,
+      "library_translation_ms": 161.4820590475574,
+      "sql_write_ms": 3.5287310602143407,
+      "sql_generation_ms": 381.1117489822209,
+      "sql_execution_ms": 72.27120001334697,
+      "result_conversion_ms": 0.42766204569488764,
+      "comparison_ms": 0.6838300032541156,
+      "total_ms": 640.2721951017156,
+      "resource_scope_ms": 1.052211970090866,
+      "test_suite_load_ms": 251.28738197963685,
+      "measure_wall_ms": 923.8346649799496
     }
   },
   "CMS124": {
@@ -194,17 +194,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 47278,
     "timings_ms": {
-      "cql_parse_ms": 7.561895996332169,
-      "library_translation_ms": 177.8869649861008,
-      "sql_write_ms": 4.7331450041383505,
-      "sql_generation_ms": 89.59293400403112,
-      "sql_execution_ms": 58.68846399243921,
-      "result_conversion_ms": 0.3604200901463628,
-      "comparison_ms": 0.5554660456255078,
-      "total_ms": 339.3792901188135,
-      "resource_scope_ms": 0.8076690137386322,
-      "test_suite_load_ms": 113.57378005050123,
-      "measure_wall_ms": 484.95910794008523
+      "cql_parse_ms": 7.407777942717075,
+      "library_translation_ms": 221.50592599064112,
+      "sql_write_ms": 3.2122869743034244,
+      "sql_generation_ms": 85.1995520060882,
+      "sql_execution_ms": 55.72055501397699,
+      "result_conversion_ms": 0.39126898627728224,
+      "comparison_ms": 0.5515969824045897,
+      "total_ms": 373.9889638964087,
+      "resource_scope_ms": 0.856118043884635,
+      "test_suite_load_ms": 107.4761840282008,
+      "measure_wall_ms": 511.39563601464033
     }
   },
   "CMS125": {
@@ -220,17 +220,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 128538,
     "timings_ms": {
-      "cql_parse_ms": 11.170340003445745,
-      "library_translation_ms": 422.63965494930744,
-      "sql_write_ms": 4.802372888661921,
-      "sql_generation_ms": 373.0792689602822,
-      "sql_execution_ms": 125.051727052778,
-      "result_conversion_ms": 0.3953099949285388,
-      "comparison_ms": 0.9395939996466041,
-      "total_ms": 938.0782678490505,
-      "resource_scope_ms": 0.769625068642199,
-      "test_suite_load_ms": 200.05469303578138,
-      "measure_wall_ms": 1171.01335094776
+      "cql_parse_ms": 10.727221961133182,
+      "library_translation_ms": 390.77022299170494,
+      "sql_write_ms": 4.081063088960946,
+      "sql_generation_ms": 283.54901901911944,
+      "sql_execution_ms": 114.74281700793654,
+      "result_conversion_ms": 0.40803197771310806,
+      "comparison_ms": 0.8636349812150002,
+      "total_ms": 805.1420110277832,
+      "resource_scope_ms": 0.8557969704270363,
+      "test_suite_load_ms": 186.7863649968058,
+      "measure_wall_ms": 1025.0052630435675
     }
   },
   "CMS1264": {
@@ -246,17 +246,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 31984,
     "timings_ms": {
-      "cql_parse_ms": 21.16249199025333,
-      "library_translation_ms": 183.62265499308705,
-      "sql_write_ms": 5.116032087244093,
-      "sql_generation_ms": 91.787577024661,
-      "sql_execution_ms": 60.96640496980399,
-      "result_conversion_ms": 0.45941805001348257,
-      "comparison_ms": 0.5898999515920877,
-      "total_ms": 363.70447906665504,
-      "resource_scope_ms": 0.9362229611724615,
-      "test_suite_load_ms": 210.90028691105545,
-      "measure_wall_ms": 611.7144220042974
+      "cql_parse_ms": 17.498207045719028,
+      "library_translation_ms": 210.25165496394038,
+      "sql_write_ms": 6.627243012189865,
+      "sql_generation_ms": 77.23782397806644,
+      "sql_execution_ms": 91.61083295475692,
+      "result_conversion_ms": 0.46942802146077156,
+      "comparison_ms": 0.717788003385067,
+      "total_ms": 404.4129779795185,
+      "resource_scope_ms": 0.8856808999553323,
+      "test_suite_load_ms": 161.00739501416683,
+      "measure_wall_ms": 597.6961860433221
     }
   },
   "CMS128": {
@@ -270,19 +270,19 @@
     ],
     "patient_count": 10,
     "accuracy_pct": 100.0,
-    "sql_size_bytes": 212128,
+    "sql_size_bytes": 212160,
     "timings_ms": {
-      "cql_parse_ms": 11.5092369960621,
-      "library_translation_ms": 358.33540197927505,
-      "sql_write_ms": 5.570051958784461,
-      "sql_generation_ms": 533.3487379830331,
-      "sql_execution_ms": 290.78081902116537,
-      "result_conversion_ms": 0.3598370822146535,
-      "comparison_ms": 0.4330659285187721,
-      "total_ms": 1200.3371509490535,
-      "resource_scope_ms": 0.8111339993774891,
-      "test_suite_load_ms": 42.15612600091845,
-      "measure_wall_ms": 1279.8158440273255
+      "cql_parse_ms": 12.903359020128846,
+      "library_translation_ms": 361.127240001224,
+      "sql_write_ms": 3.95605294033885,
+      "sql_generation_ms": 490.15826696995646,
+      "sql_execution_ms": 288.598965969868,
+      "result_conversion_ms": 0.40255708154290915,
+      "comparison_ms": 0.4066020483151078,
+      "total_ms": 1157.5530440313742,
+      "resource_scope_ms": 1.1233050609007478,
+      "test_suite_load_ms": 52.16415703762323,
+      "measure_wall_ms": 1270.6684720469639
     }
   },
   "CMS130": {
@@ -298,17 +298,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 120913,
     "timings_ms": {
-      "cql_parse_ms": 9.534031036309898,
-      "library_translation_ms": 284.2219150625169,
-      "sql_write_ms": 5.622428026981652,
-      "sql_generation_ms": 314.29683801252395,
-      "sql_execution_ms": 125.24015503004193,
-      "result_conversion_ms": 0.44486497063189745,
-      "comparison_ms": 0.8840110385790467,
-      "total_ms": 740.2442431775853,
-      "resource_scope_ms": 0.8674470009282231,
-      "test_suite_load_ms": 195.51847595721483,
-      "measure_wall_ms": 967.5630580168217
+      "cql_parse_ms": 10.87972498498857,
+      "library_translation_ms": 276.85522893443704,
+      "sql_write_ms": 3.6084239836782217,
+      "sql_generation_ms": 286.1087409546599,
+      "sql_execution_ms": 113.85116796009243,
+      "result_conversion_ms": 0.39979605935513973,
+      "comparison_ms": 0.8698509773239493,
+      "total_ms": 692.5729338545352,
+      "resource_scope_ms": 0.9749910095706582,
+      "test_suite_load_ms": 197.91696895845234,
+      "measure_wall_ms": 923.5882160719484
     }
   },
   "CMS133": {
@@ -324,17 +324,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 82194,
     "timings_ms": {
-      "cql_parse_ms": 29.90444703027606,
-      "library_translation_ms": 121.34290405083448,
-      "sql_write_ms": 4.874360980466008,
-      "sql_generation_ms": 92.15745108667761,
-      "sql_execution_ms": 121.06261099688709,
-      "result_conversion_ms": 0.5430750316008925,
-      "comparison_ms": 1.002731965854764,
-      "total_ms": 370.8875811425969,
-      "resource_scope_ms": 3.6811019526794553,
-      "test_suite_load_ms": 228.1617650296539,
-      "measure_wall_ms": 639.4796259701252
+      "cql_parse_ms": 22.536648088134825,
+      "library_translation_ms": 118.1833129376173,
+      "sql_write_ms": 4.649769049137831,
+      "sql_generation_ms": 76.41474402043968,
+      "sql_execution_ms": 131.56493799760938,
+      "result_conversion_ms": 1.196491066366434,
+      "comparison_ms": 0.9741049725562334,
+      "total_ms": 355.5200081318617,
+      "resource_scope_ms": 1.0013949358835816,
+      "test_suite_load_ms": 223.98052201606333,
+      "measure_wall_ms": 622.2697279881686
     }
   },
   "CMS135": {
@@ -350,17 +350,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 60300,
     "timings_ms": {
-      "cql_parse_ms": 7.810748997144401,
-      "library_translation_ms": 352.7522759977728,
-      "sql_write_ms": 3.2258399296551943,
-      "sql_generation_ms": 171.08339502010494,
-      "sql_execution_ms": 83.7939070770517,
-      "result_conversion_ms": 0.4393389681354165,
-      "comparison_ms": 0.6399430567398667,
-      "total_ms": 619.7454490466043,
-      "resource_scope_ms": 0.9590779663994908,
-      "test_suite_load_ms": 115.84113107528538,
-      "measure_wall_ms": 768.2170419720933
+      "cql_parse_ms": 8.047051029279828,
+      "library_translation_ms": 265.5985099263489,
+      "sql_write_ms": 3.8302779430523515,
+      "sql_generation_ms": 248.17144102416933,
+      "sql_execution_ms": 74.15369700174779,
+      "result_conversion_ms": 0.40810601785779,
+      "comparison_ms": 0.5621849559247494,
+      "total_ms": 600.7712678983808,
+      "resource_scope_ms": 0.8984169689938426,
+      "test_suite_load_ms": 112.83442005515099,
+      "measure_wall_ms": 767.8990690037608
     }
   },
   "CMS142": {
@@ -376,17 +376,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 27080,
     "timings_ms": {
-      "cql_parse_ms": 11.735217063687742,
-      "library_translation_ms": 115.53288891445845,
-      "sql_write_ms": 3.4846210619434714,
-      "sql_generation_ms": 65.93169609550387,
-      "sql_execution_ms": 39.86282297410071,
-      "result_conversion_ms": 0.39050495252013206,
-      "comparison_ms": 0.5383789539337158,
-      "total_ms": 237.4761300161481,
-      "resource_scope_ms": 0.9076660498976707,
-      "test_suite_load_ms": 109.13649294525385,
-      "measure_wall_ms": 379.47345001157373
+      "cql_parse_ms": 15.113684930838645,
+      "library_translation_ms": 117.16829997021705,
+      "sql_write_ms": 3.247685031965375,
+      "sql_generation_ms": 63.69024398736656,
+      "sql_execution_ms": 34.49227404780686,
+      "result_conversion_ms": 0.36401196848601103,
+      "comparison_ms": 0.5045750876888633,
+      "total_ms": 234.58077502436936,
+      "resource_scope_ms": 0.8463470730930567,
+      "test_suite_load_ms": 102.08128800150007,
+      "measure_wall_ms": 368.11928101815283
     }
   },
   "CMS143": {
@@ -402,17 +402,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 19141,
     "timings_ms": {
-      "cql_parse_ms": 8.23114498052746,
-      "library_translation_ms": 113.9402809785679,
-      "sql_write_ms": 3.3013310749083757,
-      "sql_generation_ms": 58.18482197355479,
-      "sql_execution_ms": 28.294794028624892,
-      "result_conversion_ms": 0.4367850488051772,
-      "comparison_ms": 0.5242979386821389,
-      "total_ms": 212.91345602367073,
-      "resource_scope_ms": 0.8071219781413674,
-      "test_suite_load_ms": 89.20419600326568,
-      "measure_wall_ms": 334.51565995346755
+      "cql_parse_ms": 9.768159943632782,
+      "library_translation_ms": 104.47743802797049,
+      "sql_write_ms": 4.421779070980847,
+      "sql_generation_ms": 54.975796956568956,
+      "sql_execution_ms": 29.772837064228952,
+      "result_conversion_ms": 0.3611609572544694,
+      "comparison_ms": 0.5157999694347382,
+      "total_ms": 204.29297199007124,
+      "resource_scope_ms": 0.8231449173763394,
+      "test_suite_load_ms": 102.38316492177546,
+      "measure_wall_ms": 339.0990839106962
     }
   },
   "CMS144": {
@@ -428,17 +428,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 89109,
     "timings_ms": {
-      "cql_parse_ms": 15.457722009159625,
-      "library_translation_ms": 255.00955595634878,
-      "sql_write_ms": 4.588352981954813,
-      "sql_generation_ms": 123.64438397344202,
-      "sql_execution_ms": 106.74770991317928,
-      "result_conversion_ms": 0.42742793448269367,
-      "comparison_ms": 0.6182750221341848,
-      "total_ms": 506.4934277907014,
-      "resource_scope_ms": 0.7500059437006712,
-      "test_suite_load_ms": 139.69351898413152,
-      "measure_wall_ms": 689.9094119435176
+      "cql_parse_ms": 12.962594046257436,
+      "library_translation_ms": 240.23865698836744,
+      "sql_write_ms": 4.124036990106106,
+      "sql_generation_ms": 118.79275797400624,
+      "sql_execution_ms": 106.24202399048954,
+      "result_conversion_ms": 0.39526703767478466,
+      "comparison_ms": 0.6387600442394614,
+      "total_ms": 483.394097071141,
+      "resource_scope_ms": 0.7041090866550803,
+      "test_suite_load_ms": 130.62347297091037,
+      "measure_wall_ms": 646.4509000070393
     }
   },
   "CMS145": {
@@ -454,17 +454,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 148571,
     "timings_ms": {
-      "cql_parse_ms": 36.69299406465143,
-      "library_translation_ms": 278.0258570564911,
-      "sql_write_ms": 3.7130319979041815,
-      "sql_generation_ms": 182.9202069202438,
-      "sql_execution_ms": 172.38417291082442,
-      "result_conversion_ms": 0.45648100785911083,
-      "comparison_ms": 3.545209998264909,
-      "total_ms": 677.7379539562389,
-      "resource_scope_ms": 2.552259946241975,
-      "test_suite_load_ms": 153.58059795107692,
-      "measure_wall_ms": 866.1739630624652
+      "cql_parse_ms": 37.31854597572237,
+      "library_translation_ms": 211.70132094994187,
+      "sql_write_ms": 4.068561014719307,
+      "sql_generation_ms": 238.95464604720473,
+      "sql_execution_ms": 165.87692208122462,
+      "result_conversion_ms": 0.4781989846378565,
+      "comparison_ms": 1.5461919829249382,
+      "total_ms": 659.9443870363757,
+      "resource_scope_ms": 0.9102339390665293,
+      "test_suite_load_ms": 208.79334898199886,
+      "measure_wall_ms": 915.327116032131
     }
   },
   "CMS146": {
@@ -478,19 +478,19 @@
     ],
     "patient_count": 10,
     "accuracy_pct": 100.0,
-    "sql_size_bytes": 91247,
+    "sql_size_bytes": 91221,
     "timings_ms": {
-      "cql_parse_ms": 15.563565073534846,
-      "library_translation_ms": 425.9956079768017,
-      "sql_write_ms": 4.437969997525215,
-      "sql_generation_ms": 265.3865839820355,
-      "sql_execution_ms": 71.85523700900376,
-      "result_conversion_ms": 0.41002407670021057,
-      "comparison_ms": 0.2946440363302827,
-      "total_ms": 783.9436321519315,
-      "resource_scope_ms": 1.060090959072113,
-      "test_suite_load_ms": 36.705698003061116,
-      "measure_wall_ms": 851.8259190022945
+      "cql_parse_ms": 13.541280990466475,
+      "library_translation_ms": 318.4261249843985,
+      "sql_write_ms": 4.14689804892987,
+      "sql_generation_ms": 340.13103507459164,
+      "sql_execution_ms": 77.98513199668378,
+      "result_conversion_ms": 0.36068400368094444,
+      "comparison_ms": 0.27960597071796656,
+      "total_ms": 754.8707610694692,
+      "resource_scope_ms": 1.0939310304820538,
+      "test_suite_load_ms": 38.60855894163251,
+      "measure_wall_ms": 825.7538179168478
     }
   },
   "CMS149": {
@@ -506,17 +506,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 21909,
     "timings_ms": {
-      "cql_parse_ms": 9.11711493972689,
-      "library_translation_ms": 182.19873402267694,
-      "sql_write_ms": 3.153358935378492,
-      "sql_generation_ms": 59.452746994793415,
-      "sql_execution_ms": 37.2895949985832,
-      "result_conversion_ms": 0.36083406303077936,
-      "comparison_ms": 0.5117530236020684,
-      "total_ms": 292.0841369777918,
-      "resource_scope_ms": 0.8161369478330016,
-      "test_suite_load_ms": 110.21698801778257,
-      "measure_wall_ms": 434.0363859664649
+      "cql_parse_ms": 9.327923995442688,
+      "library_translation_ms": 109.55443501006812,
+      "sql_write_ms": 3.7114740116521716,
+      "sql_generation_ms": 56.54981802217662,
+      "sql_execution_ms": 35.1954810321331,
+      "result_conversion_ms": 0.3654300235211849,
+      "comparison_ms": 0.5109469639137387,
+      "total_ms": 215.21550905890763,
+      "resource_scope_ms": 0.8509639883413911,
+      "test_suite_load_ms": 100.91807693243027,
+      "measure_wall_ms": 348.4312390210107
     }
   },
   "CMS155": {
@@ -532,17 +532,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 41667,
     "timings_ms": {
-      "cql_parse_ms": 9.822694002650678,
-      "library_translation_ms": 183.09983890503645,
-      "sql_write_ms": 5.095347063615918,
-      "sql_generation_ms": 83.09748093597591,
-      "sql_execution_ms": 47.646497027017176,
-      "result_conversion_ms": 2.161939046345651,
-      "comparison_ms": 0.6316700018942356,
-      "total_ms": 331.555466982536,
-      "resource_scope_ms": 0.8017289219424129,
-      "test_suite_load_ms": 40.9754510037601,
-      "measure_wall_ms": 409.66127102728933
+      "cql_parse_ms": 9.253139956854284,
+      "library_translation_ms": 170.34461698494852,
+      "sql_write_ms": 3.628842066973448,
+      "sql_generation_ms": 148.93687993753701,
+      "sql_execution_ms": 50.10384402703494,
+      "result_conversion_ms": 0.3765519941225648,
+      "comparison_ms": 0.59780094306916,
+      "total_ms": 383.2416759105399,
+      "resource_scope_ms": 0.7591129979118705,
+      "test_suite_load_ms": 44.60457991808653,
+      "measure_wall_ms": 470.7930820295587
     }
   },
   "CMS157": {
@@ -556,19 +556,19 @@
     ],
     "patient_count": 10,
     "accuracy_pct": 100.0,
-    "sql_size_bytes": 25077,
+    "sql_size_bytes": 25391,
     "timings_ms": {
-      "cql_parse_ms": 8.941585081629455,
-      "library_translation_ms": 153.46895495895296,
-      "sql_write_ms": 3.780297003686428,
-      "sql_generation_ms": 450.0949860084802,
-      "sql_execution_ms": 35.146348061971366,
-      "result_conversion_ms": 0.4122440004721284,
-      "comparison_ms": 0.5958520341664553,
-      "total_ms": 652.440267149359,
-      "resource_scope_ms": 0.8640699088573456,
-      "test_suite_load_ms": 38.834366016089916,
-      "measure_wall_ms": 732.3488279944286
+      "cql_parse_ms": 8.330472046509385,
+      "library_translation_ms": 152.26536407135427,
+      "sql_write_ms": 5.590024986304343,
+      "sql_generation_ms": 370.45074289198965,
+      "sql_execution_ms": 33.02932402584702,
+      "result_conversion_ms": 0.41051802691072226,
+      "comparison_ms": 0.4422429483383894,
+      "total_ms": 570.5186889972538,
+      "resource_scope_ms": 0.7871990092098713,
+      "test_suite_load_ms": 38.62081607803702,
+      "measure_wall_ms": 650.9887400316074
     }
   },
   "CMS159": {
@@ -584,17 +584,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 55190,
     "timings_ms": {
-      "cql_parse_ms": 20.463385968469083,
-      "library_translation_ms": 384.9419599864632,
-      "sql_write_ms": 3.500630031339824,
-      "sql_generation_ms": 84.0343739837408,
-      "sql_execution_ms": 120.15108298510313,
-      "result_conversion_ms": 0.42245804797858,
-      "comparison_ms": 1.948764082044363,
-      "total_ms": 615.462655085139,
-      "resource_scope_ms": 2.1744309924542904,
-      "test_suite_load_ms": 185.6263899244368,
-      "measure_wall_ms": 835.0100720999762
+      "cql_parse_ms": 20.777625031769276,
+      "library_translation_ms": 354.0383899817243,
+      "sql_write_ms": 3.4849279327318072,
+      "sql_generation_ms": 88.14197196625173,
+      "sql_execution_ms": 121.82456103619188,
+      "result_conversion_ms": 0.3970850957557559,
+      "comparison_ms": 1.0013949358835816,
+      "total_ms": 589.6659559803084,
+      "resource_scope_ms": 0.7994270417839289,
+      "test_suite_load_ms": 192.84548808354884,
+      "measure_wall_ms": 815.3667190345004
     }
   },
   "CMS165": {
@@ -610,17 +610,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 135569,
     "timings_ms": {
-      "cql_parse_ms": 13.624603976495564,
-      "library_translation_ms": 392.97394605819136,
-      "sql_write_ms": 3.7167620612308383,
-      "sql_generation_ms": 247.97766795381904,
-      "sql_execution_ms": 193.08790296781808,
-      "result_conversion_ms": 0.5098229739814997,
-      "comparison_ms": 1.384092029184103,
-      "total_ms": 853.2747980207205,
-      "resource_scope_ms": 0.9352699853479862,
-      "test_suite_load_ms": 195.200826972723,
-      "measure_wall_ms": 1080.522030009888
+      "cql_parse_ms": 16.55845798086375,
+      "library_translation_ms": 346.5922430623323,
+      "sql_write_ms": 3.9220108883455396,
+      "sql_generation_ms": 316.4555459516123,
+      "sql_execution_ms": 186.04692199733108,
+      "result_conversion_ms": 0.4342829342931509,
+      "comparison_ms": 0.9958900045603514,
+      "total_ms": 871.0053528193384,
+      "resource_scope_ms": 1.8241570796817541,
+      "test_suite_load_ms": 193.70226294267923,
+      "measure_wall_ms": 1096.6498150955886
     }
   },
   "CMS190": {
@@ -636,17 +636,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 132811,
     "timings_ms": {
-      "cql_parse_ms": 41.50050599128008,
-      "library_translation_ms": 534.1362759936601,
-      "sql_write_ms": 4.929858027026057,
-      "sql_generation_ms": 450.5075110355392,
-      "sql_execution_ms": 189.6927240304649,
-      "result_conversion_ms": 0.8068169699981809,
-      "comparison_ms": 1.421264954842627,
-      "total_ms": 1222.9949570028111,
-      "resource_scope_ms": 0.9877460543066263,
-      "test_suite_load_ms": 399.39335198141634,
-      "measure_wall_ms": 1657.0253539830446
+      "cql_parse_ms": 38.842080044560134,
+      "library_translation_ms": 439.51515201479197,
+      "sql_write_ms": 3.8529899902641773,
+      "sql_generation_ms": 428.3226600382477,
+      "sql_execution_ms": 184.7834619693458,
+      "result_conversion_ms": 0.7862020283937454,
+      "comparison_ms": 1.4603789895772934,
+      "total_ms": 1097.5629250751808,
+      "resource_scope_ms": 1.1193840764462948,
+      "test_suite_load_ms": 414.9000729667023,
+      "measure_wall_ms": 1542.0388580532745
     }
   },
   "CMS22": {
@@ -662,17 +662,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 70896,
     "timings_ms": {
-      "cql_parse_ms": 40.67305207718164,
-      "library_translation_ms": 132.86005391273648,
-      "sql_write_ms": 3.600743948481977,
-      "sql_generation_ms": 107.24901605863124,
-      "sql_execution_ms": 99.70135299954563,
-      "result_conversion_ms": 0.510566052980721,
-      "comparison_ms": 0.5659409798681736,
-      "total_ms": 385.16072602942586,
-      "resource_scope_ms": 1.1835400946438313,
-      "test_suite_load_ms": 146.250743069686,
-      "measure_wall_ms": 560.8923679683357
+      "cql_parse_ms": 40.06545804440975,
+      "library_translation_ms": 130.689691985026,
+      "sql_write_ms": 3.6035720258951187,
+      "sql_generation_ms": 105.2546639693901,
+      "sql_execution_ms": 93.01778092049062,
+      "result_conversion_ms": 0.5010160384699702,
+      "comparison_ms": 0.6554960273206234,
+      "total_ms": 373.7876790110022,
+      "resource_scope_ms": 1.0103039676323533,
+      "test_suite_load_ms": 128.56298801489174,
+      "measure_wall_ms": 534.3056380515918
     }
   },
   "CMS2": {
@@ -688,17 +688,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 405855,
     "timings_ms": {
-      "cql_parse_ms": 22.66798890195787,
-      "library_translation_ms": 701.5718079637736,
-      "sql_write_ms": 7.371869985945523,
-      "sql_generation_ms": 1304.8232180299237,
-      "sql_execution_ms": 366.36641691438854,
-      "result_conversion_ms": 0.45042892452329397,
-      "comparison_ms": 0.675046001560986,
-      "total_ms": 2403.9267767220736,
-      "resource_scope_ms": 0.9220459032803774,
-      "test_suite_load_ms": 118.96730295848101,
-      "measure_wall_ms": 2560.182260000147
+      "cql_parse_ms": 24.141549947671592,
+      "library_translation_ms": 714.8486520163715,
+      "sql_write_ms": 5.267219035886228,
+      "sql_generation_ms": 1476.6392919700593,
+      "sql_execution_ms": 391.3362710736692,
+      "result_conversion_ms": 0.39264699444174767,
+      "comparison_ms": 0.6876219995319843,
+      "total_ms": 2613.3132530376315,
+      "resource_scope_ms": 0.9362250566482544,
+      "test_suite_load_ms": 113.05818299297243,
+      "measure_wall_ms": 2763.1921840365976
     }
   },
   "CMS349": {
@@ -714,17 +714,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 17950,
     "timings_ms": {
-      "cql_parse_ms": 7.069480954669416,
-      "library_translation_ms": 232.74055600631982,
-      "sql_write_ms": 4.447586019523442,
-      "sql_generation_ms": 60.53461600095034,
-      "sql_execution_ms": 37.0200399775058,
-      "result_conversion_ms": 0.3958960296586156,
-      "comparison_ms": 0.5899780662730336,
-      "total_ms": 342.79815305490047,
-      "resource_scope_ms": 0.8782099466770887,
-      "test_suite_load_ms": 107.4756410671398,
-      "measure_wall_ms": 479.75340799894184
+      "cql_parse_ms": 8.622435037977993,
+      "library_translation_ms": 167.62451210524887,
+      "sql_write_ms": 5.054884008131921,
+      "sql_generation_ms": 60.775018064305186,
+      "sql_execution_ms": 35.67827690858394,
+      "result_conversion_ms": 0.38603495340794325,
+      "comparison_ms": 0.5617779679596424,
+      "total_ms": 278.7029390456155,
+      "resource_scope_ms": 0.9139790199697018,
+      "test_suite_load_ms": 111.81346804369241,
+      "measure_wall_ms": 421.96504690218717
     }
   },
   "CMS506": {
@@ -740,17 +740,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 42241,
     "timings_ms": {
-      "cql_parse_ms": 14.695970108732581,
-      "library_translation_ms": 155.15111899003386,
-      "sql_write_ms": 4.33482404332608,
-      "sql_generation_ms": 74.84051992651075,
-      "sql_execution_ms": 67.16107309330255,
-      "result_conversion_ms": 0.4343310138210654,
-      "comparison_ms": 0.642533996142447,
-      "total_ms": 317.26037117186934,
-      "resource_scope_ms": 0.8121529826894403,
-      "test_suite_load_ms": 116.23158492147923,
-      "measure_wall_ms": 464.23549798782915
+      "cql_parse_ms": 14.288726961240172,
+      "library_translation_ms": 155.92187794391066,
+      "sql_write_ms": 3.3408429007977247,
+      "sql_generation_ms": 83.69053702335805,
+      "sql_execution_ms": 69.521923083812,
+      "result_conversion_ms": 0.43029896914958954,
+      "comparison_ms": 0.5151160294190049,
+      "total_ms": 327.7093229116872,
+      "resource_scope_ms": 0.7700929418206215,
+      "test_suite_load_ms": 130.78521902207285,
+      "measure_wall_ms": 493.2642299681902
     }
   },
   "CMS50": {
@@ -764,19 +764,19 @@
     ],
     "patient_count": 33,
     "accuracy_pct": 100.0,
-    "sql_size_bytes": 30907,
+    "sql_size_bytes": 31105,
     "timings_ms": {
-      "cql_parse_ms": 12.810442945919931,
-      "library_translation_ms": 106.47913999855518,
-      "sql_write_ms": 4.037858918309212,
-      "sql_generation_ms": 65.3784959577024,
-      "sql_execution_ms": 40.70510307792574,
-      "result_conversion_ms": 0.34649891313165426,
-      "comparison_ms": 0.5193650722503662,
-      "total_ms": 230.2769048837945,
-      "resource_scope_ms": 0.8853509789332747,
-      "test_suite_load_ms": 95.42168898042291,
-      "measure_wall_ms": 356.3044349430129
+      "cql_parse_ms": 12.749196030199528,
+      "library_translation_ms": 109.88101200200617,
+      "sql_write_ms": 3.856266033835709,
+      "sql_generation_ms": 63.81161301396787,
+      "sql_execution_ms": 44.11049501504749,
+      "result_conversion_ms": 0.3516060533002019,
+      "comparison_ms": 0.5066050216555595,
+      "total_ms": 235.26679317001253,
+      "resource_scope_ms": 0.9377540554851294,
+      "test_suite_load_ms": 103.09946001507342,
+      "measure_wall_ms": 370.85044907871634
     }
   },
   "CMS56": {
@@ -790,19 +790,19 @@
     ],
     "patient_count": 58,
     "accuracy_pct": 100.0,
-    "sql_size_bytes": 113775,
+    "sql_size_bytes": 113715,
     "timings_ms": {
-      "cql_parse_ms": 31.44904295913875,
-      "library_translation_ms": 264.4335849909112,
-      "sql_write_ms": 3.9944719756022096,
-      "sql_generation_ms": 144.5070180343464,
-      "sql_execution_ms": 130.5501270107925,
-      "result_conversion_ms": 0.41738501749932766,
-      "comparison_ms": 1.0590589372441173,
-      "total_ms": 576.4106889255345,
-      "resource_scope_ms": 0.7969719590619206,
-      "test_suite_load_ms": 156.79142298176885,
-      "measure_wall_ms": 764.2202309798449
+      "cql_parse_ms": 30.209633987396955,
+      "library_translation_ms": 289.9188620503992,
+      "sql_write_ms": 3.868801984935999,
+      "sql_generation_ms": 146.08327497262508,
+      "sql_execution_ms": 132.94463302008808,
+      "result_conversion_ms": 0.3920140443369746,
+      "comparison_ms": 0.8809668943285942,
+      "total_ms": 604.2981869541109,
+      "resource_scope_ms": 0.8319880580529571,
+      "test_suite_load_ms": 185.40722003672272,
+      "measure_wall_ms": 820.9443129599094
     }
   },
   "CMS645": {
@@ -818,17 +818,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 81993,
     "timings_ms": {
-      "cql_parse_ms": 18.91636208165437,
-      "library_translation_ms": 122.57871008478105,
-      "sql_write_ms": 3.9925180608406663,
-      "sql_generation_ms": 212.52798999194056,
-      "sql_execution_ms": 87.30947505682707,
-      "result_conversion_ms": 0.3971400437876582,
-      "comparison_ms": 0.8078019600361586,
-      "total_ms": 446.52999727986753,
-      "resource_scope_ms": 1.1444829870015383,
-      "test_suite_load_ms": 144.41586006432772,
-      "measure_wall_ms": 625.7947420235723
+      "cql_parse_ms": 16.44553302321583,
+      "library_translation_ms": 126.58825097605586,
+      "sql_write_ms": 3.352436004206538,
+      "sql_generation_ms": 199.7000250266865,
+      "sql_execution_ms": 85.15425003133714,
+      "result_conversion_ms": 0.4072550218552351,
+      "comparison_ms": 0.7355010602623224,
+      "total_ms": 432.3832511436194,
+      "resource_scope_ms": 0.949743902310729,
+      "test_suite_load_ms": 166.62846005056053,
+      "measure_wall_ms": 632.3018529219553
     }
   },
   "CMS646": {
@@ -844,17 +844,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 54304,
     "timings_ms": {
-      "cql_parse_ms": 18.601390067487955,
-      "library_translation_ms": 117.92570899706334,
-      "sql_write_ms": 3.434165962971747,
-      "sql_generation_ms": 85.6672020163387,
-      "sql_execution_ms": 76.98184507898986,
-      "result_conversion_ms": 0.4167109727859497,
-      "comparison_ms": 0.7851420668885112,
-      "total_ms": 303.81216516252607,
-      "resource_scope_ms": 0.9778360836207867,
-      "test_suite_load_ms": 119.47053601033986,
-      "measure_wall_ms": 456.10992005094886
+      "cql_parse_ms": 18.40895297937095,
+      "library_translation_ms": 118.76209208276123,
+      "sql_write_ms": 3.7312409840524197,
+      "sql_generation_ms": 85.41163301561028,
+      "sql_execution_ms": 77.25520094390959,
+      "result_conversion_ms": 0.4806250799447298,
+      "comparison_ms": 0.6114010466262698,
+      "total_ms": 304.66114613227546,
+      "resource_scope_ms": 0.8220589952543378,
+      "test_suite_load_ms": 132.5001190416515,
+      "measure_wall_ms": 468.0773770669475
     }
   },
   "CMS68": {
@@ -870,17 +870,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 10081,
     "timings_ms": {
-      "cql_parse_ms": 6.266281008720398,
-      "library_translation_ms": 99.18798389844596,
-      "sql_write_ms": 3.0952160013839602,
-      "sql_generation_ms": 44.33306306600571,
-      "sql_execution_ms": 25.243594078347087,
-      "result_conversion_ms": 0.4034549929201603,
-      "comparison_ms": 0.43124391231685877,
-      "total_ms": 178.96083695814013,
-      "resource_scope_ms": 1.0115769691765308,
-      "test_suite_load_ms": 68.85356700513512,
-      "measure_wall_ms": 278.722058981657
+      "cql_parse_ms": 5.09368593338877,
+      "library_translation_ms": 103.42308296822011,
+      "sql_write_ms": 5.023863981477916,
+      "sql_generation_ms": 48.01185603719205,
+      "sql_execution_ms": 23.537763976491988,
+      "result_conversion_ms": 0.44885301031172276,
+      "comparison_ms": 0.38588594179600477,
+      "total_ms": 185.92499184887856,
+      "resource_scope_ms": 0.7385528879240155,
+      "test_suite_load_ms": 75.43021801393479,
+      "measure_wall_ms": 291.4961139904335
     }
   },
   "CMS69": {
@@ -896,17 +896,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 76472,
     "timings_ms": {
-      "cql_parse_ms": 17.811147030442953,
-      "library_translation_ms": 266.688568983227,
-      "sql_write_ms": 4.149154992774129,
-      "sql_generation_ms": 275.6731929257512,
-      "sql_execution_ms": 84.17168410960585,
-      "result_conversion_ms": 0.48740406055003405,
-      "comparison_ms": 1.0853350395336747,
-      "total_ms": 650.0664871418849,
-      "resource_scope_ms": 0.8532030042260885,
-      "test_suite_load_ms": 163.22872799355537,
-      "measure_wall_ms": 844.3349120207131
+      "cql_parse_ms": 17.12460198905319,
+      "library_translation_ms": 280.76915605925024,
+      "sql_write_ms": 3.3829830354079604,
+      "sql_generation_ms": 283.76955597195774,
+      "sql_execution_ms": 82.62214798014611,
+      "result_conversion_ms": 0.41462399531155825,
+      "comparison_ms": 0.9371699998155236,
+      "total_ms": 669.0202390309423,
+      "resource_scope_ms": 0.830558012239635,
+      "test_suite_load_ms": 178.58938802964985,
+      "measure_wall_ms": 879.3915999121964
     }
   },
   "CMS71": {
@@ -922,17 +922,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 43454,
     "timings_ms": {
-      "cql_parse_ms": 16.892381943762302,
-      "library_translation_ms": 344.8716750135645,
-      "sql_write_ms": 3.67192504927516,
-      "sql_generation_ms": 166.7802460724488,
-      "sql_execution_ms": 83.71597109362483,
-      "result_conversion_ms": 0.6432199152186513,
-      "comparison_ms": 1.0336419800296426,
-      "total_ms": 617.6090610679239,
-      "resource_scope_ms": 0.9784189751371741,
-      "test_suite_load_ms": 245.2353690750897,
-      "measure_wall_ms": 911.7811440955848
+      "cql_parse_ms": 13.77296692226082,
+      "library_translation_ms": 300.17932900227606,
+      "sql_write_ms": 3.5446120891720057,
+      "sql_generation_ms": 165.17124604433775,
+      "sql_execution_ms": 75.11979504488409,
+      "result_conversion_ms": 0.5856510251760483,
+      "comparison_ms": 0.9891289519146085,
+      "total_ms": 559.3627290800214,
+      "resource_scope_ms": 0.9455489926040173,
+      "test_suite_load_ms": 246.1149530718103,
+      "measure_wall_ms": 839.7780600935221
     }
   },
   "CMS72": {
@@ -948,17 +948,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 59200,
     "timings_ms": {
-      "cql_parse_ms": 15.879686106927693,
-      "library_translation_ms": 350.0709809595719,
-      "sql_write_ms": 3.4032389521598816,
-      "sql_generation_ms": 101.10766300931573,
-      "sql_execution_ms": 105.38723692297935,
-      "result_conversion_ms": 0.8872579783201218,
-      "comparison_ms": 1.9294259836897254,
-      "total_ms": 578.6654899129644,
-      "resource_scope_ms": 0.8756070164963603,
-      "test_suite_load_ms": 433.80726501345634,
-      "measure_wall_ms": 1045.0396100059152
+      "cql_parse_ms": 111.86803702730685,
+      "library_translation_ms": 232.5509019428864,
+      "sql_write_ms": 3.849689965136349,
+      "sql_generation_ms": 99.24002399202436,
+      "sql_execution_ms": 104.62323704268783,
+      "result_conversion_ms": 0.8084699511528015,
+      "comparison_ms": 2.9357330640777946,
+      "total_ms": 555.8760929852724,
+      "resource_scope_ms": 0.8768819971010089,
+      "test_suite_load_ms": 550.247260951437,
+      "measure_wall_ms": 1140.7040300546214
     }
   },
   "CMS74": {
@@ -974,17 +974,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 24877,
     "timings_ms": {
-      "cql_parse_ms": 6.120402016676962,
-      "library_translation_ms": 169.21227402053773,
-      "sql_write_ms": 3.6902580177411437,
-      "sql_generation_ms": 67.90950102731586,
-      "sql_execution_ms": 39.23308791127056,
-      "result_conversion_ms": 0.36068400368094444,
-      "comparison_ms": 0.49913604743778706,
-      "total_ms": 287.025343044661,
-      "resource_scope_ms": 0.9321270044893026,
-      "test_suite_load_ms": 77.77067308779806,
-      "measure_wall_ms": 401.95572399534285
+      "cql_parse_ms": 5.508202943019569,
+      "library_translation_ms": 169.50522607658058,
+      "sql_write_ms": 3.654774045571685,
+      "sql_generation_ms": 66.66865898296237,
+      "sql_execution_ms": 40.229431935586035,
+      "result_conversion_ms": 0.370507943443954,
+      "comparison_ms": 0.4744790494441986,
+      "total_ms": 286.4112809766084,
+      "resource_scope_ms": 0.9282610844820738,
+      "test_suite_load_ms": 77.8104830533266,
+      "measure_wall_ms": 395.41844406630844
     }
   },
   "CMS75": {
@@ -1000,17 +1000,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 24058,
     "timings_ms": {
-      "cql_parse_ms": 5.537646939046681,
-      "library_translation_ms": 482.9131599981338,
-      "sql_write_ms": 6.646028021350503,
-      "sql_generation_ms": 65.31132606323808,
-      "sql_execution_ms": 40.90431600343436,
-      "result_conversion_ms": 0.36906194873154163,
-      "comparison_ms": 0.5056009395048022,
-      "total_ms": 602.1871399134398,
-      "resource_scope_ms": 0.8401339873671532,
-      "test_suite_load_ms": 69.68014303129166,
-      "measure_wall_ms": 702.2426939802244
+      "cql_parse_ms": 4.551154910586774,
+      "library_translation_ms": 478.5581969190389,
+      "sql_write_ms": 4.494819091632962,
+      "sql_generation_ms": 67.00012797955424,
+      "sql_execution_ms": 39.46642891969532,
+      "result_conversion_ms": 0.35511504393070936,
+      "comparison_ms": 0.4665409214794636,
+      "total_ms": 594.8923837859184,
+      "resource_scope_ms": 0.8686840301379561,
+      "test_suite_load_ms": 54.05723408330232,
+      "measure_wall_ms": 679.8460619756952
     }
   },
   "CMS771": {
@@ -1024,19 +1024,19 @@
     ],
     "patient_count": 31,
     "accuracy_pct": 100.0,
-    "sql_size_bytes": 46981,
+    "sql_size_bytes": 46975,
     "timings_ms": {
-      "cql_parse_ms": 14.419888029806316,
-      "library_translation_ms": 128.12866002786905,
-      "sql_write_ms": 3.606263897381723,
-      "sql_generation_ms": 88.54110795073211,
-      "sql_execution_ms": 61.88824190758169,
-      "result_conversion_ms": 0.4191050538793206,
-      "comparison_ms": 0.6704600527882576,
-      "total_ms": 297.67372692003846,
-      "resource_scope_ms": 0.8453719783574343,
-      "test_suite_load_ms": 105.29512795619667,
-      "measure_wall_ms": 435.8135280199349
+      "cql_parse_ms": 14.42817598581314,
+      "library_translation_ms": 125.50714798271656,
+      "sql_write_ms": 3.7639759248122573,
+      "sql_generation_ms": 94.23000400420278,
+      "sql_execution_ms": 59.52541797887534,
+      "result_conversion_ms": 0.3634080057963729,
+      "comparison_ms": 0.6109199021011591,
+      "total_ms": 298.4290497843176,
+      "resource_scope_ms": 0.7548480061814189,
+      "test_suite_load_ms": 109.10549701657146,
+      "measure_wall_ms": 437.8768579335883
     }
   },
   "CMS816": {
@@ -1050,19 +1050,19 @@
     ],
     "patient_count": 27,
     "accuracy_pct": 100.0,
-    "sql_size_bytes": 28028,
+    "sql_size_bytes": 28127,
     "timings_ms": {
-      "cql_parse_ms": 8.525361074134707,
-      "library_translation_ms": 156.20894799940288,
-      "sql_write_ms": 4.322001012042165,
-      "sql_generation_ms": 76.78936701267958,
-      "sql_execution_ms": 55.30250200536102,
-      "result_conversion_ms": 0.40336698293685913,
-      "comparison_ms": 0.5794049939140677,
-      "total_ms": 302.1309510804713,
-      "resource_scope_ms": 0.9228070266544819,
-      "test_suite_load_ms": 89.31303897406906,
-      "measure_wall_ms": 429.06555300578475
+      "cql_parse_ms": 8.410164038650692,
+      "library_translation_ms": 160.23298900108784,
+      "sql_write_ms": 5.46630600001663,
+      "sql_generation_ms": 76.03885501157492,
+      "sql_execution_ms": 50.437522935681045,
+      "result_conversion_ms": 0.413512927480042,
+      "comparison_ms": 0.5021799588575959,
+      "total_ms": 301.5015298733488,
+      "resource_scope_ms": 0.9022790472954512,
+      "test_suite_load_ms": 108.16698393318802,
+      "measure_wall_ms": 443.30588390585035
     }
   },
   "CMS819": {
@@ -1076,19 +1076,19 @@
     ],
     "patient_count": 18,
     "accuracy_pct": 100.0,
-    "sql_size_bytes": 21828,
+    "sql_size_bytes": 21927,
     "timings_ms": {
-      "cql_parse_ms": 6.995453033596277,
-      "library_translation_ms": 264.36827098950744,
-      "sql_write_ms": 3.2974270870909095,
-      "sql_generation_ms": 68.43395298346877,
-      "sql_execution_ms": 49.48356898967177,
-      "result_conversion_ms": 0.36805402487516403,
-      "comparison_ms": 0.45069598127156496,
-      "total_ms": 393.3974230894819,
-      "resource_scope_ms": 0.875961035490036,
-      "test_suite_load_ms": 63.84200893808156,
-      "measure_wall_ms": 487.5604180851951
+      "cql_parse_ms": 6.760912016034126,
+      "library_translation_ms": 252.19764199573547,
+      "sql_write_ms": 3.985494957305491,
+      "sql_generation_ms": 75.27178397867829,
+      "sql_execution_ms": 48.604108043946326,
+      "result_conversion_ms": 0.3877830458804965,
+      "comparison_ms": 0.3806289751082659,
+      "total_ms": 387.58835301268846,
+      "resource_scope_ms": 0.8264810312539339,
+      "test_suite_load_ms": 52.526421030052006,
+      "measure_wall_ms": 472.0751430140808
     }
   },
   "CMS826": {
@@ -1104,17 +1104,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 42241,
     "timings_ms": {
-      "cql_parse_ms": 11.375945061445236,
-      "library_translation_ms": 161.55376401729882,
-      "sql_write_ms": 3.714150981977582,
-      "sql_generation_ms": 79.07438499387354,
-      "sql_execution_ms": 65.65146299544722,
-      "result_conversion_ms": 0.4716850817203522,
-      "comparison_ms": 0.37945201620459557,
-      "total_ms": 322.22084514796734,
-      "resource_scope_ms": 0.8722859201952815,
-      "test_suite_load_ms": 34.691321081481874,
-      "measure_wall_ms": 393.1689059827477
+      "cql_parse_ms": 10.48164302483201,
+      "library_translation_ms": 168.326694983989,
+      "sql_write_ms": 3.815400996245444,
+      "sql_generation_ms": 88.08991103433073,
+      "sql_execution_ms": 63.65347502287477,
+      "result_conversion_ms": 0.3772689960896969,
+      "comparison_ms": 0.3837340045720339,
+      "total_ms": 335.1281280629337,
+      "resource_scope_ms": 0.8210609667003155,
+      "test_suite_load_ms": 27.16462896205485,
+      "measure_wall_ms": 393.2089979061857
     }
   },
   "CMS832": {
@@ -1128,19 +1128,19 @@
     ],
     "patient_count": 34,
     "accuracy_pct": 100.0,
-    "sql_size_bytes": 101368,
+    "sql_size_bytes": 101787,
     "timings_ms": {
-      "cql_parse_ms": 45.95286899711937,
-      "library_translation_ms": 1049.4718309491873,
-      "sql_write_ms": 3.720771986991167,
-      "sql_generation_ms": 493.8956100959331,
-      "sql_execution_ms": 261.9501550216228,
-      "result_conversion_ms": 0.504657975398004,
-      "comparison_ms": 0.5865659331902862,
-      "total_ms": 1856.082460959442,
-      "resource_scope_ms": 1.0213529458269477,
-      "test_suite_load_ms": 107.78793995268643,
-      "measure_wall_ms": 1996.460446040146
+      "cql_parse_ms": 44.19098095968366,
+      "library_translation_ms": 960.105785052292,
+      "sql_write_ms": 3.9817580254748464,
+      "sql_generation_ms": 538.3997189346701,
+      "sql_execution_ms": 273.51388591341674,
+      "result_conversion_ms": 0.4313630051910877,
+      "comparison_ms": 2.2337009431794286,
+      "total_ms": 1822.857192833908,
+      "resource_scope_ms": 0.8948890026658773,
+      "test_suite_load_ms": 106.31397494580597,
+      "measure_wall_ms": 1962.3625590465963
     }
   },
   "CMS871": {
@@ -1154,19 +1154,19 @@
     ],
     "patient_count": 10,
     "accuracy_pct": 100.0,
-    "sql_size_bytes": 58374,
+    "sql_size_bytes": 58688,
     "timings_ms": {
-      "cql_parse_ms": 25.36584495101124,
-      "library_translation_ms": 281.2680769711733,
-      "sql_write_ms": 5.726509960368276,
-      "sql_generation_ms": 110.5123000452295,
-      "sql_execution_ms": 100.00217601191252,
-      "result_conversion_ms": 0.39883400313556194,
-      "comparison_ms": 0.4619309911504388,
-      "total_ms": 523.7356729339808,
-      "resource_scope_ms": 1.087157055735588,
-      "test_suite_load_ms": 39.28347409237176,
-      "measure_wall_ms": 594.4760859711096
+      "cql_parse_ms": 27.213215944357216,
+      "library_translation_ms": 269.58274003118277,
+      "sql_write_ms": 4.446880891919136,
+      "sql_generation_ms": 117.30919789988548,
+      "sql_execution_ms": 94.5883160457015,
+      "result_conversion_ms": 0.38613402284681797,
+      "comparison_ms": 0.364196952432394,
+      "total_ms": 513.8906817883253,
+      "resource_scope_ms": 0.9603890357539058,
+      "test_suite_load_ms": 45.77371699269861,
+      "measure_wall_ms": 595.8254029974341
     }
   },
   "CMS986": {
@@ -1180,19 +1180,19 @@
     ],
     "patient_count": 143,
     "accuracy_pct": 100.0,
-    "sql_size_bytes": 49013,
+    "sql_size_bytes": 49952,
     "timings_ms": {
-      "cql_parse_ms": 27.6824370957911,
-      "library_translation_ms": 167.51886205747724,
-      "sql_write_ms": 3.6107400665059686,
-      "sql_generation_ms": 81.61514496896416,
-      "sql_execution_ms": 28.57692399993539,
-      "result_conversion_ms": 0.45628997031599283,
-      "comparison_ms": 3.8929119473323226,
-      "total_ms": 313.35331010632217,
-      "resource_scope_ms": 1.073020976036787,
-      "test_suite_load_ms": 396.14957093726844,
-      "measure_wall_ms": 743.5572260292247
+      "cql_parse_ms": 28.925833059474826,
+      "library_translation_ms": 184.07741107512265,
+      "sql_write_ms": 3.4153349697589874,
+      "sql_generation_ms": 88.71881500817835,
+      "sql_execution_ms": 25.477751973085105,
+      "result_conversion_ms": 0.44212699867784977,
+      "comparison_ms": 5.485221045091748,
+      "total_ms": 336.5424941293895,
+      "resource_scope_ms": 0.8962580468505621,
+      "test_suite_load_ms": 418.11128600966185,
+      "measure_wall_ms": 786.6042880341411
     }
   },
   "CMS996": {
@@ -1208,17 +1208,17 @@
     "accuracy_pct": 100.0,
     "sql_size_bytes": 95175,
     "timings_ms": {
-      "cql_parse_ms": 124.8770389938727,
-      "library_translation_ms": 171.4759609894827,
-      "sql_write_ms": 3.8826739182695746,
-      "sql_generation_ms": 111.18721100501716,
-      "sql_execution_ms": 105.0624749623239,
-      "result_conversion_ms": 0.713684014044702,
-      "comparison_ms": 1.3751019723713398,
-      "total_ms": 518.5741458553821,
-      "resource_scope_ms": 0.770663027651608,
-      "test_suite_load_ms": 305.26562593877316,
-      "measure_wall_ms": 856.2957890098915
+      "cql_parse_ms": 37.840402917936444,
+      "library_translation_ms": 287.8964130068198,
+      "sql_write_ms": 3.578642033971846,
+      "sql_generation_ms": 114.0881220344454,
+      "sql_execution_ms": 114.93395897559822,
+      "result_conversion_ms": 0.6908919895067811,
+      "comparison_ms": 1.303746015764773,
+      "total_ms": 560.3321769740433,
+      "resource_scope_ms": 0.8042480330914259,
+      "test_suite_load_ms": 311.10065802931786,
+      "measure_wall_ms": 904.9437189241871
     }
   },
   "_summary": {
@@ -1229,13 +1229,13 @@
     "total_patients": 2273,
     "library_cache_entries": 64,
     "timings_ms": {
-      "measure_discovery_ms": 1733.6507510626689,
-      "database_init_ms": 2779.351920937188,
-      "test_data_load_ms": 16686.742880032398,
-      "valueset_load_ms": 3878.4046180080622,
+      "measure_discovery_ms": 1624.7423969907686,
+      "database_init_ms": 2581.0363279888406,
+      "test_data_load_ms": 15099.486929015256,
+      "valueset_load_ms": 3397.531647933647,
       "valueset_file_count": 49,
-      "measure_run_ms": 47677.31329705566,
-      "suite_wall_ms": 72817.75090191513
+      "measure_run_ms": 46784.55927607138,
+      "suite_wall_ms": 69545.0307369465
     }
   }
 }

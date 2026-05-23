@@ -513,8 +513,13 @@ class ListsMixin:
             qualified_func = CQLFunctionRef(name=f"{library_alias}.{func_name}", arguments=expr.arguments)
             return self._translate_function_ref(qualified_func, boolean_context=boolean_context)
 
-        source = self.translate(expr.source, boolean_context=False)
         method = expr.method
+        source_usage = (
+            ExprUsage.LIST
+            if method.lower() in {"first", "last", "singletonfrom", "count", "distinct", "where", "select"}
+            else ExprUsage.SCALAR
+        )
+        source = self.translate(expr.source, usage=source_usage)
         args = [self.translate(arg, boolean_context=False) for arg in expr.arguments]
 
         # Handle common method invocations

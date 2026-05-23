@@ -504,6 +504,9 @@ class InferenceMixin:
                     return RowShape.PATIENT_SCALAR
                 return RowShape.RESOURCE_ROWS
 
+            if op in ('+', '-', '*', '/', 'div', 'mod'):
+                return RowShape.PATIENT_SCALAR
+
         # Conditional: if either branch is RESOURCE_ROWS, result is RESOURCE_ROWS
         if isinstance(ast_node, ConditionalExpression):
             then_shape = self._infer_row_shape(ast_node.then_expr, _visited)
@@ -563,9 +566,13 @@ class InferenceMixin:
                     # Classify as RESOURCE_ROWS so the CTE stores
                     # (patient_id, resource) with JSON data.
                     return RowShape.RESOURCE_ROWS
-                # Multi-source from queries always produce (patient_id, resource)
-                # via the multi-source handler, regardless of return type.
-                if isinstance(ast_node.source, list) and len(ast_node.source) > 1:
+                if isinstance(ret_expr, Identifier):
+                    sources = ast_node.source if isinstance(ast_node.source, list) else [ast_node.source]
+                    for source in sources:
+                        if hasattr(source, "alias") and source.alias == ret_expr.name:
+                            source_expr = getattr(source, "expression", source)
+                            return self._infer_row_shape(source_expr, _visited)
+                if self._query_return_expr_is_resource(ast_node, ret_expr, _visited):
                     return RowShape.RESOURCE_ROWS
                 return RowShape.PATIENT_MULTI_VALUE
             # Without return clause, shape comes from source
@@ -861,6 +868,176 @@ class InferenceMixin:
             return None
         return self._infer_fhir_property_type(resource_type, ".".join(path_parts))
 
+    def _is_fhir_resource_type(self, cql_type: Optional[str]) -> bool:
+        """Return True when a CQL type name denotes a FHIR resource/profile."""
+        if not cql_type:
+            return False
+        type_name = str(cql_type).strip()
+        if type_name.startswith("List<") and type_name.endswith(">"):
+            type_name = type_name[len("List<"):-1].strip()
+        bare = type_name.split(".")[-1] if "." in type_name else type_name
+        if bare == "Resource":
+            return True
+
+        registry = getattr(self._context, "profile_registry", None)
+        if registry is not None and registry.resolve_named_profile(bare) is not None:
+            return True
+
+        schema = getattr(self._context, "fhir_schema", None)
+        return bool(schema is not None and bare in getattr(schema, "resources", {}))
+
+    def _definition_ast(self, name: str) -> Any:
+        cql_asts = getattr(self._context, "_definition_cql_asts", {})
+        ast_node = cql_asts.get(name)
+        if ast_node is not None:
+            return ast_node
+        expr_defs = getattr(self._context, "expression_definitions", {})
+        ast_def = expr_defs.get(name)
+        if ast_def is None:
+            return None
+        return ast_def.expression if hasattr(ast_def, "expression") else ast_def
+
+    def _query_alias_sources(self, query: Any) -> dict[str, Any]:
+        from ..parser.ast_nodes import QuerySource
+
+        sources = query.source if isinstance(query.source, list) else [query.source]
+        alias_sources: dict[str, Any] = {}
+        for source in sources:
+            if isinstance(source, QuerySource) and source.alias:
+                alias_sources[source.alias] = source.expression
+        return alias_sources
+
+    def _definition_tuple_field_type(
+        self,
+        definition_name: str,
+        field_name: str,
+        visited: Set[str],
+    ) -> Optional[str]:
+        """Infer the type of a tuple field returned by a named definition."""
+        from ..parser.ast_nodes import FunctionRef, Identifier, Query, TupleExpression
+
+        key = f"{definition_name}.{field_name}"
+        if key in visited:
+            return None
+        visited.add(key)
+
+        ast_node = self._definition_ast(definition_name)
+        if ast_node is None:
+            return None
+
+        if isinstance(ast_node, Identifier):
+            return self._definition_tuple_field_type(ast_node.name, field_name, visited)
+
+        if isinstance(ast_node, FunctionRef) and ast_node.name.lower() in ("first", "last"):
+            args = getattr(ast_node, "arguments", []) or []
+            if args:
+                ast_node = args[0]
+
+        if not isinstance(ast_node, Query) or ast_node.return_clause is None:
+            return None
+
+        ret_expr = ast_node.return_clause.expression
+        if not isinstance(ret_expr, TupleExpression):
+            return None
+
+        alias_sources = self._query_alias_sources(ast_node)
+        for element in ret_expr.elements:
+            if getattr(element, "name", None) != field_name:
+                continue
+            field_expr = getattr(element, "type", None)
+            return self._infer_expr_type_in_query(field_expr, alias_sources, visited)
+        return None
+
+    def _infer_expr_type_in_query(
+        self,
+        expr: Any,
+        alias_sources: dict[str, Any],
+        visited: Set[str],
+    ) -> str:
+        """Infer a CQL type for an expression with query aliases in scope."""
+        from ..parser.ast_nodes import Identifier, Property, Retrieve
+
+        if isinstance(expr, Retrieve):
+            return getattr(expr, "type", "Resource") or "Resource"
+
+        if isinstance(expr, Identifier):
+            source_expr = alias_sources.get(expr.name)
+            if source_expr is not None:
+                return self._infer_expr_type_in_query(source_expr, {}, visited)
+            meta = self._context.definition_meta.get(expr.name)
+            if meta and meta.cql_type and meta.cql_type != "Any":
+                return meta.cql_type
+            if expr.name not in visited:
+                ast_node = self._definition_ast(expr.name)
+                if ast_node is not None:
+                    visited.add(expr.name)
+                    return self._infer_cql_type(ast_node)
+            return self._infer_cql_type(expr)
+
+        if isinstance(expr, Property) and isinstance(expr.source, Identifier):
+            source_expr = alias_sources.get(expr.source.name)
+            if source_expr is not None:
+                source_type = self._infer_expr_type_in_query(source_expr, {}, visited)
+                if self._is_fhir_resource_type(source_type):
+                    fhir_type = self._infer_fhir_property_type(
+                        source_type[5:-1] if source_type.startswith("List<") else source_type,
+                        expr.path,
+                    )
+                    if fhir_type:
+                        return fhir_type
+                if isinstance(source_expr, Identifier):
+                    tuple_type = self._definition_tuple_field_type(
+                        source_expr.name,
+                        expr.path,
+                        visited,
+                    )
+                    if tuple_type:
+                        return tuple_type
+            return self._infer_cql_type(expr)
+
+        return self._infer_cql_type(expr)
+
+    def _query_return_expr_is_resource(
+        self,
+        query: Any,
+        return_expr: Any,
+        visited: Set[str],
+    ) -> bool:
+        """Return True if a query return expression should be materialized as resource."""
+        from ..parser.ast_nodes import Identifier, Property, TupleExpression
+
+        if isinstance(return_expr, TupleExpression):
+            return True
+
+        alias_sources = self._query_alias_sources(query)
+
+        if isinstance(return_expr, Identifier):
+            for let_clause in getattr(query, "let_clauses", []) or []:
+                if getattr(let_clause, "alias", None) == return_expr.name:
+                    return self._is_fhir_resource_type(
+                        self._infer_expr_type_in_query(let_clause.expression, alias_sources, visited)
+                    )
+            source_expr = alias_sources.get(return_expr.name)
+            if source_expr is not None:
+                return self._is_fhir_resource_type(
+                    self._infer_expr_type_in_query(source_expr, {}, visited)
+                )
+
+        if isinstance(return_expr, Property) and isinstance(return_expr.source, Identifier):
+            source_expr = alias_sources.get(return_expr.source.name)
+            if isinstance(source_expr, Identifier):
+                field_type = self._definition_tuple_field_type(
+                    source_expr.name,
+                    return_expr.path,
+                    visited,
+                )
+                if field_type and self._is_fhir_resource_type(field_type):
+                    return True
+
+        return self._is_fhir_resource_type(
+            self._infer_expr_type_in_query(return_expr, alias_sources, visited)
+        )
+
     def _infer_cql_type(self, ast_node: Any) -> str:
         """
         Infer the CQL type of an expression.
@@ -1035,6 +1212,30 @@ class InferenceMixin:
                 if left_type != "Any":
                     return left_type
                 return self._infer_cql_type(ast_node.right)
+            if op in ('+', '-'):
+                left_type = self._infer_cql_type(ast_node.left)
+                right_type = self._infer_cql_type(ast_node.right)
+                if left_type in ("Date", "DateTime", "Time"):
+                    return left_type
+                if right_type in ("Date", "DateTime", "Time"):
+                    return right_type
+                if left_type == "Quantity" or right_type == "Quantity":
+                    return "Quantity"
+                if "Decimal" in (left_type, right_type):
+                    return "Decimal"
+                if "Integer" in (left_type, right_type):
+                    return "Integer"
+                return "Any"
+            if op in ('*', '/', 'div', 'mod'):
+                left_type = self._infer_cql_type(ast_node.left)
+                right_type = self._infer_cql_type(ast_node.right)
+                if left_type == "Quantity" or right_type == "Quantity":
+                    return "Quantity"
+                if "Decimal" in (left_type, right_type) or op == '/':
+                    return "Decimal"
+                if "Integer" in (left_type, right_type):
+                    return "Integer"
+                return "Any"
             # "as" cast: type is the target type specifier
             if op == 'as':
                 from ..parser.ast_nodes import NamedTypeSpecifier
@@ -1067,6 +1268,12 @@ class InferenceMixin:
 
         # Property access — resolve library-qualified definition references
         if isinstance(ast_node, Property):
+            if (
+                isinstance(ast_node.source, Identifier)
+                and ast_node.source.name == "Patient"
+                and ast_node.path == "birthDate"
+            ):
+                return "Date"
             if isinstance(ast_node.source, Identifier) and ast_node.path:
                 prefixed = f"{ast_node.source.name}.{ast_node.path}"
                 meta = self._context.definition_meta.get(prefixed)
@@ -1102,10 +1309,19 @@ class InferenceMixin:
                         return inferred
 
         # Query node: infer type from return clause or source
-        from ..parser.ast_nodes import Query, ReturnClause
+        from ..parser.ast_nodes import Query, QuerySource, ReturnClause
         if isinstance(ast_node, Query):
             if ast_node.return_clause is not None:
                 rc_expr = ast_node.return_clause.expression if isinstance(ast_node.return_clause, ReturnClause) else ast_node.return_clause
+                if isinstance(rc_expr, Identifier):
+                    sources = ast_node.source if isinstance(ast_node.source, list) else [ast_node.source]
+                    for source in sources:
+                        if isinstance(source, QuerySource) and source.alias == rc_expr.name:
+                            source_type = self._infer_cql_type(source.expression)
+                            if source_type.startswith("List<"):
+                                return source_type
+                            if source_type != "Any":
+                                return f"List<{source_type}>"
                 property_return_type = self._infer_query_return_property_type(ast_node, rc_expr)
                 if property_return_type is not None:
                     return f"List<{property_return_type}>"

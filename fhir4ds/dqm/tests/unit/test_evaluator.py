@@ -2,6 +2,7 @@
 
 import json
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -209,6 +210,25 @@ class TestMeasureEvaluatorValidation:
         assert summary["numerator_final"] == 1
         assert summary["performance_rate"] == 0.5  # 1/2
         assert summary["total_patients"] == 4
+
+    def test_summary_report_handles_array_population_values(self):
+        """Collection-valued population cells should not raise truth-value errors."""
+        df = pd.DataFrame(
+            {
+                "patient_id": ["P1", "P2"],
+                "initial_population": [np.array([]), np.array(["enc-1"])],
+                "denominator": [[], ["enc-1"]],
+                "numerator": [[], ["enc-1"]],
+            }
+        )
+        evaluator = MeasureEvaluator(conn=None)
+
+        summary = evaluator.summary_report(df)
+
+        assert summary["initial_population"] == 1
+        assert summary["denominator"] == 1
+        assert summary["numerator"] == 1
+        assert summary["total_patients"] == 2
 
     def test_summary_report_applies_denominator_exclusion_before_numerator(self):
         """Excluded denominator patients must not contribute to numerator rate."""
