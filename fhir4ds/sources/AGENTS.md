@@ -47,6 +47,7 @@ failures surface immediately, not during measure evaluation.
 | `ExistingTableSource` | `existing.py` | Wrap pre-loaded DuckDB table/view |
 | `FileSystemSource` | `filesystem.py` | Parquet / NDJSON / Iceberg (local or cloud) |
 | `PostgresSource` | `relational.py` | FHIR JSON stored in Postgres columns |
+| `HapiPostgresSource` | `hapi_postgres.py` | HAPI FHIR JPA Server on PostgreSQL |
 | `CSVSource` | `csv.py` | CSV files with user-defined SQL projection |
 
 ## Schema Contract
@@ -69,6 +70,7 @@ fhir4ds/sources/
 ├── existing.py       # ExistingTableSource
 ├── filesystem.py     # FileSystemSource, CloudCredentials
 ├── relational.py     # PostgresSource, PostgresTableMapping
+├── hapi_postgres.py  # HapiPostgresSource, HapiPostgresSchema
 ├── csv.py            # CSVSource
 └── tests/
     ├── unit/         # Unit tests per adapter

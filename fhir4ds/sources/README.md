@@ -76,6 +76,22 @@ source = PostgresSource(
 fhir4ds.attach(con, source)
 ```
 
+### HAPI FHIR JPA Server on PostgreSQL
+
+```python
+from fhir4ds.sources import HapiPostgresSource
+
+source = HapiPostgresSource(
+    connection_string='postgresql://readonly:pass@hapi-db:5432/hapi'
+)
+fhir4ds.attach(con, source)
+```
+
+`HapiPostgresSource` reads current resources from HAPI's
+`hfj_resource`/`hfj_res_ver` tables. V1 supports inline JSON resource bodies
+(`res_encoding = 'JSON'`, `res_text_vc` populated) and fails clearly when
+current resources require compressed/LOB decoding.
+
 ### CSV Files
 
 ```python
