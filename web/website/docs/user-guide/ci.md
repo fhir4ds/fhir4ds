@@ -93,18 +93,18 @@ old timings no longer comparable.
 To refresh the baseline:
 
 ```bash
-python3 conformance/scripts/run_dqm.py
-cp conformance/reports/dqm_report.json benchmarks/baselines/dqm_2025.json
-python3 benchmarks/runner/dqm_perf_report.py \
-  --current conformance/reports/dqm_report.json \
-  --baseline benchmarks/baselines/dqm_2025.json \
-  --output-json benchmarks/output/dqm-performance-report.json \
-  --output-md benchmarks/output/dqm-performance-report.md
+python3 benchmarks/runner/update_dqm_baseline.py --run
 ```
 
-Before committing a new baseline, confirm the DQM suite still reports
-`47/47 measures passed (100.0%)` and document why the baseline changed in the
-commit message.
+To validate an existing report without updating the baseline:
+
+```bash
+python3 benchmarks/runner/update_dqm_baseline.py --dry-run
+```
+
+The helper refuses to update the baseline unless the expected 47 measure records
+are present and all passed. Before committing a new baseline, document why the
+performance expectation changed in the commit message.
 
 ## Submodules
 

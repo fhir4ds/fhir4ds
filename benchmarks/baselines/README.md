@@ -38,6 +38,25 @@ Do not update the baseline just to hide an unexplained regression.
 
 ## Update Procedure
 
+### Recommended Helper
+
+Use the helper script when possible:
+
+```bash
+python3 benchmarks/runner/update_dqm_baseline.py --run
+```
+
+This runs DQM conformance, verifies that all expected measures passed, updates
+`benchmarks/baselines/dqm_2025.json`, and regenerates the comparison report.
+
+To validate an existing report without writing the baseline:
+
+```bash
+python3 benchmarks/runner/update_dqm_baseline.py --dry-run
+```
+
+### Manual Procedure
+
 1. Run the DQM conformance suite locally:
 
    ```bash
@@ -52,7 +71,7 @@ Do not update the baseline just to hide an unexplained regression.
 
 3. Review the generated timings in `conformance/reports/dqm_report.json`.
 
-4. Copy the report into the baseline:
+4. Copy the report into the baseline, or run the helper without `--dry-run`:
 
    ```bash
    cp conformance/reports/dqm_report.json benchmarks/baselines/dqm_2025.json

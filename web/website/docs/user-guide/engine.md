@@ -97,7 +97,15 @@ The `cql` module translates Clinical Quality Language into optimized DuckDB SQL 
 The `dqm` (Digital Quality Measures) module manages the full lifecycle of evaluation, from loading CMS bundles to generating auditable evidence.
 
 - **Workflow & Audit**: [DQM Orchestration](./quality/dqm)
+- **Production Recipes**: [Source-to-DQM Production Recipes](./quality/dqm-recipes)
 </details>
+
+## 5. Operations
+
+For repeatable batch runs and project automation, use the operations guides:
+
+- **CLI**: [Command Line Interface](./cli)
+- **CI**: [Continuous Integration](./ci)
 
 ---
 

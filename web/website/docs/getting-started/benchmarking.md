@@ -72,3 +72,25 @@ cd benchmarks
 # Run the full 2025 QI-Core suite
 python -m runner --suite 2025 --skip-errors
 ```
+
+## 5. CI Performance Reports
+
+The repository also includes a DQM timing report workflow for tracking
+performance changes across the 2025 measure suite. The workflow runs the DQM
+conformance suite, compares `conformance/reports/dqm_report.json` to the
+checked-in baseline at `benchmarks/baselines/dqm_2025.json`, and uploads JSON
+and Markdown reports as GitHub Actions artifacts.
+
+To generate the same report locally:
+
+```bash
+python3 conformance/scripts/run_dqm.py
+python3 benchmarks/runner/dqm_perf_report.py \
+  --current conformance/reports/dqm_report.json \
+  --baseline benchmarks/baselines/dqm_2025.json \
+  --output-json benchmarks/output/dqm-performance-report.json \
+  --output-md benchmarks/output/dqm-performance-report.md
+```
+
+See [Continuous Integration](/docs/user-guide/ci) for workflow behavior and
+baseline update policy.

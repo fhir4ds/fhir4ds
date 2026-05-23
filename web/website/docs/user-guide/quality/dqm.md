@@ -26,6 +26,11 @@ Most DQM runs follow the same shape:
 For production jobs, prefer the CLI batch runner. For notebooks, tests, and
 custom applications, use `MeasureEvaluator` directly.
 
+For source-specific examples, see
+[Source-to-DQM Production Recipes](/docs/user-guide/quality/dqm-recipes). For
+CLI behavior and exit codes, see the
+[Command Line Interface](/docs/user-guide/cli).
+
 ## 2. CLI Batch Runner
 
 The CLI exposes three DQM subcommands:
@@ -289,4 +294,5 @@ report = evaluator.to_measure_report(
 ```
 
 See the [DQM API Reference](/docs/api-reference/dqm/) for the full Python and
-batch configuration surface.
+batch configuration surface. For CI and benchmark baseline maintenance, see
+[Continuous Integration](/docs/user-guide/ci).
