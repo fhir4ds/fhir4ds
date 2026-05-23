@@ -39,10 +39,28 @@ jobs:
       - name: Run DQM conformance timing suite
         run: python3 conformance/scripts/run_dqm.py
 
-      - name: Upload DQM timing report
+      - name: Generate DQM performance comparison
+        run: >
+          python3 benchmarks/runner/dqm_perf_report.py
+          --current conformance/reports/dqm_report.json
+          --baseline benchmarks/baselines/dqm_2025.json
+          --output-json benchmarks/output/dqm-performance-report.json
+          --output-md benchmarks/output/dqm-performance-report.md
+
+      - name: Add performance report to job summary
+        if: always()
+        run: |
+          if [ -f benchmarks/output/dqm-performance-report.md ]; then
+            cat benchmarks/output/dqm-performance-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload DQM timing reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dqm-performance-report
-          path: conformance/reports/dqm_report.json
+          path: |
+            conformance/reports/dqm_report.json
+            benchmarks/output/dqm-performance-report.json
+            benchmarks/output/dqm-performance-report.md
           if-no-files-found: warn

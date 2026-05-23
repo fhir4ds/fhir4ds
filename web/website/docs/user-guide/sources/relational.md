@@ -8,8 +8,11 @@ sidebar_label: PostgreSQL
 
 The `PostgresSource` adapter lets you evaluate clinical logic against FHIR data stored in a PostgreSQL database — without copying data out of Postgres.
 
-:::caution Scope Boundary
+:::warning 
+
+Scope Boundary
 This adapter requires that your Postgres tables **already contain FHIR resource JSON in a column** (JSON or JSONB). It does not construct FHIR JSON from arbitrary relational column schemas. If your data is in a normalized relational schema, you will need to build the FHIR JSON before using this adapter.
+
 :::
 
 ## Prerequisites

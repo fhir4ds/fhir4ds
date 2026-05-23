@@ -21,7 +21,6 @@ const sidebars: SidebarsConfig = {
       link: {type: 'doc', id: 'user-guide/engine'},
       items: [
         'user-guide/engine',
-        'user-guide/cli',
         {
           type: 'category',
           label: 'Data Sources',
@@ -62,6 +61,22 @@ const sidebars: SidebarsConfig = {
             'user-guide/quality/dqm',
             'user-guide/quality/dqm-recipes',
           ],
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Operations',
+      items: [
+        {
+          type: 'doc',
+          id: 'user-guide/cli',
+          label: 'Command Line Interface',
+        },
+        {
+          type: 'doc',
+          id: 'user-guide/ci',
+          label: 'Continuous Integration',
         },
       ],
     },

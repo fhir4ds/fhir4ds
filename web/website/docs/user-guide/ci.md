@@ -1,0 +1,142 @@
+---
+id: ci
+title: Continuous Integration
+sidebar_label: CI
+---
+
+# Continuous Integration
+
+FHIR4DS uses GitHub Actions for automated checks. The workflows are split by
+cost and purpose so routine `dev` work gets fast feedback while full
+conformance and performance timing remain available on `main`, nightly, and
+manual runs.
+
+## Branch Behavior
+
+| Workflow | `dev` Push | `main` Push | Pull Request | Nightly | Manual |
+|----------|------------|-------------|--------------|---------|--------|
+| CI | Yes, except docs-only changes | Yes, except docs-only changes | Yes, except docs-only changes | No | No |
+| Website Check | Yes for website/docs changes | No, deploy workflow handles `main` | Yes for website/docs changes | No | No |
+| Spec Conformance | No | Yes | No | Yes | Yes |
+| DQM Performance Report | No | No | No | Yes | Yes |
+
+## Blocking vs Report-Only
+
+The `CI` workflow has one blocking gate:
+
+```bash
+python -m pytest \
+  fhir4ds/cli/tests \
+  fhir4ds/dqm \
+  fhir4ds/sources \
+  fhir4ds/cql/tests/unit \
+  fhir4ds/viewdef
+```
+
+Ruff currently runs in report-only mode because the repository has existing
+global lint findings outside the current blocking gate. Treat Ruff annotations as
+cleanup guidance until a package is made lint-clean and promoted to a blocking
+check.
+
+## Conformance
+
+The `Spec Conformance` workflow runs:
+
+```bash
+python3 conformance/scripts/run_all.py
+```
+
+It runs on pushes to `main`, nightly, and manual dispatch. The workflow uploads
+the generated JSON reports from `conformance/reports/`.
+
+## DQM Performance
+
+The `DQM Performance Report` workflow runs:
+
+```bash
+python3 conformance/scripts/run_dqm.py
+python3 benchmarks/runner/dqm_perf_report.py ...
+```
+
+The first command generates `conformance/reports/dqm_report.json`. The second
+compares that timing report against the checked-in baseline at
+`benchmarks/baselines/dqm_2025.json` and writes:
+
+- `benchmarks/output/dqm-performance-report.json`
+- `benchmarks/output/dqm-performance-report.md`
+
+The performance report is non-blocking by default. It is intended to highlight
+large regressions, not to fail every run because of hosted-runner noise.
+
+Current report thresholds are:
+
+| Threshold | Value |
+|-----------|-------|
+| Ratio | `2.0x` baseline |
+| Absolute increase | `500 ms` |
+
+A measure is flagged only when both thresholds are exceeded.
+
+### Baseline Lifecycle
+
+The checked-in DQM performance baseline lives at:
+
+```text
+benchmarks/baselines/dqm_2025.json
+```
+
+Update this baseline only when the timing change is intentional and reviewed.
+Good reasons include an accepted optimization, a correctness fix with understood
+cost, a benchmark fixture change, or a CI runner environment change that makes
+old timings no longer comparable.
+
+To refresh the baseline:
+
+```bash
+python3 conformance/scripts/run_dqm.py
+cp conformance/reports/dqm_report.json benchmarks/baselines/dqm_2025.json
+python3 benchmarks/runner/dqm_perf_report.py \
+  --current conformance/reports/dqm_report.json \
+  --baseline benchmarks/baselines/dqm_2025.json \
+  --output-json benchmarks/output/dqm-performance-report.json \
+  --output-md benchmarks/output/dqm-performance-report.md
+```
+
+Before committing a new baseline, confirm the DQM suite still reports
+`47/47 measures passed (100.0%)` and document why the baseline changed in the
+commit message.
+
+## Submodules
+
+CI intentionally checks out only the DQM conformance fixture submodule:
+
+```bash
+git submodule update --init tests/data/ecqm-content-qicore-2025
+```
+
+It does not recursively initialize all submodules, because that would pull large
+DuckDB source trees that are not needed for the standard Python CI jobs.
+
+## Local Reproduction
+
+Run the blocking CI pytest gate locally:
+
+```bash
+python3 -m pytest \
+  fhir4ds/cli/tests \
+  fhir4ds/dqm \
+  fhir4ds/sources \
+  fhir4ds/cql/tests/unit \
+  fhir4ds/viewdef
+```
+
+Generate a local DQM performance report:
+
+```bash
+python3 conformance/scripts/run_dqm.py
+python3 benchmarks/runner/dqm_perf_report.py \
+  --current conformance/reports/dqm_report.json \
+  --baseline benchmarks/baselines/dqm_2025.json \
+  --output-json benchmarks/output/dqm-performance-report.json \
+  --output-md benchmarks/output/dqm-performance-report.md
+```
