@@ -11,13 +11,20 @@ from fhir4ds.cli.main import main
 from fhir4ds.dqm.config import DQMConfigError
 from fhir4ds.dqm.hapi_materialization import (
     DEFAULT_DECODED_VIEW,
+    FHIR4DS_MATERIALIZATION_TAG_SYSTEM,
+    FHIR4DS_MEASURE_REPORT_IDENTIFIER_SYSTEM,
+    FHIR4DS_MEASURE_REPORT_TAG_CODE,
+    HapiMaterializationConfig,
     HapiMaterializedMeasure,
     HapiRetentionPolicy,
     _compiled_metrics_delta,
+    _prepare_measure_report_for_materialization,
+    _publish_measure_report_to_hapi,
     claim_pending_patients,
     materialization_sql,
     materialized_measure_hash,
     parse_materialization_config,
+    persist_patient_measure_result,
     prune_materialization_history,
     reset_stale_processing,
     split_patient_result_rows,
@@ -46,6 +53,10 @@ def test_materialization_sql_contains_queue_result_and_triggers():
     assert "lo_get(p_text_oid)" in sql
     assert "compile_cache_hits" in sql
     assert "fhir4ds_measure_result_run_idx" in sql
+    assert "measure_report_json JSONB" in sql
+    assert "persist_measure_report BOOLEAN" in sql
+    assert "fhir4ds_is_generated_measure_report" in sql
+    assert "LIKE 'fhir4ds-%'" in sql
     assert "pg_notify(" in sql
     assert "fhir4ds_hfj_resource_change" in sql
 
@@ -73,9 +84,14 @@ def test_parse_materialization_config_resolves_paths_and_defaults(tmp_path):
     measure, cql = _write_measure_files(tmp_path)
     raw = {
         "postgres": {"connection_string": "postgresql://hapi:hapi@localhost/hapi"},
+        "hapi": {"base_url": "http://localhost:18080/fhir"},
         "period": {"start": "2026-01-01", "end": "2026-12-31"},
         "defaults": {"audit_mode": "population", "narratives": True},
-        "results": {"persist_audit": True},
+        "results": {
+            "persist_audit": True,
+            "persist_measure_report": True,
+            "publish_measure_report_to_hapi": True,
+        },
         "worker": {
             "batch_size": 25,
             "poll_interval_seconds": 5,
@@ -108,6 +124,7 @@ def test_parse_materialization_config_resolves_paths_and_defaults(tmp_path):
     config = parse_materialization_config(raw, base_dir=tmp_path)
 
     assert config.postgres_connection_string == "postgresql://hapi:hapi@localhost/hapi"
+    assert config.hapi_base_url == "http://localhost:18080/fhir"
     assert config.batch_size == 25
     assert config.max_attempts == 4
     assert config.retry_backoff_seconds == 2.5
@@ -128,7 +145,21 @@ def test_parse_materialization_config_resolves_paths_and_defaults(tmp_path):
     assert measure_config.measure_version == "2026"
     assert measure_config.audit_mode == AuditMode.POPULATION
     assert measure_config.persist_audit is True
+    assert measure_config.persist_measure_report is True
+    assert measure_config.publish_measure_report_to_hapi is True
     assert measure_config.generate_narratives is True
+
+
+def test_parse_materialization_config_requires_hapi_base_url_for_publish(tmp_path):
+    measure, _cql = _write_measure_files(tmp_path)
+    raw = {
+        "postgres": {"connection_string": "postgresql://hapi:hapi@localhost/hapi"},
+        "results": {"publish_measure_report_to_hapi": True},
+        "measures": [{"path": str(measure)}],
+    }
+
+    with pytest.raises(DQMConfigError, match="hapi.base_url"):
+        parse_materialization_config(raw, base_dir=tmp_path)
 
 
 def test_parse_materialization_config_rejects_unsafe_channel(tmp_path):
@@ -195,6 +226,124 @@ def test_split_patient_result_rows_keeps_compact_and_full_audit():
     }
     assert audit["rows"][0]["initial_population"]["evidence"][0]["target"] == "Encounter/e1"
     assert audit["rows"][0]["evidence_Helper"][0]["target"] == "Observation/o1"
+
+
+def test_prepare_measure_report_for_materialization_tags_and_identifies(tmp_path):
+    measure, cql = _write_measure_files(tmp_path)
+    report = {
+        "resourceType": "MeasureReport",
+        "meta": {"profile": ["http://example.com/Profile"]},
+    }
+    measure_config = HapiMaterializedMeasure(
+        measure_id="CMS TEST",
+        measure_path=measure,
+        cql_path=cql,
+    )
+
+    prepared = _prepare_measure_report_for_materialization(
+        report,
+        measure=measure_config,
+        patient_id="patient-1",
+    )
+    _prepare_measure_report_for_materialization(
+        prepared,
+        measure=measure_config,
+        patient_id="patient-1",
+    )
+
+    assert prepared["id"].startswith("fhir4ds-CMS-TEST-")
+    assert len(prepared["id"]) <= 64
+    assert prepared["meta"]["profile"] == ["http://example.com/Profile"]
+    tags = prepared["meta"]["tag"]
+    matching_tags = [
+        tag
+        for tag in tags
+        if tag.get("system") == FHIR4DS_MATERIALIZATION_TAG_SYSTEM
+        and tag.get("code") == FHIR4DS_MEASURE_REPORT_TAG_CODE
+    ]
+    assert len(matching_tags) == 1
+    identifiers = prepared["identifier"]
+    assert identifiers == [
+        {
+            "system": FHIR4DS_MEASURE_REPORT_IDENTIFIER_SYSTEM,
+            "value": "CMS TEST|patient-1",
+        }
+    ]
+
+
+def test_publish_measure_report_to_hapi_puts_resource(monkeypatch):
+    import fhir4ds.dqm.hapi_materialization as hapi_materialization
+
+    requests = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def read(self):
+            return b""
+
+    def fake_urlopen(request, timeout):
+        requests.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr(hapi_materialization.urllib.request, "urlopen", fake_urlopen)
+
+    _publish_measure_report_to_hapi(
+        HapiMaterializationConfig(
+            postgres_connection_string="postgresql://hapi:hapi@localhost/hapi",
+            hapi_base_url="http://localhost:18080/fhir",
+        ),
+        {"resourceType": "MeasureReport", "id": "report 1"},
+    )
+
+    request, timeout = requests[0]
+    assert timeout == 30
+    assert request.full_url == "http://localhost:18080/fhir/MeasureReport/report%201"
+    assert request.get_method() == "PUT"
+    assert json.loads(request.data.decode("utf-8"))["resourceType"] == "MeasureReport"
+
+
+def test_persist_patient_measure_result_includes_measure_report_json(tmp_path):
+    measure, cql = _write_measure_files(tmp_path)
+    executed: list[tuple[str, list[object]]] = []
+
+    class FakeCursor:
+        def fetchone(self):
+            return (123,)
+
+    class FakeConn:
+        def execute(self, sql, params=None):
+            executed.append((sql, list(params or [])))
+            return FakeCursor()
+
+        def commit(self):
+            return None
+
+    result_id = persist_patient_measure_result(
+        FakeConn(),
+        run_id=9,
+        patient_id="patient-1",
+        measure=HapiMaterializedMeasure(
+            measure_id="CMS_TEST",
+            measure_path=measure,
+            cql_path=cql,
+        ),
+        status="ok",
+        result_json={"rows": []},
+        summary_json={"total_patients": 1},
+        measure_report_json={"resourceType": "MeasureReport", "id": "mr-1"},
+        input_watermark=None,
+        config_hash="hash",
+    )
+
+    assert result_id == 123
+    insert_sql, insert_params = executed[1]
+    assert "measure_report_json" in insert_sql
+    assert '{"resourceType": "MeasureReport", "id": "mr-1"}' in insert_params
 
 
 def test_compiled_metrics_delta_preserves_cumulative_snapshot():

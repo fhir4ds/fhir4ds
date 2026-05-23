@@ -17,6 +17,9 @@ postgres:
     text_lob_column: res_text
     decoded_view: fhir4ds_hapi_current_resources
 
+hapi:
+  base_url: http://hapi:8080/fhir
+
 period:
   start: "2026-01-01"
   end: "2026-12-31"
@@ -42,6 +45,8 @@ defaults:
 
 results:
   persist_audit: true
+  persist_measure_report: false
+  publish_measure_report_to_hapi: false
 
 libraries:
   paths: []

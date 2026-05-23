@@ -78,6 +78,21 @@ python3 scripts/hapi/smoke_2025_materialization.py \
   --limit-patients 1
 ```
 
+The smoke runner also accepts repeated or comma-separated measures and verifies
+that each configured measure persists a result row for each loaded patient:
+
+```bash
+python3 scripts/hapi/smoke_2025_materialization.py \
+  --measure CMS122,CMS124,CMS130 \
+  --limit-patients 2
+```
+
+To verify generated individual `MeasureReport` JSON persistence, add
+`--persist-measure-report`. To also publish those reports back to HAPI through
+FHIR REST, add `--publish-measure-report-to-hapi`; generated reports use
+deterministic `fhir4ds-` IDs and are tagged so the PostgreSQL trigger does not
+enqueue them as new patient changes.
+
 Cleanup:
 
 ```bash

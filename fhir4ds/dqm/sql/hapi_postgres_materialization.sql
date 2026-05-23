@@ -33,12 +33,18 @@ CREATE TABLE IF NOT EXISTS fhir4ds_measure_config (
     tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     audit_mode TEXT NOT NULL DEFAULT 'none',
     persist_audit BOOLEAN NOT NULL DEFAULT false,
+    persist_measure_report BOOLEAN NOT NULL DEFAULT false,
+    publish_measure_report_to_hapi BOOLEAN NOT NULL DEFAULT false,
     generate_narratives BOOLEAN NOT NULL DEFAULT false,
     include_supporting_evidence BOOLEAN NOT NULL DEFAULT false,
     filter_to_ip BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE fhir4ds_measure_config
+    ADD COLUMN IF NOT EXISTS persist_measure_report BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS publish_measure_report_to_hapi BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS fhir4ds_measure_run (
     run_id BIGSERIAL PRIMARY KEY,
@@ -87,10 +93,14 @@ CREATE TABLE IF NOT EXISTS fhir4ds_measure_result (
         CHECK (status IN ('ok', 'no_result', 'error')),
     result_json JSONB,
     summary_json JSONB,
+    measure_report_json JSONB,
     input_watermark TIMESTAMPTZ,
     config_hash TEXT,
     error TEXT
 );
+
+ALTER TABLE fhir4ds_measure_result
+    ADD COLUMN IF NOT EXISTS measure_report_json JSONB;
 
 CREATE UNIQUE INDEX IF NOT EXISTS fhir4ds_measure_result_active_idx
 ON fhir4ds_measure_result(patient_id, measure_id)
@@ -176,6 +186,27 @@ BEGIN
 
     RETURN NULL;
 END;
+$$;
+
+CREATE OR REPLACE FUNCTION fhir4ds_is_generated_measure_report(
+    p_resource JSONB
+) RETURNS BOOLEAN
+LANGUAGE sql
+IMMUTABLE
+AS $$
+    SELECT COALESCE(p_resource->>'resourceType', '') = 'MeasureReport'
+       AND EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(
+                CASE
+                    WHEN jsonb_typeof(p_resource #> '{meta,tag}') = 'array'
+                        THEN p_resource #> '{meta,tag}'
+                    ELSE '[]'::jsonb
+                END
+            ) AS tag
+            WHERE tag->>'system' = 'https://fhir4ds.com/materialization'
+              AND tag->>'code' = 'measure-report'
+       );
 $$;
 
 CREATE OR REPLACE VIEW {{DECODED_VIEW_RELATION}} AS
@@ -318,6 +349,14 @@ BEGIN
         v.{{TEXT_VC_COLUMN}},
         v.{{TEXT_LOB_COLUMN}}
     );
+
+    IF r.{{RESOURCE_TYPE_COLUMN}} = 'MeasureReport'
+       AND (
+            r.{{FHIR_ID_COLUMN}} LIKE 'fhir4ds-%'
+            OR (body IS NOT NULL AND fhir4ds_is_generated_measure_report(body))
+       ) THEN
+        RETURN NEW;
+    END IF;
 
     IF r.{{RESOURCE_TYPE_COLUMN}} = 'Patient' THEN
         patient_id := r.{{FHIR_ID_COLUMN}};

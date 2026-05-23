@@ -8,6 +8,9 @@ import logging
 import re
 import signal
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime
 from importlib import resources
@@ -25,6 +28,11 @@ from fhir4ds.sources.base import quote_identifier, quote_sql_literal
 
 NOTIFICATION_CHANNEL = "fhir4ds_patient_changed"
 DEFAULT_DECODED_VIEW = "fhir4ds_hapi_current_resources"
+FHIR4DS_MATERIALIZATION_TAG_SYSTEM = "https://fhir4ds.com/materialization"
+FHIR4DS_MEASURE_REPORT_TAG_CODE = "measure-report"
+FHIR4DS_MEASURE_REPORT_IDENTIFIER_SYSTEM = (
+    "https://fhir4ds.com/materialization/measure-report"
+)
 _PG_CHANNEL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 logger = logging.getLogger(__name__)
 
@@ -44,6 +52,8 @@ class HapiMaterializedMeasure:
     tags: list[str] = field(default_factory=list)
     audit_mode: AuditMode = AuditMode.NONE
     persist_audit: bool = False
+    persist_measure_report: bool = False
+    publish_measure_report_to_hapi: bool = False
     generate_narratives: bool = False
     include_supporting_evidence: bool = False
     filter_to_ip: bool = False
@@ -64,6 +74,7 @@ class HapiMaterializationConfig:
 
     postgres_connection_string: str
     hapi_connection_string: str | None = None
+    hapi_base_url: str | None = None
     measures: list[HapiMaterializedMeasure] = field(default_factory=list)
     parameters: dict[str, Any] = field(default_factory=dict)
     library_paths: list[Path] = field(default_factory=list)
@@ -248,6 +259,14 @@ def parse_materialization_config(
     connection_string = postgres.get("connection_string") or raw.get("connection_string")
     if not isinstance(connection_string, str) or not connection_string:
         raise DQMConfigError("'postgres.connection_string' is required")
+    hapi = raw.get("hapi") or {}
+    if not isinstance(hapi, dict):
+        raise DQMConfigError("'hapi' must be an object")
+    hapi_base_url = hapi.get("base_url") or raw.get("hapi_base_url")
+    if hapi_base_url is not None:
+        if not isinstance(hapi_base_url, str) or not hapi_base_url.strip():
+            raise DQMConfigError("'hapi.base_url' must be a non-empty string")
+        hapi_base_url = hapi_base_url.strip()
 
     worker = raw.get("worker") or {}
     if not isinstance(worker, dict):
@@ -286,10 +305,15 @@ def parse_materialization_config(
         defaults=defaults,
         results=results,
     )
+    if any(measure.publish_measure_report_to_hapi for measure in measures) and not hapi_base_url:
+        raise DQMConfigError(
+            "'hapi.base_url' is required when publishing MeasureReports to HAPI"
+        )
 
     return HapiMaterializationConfig(
         postgres_connection_string=connection_string,
         hapi_connection_string=postgres.get("hapi_connection_string"),
+        hapi_base_url=hapi_base_url,
         measures=measures,
         parameters=global_parameters,
         library_paths=global_libraries,
@@ -336,6 +360,8 @@ def sync_measure_config(config: HapiMaterializationConfig) -> int:
                     tags,
                     audit_mode,
                     persist_audit,
+                    persist_measure_report,
+                    publish_measure_report_to_hapi,
                     generate_narratives,
                     include_supporting_evidence,
                     filter_to_ip,
@@ -344,7 +370,7 @@ def sync_measure_config(config: HapiMaterializationConfig) -> int:
                 VALUES (
                     %s, %s, %s, %s, %s,
                     %s::jsonb, %s::jsonb, %s::jsonb, %s,
-                    %s, %s, %s, %s, %s, now()
+                    %s, %s, %s, %s, %s, %s, %s, now()
                 )
                 ON CONFLICT (measure_id)
                 DO UPDATE SET
@@ -358,6 +384,8 @@ def sync_measure_config(config: HapiMaterializationConfig) -> int:
                     tags = EXCLUDED.tags,
                     audit_mode = EXCLUDED.audit_mode,
                     persist_audit = EXCLUDED.persist_audit,
+                    persist_measure_report = EXCLUDED.persist_measure_report,
+                    publish_measure_report_to_hapi = EXCLUDED.publish_measure_report_to_hapi,
                     generate_narratives = EXCLUDED.generate_narratives,
                     include_supporting_evidence = EXCLUDED.include_supporting_evidence,
                     filter_to_ip = EXCLUDED.filter_to_ip,
@@ -379,6 +407,8 @@ def sync_measure_config(config: HapiMaterializationConfig) -> int:
                     measure.tags,
                     measure.audit_mode.value,
                     measure.persist_audit,
+                    measure.persist_measure_report,
+                    measure.publish_measure_report_to_hapi,
                     measure.generate_narratives,
                     measure.include_supporting_evidence,
                     measure.filter_to_ip,
@@ -612,6 +642,8 @@ def load_enabled_measure_config(conn: Any) -> list[HapiMaterializedMeasure]:
             tags,
             audit_mode,
             persist_audit,
+            persist_measure_report,
+            publish_measure_report_to_hapi,
             generate_narratives,
             include_supporting_evidence,
             filter_to_ip
@@ -634,9 +666,11 @@ def load_enabled_measure_config(conn: Any) -> list[HapiMaterializedMeasure]:
                 tags=list(row[7] or []),
                 audit_mode=AuditMode(row[8]),
                 persist_audit=bool(row[9]),
-                generate_narratives=bool(row[10]),
-                include_supporting_evidence=bool(row[11]),
-                filter_to_ip=bool(row[12]),
+                persist_measure_report=bool(row[10]),
+                publish_measure_report_to_hapi=bool(row[11]),
+                generate_narratives=bool(row[12]),
+                include_supporting_evidence=bool(row[13]),
+                filter_to_ip=bool(row[14]),
             )
         )
     return measures
@@ -748,6 +782,7 @@ def persist_patient_measure_result(
     summary_json: dict[str, Any] | None,
     input_watermark: datetime | None,
     config_hash: str,
+    measure_report_json: dict[str, Any] | None = None,
     error: str | None = None,
     audit_json: dict[str, Any] | None = None,
 ) -> int:
@@ -773,13 +808,14 @@ def persist_patient_measure_result(
             status,
             result_json,
             summary_json,
+            measure_report_json,
             input_watermark,
             config_hash,
             error
         )
         VALUES (
             %s, %s, %s, %s, true, %s,
-            %s::jsonb, %s::jsonb, %s, %s, %s
+            %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s
         )
         RETURNING result_id
         """,
@@ -791,6 +827,11 @@ def persist_patient_measure_result(
             status,
             json.dumps(result_json, default=str) if result_json is not None else None,
             json.dumps(summary_json, default=str) if summary_json is not None else None,
+            (
+                json.dumps(measure_report_json, default=str)
+                if measure_report_json is not None
+                else None
+            ),
             input_watermark,
             config_hash,
             error,
@@ -882,6 +923,7 @@ def materialized_measure_hash(measure: HapiMaterializedMeasure) -> str:
         "valueset_paths": [str(path) for path in measure.valueset_paths],
         "parameters": measure.parameters,
         "audit_mode": measure.audit_mode.value,
+        "persist_measure_report": measure.persist_measure_report,
         "filter_to_ip": measure.filter_to_ip,
     }
     text = json.dumps(payload, sort_keys=True, default=str)
@@ -930,6 +972,7 @@ def _process_claimed_patients(
             _persist_successful_measure(
                 pg_conn,
                 evaluator,
+                config,
                 run_id,
                 patients,
                 measure,
@@ -994,6 +1037,7 @@ def _evaluate_materialized_measure(
 def _persist_successful_measure(
     pg_conn: Any,
     evaluator: MeasureEvaluator,
+    config: HapiMaterializationConfig,
     run_id: int,
     patients: list[ClaimedPatient],
     measure: HapiMaterializedMeasure,
@@ -1033,6 +1077,19 @@ def _persist_successful_measure(
             pop_map=result.pop_map,
         )
         summary = evaluator.summary_report(patient_result)
+        measure_report_json = None
+        if measure.persist_measure_report or measure.publish_measure_report_to_hapi:
+            measure_report_json = evaluator.to_measure_report(
+                patient_result,
+                report_type="individual",
+            )
+            measure_report_json = _prepare_measure_report_for_materialization(
+                measure_report_json,
+                measure=measure,
+                patient_id=patient.patient_id,
+            )
+        if measure.publish_measure_report_to_hapi and measure_report_json is not None:
+            _publish_measure_report_to_hapi(config, measure_report_json)
         persist_patient_measure_result(
             pg_conn,
             run_id=run_id,
@@ -1041,10 +1098,100 @@ def _persist_successful_measure(
             status="ok",
             result_json=result_json,
             summary_json=summary,
+            measure_report_json=measure_report_json,
             input_watermark=watermark_by_patient.get(patient.patient_id),
             config_hash=config_hash,
             audit_json=audit_json if measure.persist_audit else None,
         )
+
+
+def _prepare_measure_report_for_materialization(
+    report: dict[str, Any],
+    *,
+    measure: HapiMaterializedMeasure,
+    patient_id: str,
+) -> dict[str, Any]:
+    report["id"] = _measure_report_id(measure.measure_id, patient_id)
+    meta = report.setdefault("meta", {})
+    tags = meta.setdefault("tag", [])
+    _append_unique_dict(
+        tags,
+        {
+            "system": FHIR4DS_MATERIALIZATION_TAG_SYSTEM,
+            "code": FHIR4DS_MEASURE_REPORT_TAG_CODE,
+            "display": "FHIR4DS generated MeasureReport",
+        },
+        keys=("system", "code"),
+    )
+    identifiers = report.setdefault("identifier", [])
+    _append_unique_dict(
+        identifiers,
+        {
+            "system": FHIR4DS_MEASURE_REPORT_IDENTIFIER_SYSTEM,
+            "value": f"{measure.measure_id}|{patient_id}",
+        },
+        keys=("system", "value"),
+    )
+    return report
+
+
+def _measure_report_id(measure_id: str, patient_id: str) -> str:
+    measure_slug = re.sub(r"[^A-Za-z0-9.-]+", "-", measure_id).strip(".-")
+    measure_slug = measure_slug[:20] or "measure"
+    digest = hashlib.sha256(f"{measure_id}|{patient_id}".encode()).hexdigest()
+    return f"fhir4ds-{measure_slug}-{digest[:32]}"
+
+
+def _append_unique_dict(
+    items: list[Any],
+    item: dict[str, Any],
+    *,
+    keys: tuple[str, ...],
+) -> None:
+    for existing in items:
+        if not isinstance(existing, dict):
+            continue
+        if all(existing.get(key) == item.get(key) for key in keys):
+            return
+    items.append(item)
+
+
+def _publish_measure_report_to_hapi(
+    config: HapiMaterializationConfig,
+    report: dict[str, Any],
+) -> None:
+    if not config.hapi_base_url:
+        raise DQMConfigError(
+            "'hapi.base_url' is required when publishing MeasureReports to HAPI"
+        )
+    resource_id = report.get("id")
+    if not isinstance(resource_id, str) or not resource_id:
+        raise DQMConfigError("Generated MeasureReport is missing a FHIR id")
+    url = (
+        f"{config.hapi_base_url.rstrip('/')}/MeasureReport/"
+        f"{urllib.parse.quote(resource_id, safe='')}"
+    )
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(report, default=str).encode("utf-8"),
+        method="PUT",
+        headers={
+            "Accept": "application/fhir+json",
+            "Content-Type": "application/fhir+json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            response.read()
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"HAPI MeasureReport publish failed for {resource_id}: {body}"
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            f"HAPI MeasureReport publish failed for {resource_id}: {exc}"
+        ) from exc
 
 
 def _parse_materialized_measures(
@@ -1071,6 +1218,18 @@ def _parse_materialized_measures(
             raise DQMConfigError(f"measures[{index}].id must be a string")
 
         audit_mode = item.get("audit_mode", defaults.get("audit_mode", AuditMode.NONE.value))
+        publish_measure_report = bool(
+            item.get(
+                "publish_measure_report_to_hapi",
+                results.get("publish_measure_report_to_hapi", False),
+            )
+        )
+        persist_measure_report = bool(
+            item.get(
+                "persist_measure_report",
+                results.get("persist_measure_report", False),
+            )
+        ) or publish_measure_report
         measures.append(
             HapiMaterializedMeasure(
                 measure_id=measure_id,
@@ -1086,6 +1245,8 @@ def _parse_materialized_measures(
                 persist_audit=bool(
                     item.get("persist_audit", results.get("persist_audit", False))
                 ),
+                persist_measure_report=persist_measure_report,
+                publish_measure_report_to_hapi=publish_measure_report,
                 generate_narratives=bool(
                     item.get("generate_narratives", defaults.get("narratives", False))
                 ),
