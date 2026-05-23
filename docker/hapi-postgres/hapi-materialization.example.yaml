@@ -19,6 +19,9 @@ postgres:
 
 hapi:
   base_url: http://localhost:18080/fhir
+  timeout_seconds: 30
+  # bearer_token: replace-with-token
+  headers: {}
 
 artifacts:
   # Use "hapi" to resolve Measure/Library/ValueSet artifacts from hapi.base_url.

@@ -110,6 +110,21 @@ CREATE TABLE IF NOT EXISTS fhir4ds_measure_result (
 ALTER TABLE fhir4ds_measure_result
     ADD COLUMN IF NOT EXISTS measure_report_json JSONB;
 
+CREATE TABLE IF NOT EXISTS fhir4ds_measure_report (
+    measure_report_row_id BIGSERIAL PRIMARY KEY,
+    result_id BIGINT NOT NULL REFERENCES fhir4ds_measure_result(result_id) ON DELETE CASCADE,
+    run_id BIGINT REFERENCES fhir4ds_measure_run(run_id),
+    patient_id TEXT NOT NULL,
+    measure_id TEXT NOT NULL,
+    measure_version TEXT,
+    measure_report_id TEXT NOT NULL,
+    calculated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    active BOOLEAN NOT NULL DEFAULT true,
+    resource_json JSONB NOT NULL,
+    published_to_hapi BOOLEAN NOT NULL DEFAULT false,
+    config_hash TEXT
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS fhir4ds_measure_result_active_idx
 ON fhir4ds_measure_result(patient_id, measure_id)
 WHERE active;
@@ -123,6 +138,22 @@ ON fhir4ds_measure_result(run_id);
 CREATE INDEX IF NOT EXISTS fhir4ds_measure_result_inactive_calculated_idx
 ON fhir4ds_measure_result(calculated_at)
 WHERE active = false;
+
+CREATE UNIQUE INDEX IF NOT EXISTS fhir4ds_measure_report_active_idx
+ON fhir4ds_measure_report(patient_id, measure_id)
+WHERE active;
+
+CREATE INDEX IF NOT EXISTS fhir4ds_measure_report_lookup_idx
+ON fhir4ds_measure_report(patient_id, measure_id, calculated_at DESC);
+
+CREATE INDEX IF NOT EXISTS fhir4ds_measure_report_result_idx
+ON fhir4ds_measure_report(result_id);
+
+CREATE INDEX IF NOT EXISTS fhir4ds_measure_report_run_idx
+ON fhir4ds_measure_report(run_id);
+
+CREATE INDEX IF NOT EXISTS fhir4ds_measure_report_fhir_id_idx
+ON fhir4ds_measure_report(measure_report_id);
 
 CREATE TABLE IF NOT EXISTS fhir4ds_measure_audit (
     audit_id BIGSERIAL PRIMARY KEY,

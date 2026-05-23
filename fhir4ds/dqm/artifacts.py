@@ -21,8 +21,28 @@ from typing import Any, Protocol
 from fhir4ds.dqm.config import DQMConfigError
 from fhir4ds.dqm.errors import MeasureParseError
 
-_CQL_INCLUDE_RE = re.compile(r"^\s*include\s+([A-Za-z][A-Za-z0-9_.]*)\b", re.MULTILINE)
-_CQL_VALUESET_RE = re.compile(r"valueset\s+\"[^\"]+\"\s*:\s*'([^']+)'")
+_CQL_INCLUDE_RE = re.compile(
+    r"^\s*include\s+([A-Za-z][A-Za-z0-9_.]*)\b"
+    r"(?:\s+version\s+'([^']+)')?",
+    re.IGNORECASE | re.MULTILINE,
+)
+_CQL_VALUESET_RE = re.compile(
+    r"valueset\s+(?:\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_]*)\s*:\s*'([^']+)'"
+    r"(?:\s+version\s+'([^']+)')?",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True, order=True)
+class ValueSetRef:
+    """Canonical ValueSet reference declared in CQL."""
+
+    url: str
+    version: str | None = None
+
+    @property
+    def label(self) -> str:
+        return f"{self.url}|{self.version}" if self.version else self.url
 
 
 @dataclass(frozen=True)
@@ -63,7 +83,11 @@ class ArtifactResolver(Protocol):
     ) -> LibraryArtifact:
         """Resolve the primary CQL library for a Measure."""
 
-    def resolve_include(self, alias: str) -> LibraryArtifact | None:
+    def resolve_include(
+        self,
+        alias: str,
+        version: str | None = None,
+    ) -> LibraryArtifact | None:
         """Resolve a CQL include alias to a library artifact."""
 
     def fingerprint(self) -> str:
@@ -123,11 +147,18 @@ class FileArtifactResolver:
             "Set cql_library_path or add the library directory to include_paths."
         )
 
-    def resolve_include(self, alias: str) -> LibraryArtifact | None:
+    def resolve_include(
+        self,
+        alias: str,
+        version: str | None = None,
+    ) -> LibraryArtifact | None:
         resolved_alias = alias.rsplit(".", 1)[-1] if "." in alias else alias
         for search_alias in dict.fromkeys([alias, resolved_alias]):
             for directory in self._search_dirs():
-                candidates = [directory / f"{search_alias}.cql"]
+                candidates = []
+                if version:
+                    candidates.append(directory / f"{search_alias}-{version}.cql")
+                candidates.append(directory / f"{search_alias}.cql")
                 candidates.extend(sorted(directory.glob(f"{search_alias}-*.cql")))
                 for path in candidates:
                     if path.exists():
@@ -183,12 +214,23 @@ class FileArtifactResolver:
 class HapiArtifactResolver:
     """Resolve Measure, Library, and ValueSet resources through a FHIR REST API."""
 
-    def __init__(self, base_url: str):
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        timeout_seconds: float = 30.0,
+    ):
         if not base_url:
             raise DQMConfigError("HAPI artifact resolver requires a base URL")
+        if timeout_seconds <= 0:
+            raise DQMConfigError("HAPI artifact resolver timeout must be positive")
         self.base_url = base_url.rstrip("/")
+        self.headers = _normalize_headers(headers)
+        self.timeout_seconds = float(timeout_seconds)
         self._cache: dict[tuple[str, str], dict[str, Any]] = {}
         self._library_cache: dict[str, LibraryArtifact] = {}
+        self._valueset_cache: dict[tuple[str, str | None], dict[str, Any]] = {}
 
     def resolve_measure(self, ref: str | Path | dict[str, Any]) -> MeasureArtifact:
         if isinstance(ref, dict):
@@ -217,11 +259,15 @@ class HapiArtifactResolver:
             raise DQMConfigError("Measure does not reference a CQL Library")
         return self._resolve_library_ref(str(ref))
 
-    def resolve_include(self, alias: str) -> LibraryArtifact | None:
+    def resolve_include(
+        self,
+        alias: str,
+        version: str | None = None,
+    ) -> LibraryArtifact | None:
         resolved_alias = alias.rsplit(".", 1)[-1] if "." in alias else alias
         for candidate in dict.fromkeys([alias, resolved_alias]):
             try:
-                return self._resolve_library_ref(candidate)
+                return self._resolve_library_ref(candidate, version=version)
             except FileNotFoundError:
                 continue
         return None
@@ -237,79 +283,132 @@ class HapiArtifactResolver:
                 (key, artifact.source_id, artifact.content_hash)
                 for key, artifact in sorted(self._library_cache.items())
             ],
+            "valuesets": [
+                (key[0], key[1], _resource_source_id("hapi", valueset))
+                for key, valueset in sorted(self._valueset_cache.items())
+            ],
         }
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
     def resolve_valuesets_for_cql(self, cql_text: str) -> list[dict[str, Any]]:
         """Resolve transitive ValueSet declarations in CQL through HAPI."""
-        urls = self._valueset_urls_for_cql(cql_text, seen_libraries=set())
+        refs = self._valueset_refs_for_cql(cql_text, seen_libraries=set())
         valuesets: list[dict[str, Any]] = []
-        for url in urls:
+        for ref in refs:
             try:
-                valuesets.append(self._resolve_valueset_url(url))
+                valuesets.append(self._resolve_valueset_ref(ref))
             except FileNotFoundError as exc:
-                raise DQMConfigError(f"ValueSet not found in HAPI: {url}") from exc
+                raise DQMConfigError(
+                    f"ValueSet not found in HAPI: {ref.label}"
+                ) from exc
         return valuesets
 
-    def _valueset_urls_for_cql(
+    def _valueset_refs_for_cql(
         self,
         cql_text: str,
         *,
         seen_libraries: set[str],
-    ) -> list[str]:
-        urls = set(_CQL_VALUESET_RE.findall(cql_text))
-        for alias in _CQL_INCLUDE_RE.findall(cql_text):
-            if alias in seen_libraries:
+    ) -> list[ValueSetRef]:
+        refs = set(_valueset_refs_from_cql(cql_text))
+        for alias, version in _CQL_INCLUDE_RE.findall(cql_text):
+            key = f"{alias}|{version}" if version else alias
+            if key in seen_libraries:
                 continue
-            seen_libraries.add(alias)
-            artifact = self.resolve_include(alias)
+            seen_libraries.add(key)
+            artifact = self.resolve_include(alias, version=version or None)
             if artifact is not None:
-                urls.update(
-                    self._valueset_urls_for_cql(
+                refs.update(
+                    self._valueset_refs_for_cql(
                         artifact.text,
                         seen_libraries=seen_libraries,
                     )
                 )
-        return sorted(urls)
+        return sorted(refs)
 
-    def _resolve_valueset_url(self, url: str) -> dict[str, Any]:
-        valueset = self._search_one("ValueSet", {"url": url})
-        if valueset.get("expansion"):
-            return valueset
-        expanded = self._expand_valueset(url)
-        if expanded.get("expansion"):
-            return expanded
-        raise DQMConfigError(
-            "HAPI ValueSet resolution requires an expanded ValueSet. "
-            f"ValueSet has no expansion and $expand did not return one: {url}"
-        )
-
-    def _resolve_library_ref(self, ref: str) -> LibraryArtifact:
-        cached = self._library_cache.get(ref)
+    def _resolve_valueset_ref(self, ref: ValueSetRef) -> dict[str, Any]:
+        cache_key = (ref.url, ref.version)
+        cached = self._valueset_cache.get(cache_key)
         if cached is not None:
             return cached
-        resource = self._read_resource_ref("Library", ref)
+
+        params = {"url": ref.url}
+        if ref.version:
+            params["version"] = ref.version
+        valueset = self._search_one("ValueSet", params)
+        if valueset.get("expansion"):
+            self._valueset_cache[cache_key] = valueset
+            return valueset
+
+        try:
+            expanded = self._expand_valueset(ref, valueset)
+        except RuntimeError as exc:
+            raise DQMConfigError(
+                "HAPI ValueSet resolution requires an expanded ValueSet. "
+                f"The ValueSet resource had no expansion and $expand failed for: {ref.label}. "
+                f"{exc}"
+            ) from exc
+        if expanded.get("expansion"):
+            if not expanded.get("url"):
+                expanded = {**expanded, "url": ref.url}
+            if ref.version and not expanded.get("version"):
+                expanded = {**expanded, "version": ref.version}
+            self._valueset_cache[cache_key] = expanded
+            return expanded
+
+        raise DQMConfigError(
+            "HAPI ValueSet resolution requires an expanded ValueSet. "
+            "HAPI returned the ValueSet resource, but neither the resource nor "
+            f"$expand contained expansion codes for: {ref.label}"
+        )
+
+    def _resolve_library_ref(
+        self,
+        ref: str,
+        *,
+        version: str | None = None,
+    ) -> LibraryArtifact:
+        cache_key = f"{ref}|{version}" if version else ref
+        cached = self._library_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        resource = self._read_resource_ref("Library", ref, version=version)
         artifact = _library_artifact_from_resource(
             resource,
             source_id=_resource_source_id("hapi", resource),
         )
-        self._library_cache[ref] = artifact
+        self._library_cache[cache_key] = artifact
+        self._library_cache.setdefault(ref, artifact)
         if artifact.name:
             self._library_cache.setdefault(artifact.name, artifact)
+            if artifact.version:
+                self._library_cache.setdefault(f"{artifact.name}|{artifact.version}", artifact)
         if artifact.url:
             self._library_cache.setdefault(artifact.url, artifact)
             if artifact.version:
                 self._library_cache.setdefault(f"{artifact.url}|{artifact.version}", artifact)
         return artifact
 
-    def _read_resource_ref(self, resource_type: str, ref: str) -> dict[str, Any]:
+    def _read_resource_ref(
+        self,
+        resource_type: str,
+        ref: str,
+        *,
+        version: str | None = None,
+    ) -> dict[str, Any]:
+        if version:
+            for params in _versioned_search_params(resource_type, ref, version):
+                try:
+                    return self._search_one(resource_type, params)
+                except FileNotFoundError:
+                    continue
         if ref.startswith(f"{resource_type}/"):
             return self._get_resource(resource_type, ref.split("/", 1)[1])
         if ref.startswith("http://") or ref.startswith("https://"):
-            url, version = _split_canonical(ref)
+            url, canonical_version = _split_canonical(ref)
             params = {"url": url}
-            if version:
-                params["version"] = version
+            effective_version = version or canonical_version
+            if effective_version:
+                params["version"] = effective_version
             return self._search_one(resource_type, params)
         try:
             return self._get_resource(resource_type, ref)
@@ -349,17 +448,36 @@ class HapiArtifactResolver:
                 return resource
         raise FileNotFoundError(f"{resource_type} not found in HAPI for {params}")
 
-    def _expand_valueset(self, url: str) -> dict[str, Any]:
-        query = urllib.parse.urlencode({"url": url})
-        return self._read_json(f"{self.base_url}/ValueSet/$expand?{query}")
+    def _expand_valueset(
+        self,
+        ref: ValueSetRef,
+        valueset: dict[str, Any],
+    ) -> dict[str, Any]:
+        params = {"url": ref.url}
+        if ref.version:
+            params["valueSetVersion"] = ref.version
+        query = urllib.parse.urlencode(params)
+        try:
+            return self._read_json(f"{self.base_url}/ValueSet/$expand?{query}")
+        except FileNotFoundError:
+            resource_id = valueset.get("id")
+            if not resource_id:
+                raise
+            return self._read_json(
+                f"{self.base_url}/ValueSet/"
+                f"{urllib.parse.quote(str(resource_id), safe='')}/$expand"
+            )
 
     def _read_json(self, url: str) -> dict[str, Any]:
         request = urllib.request.Request(
             url,
-            headers={"Accept": "application/fhir+json"},
+            headers={
+                "Accept": "application/fhir+json",
+                **self.headers,
+            },
         )
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                 return json.loads(response.read())
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
@@ -368,6 +486,47 @@ class HapiArtifactResolver:
             raise RuntimeError(f"HAPI artifact request failed for {url}: {body}") from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"HAPI artifact request failed for {url}: {exc}") from exc
+
+
+def _valueset_refs_from_cql(cql_text: str) -> list[ValueSetRef]:
+    refs: list[ValueSetRef] = []
+    for raw_url, raw_version in _CQL_VALUESET_RE.findall(cql_text):
+        url, canonical_version = _split_canonical(raw_url)
+        version = raw_version or canonical_version
+        if raw_version and canonical_version and raw_version != canonical_version:
+            raise DQMConfigError(
+                "ValueSet declaration contains conflicting canonical and "
+                f"version values: {raw_url} version '{raw_version}'"
+            )
+        refs.append(ValueSetRef(url=url, version=version or None))
+    return refs
+
+
+def _versioned_search_params(
+    resource_type: str,
+    ref: str,
+    version: str,
+) -> list[dict[str, str]]:
+    params: list[dict[str, str]] = []
+    if ref.startswith("http://") or ref.startswith("https://"):
+        url, canonical_version = _split_canonical(ref)
+        params.append({"url": url, "version": canonical_version or version})
+    else:
+        params.append({"name": ref, "version": version})
+        if resource_type == "Library":
+            params.append({"url": f"https://madie.cms.gov/Library/{ref}", "version": version})
+    return params
+
+
+def _normalize_headers(headers: dict[str, str] | None) -> dict[str, str]:
+    normalized: dict[str, str] = {}
+    for key, value in (headers or {}).items():
+        if not isinstance(key, str) or not key.strip():
+            raise DQMConfigError("HAPI headers must use non-empty string names")
+        if not isinstance(value, str):
+            raise DQMConfigError(f"HAPI header {key!r} must have a string value")
+        normalized[key.strip()] = value
+    return normalized
 
 
 def _library_artifact_from_resource(

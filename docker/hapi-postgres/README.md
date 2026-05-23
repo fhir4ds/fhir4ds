@@ -87,6 +87,17 @@ python3 scripts/hapi/smoke_2025_materialization.py \
   --limit-patients 2
 ```
 
+For a broader artifact smoke without listing IDs manually:
+
+```bash
+python3 scripts/hapi/smoke_2025_materialization.py \
+  --all-measures \
+  --limit-measures 5 \
+  --limit-patients 1 \
+  --artifact-source hapi \
+  --persist-measure-report
+```
+
 By default, measure artifacts are read from local files while patient data is
 analyzed in HAPI PostgreSQL. To verify HAPI-hosted Measure, Library, and
 ValueSet artifacts, use:
@@ -100,14 +111,28 @@ python3 scripts/hapi/smoke_2025_materialization.py \
 
 For worker configuration, set `artifacts.source: hapi` and give each measure an
 `artifact_ref` matching the HAPI Measure id, canonical URL, or `Measure/<id>`.
-ValueSets declared by the primary CQL library are resolved from HAPI and must
-already contain an expansion or be expandable by HAPI.
+ValueSets declared by the primary CQL library and included libraries are
+resolved from HAPI, including `version` qualifiers. Each ValueSet must already
+contain an expansion or be expandable by HAPI.
+
+Authenticated HAPI servers can be configured with static headers, a bearer
+token, and a request timeout:
+
+```yaml
+hapi:
+  base_url: https://hapi.example/fhir
+  timeout_seconds: 30
+  bearer_token: replace-with-token
+  headers:
+    X-Tenant: quality
+```
 
 To verify generated individual `MeasureReport` JSON persistence, add
-`--persist-measure-report`. To also publish those reports back to HAPI through
-FHIR REST, add `--publish-measure-report-to-hapi`; generated reports use
-deterministic `fhir4ds-` IDs and are tagged so the PostgreSQL trigger does not
-enqueue them as new patient changes.
+`--persist-measure-report`. Reports are stored on the active result row and in
+`fhir4ds_measure_report` for direct querying/history. To also publish those
+reports back to HAPI through FHIR REST, add `--publish-measure-report-to-hapi`;
+generated reports use deterministic `fhir4ds-` IDs and are tagged so the
+PostgreSQL trigger does not enqueue them as new patient changes.
 
 Cleanup:
 

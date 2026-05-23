@@ -47,6 +47,7 @@ def test_materialization_sql_contains_queue_result_and_triggers():
     assert "{{" not in sql
     assert "CREATE TABLE IF NOT EXISTS fhir4ds_patient_change_queue" in sql
     assert "CREATE TABLE IF NOT EXISTS fhir4ds_measure_result" in sql
+    assert "CREATE TABLE IF NOT EXISTS fhir4ds_measure_report" in sql
     assert "CREATE TABLE IF NOT EXISTS fhir4ds_measure_audit" in sql
     assert f'CREATE OR REPLACE VIEW "public"."{DEFAULT_DECODED_VIEW}"' in sql
     assert "fhir4ds_hapi_resource_json" in sql
@@ -54,6 +55,8 @@ def test_materialization_sql_contains_queue_result_and_triggers():
     assert "compile_cache_hits" in sql
     assert "fhir4ds_measure_result_run_idx" in sql
     assert "measure_report_json JSONB" in sql
+    assert "resource_json JSONB NOT NULL" in sql
+    assert "fhir4ds_measure_report_active_idx" in sql
     assert "persist_measure_report BOOLEAN" in sql
     assert "artifact_source TEXT NOT NULL DEFAULT 'files'" in sql
     assert "artifact_ref TEXT" in sql
@@ -128,6 +131,8 @@ def test_parse_materialization_config_resolves_paths_and_defaults(tmp_path):
 
     assert config.postgres_connection_string == "postgresql://hapi:hapi@localhost/hapi"
     assert config.hapi_base_url == "http://localhost:18080/fhir"
+    assert config.hapi_headers == {}
+    assert config.hapi_timeout_seconds == 30.0
     assert config.batch_size == 25
     assert config.max_attempts == 4
     assert config.retry_backoff_seconds == 2.5
@@ -177,6 +182,28 @@ def test_parse_materialization_config_allows_hapi_artifact_source():
     assert measure_config.cql_path is None
     assert measure_config.artifact_source == "hapi"
     assert measure_config.artifact_ref == "CMS122FHIRDiabetesAssessGreaterThan9Percent"
+
+
+def test_parse_materialization_config_accepts_hapi_headers_and_timeout():
+    raw = {
+        "postgres": {"connection_string": "postgresql://hapi:hapi@localhost/hapi"},
+        "hapi": {
+            "base_url": "http://localhost:18080/fhir",
+            "headers": {"X-Tenant": "quality"},
+            "bearer_token": "secret-token",
+            "timeout_seconds": 15,
+        },
+        "artifacts": {"source": "hapi"},
+        "measures": [{"id": "CMS_TEST", "artifact_ref": "MeasureRef"}],
+    }
+
+    config = parse_materialization_config(raw)
+
+    assert config.hapi_headers == {
+        "X-Tenant": "quality",
+        "Authorization": "Bearer secret-token",
+    }
+    assert config.hapi_timeout_seconds == 15.0
 
 
 def test_parse_materialization_config_requires_hapi_base_url_for_hapi_artifacts():
@@ -336,14 +363,17 @@ def test_publish_measure_report_to_hapi_puts_resource(monkeypatch):
         HapiMaterializationConfig(
             postgres_connection_string="postgresql://hapi:hapi@localhost/hapi",
             hapi_base_url="http://localhost:18080/fhir",
+            hapi_headers={"Authorization": "Bearer token"},
+            hapi_timeout_seconds=12.5,
         ),
         {"resourceType": "MeasureReport", "id": "report 1"},
     )
 
     request, timeout = requests[0]
-    assert timeout == 30
+    assert timeout == 12.5
     assert request.full_url == "http://localhost:18080/fhir/MeasureReport/report%201"
     assert request.get_method() == "PUT"
+    assert request.headers["Authorization"] == "Bearer token"
     assert json.loads(request.data.decode("utf-8"))["resourceType"] == "MeasureReport"
 
 
@@ -381,9 +411,17 @@ def test_persist_patient_measure_result_includes_measure_report_json(tmp_path):
     )
 
     assert result_id == 123
-    insert_sql, insert_params = executed[1]
+    insert_sql, insert_params = next(
+        (sql, params) for sql, params in executed if "INSERT INTO fhir4ds_measure_result" in sql
+    )
     assert "measure_report_json" in insert_sql
     assert '{"resourceType": "MeasureReport", "id": "mr-1"}' in insert_params
+    report_sql, report_params = next(
+        (sql, params) for sql, params in executed if "INSERT INTO fhir4ds_measure_report" in sql
+    )
+    assert "resource_json" in report_sql
+    assert report_params[5] == "mr-1"
+    assert report_params[7] is False
 
 
 def test_compiled_metrics_delta_preserves_cumulative_snapshot():

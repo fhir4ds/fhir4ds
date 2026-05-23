@@ -30,7 +30,11 @@ logger = logging.getLogger(__name__)
 
 
 _TARGET_PATIENT_TABLE = "_fhir4ds_target_patients"
-_CQL_INCLUDE_RE = re.compile(r"^\s*include\s+([A-Za-z][A-Za-z0-9_.]*)\b", re.MULTILINE)
+_CQL_INCLUDE_RE = re.compile(
+    r"^\s*include\s+([A-Za-z][A-Za-z0-9_.]*)\b"
+    r"(?:\s+version\s+'([^']+)')?",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 @dataclass
@@ -1128,11 +1132,12 @@ class MeasureEvaluator:
     ) -> None:
         """Resolve transitive includes before cache-key fingerprinting."""
         seen = seen or set()
-        for alias in _CQL_INCLUDE_RE.findall(cql_text):
-            if alias in seen:
+        for alias, version in _CQL_INCLUDE_RE.findall(cql_text):
+            key = f"{alias}|{version}" if version else alias
+            if key in seen:
                 continue
-            seen.add(alias)
-            artifact = artifact_resolver.resolve_include(alias)
+            seen.add(key)
+            artifact = artifact_resolver.resolve_include(alias, version=version or None)
             if artifact is not None:
                 self._prime_resolved_includes(
                     artifact_resolver,

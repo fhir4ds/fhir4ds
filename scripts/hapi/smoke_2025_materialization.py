@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,6 +45,17 @@ def main() -> int:
             "Measure ID(s) to smoke. May be repeated or comma-separated. "
             "Defaults to CMS122."
         ),
+    )
+    parser.add_argument(
+        "--all-measures",
+        action="store_true",
+        help="Smoke every discovered measure in the selected suite",
+    )
+    parser.add_argument(
+        "--limit-measures",
+        type=int,
+        default=None,
+        help="Limit the number of discovered measures used with --all-measures",
     )
     parser.add_argument("--suite", choices=["2025", "2026"], default="2025")
     parser.add_argument("--limit-patients", type=int, default=1)
@@ -105,8 +117,16 @@ def main() -> int:
     _wait_for_hapi(args.base_url, args.timeout)
     _wait_for_postgres(args.connection, args.timeout)
 
-    measure_ids = _parse_measure_ids(args.measure)
-    measure_configs = _find_measures(measure_ids, args.suite)
+    if args.all_measures:
+        measure_configs = _discover_measures(suite=args.suite)
+        if args.limit_measures is not None:
+            if args.limit_measures <= 0:
+                raise RuntimeError("--limit-measures must be positive")
+            measure_configs = measure_configs[: args.limit_measures]
+        measure_ids = [config.id for config in measure_configs]
+    else:
+        measure_ids = _parse_measure_ids(args.measure)
+        measure_configs = _find_measures(measure_ids, args.suite)
     test_suites = {config.id: load_test_suite(config) for config in measure_configs}
     cases_by_measure = {
         config.id: test_suites[config.id].test_cases[: args.limit_patients]
@@ -146,7 +166,9 @@ def main() -> int:
     smoke_started = datetime.now(timezone.utc)
     smoke_stamp = str(time.time_ns())
     loaded_resources = 0
+    loaded_reference_stubs = 0
     seen_resources: dict[tuple[str, str], str] = {}
+    stubbed_resources: set[tuple[str, str]] = set()
     target_patients: set[str] = set()
     configured_measure_ids = [
         measure.measure_id for measure in materialization_config.measures
@@ -154,7 +176,16 @@ def main() -> int:
     for measure_id in configured_measure_ids:
         for case in cases_by_measure[measure_id]:
             target_patients.add(case.patient_id)
-            for resource in patient_first(case.resources):
+            case_keys = _resource_keys(case.resources)
+            for resource in dependency_ordered_resources(case.resources):
+                loaded_reference_stubs += _put_missing_reference_stubs(
+                    args.base_url,
+                    resource,
+                    local_keys=case_keys,
+                    seen_resources=seen_resources,
+                    stubbed_resources=stubbed_resources,
+                    stamp=smoke_stamp,
+                )
                 if _is_duplicate_resource(resource, seen_resources):
                     continue
                 put_resource(args.base_url, _stamp_resource(resource, smoke_stamp))
@@ -214,8 +245,16 @@ def main() -> int:
         missing_reports = [
             row
             for row in persisted
-            if row["status"] == "ok" and not row["has_measure_report"]
+            if row["status"] == "ok"
+            and (not row["has_measure_report"] or not row["has_measure_report_row"])
         ]
+        if args.publish_measure_report_to_hapi:
+            missing_reports.extend(
+                row
+                for row in persisted
+                if row["status"] == "ok"
+                and not row["measure_report_published_to_hapi"]
+            )
     if missing or errors or missing_reports:
         raise RuntimeError(
             "HAPI materialization smoke failed: "
@@ -239,6 +278,7 @@ def main() -> int:
                 },
                 "loaded_patients": len(target_patient_ids),
                 "loaded_resources": loaded_resources,
+                "loaded_reference_stubs": loaded_reference_stubs,
                 "loaded_artifacts": loaded_artifacts,
                 "artifact_source": args.artifact_source,
                 "target_patients": target_patient_ids,
@@ -316,13 +356,8 @@ def _hapi_artifacts_for_measure(measure_config: Any) -> list[dict[str, Any]]:
             raise RuntimeError(f"Library resource not found: {library_path}")
         resources.append(_read_resource(library_path))
 
-    valueset_bundle = _valueset_bundle_path(measure_config)
-    if valueset_bundle.exists():
-        bundle = _read_resource(valueset_bundle)
-        for entry in bundle.get("entry", []):
-            resource = entry.get("resource", {}) if isinstance(entry, dict) else {}
-            if resource.get("resourceType") == "ValueSet":
-                resources.append(resource)
+    for valueset in _valueset_resources_for_paths(measure_config.valueset_paths):
+        resources.append(valueset)
     return resources
 
 
@@ -330,6 +365,28 @@ def _read_resource(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise RuntimeError(f"FHIR artifact resource not found: {path}")
     return json.loads(path.read_text())
+
+
+def _valueset_resources_for_paths(paths: list[Path]) -> list[dict[str, Any]]:
+    valuesets: list[dict[str, Any]] = []
+    for path in _iter_json_files(paths):
+        data = _read_resource(path)
+        if data.get("resourceType") == "Bundle":
+            for entry in data.get("entry", []):
+                resource = entry.get("resource", {}) if isinstance(entry, dict) else {}
+                if resource.get("resourceType") == "ValueSet":
+                    valuesets.append(resource)
+        elif data.get("resourceType") == "ValueSet":
+            valuesets.append(data)
+    return valuesets
+
+
+def _iter_json_files(paths: list[Path]):
+    for path in paths:
+        if path.is_dir():
+            yield from sorted(path.rglob("*.json"))
+        elif path.is_file():
+            yield path
 
 
 def _cql_library_names(cql_path: Path) -> list[str]:
@@ -355,11 +412,158 @@ def _cql_library_names(cql_path: Path) -> list[str]:
     return names
 
 
-def patient_first(resources: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return sorted(
-        resources,
-        key=lambda resource: 0 if resource.get("resourceType") == "Patient" else 1,
-    )
+def dependency_ordered_resources(resources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Order same-case resources so local references are created first."""
+    keyed: list[tuple[tuple[str, str], dict[str, Any]]] = []
+    for resource in resources:
+        resource_type = resource.get("resourceType")
+        resource_id = resource.get("id")
+        if isinstance(resource_type, str) and isinstance(resource_id, str):
+            keyed.append(((resource_type, resource_id), resource))
+
+    keyed_by_id = dict(keyed)
+    local_keys = set(keyed_by_id)
+    dependencies: dict[tuple[str, str], set[tuple[str, str]]] = {}
+    for key, resource in keyed:
+        dependencies[key] = {
+            ref
+            for ref in _resource_references(resource)
+            if ref in local_keys and ref != key
+        }
+
+    ordered: list[dict[str, Any]] = []
+    emitted: set[tuple[str, str]] = set()
+    while len(emitted) < len(keyed):
+        ready = [
+            key
+            for key, _resource in keyed
+            if key not in emitted and dependencies[key].issubset(emitted)
+        ]
+        if not ready:
+            break
+        for key in ready:
+            emitted.add(key)
+            ordered.append(keyed_by_id[key])
+
+    if len(emitted) < len(keyed):
+        ordered.extend(
+            resource
+            for key, resource in keyed
+            if key not in emitted
+        )
+
+    unkeyed = [
+        resource
+        for resource in resources
+        if not (
+            isinstance(resource.get("resourceType"), str)
+            and isinstance(resource.get("id"), str)
+        )
+    ]
+    return [*ordered, *unkeyed]
+
+
+def _resource_references(value: Any) -> set[tuple[str, str]]:
+    refs: set[tuple[str, str]] = set()
+    if isinstance(value, dict):
+        reference = value.get("reference")
+        if isinstance(reference, str):
+            normalized = _normalize_local_reference(reference)
+            if normalized is not None:
+                refs.add(normalized)
+        for child in value.values():
+            refs.update(_resource_references(child))
+    elif isinstance(value, list):
+        for child in value:
+            refs.update(_resource_references(child))
+    return refs
+
+
+def _resource_keys(resources: list[dict[str, Any]]) -> set[tuple[str, str]]:
+    keys: set[tuple[str, str]] = set()
+    for resource in resources:
+        resource_type = resource.get("resourceType")
+        resource_id = resource.get("id")
+        if isinstance(resource_type, str) and isinstance(resource_id, str):
+            keys.add((resource_type, resource_id))
+    return keys
+
+
+def _put_missing_reference_stubs(
+    base_url: str,
+    resource: dict[str, Any],
+    *,
+    local_keys: set[tuple[str, str]],
+    seen_resources: dict[tuple[str, str], str],
+    stubbed_resources: set[tuple[str, str]],
+    stamp: str,
+) -> int:
+    count = 0
+    for ref in sorted(_resource_references(resource)):
+        if ref in local_keys or ref in seen_resources or ref in stubbed_resources:
+            continue
+        stub = _reference_stub(ref)
+        put_resource(base_url, _stamp_resource(stub, stamp))
+        stubbed_resources.add(ref)
+        count += 1
+    return count
+
+
+def _reference_stub(ref: tuple[str, str]) -> dict[str, Any]:
+    resource_type, resource_id = ref
+    stub: dict[str, Any] = {
+        "resourceType": resource_type,
+        "id": resource_id,
+    }
+    if resource_type == "Encounter":
+        stub.update(
+            {
+                "status": "unknown",
+                "class": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                    "code": "UNK",
+                },
+            }
+        )
+    elif resource_type == "Observation":
+        stub.update({"status": "unknown", "code": {"text": "Reference placeholder"}})
+    elif resource_type == "MedicationRequest":
+        stub.update({"status": "unknown", "intent": "order"})
+    elif resource_type == "Claim":
+        stub.update(
+            {
+                "status": "active",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/claim-type",
+                            "code": "professional",
+                        }
+                    ]
+                },
+                "use": "claim",
+            }
+        )
+    elif resource_type == "Location":
+        stub.update({"status": "active"})
+    return stub
+
+
+def _normalize_local_reference(reference: str) -> tuple[str, str] | None:
+    if reference.startswith("#"):
+        return None
+    if reference.startswith("http://") or reference.startswith("https://"):
+        path = urllib.parse.urlsplit(reference).path.strip("/")
+        parts = path.split("/")
+        if len(parts) >= 2:
+            return parts[-2], parts[-1]
+        return None
+    if "/" not in reference:
+        return None
+    resource_type, resource_id = reference.split("/", 1)
+    if not resource_type or not resource_id or "/" in resource_id:
+        return None
+    return resource_type, resource_id
 
 
 def _stamp_resource(resource: dict[str, Any], stamp: str) -> dict[str, Any]:
@@ -572,18 +776,24 @@ def _fetch_persisted_results(
         rows = conn.execute(
             """
             SELECT
-                measure_id,
-                patient_id,
-                status,
-                error,
-                measure_report_json IS NOT NULL AS has_measure_report,
-                measure_report_json->>'id' AS measure_report_id
-            FROM fhir4ds_measure_result
-            WHERE active = true
-              AND measure_id = ANY(%s::TEXT[])
-              AND patient_id = ANY(%s::TEXT[])
-              AND calculated_at >= %s
-            ORDER BY measure_id, patient_id
+                result.measure_id,
+                result.patient_id,
+                result.status,
+                result.error,
+                result.measure_report_json IS NOT NULL AS has_measure_report,
+                result.measure_report_json->>'id' AS measure_report_id,
+                report.resource_json IS NOT NULL AS has_measure_report_row,
+                report.measure_report_id AS measure_report_row_id,
+                COALESCE(report.published_to_hapi, false) AS measure_report_published_to_hapi
+            FROM fhir4ds_measure_result result
+            LEFT JOIN fhir4ds_measure_report report
+              ON report.result_id = result.result_id
+             AND report.active = true
+            WHERE result.active = true
+              AND result.measure_id = ANY(%s::TEXT[])
+              AND result.patient_id = ANY(%s::TEXT[])
+              AND result.calculated_at >= %s
+            ORDER BY result.measure_id, result.patient_id
             """,
             [measure_ids, patient_ids, calculated_after],
         ).fetchall()
@@ -595,6 +805,9 @@ def _fetch_persisted_results(
             "error": row[3],
             "has_measure_report": bool(row[4]),
             "measure_report_id": row[5],
+            "has_measure_report_row": bool(row[6]),
+            "measure_report_row_id": row[7],
+            "measure_report_published_to_hapi": bool(row[8]),
         }
         for row in rows
     ]

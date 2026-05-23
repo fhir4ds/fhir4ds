@@ -78,6 +78,8 @@ class HapiMaterializationConfig:
     postgres_connection_string: str
     hapi_connection_string: str | None = None
     hapi_base_url: str | None = None
+    hapi_headers: dict[str, str] = field(default_factory=dict)
+    hapi_timeout_seconds: float = 30.0
     measures: list[HapiMaterializedMeasure] = field(default_factory=list)
     parameters: dict[str, Any] = field(default_factory=dict)
     library_paths: list[Path] = field(default_factory=list)
@@ -281,6 +283,11 @@ def parse_materialization_config(
         if not isinstance(hapi_base_url, str) or not hapi_base_url.strip():
             raise DQMConfigError("'hapi.base_url' must be a non-empty string")
         hapi_base_url = hapi_base_url.strip()
+    hapi_headers = _parse_hapi_headers(hapi)
+    hapi_timeout_seconds = _parse_positive_float(
+        hapi.get("timeout_seconds", 30.0),
+        "hapi.timeout_seconds",
+    )
 
     worker = raw.get("worker") or {}
     if not isinstance(worker, dict):
@@ -338,6 +345,8 @@ def parse_materialization_config(
         postgres_connection_string=connection_string,
         hapi_connection_string=postgres.get("hapi_connection_string"),
         hapi_base_url=hapi_base_url,
+        hapi_headers=hapi_headers,
+        hapi_timeout_seconds=hapi_timeout_seconds,
         measures=measures,
         parameters=global_parameters,
         library_paths=global_libraries,
@@ -817,6 +826,7 @@ def persist_patient_measure_result(
     input_watermark: datetime | None,
     config_hash: str,
     measure_report_json: dict[str, Any] | None = None,
+    measure_report_published_to_hapi: bool = False,
     error: str | None = None,
     audit_json: dict[str, Any] | None = None,
 ) -> int:
@@ -824,6 +834,16 @@ def persist_patient_measure_result(
     conn.execute(
         """
         UPDATE fhir4ds_measure_result
+        SET active = false
+        WHERE patient_id = %s
+          AND measure_id = %s
+          AND active = true
+        """,
+        [patient_id, measure.measure_id],
+    )
+    conn.execute(
+        """
+        UPDATE fhir4ds_measure_report
         SET active = false
         WHERE patient_id = %s
           AND measure_id = %s
@@ -872,6 +892,40 @@ def persist_patient_measure_result(
         ],
     ).fetchone()
     result_id = int(row[0])
+    if measure_report_json is not None:
+        measure_report_id = measure_report_json.get("id")
+        if not isinstance(measure_report_id, str) or not measure_report_id:
+            raise DQMConfigError("Persisted MeasureReport JSON is missing a FHIR id")
+        conn.execute(
+            """
+            INSERT INTO fhir4ds_measure_report (
+                result_id,
+                run_id,
+                patient_id,
+                measure_id,
+                measure_version,
+                measure_report_id,
+                active,
+                resource_json,
+                published_to_hapi,
+                config_hash
+            )
+            VALUES (
+                %s, %s, %s, %s, %s, %s, true, %s::jsonb, %s, %s
+            )
+            """,
+            [
+                result_id,
+                run_id,
+                patient_id,
+                measure.measure_id,
+                measure.measure_version,
+                measure_report_id,
+                json.dumps(measure_report_json, default=str),
+                measure_report_published_to_hapi,
+                config_hash,
+            ],
+        )
     if audit_json is not None:
         audit_text = json.dumps(audit_json, default=str)
         conn.execute(
@@ -960,6 +1014,9 @@ def materialized_measure_hash(measure: HapiMaterializedMeasure) -> str:
         "parameters": measure.parameters,
         "audit_mode": measure.audit_mode.value,
         "persist_measure_report": measure.persist_measure_report,
+        "publish_measure_report_to_hapi": measure.publish_measure_report_to_hapi,
+        "generate_narratives": measure.generate_narratives,
+        "include_supporting_evidence": measure.include_supporting_evidence,
         "filter_to_ip": measure.filter_to_ip,
     }
     text = json.dumps(payload, sort_keys=True, default=str)
@@ -1057,7 +1114,11 @@ def _evaluate_materialized_measure(
             raise DQMConfigError(
                 "'hapi.base_url' is required when resolving artifacts from HAPI"
             )
-        resolver = HapiArtifactResolver(config.hapi_base_url)
+        resolver = HapiArtifactResolver(
+            config.hapi_base_url,
+            headers=config.hapi_headers,
+            timeout_seconds=config.hapi_timeout_seconds,
+        )
         measure_ref = measure.artifact_ref or measure.measure_id
         measure_artifact = resolver.resolve_measure(measure_ref)
         library_artifact = resolver.resolve_library(measure=measure_artifact.resource)
@@ -1155,6 +1216,9 @@ def _persist_successful_measure(
             )
         if measure.publish_measure_report_to_hapi and measure_report_json is not None:
             _publish_measure_report_to_hapi(config, measure_report_json)
+            measure_report_published_to_hapi = True
+        else:
+            measure_report_published_to_hapi = False
         persist_patient_measure_result(
             pg_conn,
             run_id=run_id,
@@ -1164,6 +1228,7 @@ def _persist_successful_measure(
             result_json=result_json,
             summary_json=summary,
             measure_report_json=measure_report_json,
+            measure_report_published_to_hapi=measure_report_published_to_hapi,
             input_watermark=watermark_by_patient.get(patient.patient_id),
             config_hash=config_hash,
             audit_json=audit_json if measure.persist_audit else None,
@@ -1243,10 +1308,11 @@ def _publish_measure_report_to_hapi(
         headers={
             "Accept": "application/fhir+json",
             "Content-Type": "application/fhir+json",
+            **config.hapi_headers,
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=config.hapi_timeout_seconds) as response:
             response.read()
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
@@ -1431,6 +1497,27 @@ def _parse_hapi_schema(raw: Any) -> HapiPostgresSchema:
     return HapiPostgresSchema(**values)
 
 
+def _parse_hapi_headers(raw_hapi: dict[str, Any]) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    raw_headers = raw_hapi.get("headers") or {}
+    if raw_headers:
+        if not isinstance(raw_headers, dict):
+            raise DQMConfigError("'hapi.headers' must be an object")
+        for key, value in raw_headers.items():
+            if not isinstance(key, str) or not key.strip():
+                raise DQMConfigError("'hapi.headers' names must be non-empty strings")
+            if not isinstance(value, str):
+                raise DQMConfigError(f"'hapi.headers.{key}' must be a string")
+            headers[key.strip()] = value
+
+    bearer_token = raw_hapi.get("bearer_token")
+    if bearer_token is not None:
+        if not isinstance(bearer_token, str) or not bearer_token:
+            raise DQMConfigError("'hapi.bearer_token' must be a non-empty string")
+        headers.setdefault("Authorization", f"Bearer {bearer_token}")
+    return headers
+
+
 def _parse_retention_policy(raw: dict[str, Any]) -> HapiRetentionPolicy:
     return HapiRetentionPolicy(
         inactive_result_days=_optional_positive_int(
@@ -1451,6 +1538,16 @@ def _optional_positive_int(value: Any, field_name: str) -> int | None:
         raise DQMConfigError(f"'{field_name}' must be a positive integer") from exc
     if parsed <= 0:
         raise DQMConfigError(f"'{field_name}' must be a positive integer")
+    return parsed
+
+
+def _parse_positive_float(value: Any, field_name: str) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise DQMConfigError(f"'{field_name}' must be a positive number") from exc
+    if parsed <= 0:
+        raise DQMConfigError(f"'{field_name}' must be a positive number")
     return parsed
 
 

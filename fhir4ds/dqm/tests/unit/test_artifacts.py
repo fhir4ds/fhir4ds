@@ -179,6 +179,103 @@ valueset "Helper": 'http://example.com/ValueSet/helper'
     ]
 
 
+def test_hapi_artifact_resolver_respects_include_and_valueset_versions(monkeypatch):
+    cql = """library Primary
+include HelperLibrary version '1.0.0' called Helper
+valueset "Primary": 'http://example.com/ValueSet/primary' version '2025'
+"""
+    helper_cql = """library HelperLibrary version '1.0.0'
+valueset "Helper": 'http://example.com/ValueSet/helper' version '2024'
+"""
+    helper_resource = {
+        "resourceType": "Library",
+        "id": "HelperLibrary",
+        "name": "HelperLibrary",
+        "version": "1.0.0",
+        "content": [
+            {
+                "contentType": "text/cql",
+                "data": base64.b64encode(helper_cql.encode()).decode(),
+            }
+        ],
+    }
+    resolver = HapiArtifactResolver("http://hapi.test/fhir")
+    requested: list[str] = []
+
+    def fake_read_json(url: str) -> dict[str, Any]:
+        requested.append(url)
+        if "/Library?" in url:
+            assert "name=HelperLibrary" in url
+            assert "version=1.0.0" in url
+            return {"resourceType": "Bundle", "entry": [{"resource": helper_resource}]}
+        if "/ValueSet?" in url:
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+            valueset_url = query["url"][0]
+            version = query["version"][0]
+            return {
+                "resourceType": "Bundle",
+                "entry": [
+                    {
+                        "resource": {
+                            "resourceType": "ValueSet",
+                            "id": valueset_url.rsplit("/", 1)[-1],
+                            "url": valueset_url,
+                            "version": version,
+                            "expansion": {"contains": [{"system": "x", "code": version}]},
+                        }
+                    }
+                ],
+            }
+        raise AssertionError(f"unexpected URL: {url}")
+
+    monkeypatch.setattr(resolver, "_read_json", fake_read_json)
+
+    valuesets = resolver.resolve_valuesets_for_cql(cql)
+    resolver.resolve_valuesets_for_cql(cql)
+
+    assert [(valueset["url"], valueset["version"]) for valueset in valuesets] == [
+        ("http://example.com/ValueSet/helper", "2024"),
+        ("http://example.com/ValueSet/primary", "2025"),
+    ]
+    assert sum(1 for url in requested if "/ValueSet?" in url) == 2
+
+
+def test_hapi_artifact_resolver_sends_headers_and_timeout(monkeypatch):
+    import fhir4ds.dqm.artifacts as artifacts
+
+    requests = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def read(self):
+            return b'{"resourceType":"Bundle","entry":[]}'
+
+    def fake_urlopen(request, timeout):
+        requests.append((request, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr(artifacts.urllib.request, "urlopen", fake_urlopen)
+
+    resolver = HapiArtifactResolver(
+        "http://hapi.test/fhir",
+        headers={"Authorization": "Bearer token", "X-Test": "yes"},
+        timeout_seconds=12.5,
+    )
+    with pytest.raises(FileNotFoundError):
+        resolver._search_one("ValueSet", {"url": "http://example.com/vs"})
+
+    request, timeout = requests[0]
+    assert timeout == 12.5
+    assert request.headers["Authorization"] == "Bearer token"
+    assert request.headers["X-test"] == "yes"
+    assert request.headers["Accept"] == "application/fhir+json"
+
+
 def test_hapi_artifact_resolver_requires_expanded_valueset(monkeypatch):
     cql = "valueset \"Diabetes\": 'http://example.com/ValueSet/diabetes'"
     resolver = HapiArtifactResolver("http://hapi.test/fhir")
