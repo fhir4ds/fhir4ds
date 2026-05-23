@@ -11,9 +11,11 @@ from pathlib import Path
 from typing import Any
 
 if __package__ in {None, ""}:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from dqm_perf_report import compare_reports, markdown_report, summarize_suite
+else:
+    from .dqm_perf_report import compare_reports, markdown_report, summarize_suite
 
-from benchmarks.runner.dqm_perf_report import markdown_report, summarize_suite
 
 DEFAULT_REPORT = Path("conformance/reports/dqm_report.json")
 DEFAULT_BASELINE = Path("benchmarks/baselines/dqm_2025.json")
@@ -66,12 +68,15 @@ def run_dqm_conformance() -> None:
     )
 
 
-def write_comparison(report: dict[str, Any], output_json: Path, output_md: Path) -> None:
-    from benchmarks.runner.dqm_perf_report import compare_reports
-
+def write_comparison(
+    report: dict[str, Any],
+    baseline: dict[str, Any] | None,
+    output_json: Path,
+    output_md: Path,
+) -> None:
     comparison = compare_reports(
         report,
-        report,
+        baseline,
         ratio_threshold=2.0,
         absolute_threshold_ms=500.0,
     )
@@ -102,6 +107,7 @@ def main() -> int:
     report = load_report(args.report)
     validate_report(report, expected_measures=args.expected_measures)
     suite = summarize_suite(report)
+    old_baseline = load_report(args.baseline) if args.baseline.exists() else None
 
     print(
         "DQM report validated: "
@@ -117,7 +123,7 @@ def main() -> int:
     shutil.copyfile(args.report, args.baseline)
     print(f"Updated baseline: {args.baseline}")
 
-    write_comparison(report, args.output_json, args.output_md)
+    write_comparison(report, old_baseline, args.output_json, args.output_md)
     print(f"Wrote comparison JSON: {args.output_json}")
     print(f"Wrote comparison Markdown: {args.output_md}")
     return 0

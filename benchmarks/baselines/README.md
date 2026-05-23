@@ -47,7 +47,8 @@ python3 benchmarks/runner/update_dqm_baseline.py --run
 ```
 
 This runs DQM conformance, verifies that all expected measures passed, updates
-`benchmarks/baselines/dqm_2025.json`, and regenerates the comparison report.
+`benchmarks/baselines/dqm_2025.json`, and regenerates the comparison report
+against the previous checked-in baseline.
 
 To validate an existing report without writing the baseline:
 
@@ -71,13 +72,7 @@ python3 benchmarks/runner/update_dqm_baseline.py --dry-run
 
 3. Review the generated timings in `conformance/reports/dqm_report.json`.
 
-4. Copy the report into the baseline, or run the helper without `--dry-run`:
-
-   ```bash
-   cp conformance/reports/dqm_report.json benchmarks/baselines/dqm_2025.json
-   ```
-
-5. Generate and review the comparison report:
+4. Generate and review the comparison report before replacing the baseline:
 
    ```bash
    python3 benchmarks/runner/dqm_perf_report.py \
@@ -85,6 +80,13 @@ python3 benchmarks/runner/update_dqm_baseline.py --dry-run
      --baseline benchmarks/baselines/dqm_2025.json \
      --output-json benchmarks/output/dqm-performance-report.json \
      --output-md benchmarks/output/dqm-performance-report.md
+   ```
+
+5. Copy the reviewed report into the baseline, or run the helper without
+   `--dry-run`:
+
+   ```bash
+   cp conformance/reports/dqm_report.json benchmarks/baselines/dqm_2025.json
    ```
 
 6. Commit the baseline with a message that explains why the performance

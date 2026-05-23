@@ -103,8 +103,10 @@ python3 benchmarks/runner/update_dqm_baseline.py --dry-run
 ```
 
 The helper refuses to update the baseline unless the expected 47 measure records
-are present and all passed. Before committing a new baseline, document why the
-performance expectation changed in the commit message.
+are present and all passed. When it writes the refreshed baseline, the generated
+comparison report is still calculated against the previous checked-in baseline.
+Before committing a new baseline, document why the performance expectation
+changed in the commit message.
 
 ## Submodules
 
