@@ -52,6 +52,8 @@ class HapiPostgresSchema:
     deleted_at_column: str = "res_deleted_at"
     encoding_column: str = "res_encoding"
     text_vc_column: str = "res_text_vc"
+    text_lob_column: str = "res_text"
+    decoded_view: str | None = None
 
 
 class HapiPostgresSource:
@@ -61,8 +63,11 @@ class HapiPostgresSource:
     The adapter creates the standard FHIR4DS ``resources`` view from HAPI's
     current-resource metadata and version-content tables. V1 supports current,
     non-deleted resources stored inline as JSON in ``res_text_vc`` with
-    ``res_encoding = 'JSON'``. Compressed ``JSONC``/LOB rows are detected and
-    rejected by default so analysis does not silently omit resources.
+    ``res_encoding = 'JSON'``. If ``HapiPostgresSchema.decoded_view`` is set,
+    the adapter reads a PostgreSQL-side decoded view that may also expose JSON
+    stored in HAPI's ``res_text`` large-object column. Compressed ``JSONC`` rows
+    are detected and rejected by default so analysis does not silently omit
+    resources.
     """
 
     def __init__(
@@ -99,11 +104,19 @@ class HapiPostgresSource:
         if self._fail_on_unsupported_storage:
             unsupported = self._unsupported_storage_count(con)
             if unsupported:
+                supported_storage = (
+                    f"inline JSON in {self._schema.version_table}."
+                    f"{self._schema.text_vc_column}"
+                )
+                if self._schema.decoded_view:
+                    supported_storage += (
+                        " or JSON decoded by "
+                        f"{self._schema.schema}.{self._schema.decoded_view}"
+                    )
                 raise NotImplementedError(
-                    "HapiPostgresSource v1 supports only current resources stored "
-                    f"inline as JSON in {self._schema.version_table}."
-                    f"{self._schema.text_vc_column}; found {unsupported} current "
-                    "resource version(s) using compressed/LOB or non-JSON storage. "
+                    "HapiPostgresSource v1 supports only current resources stored as "
+                    f"{supported_storage}; found {unsupported} current resource "
+                    "version(s) using compressed JSONC or non-JSON storage. "
                     "Set fail_on_unsupported_storage=False to skip them explicitly."
                 )
 
@@ -155,6 +168,16 @@ class HapiPostgresSource:
         return sorted({row[0] for row in rows if row[0] is not None})
 
     def _unsupported_storage_count(self, con: Any) -> int:
+        if self._schema.decoded_view:
+            storage_predicate = (
+                f"v.{self._encoding()} <> 'JSON'"
+                f" OR (v.{self._text_vc()} IS NULL AND v.{self._text_lob()} IS NULL)"
+            )
+        else:
+            storage_predicate = (
+                f"v.{self._encoding()} <> 'JSON'"
+                f" OR v.{self._text_vc()} IS NULL"
+            )
         row = con.execute(f"""
             SELECT count(*)::BIGINT
             FROM {self._resource_relation()} r
@@ -162,14 +185,22 @@ class HapiPostgresSource:
               ON v.{self._version_resource_fk()} = r.{self._resource_pk()}
              AND v.{self._version_number()} = r.{self._current_version()}
             WHERE r.{self._deleted_at()} IS NULL
-              AND (
-                v.{self._encoding()} <> 'JSON'
-                OR v.{self._text_vc()} IS NULL
-              )
+              AND ({storage_predicate})
         """).fetchone()
         return int(row[0] or 0)
 
     def _current_resources_select(self, *, include_updated_at: bool = False) -> str:
+        if self._schema.decoded_view:
+            updated_at_projection = ", updated_at" if include_updated_at else ""
+            return f"""
+                SELECT
+                    id::VARCHAR AS id,
+                    "resourceType"::VARCHAR AS resourceType,
+                    resource::JSON AS resource,
+                    patient_ref::VARCHAR AS patient_ref
+                    {updated_at_projection}
+                FROM {self._decoded_view_relation()}
+            """
         updated_at_projection = (
             f",\n                r.{self._updated_at()} AS updated_at"
             if include_updated_at
@@ -221,6 +252,15 @@ class HapiPostgresSource:
             f"{quote_identifier(self._schema.version_table)}"
         )
 
+    def _decoded_view_relation(self) -> str:
+        if not self._schema.decoded_view:
+            raise RuntimeError("decoded_view is not configured")
+        return (
+            f"{quote_identifier(self._attachment_name)}."
+            f"{quote_identifier(self._schema.schema)}."
+            f"{quote_identifier(self._schema.decoded_view)}"
+        )
+
     def _resource_pk(self) -> str:
         return quote_identifier(self._schema.resource_pk_column)
 
@@ -250,3 +290,6 @@ class HapiPostgresSource:
 
     def _text_vc(self) -> str:
         return quote_identifier(self._schema.text_vc_column)
+
+    def _text_lob(self) -> str:
+        return quote_identifier(self._schema.text_lob_column)

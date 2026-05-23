@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
+import signal
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from importlib import resources
@@ -18,9 +21,12 @@ from fhir4ds.dqm.evaluator import MeasureEvaluator
 from fhir4ds.dqm.models import MeasureResult
 from fhir4ds.dqm.types import AuditMode
 from fhir4ds.sources import HapiPostgresSchema, HapiPostgresSource
+from fhir4ds.sources.base import quote_identifier, quote_sql_literal
 
 NOTIFICATION_CHANNEL = "fhir4ds_patient_changed"
+DEFAULT_DECODED_VIEW = "fhir4ds_hapi_current_resources"
 _PG_CHANNEL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -44,6 +50,15 @@ class HapiMaterializedMeasure:
 
 
 @dataclass
+class HapiRetentionPolicy:
+    """Retention windows for materialized HAPI measure history."""
+
+    inactive_result_days: int | None = None
+    audit_days: int | None = None
+    run_days: int | None = None
+
+
+@dataclass
 class HapiMaterializationConfig:
     """Configuration for the HAPI materialization worker."""
 
@@ -55,9 +70,13 @@ class HapiMaterializationConfig:
     valueset_paths: list[Path] = field(default_factory=list)
     batch_size: int = 100
     poll_interval_seconds: float = 30.0
+    max_attempts: int = 3
+    retry_backoff_seconds: float = 60.0
+    processing_timeout_seconds: float = 900.0
     notification_channel: str = NOTIFICATION_CHANNEL
     fail_on_unsupported_storage: bool = True
     hapi_schema: HapiPostgresSchema = field(default_factory=HapiPostgresSchema)
+    retention: HapiRetentionPolicy = field(default_factory=HapiRetentionPolicy)
 
     @property
     def hapi_source_connection_string(self) -> str:
@@ -79,6 +98,7 @@ class QueueProcessResult:
     run_id: int | None
     claimed: list[str]
     measures: int
+    stale_reset: int = 0
     errors: dict[str, str] = field(default_factory=dict)
     metrics: dict[str, Any] = field(default_factory=dict)
 
@@ -144,20 +164,51 @@ def require_psycopg() -> Any:
     return psycopg
 
 
-def materialization_sql() -> str:
-    """Return the PostgreSQL schema/trigger SQL for HAPI materialization."""
-    return (
+def materialization_sql(
+    schema: HapiPostgresSchema | None = None,
+    *,
+    notification_channel: str = NOTIFICATION_CHANNEL,
+    decoded_view: str | None = None,
+) -> str:
+    """Return rendered PostgreSQL schema/trigger SQL for HAPI materialization."""
+    hapi_schema = schema or HapiPostgresSchema()
+    view_name = decoded_view or hapi_schema.decoded_view or DEFAULT_DECODED_VIEW
+    channel = _validate_notification_channel(notification_channel)
+    template = (
         resources.files("fhir4ds.dqm.sql")
         .joinpath("hapi_postgres_materialization.sql")
         .read_text()
     )
+    rendered = _render_materialization_sql(
+        template,
+        schema=hapi_schema,
+        notification_channel=channel,
+        decoded_view=view_name,
+    )
+    leftovers = sorted(set(re.findall(r"\{\{[A-Z0-9_]+\}\}", rendered)))
+    if leftovers:
+        raise RuntimeError(
+            "Unrendered HAPI materialization SQL placeholder(s): "
+            + ", ".join(leftovers)
+        )
+    return rendered
 
 
-def install_materialization_schema(connection_string: str) -> None:
+def install_materialization_schema(
+    connection_string: str,
+    *,
+    schema: HapiPostgresSchema | None = None,
+    notification_channel: str = NOTIFICATION_CHANNEL,
+) -> None:
     """Install FHIR4DS queue/result tables and HAPI change triggers."""
     psycopg = require_psycopg()
     with psycopg.connect(connection_string, autocommit=True) as conn:
-        conn.execute(materialization_sql())
+        conn.execute(
+            materialization_sql(
+                schema=schema,
+                notification_channel=notification_channel,
+            )
+        )
 
 
 def load_materialization_config(path: str | Path) -> HapiMaterializationConfig:
@@ -201,6 +252,9 @@ def parse_materialization_config(
     worker = raw.get("worker") or {}
     if not isinstance(worker, dict):
         raise DQMConfigError("'worker' must be an object")
+    retention = raw.get("retention") or {}
+    if not isinstance(retention, dict):
+        raise DQMConfigError("'retention' must be an object")
 
     defaults = raw.get("defaults") or {}
     if not isinstance(defaults, dict):
@@ -242,6 +296,11 @@ def parse_materialization_config(
         valueset_paths=global_valuesets,
         batch_size=int(worker.get("batch_size", 100)),
         poll_interval_seconds=float(worker.get("poll_interval_seconds", 30.0)),
+        max_attempts=int(worker.get("max_attempts", 3)),
+        retry_backoff_seconds=float(worker.get("retry_backoff_seconds", 60.0)),
+        processing_timeout_seconds=float(
+            worker.get("processing_timeout_seconds", 900.0)
+        ),
         notification_channel=_validate_notification_channel(
             str(worker.get("notification_channel", NOTIFICATION_CHANNEL))
         ),
@@ -251,6 +310,7 @@ def parse_materialization_config(
         hapi_schema=_parse_hapi_schema(
             postgres.get("hapi_schema", raw.get("hapi_schema"))
         ),
+        retention=_parse_retention_policy(retention),
     )
 
 
@@ -339,9 +399,30 @@ def process_queue_once(
     psycopg = require_psycopg()
     batch_limit = limit or config.batch_size
     with psycopg.connect(config.postgres_connection_string) as pg_conn:
-        patients = claim_pending_patients(pg_conn, batch_limit)
+        stale_reset = reset_stale_processing(
+            pg_conn,
+            processing_timeout_seconds=config.processing_timeout_seconds,
+            max_attempts=config.max_attempts,
+        )
+        patients = claim_pending_patients(
+            pg_conn,
+            batch_limit,
+            max_attempts=config.max_attempts,
+            retry_backoff_seconds=config.retry_backoff_seconds,
+        )
+        _log_worker_event(
+            "queue_claimed",
+            claimed=len(patients),
+            stale_reset=stale_reset,
+            limit=batch_limit,
+        )
         if not patients:
-            return QueueProcessResult(run_id=None, claimed=[], measures=0)
+            return QueueProcessResult(
+                run_id=None,
+                claimed=[],
+                measures=0,
+                stale_reset=stale_reset,
+            )
 
         measures = config.measures or load_enabled_measure_config(pg_conn)
         measures = [measure for measure in measures if measure.enabled]
@@ -373,11 +454,26 @@ def process_queue_once(
             complete_measure_run(pg_conn, run_id, status="error", error=str(exc))
             for patient in patients:
                 mark_patient_failed(pg_conn, patient.patient_id, str(exc))
+            _log_worker_event(
+                "queue_batch_error",
+                run_id=run_id,
+                patients=len(patients),
+                error=str(exc),
+            )
             raise
+        _log_worker_event(
+            "queue_batch_complete",
+            run_id=run_id,
+            patients=len(patients),
+            measures=len(measures),
+            errors=len(errors),
+            metrics=metrics,
+        )
         return QueueProcessResult(
             run_id=run_id,
             claimed=[patient.patient_id for patient in patients],
             measures=len(measures),
+            stale_reset=stale_reset,
             errors=errors,
             metrics=metrics,
         )
@@ -391,33 +487,63 @@ def listen_and_process(
     """Run the event-driven worker loop with polling fallback."""
     psycopg = require_psycopg()
     loops = 0
-    with HapiMaterializationRuntime.open(config) as runtime:
-        while True:
-            process_queue_once(config, runtime=runtime)
-            loops += 1
-            if stop_after is not None and loops >= stop_after:
-                return
+    shutdown, old_handlers = _install_shutdown_handlers()
+    _log_worker_event(
+        "listener_start",
+        notification_channel=config.notification_channel,
+        poll_interval_seconds=config.poll_interval_seconds,
+    )
+    try:
+        with HapiMaterializationRuntime.open(config) as runtime:
+            while not shutdown["requested"]:
+                process_queue_once(config, runtime=runtime)
+                loops += 1
+                if stop_after is not None and loops >= stop_after:
+                    return
 
-            with psycopg.connect(
-                config.postgres_connection_string,
-                autocommit=True,
-            ) as conn:
-                conn.execute(f"LISTEN {config.notification_channel}")
-                for _notify in conn.notifies(
-                    timeout=config.poll_interval_seconds,
-                    stop_after=1,
-                ):
-                    pass
+                with psycopg.connect(
+                    config.postgres_connection_string,
+                    autocommit=True,
+                ) as conn:
+                    conn.execute(f"LISTEN {config.notification_channel}")
+                    deadline = time.monotonic() + config.poll_interval_seconds
+                    while not shutdown["requested"]:
+                        timeout = max(0.0, min(1.0, deadline - time.monotonic()))
+                        notified = False
+                        for _notify in conn.notifies(timeout=timeout, stop_after=1):
+                            notified = True
+                            break
+                        if notified:
+                            break
+                        if time.monotonic() >= deadline:
+                            break
+    finally:
+        _restore_shutdown_handlers(old_handlers)
+        _log_worker_event("listener_stop", loops=loops)
 
 
-def claim_pending_patients(conn: Any, limit: int) -> list[ClaimedPatient]:
-    """Claim pending queue rows with ``FOR UPDATE SKIP LOCKED``."""
+def claim_pending_patients(
+    conn: Any,
+    limit: int,
+    *,
+    max_attempts: int = 3,
+    retry_backoff_seconds: float = 60.0,
+) -> list[ClaimedPatient]:
+    """Claim eligible queue rows with ``FOR UPDATE SKIP LOCKED``."""
     rows = conn.execute(
         """
         WITH claimed AS (
             SELECT patient_id, last_seen_at
             FROM fhir4ds_patient_change_queue
-            WHERE status = 'pending'
+            WHERE (
+                status = 'pending'
+                OR (
+                    status = 'failed'
+                    AND attempts < %s
+                    AND COALESCE(processed_at, last_seen_at)
+                        <= now() - ((%s * GREATEST(attempts, 1)) * INTERVAL '1 second')
+                )
+            )
             ORDER BY last_seen_at, patient_id
             LIMIT %s
             FOR UPDATE SKIP LOCKED
@@ -430,10 +556,45 @@ def claim_pending_patients(conn: Any, limit: int) -> list[ClaimedPatient]:
         WHERE q.patient_id = claimed.patient_id
         RETURNING q.patient_id, claimed.last_seen_at
         """,
-        [limit],
+        [max_attempts, retry_backoff_seconds, limit],
     ).fetchall()
     conn.commit()
     return [ClaimedPatient(patient_id=row[0], input_watermark=row[1]) for row in rows]
+
+
+def reset_stale_processing(
+    conn: Any,
+    *,
+    processing_timeout_seconds: float = 900.0,
+    max_attempts: int = 3,
+) -> int:
+    """Return timed-out ``processing`` queue rows to ``pending`` for retry."""
+    row = conn.execute(
+        """
+        UPDATE fhir4ds_patient_change_queue
+        SET status = CASE
+                WHEN attempts >= %s THEN 'failed'
+                ELSE 'pending'
+            END,
+            last_error = CASE
+                WHEN attempts >= %s
+                    THEN 'Processing timeout; max attempts reached'
+                ELSE 'Processing timeout; reset for retry'
+            END,
+            processed_at = CASE
+                WHEN attempts >= %s THEN now()
+                ELSE processed_at
+            END,
+            processing_started_at = NULL
+        WHERE status = 'processing'
+          AND processing_started_at
+              < now() - (%s * INTERVAL '1 second')
+        RETURNING patient_id
+        """,
+        [max_attempts, max_attempts, max_attempts, processing_timeout_seconds],
+    ).fetchall()
+    conn.commit()
+    return len(row)
 
 
 def load_enabled_measure_config(conn: Any) -> list[HapiMaterializedMeasure]:
@@ -651,6 +812,56 @@ def persist_patient_measure_result(
         )
     conn.commit()
     return result_id
+
+
+def prune_materialization_history(
+    connection_string: str,
+    retention: HapiRetentionPolicy,
+) -> dict[str, int]:
+    """Prune old inactive results, audit rows, and unreferenced run rows."""
+    psycopg = require_psycopg()
+    deleted = {"audits": 0, "inactive_results": 0, "runs": 0}
+    with psycopg.connect(connection_string) as conn:
+        if retention.audit_days is not None:
+            rows = conn.execute(
+                """
+                DELETE FROM fhir4ds_measure_audit
+                WHERE created_at < now() - (%s * INTERVAL '1 day')
+                RETURNING audit_id
+                """,
+                [retention.audit_days],
+            ).fetchall()
+            deleted["audits"] = len(rows)
+        if retention.inactive_result_days is not None:
+            rows = conn.execute(
+                """
+                DELETE FROM fhir4ds_measure_result
+                WHERE active = false
+                  AND calculated_at < now() - (%s * INTERVAL '1 day')
+                RETURNING result_id
+                """,
+                [retention.inactive_result_days],
+            ).fetchall()
+            deleted["inactive_results"] = len(rows)
+        if retention.run_days is not None:
+            rows = conn.execute(
+                """
+                DELETE FROM fhir4ds_measure_run r
+                WHERE COALESCE(r.completed_at, r.started_at)
+                    < now() - (%s * INTERVAL '1 day')
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM fhir4ds_measure_result mr
+                      WHERE mr.run_id = r.run_id
+                  )
+                RETURNING r.run_id
+                """,
+                [retention.run_days],
+            ).fetchall()
+            deleted["runs"] = len(rows)
+        conn.commit()
+    _log_worker_event("history_pruned", **deleted)
+    return deleted
 
 
 def split_patient_result_rows(rows: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -887,6 +1098,54 @@ def _parse_materialized_measures(
     return measures
 
 
+def _render_materialization_sql(
+    template: str,
+    *,
+    schema: HapiPostgresSchema,
+    notification_channel: str,
+    decoded_view: str,
+) -> str:
+    tokens = {
+        "NOTIFICATION_CHANNEL_LITERAL": quote_sql_literal(notification_channel),
+        "DECODED_VIEW_RELATION": _pg_relation(schema.schema, decoded_view),
+        "RESOURCE_RELATION": _pg_relation(schema.schema, schema.resource_table),
+        "VERSION_RELATION": _pg_relation(schema.schema, schema.version_table),
+        "RESOURCE_TABLE_NAME_LITERAL": quote_sql_literal(schema.resource_table),
+        "RESOURCE_PK_COLUMN": quote_identifier(schema.resource_pk_column),
+        "VERSION_FK_COLUMN": quote_identifier(schema.version_resource_fk_column),
+        "RESOURCE_TYPE_COLUMN": quote_identifier(schema.resource_type_column),
+        "FHIR_ID_COLUMN": quote_identifier(schema.fhir_id_column),
+        "CURRENT_VERSION_COLUMN": quote_identifier(schema.current_version_column),
+        "VERSION_NUMBER_COLUMN": quote_identifier(schema.version_number_column),
+        "ENCODING_COLUMN": quote_identifier(schema.encoding_column),
+        "TEXT_VC_COLUMN": quote_identifier(schema.text_vc_column),
+        "TEXT_LOB_COLUMN": quote_identifier(schema.text_lob_column),
+        "RESOURCE_PK_SELECT": _pg_col("r", schema.resource_pk_column),
+        "VERSION_FK_SELECT": _pg_col("v", schema.version_resource_fk_column),
+        "RESOURCE_TYPE_SELECT": _pg_col("r", schema.resource_type_column),
+        "FHIR_ID_SELECT": _pg_col("r", schema.fhir_id_column),
+        "CURRENT_VERSION_SELECT": _pg_col("r", schema.current_version_column),
+        "VERSION_NUMBER_SELECT": _pg_col("v", schema.version_number_column),
+        "UPDATED_AT_SELECT": _pg_col("r", schema.updated_at_column),
+        "DELETED_AT_SELECT": _pg_col("r", schema.deleted_at_column),
+        "ENCODING_SELECT": _pg_col("v", schema.encoding_column),
+        "TEXT_VC_SELECT": _pg_col("v", schema.text_vc_column),
+        "TEXT_LOB_SELECT": _pg_col("v", schema.text_lob_column),
+    }
+    rendered = template
+    for key, value in tokens.items():
+        rendered = rendered.replace(f"{{{{{key}}}}}", value)
+    return rendered
+
+
+def _pg_relation(schema_name: str, table_name: str) -> str:
+    return f"{quote_identifier(schema_name)}.{quote_identifier(table_name)}"
+
+
+def _pg_col(alias: str, column_name: str) -> str:
+    return f"{alias}.{quote_identifier(column_name)}"
+
+
 def _validate_notification_channel(channel: str) -> str:
     if not _PG_CHANNEL_RE.match(channel):
         raise DQMConfigError(
@@ -921,6 +1180,29 @@ def _parse_hapi_schema(raw: Any) -> HapiPostgresSchema:
     return HapiPostgresSchema(**values)
 
 
+def _parse_retention_policy(raw: dict[str, Any]) -> HapiRetentionPolicy:
+    return HapiRetentionPolicy(
+        inactive_result_days=_optional_positive_int(
+            raw.get("inactive_result_days"),
+            "retention.inactive_result_days",
+        ),
+        audit_days=_optional_positive_int(raw.get("audit_days"), "retention.audit_days"),
+        run_days=_optional_positive_int(raw.get("run_days"), "retention.run_days"),
+    )
+
+
+def _optional_positive_int(value: Any, field_name: str) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise DQMConfigError(f"'{field_name}' must be a positive integer") from exc
+    if parsed <= 0:
+        raise DQMConfigError(f"'{field_name}' must be a positive integer")
+    return parsed
+
+
 def _compiled_metrics_delta(
     before: dict[str, Any] | None,
     after: dict[str, Any],
@@ -948,6 +1230,30 @@ def _compiled_metrics_delta(
         )
     metrics["cumulative"] = dict(after)
     return metrics
+
+
+def _log_worker_event(event: str, **fields: Any) -> None:
+    payload = {"event": event, **fields}
+    logger.info(json.dumps(payload, default=str, sort_keys=True))
+
+
+def _install_shutdown_handlers() -> tuple[dict[str, bool], dict[int, Any]]:
+    shutdown = {"requested": False}
+    old_handlers: dict[int, Any] = {}
+
+    def _request_shutdown(signum: int, frame: Any) -> None:
+        shutdown["requested"] = True
+        _log_worker_event("shutdown_requested", signal=signum)
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        old_handlers[sig] = signal.getsignal(sig)
+        signal.signal(sig, _request_shutdown)
+    return shutdown, old_handlers
+
+
+def _restore_shutdown_handlers(old_handlers: dict[int, Any]) -> None:
+    for sig, handler in old_handlers.items():
+        signal.signal(sig, handler)
 
 
 def _compact_row(row: dict[str, Any]) -> dict[str, Any]:

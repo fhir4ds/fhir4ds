@@ -18,11 +18,14 @@ Version 1 supports:
 - Current, non-deleted HAPI resources.
 - PostgreSQL-backed HAPI JPA Server.
 - Inline JSON resource bodies in `hfj_res_ver.res_text_vc`.
+- Uncompressed JSON resource bodies stored as PostgreSQL large objects in
+  `hfj_res_ver.res_text`, when using the decoded view installed by
+  `fhir4ds dqm hapi install`.
 - `res_encoding = 'JSON'`.
 
-Version 1 deliberately rejects compressed/LOB resource storage such as `JSONC`
-by default. This prevents partial analysis where compressed resources are
-silently omitted.
+Version 1 deliberately rejects compressed resource storage such as `JSONC` by
+default. This prevents partial analysis where compressed resources are silently
+omitted.
 
 ## Example
 
@@ -62,7 +65,9 @@ The default schema mapping targets the current HAPI 8.8 PostgreSQL layout:
 | Updated timestamp | `hfj_resource.res_updated` |
 | Deleted timestamp | `hfj_resource.res_deleted_at` |
 | Resource JSON text | `hfj_res_ver.res_text_vc` |
+| Resource JSON large object | `hfj_res_ver.res_text` |
 | Resource encoding | `hfj_res_ver.res_encoding` |
+| Decoded current-resource view | unset |
 
 Override these defaults with `HapiPostgresSchema` for older HAPI versions or
 custom table names:
@@ -78,6 +83,15 @@ schema = HapiPostgresSchema(
 source = HapiPostgresSource(
     "postgresql://readonly:secret@hapi-db.example.org:5432/hapi",
     schema=schema,
+)
+```
+
+Set `decoded_view` when the FHIR4DS HAPI materialization schema has been
+installed and you want the adapter to read the decoded PostgreSQL view:
+
+```python
+schema = HapiPostgresSchema(
+    decoded_view="fhir4ds_hapi_current_resources",
 )
 ```
 
@@ -117,8 +131,8 @@ CQL or DQM queries can scan many resources and should not compete with a busy
 transactional HAPI server.
 
 `HapiPostgresSource.supports_incremental()` supports insert/update delta checks
-against current inline JSON resources. Deletes and compressed historical bodies
-are outside the v1 incremental scope.
+against current resources that the adapter can decode. Deletes and compressed
+historical bodies are outside the v1 incremental scope.
 
 For event-driven DQM materialization with PostgreSQL triggers and
 `LISTEN/NOTIFY`, see

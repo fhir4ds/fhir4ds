@@ -102,6 +102,10 @@ ON fhir4ds_measure_result(patient_id, measure_id, calculated_at DESC);
 CREATE INDEX IF NOT EXISTS fhir4ds_measure_result_run_idx
 ON fhir4ds_measure_result(run_id);
 
+CREATE INDEX IF NOT EXISTS fhir4ds_measure_result_inactive_calculated_idx
+ON fhir4ds_measure_result(calculated_at)
+WHERE active = false;
+
 CREATE TABLE IF NOT EXISTS fhir4ds_measure_audit (
     audit_id BIGSERIAL PRIMARY KEY,
     result_id BIGINT NOT NULL REFERENCES fhir4ds_measure_result(result_id) ON DELETE CASCADE,
@@ -114,6 +118,33 @@ CREATE TABLE IF NOT EXISTS fhir4ds_measure_audit (
 
 CREATE INDEX IF NOT EXISTS fhir4ds_measure_audit_result_idx
 ON fhir4ds_measure_audit(result_id);
+
+CREATE INDEX IF NOT EXISTS fhir4ds_measure_audit_created_idx
+ON fhir4ds_measure_audit(created_at);
+
+CREATE OR REPLACE FUNCTION fhir4ds_hapi_resource_json(
+    p_encoding TEXT,
+    p_text_vc TEXT,
+    p_text_oid OID
+) RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF p_encoding IS DISTINCT FROM 'JSON' THEN
+        RETURN NULL;
+    END IF;
+
+    IF p_text_vc IS NOT NULL THEN
+        RETURN p_text_vc::JSONB;
+    END IF;
+
+    IF p_text_oid IS NOT NULL THEN
+        RETURN convert_from(lo_get(p_text_oid), 'UTF8')::JSONB;
+    END IF;
+
+    RETURN NULL;
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION fhir4ds_extract_patient_id(
     p_resource_type TEXT,
@@ -146,6 +177,31 @@ BEGIN
     RETURN NULL;
 END;
 $$;
+
+CREATE OR REPLACE VIEW {{DECODED_VIEW_RELATION}} AS
+SELECT
+    {{FHIR_ID_SELECT}}::TEXT AS id,
+    {{RESOURCE_TYPE_SELECT}}::TEXT AS "resourceType",
+    decoded.resource AS resource,
+    fhir4ds_extract_patient_id(
+        {{RESOURCE_TYPE_SELECT}}::TEXT,
+        {{FHIR_ID_SELECT}}::TEXT,
+        decoded.resource
+    ) AS patient_ref,
+    {{UPDATED_AT_SELECT}} AS updated_at
+FROM {{RESOURCE_RELATION}} r
+JOIN {{VERSION_RELATION}} v
+  ON {{VERSION_FK_SELECT}} = {{RESOURCE_PK_SELECT}}
+ AND {{VERSION_NUMBER_SELECT}} = {{CURRENT_VERSION_SELECT}}
+CROSS JOIN LATERAL (
+    SELECT fhir4ds_hapi_resource_json(
+        {{ENCODING_SELECT}}::TEXT,
+        {{TEXT_VC_SELECT}},
+        {{TEXT_LOB_SELECT}}
+    ) AS resource
+) decoded
+WHERE {{DELETED_AT_SELECT}} IS NULL
+  AND decoded.resource IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION fhir4ds_enqueue_patient_change(
     p_patient_id TEXT,
@@ -194,7 +250,7 @@ BEGIN
         notify_count = fhir4ds_patient_change_queue.notify_count + 1;
 
     PERFORM pg_notify(
-        'fhir4ds_patient_changed',
+        {{NOTIFICATION_CHANNEL_LITERAL}},
         json_build_object('patient_id', p_patient_id)::TEXT
     );
 END;
@@ -210,70 +266,88 @@ DECLARE
     body JSONB;
     patient_id TEXT;
 BEGIN
-    IF TG_TABLE_NAME = 'hfj_resource' THEN
+    IF TG_TABLE_NAME = {{RESOURCE_TABLE_NAME_LITERAL}} THEN
         SELECT *
         INTO r
-        FROM hfj_resource
-        WHERE res_id = NEW.res_id;
+        FROM {{RESOURCE_RELATION}}
+        WHERE {{RESOURCE_PK_COLUMN}} = NEW.{{RESOURCE_PK_COLUMN}};
         IF NOT FOUND THEN
             RETURN NEW;
         END IF;
 
         SELECT *
         INTO v
-        FROM hfj_res_ver
-        WHERE res_id = NEW.res_id
-          AND res_ver = NEW.res_ver;
+        FROM {{VERSION_RELATION}}
+        WHERE {{VERSION_FK_COLUMN}} = NEW.{{RESOURCE_PK_COLUMN}}
+          AND {{VERSION_NUMBER_COLUMN}} = NEW.{{CURRENT_VERSION_COLUMN}};
         IF NOT FOUND THEN
-            IF r.res_type = 'Patient' THEN
-                PERFORM fhir4ds_enqueue_patient_change(r.fhir_id, r.res_type, r.fhir_id);
+            IF r.{{RESOURCE_TYPE_COLUMN}} = 'Patient' THEN
+                PERFORM fhir4ds_enqueue_patient_change(
+                    r.{{FHIR_ID_COLUMN}},
+                    r.{{RESOURCE_TYPE_COLUMN}},
+                    r.{{FHIR_ID_COLUMN}}
+                );
             END IF;
             RETURN NEW;
         END IF;
     ELSE
         SELECT *
         INTO v
-        FROM hfj_res_ver
-        WHERE pid = NEW.pid;
+        FROM {{VERSION_RELATION}}
+        WHERE {{VERSION_FK_COLUMN}} = NEW.{{VERSION_FK_COLUMN}}
+          AND {{VERSION_NUMBER_COLUMN}} = NEW.{{VERSION_NUMBER_COLUMN}};
         IF NOT FOUND THEN
             RETURN NEW;
         END IF;
 
         SELECT *
         INTO r
-        FROM hfj_resource
-        WHERE res_id = NEW.res_id;
+        FROM {{RESOURCE_RELATION}}
+        WHERE {{RESOURCE_PK_COLUMN}} = NEW.{{VERSION_FK_COLUMN}};
         IF NOT FOUND THEN
             RETURN NEW;
         END IF;
 
-        IF r.res_ver IS DISTINCT FROM NEW.res_ver THEN
+        IF r.{{CURRENT_VERSION_COLUMN}} IS DISTINCT FROM NEW.{{VERSION_NUMBER_COLUMN}} THEN
             RETURN NEW;
         END IF;
     END IF;
 
-    IF r.res_type = 'Patient' THEN
-        patient_id := r.fhir_id;
-    ELSIF v.res_encoding = 'JSON' AND v.res_text_vc IS NOT NULL THEN
-        body := v.res_text_vc::JSONB;
-        patient_id := fhir4ds_extract_patient_id(r.res_type, r.fhir_id, body);
+    body := fhir4ds_hapi_resource_json(
+        v.{{ENCODING_COLUMN}}::TEXT,
+        v.{{TEXT_VC_COLUMN}},
+        v.{{TEXT_LOB_COLUMN}}
+    );
+
+    IF r.{{RESOURCE_TYPE_COLUMN}} = 'Patient' THEN
+        patient_id := r.{{FHIR_ID_COLUMN}};
+    ELSIF body IS NOT NULL THEN
+        patient_id := fhir4ds_extract_patient_id(
+            r.{{RESOURCE_TYPE_COLUMN}},
+            r.{{FHIR_ID_COLUMN}},
+            body
+        );
     ELSE
         patient_id := NULL;
     END IF;
 
-    PERFORM fhir4ds_enqueue_patient_change(patient_id, r.res_type, r.fhir_id);
+    PERFORM fhir4ds_enqueue_patient_change(
+        patient_id,
+        r.{{RESOURCE_TYPE_COLUMN}},
+        r.{{FHIR_ID_COLUMN}}
+    );
     RETURN NEW;
 END;
 $$;
 
-DROP TRIGGER IF EXISTS fhir4ds_hfj_resource_change ON hfj_resource;
+DROP TRIGGER IF EXISTS fhir4ds_hfj_resource_change ON {{RESOURCE_RELATION}};
 CREATE TRIGGER fhir4ds_hfj_resource_change
-AFTER INSERT OR UPDATE ON hfj_resource
+AFTER INSERT OR UPDATE ON {{RESOURCE_RELATION}}
 FOR EACH ROW
 EXECUTE FUNCTION fhir4ds_queue_hapi_resource_change();
 
-DROP TRIGGER IF EXISTS fhir4ds_hfj_res_ver_change ON hfj_res_ver;
+DROP TRIGGER IF EXISTS fhir4ds_hfj_res_ver_change ON {{VERSION_RELATION}};
 CREATE TRIGGER fhir4ds_hfj_res_ver_change
-AFTER INSERT OR UPDATE ON hfj_res_ver
+AFTER INSERT OR UPDATE ON {{VERSION_RELATION}}
 FOR EACH ROW
 EXECUTE FUNCTION fhir4ds_queue_hapi_resource_change();

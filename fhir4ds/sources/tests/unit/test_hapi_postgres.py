@@ -33,7 +33,8 @@ def _mock_hapi_connection() -> duckdb.DuckDBPyConnection:
             res_id BIGINT,
             res_ver BIGINT,
             res_encoding VARCHAR,
-            res_text_vc VARCHAR
+            res_text_vc VARCHAR,
+            res_text BIGINT
         )
     """)
     return con
@@ -45,7 +46,8 @@ def _insert_mock_resource(
     res_id: int,
     res_type: str,
     fhir_id: str,
-    resource_json: str,
+    resource_json: str | None,
+    text_lob: int | None = None,
     updated_at: str = "2026-05-23 00:00:00",
     encoding: str = "JSON",
     deleted: bool = False,
@@ -57,8 +59,8 @@ def _insert_mock_resource(
         [res_id, res_type, fhir_id, updated_at, deleted_at],
     )
     con.execute(
-        f"INSERT INTO {att}.public.hfj_res_ver VALUES (?, ?, 1, ?, ?)",
-        [res_id, res_id, encoding, resource_json],
+        f"INSERT INTO {att}.public.hfj_res_ver VALUES (?, ?, 1, ?, ?, ?)",
+        [res_id, res_id, encoding, resource_json, text_lob],
     )
 
 
@@ -73,6 +75,20 @@ class TestHapiPostgresSourceSql:
         assert 'v."res_ver" = r."res_ver"' in sql
         assert 'v."res_encoding" = \'JSON\'' in sql
         assert 'v."res_text_vc" IS NOT NULL' in sql
+
+    def test_decoded_view_select_uses_installed_postgres_view(self):
+        schema = HapiPostgresSchema(decoded_view="fhir4ds_hapi_current_resources")
+        src = HapiPostgresSource(
+            "postgresql://hapi:hapi@localhost/hapi",
+            schema=schema,
+        )
+
+        sql = src._current_resources_select(include_updated_at=True)
+
+        assert '"fhir4ds_hapi_pg"."public"."fhir4ds_hapi_current_resources"' in sql
+        assert '"resourceType"::VARCHAR AS resourceType' in sql
+        assert "updated_at" in sql
+        assert "hfj_resource" not in sql
 
     def test_custom_schema_identifiers_are_quoted(self):
         schema = HapiPostgresSchema(
@@ -184,6 +200,50 @@ class TestHapiPostgresSourceView:
 
         src = HapiPostgresSource("postgresql://unused")
         assert src._unsupported_storage_count(con) == 1
+
+    def test_decoded_view_storage_detection_allows_json_large_object_rows(self):
+        con = _mock_hapi_connection()
+        _insert_mock_resource(
+            con,
+            res_id=1000,
+            res_type="Patient",
+            fhir_id="1000",
+            resource_json=None,
+            encoding="JSON",
+            text_lob=123,
+        )
+
+        src = HapiPostgresSource(
+            "postgresql://unused",
+            schema=HapiPostgresSchema(decoded_view="fhir4ds_hapi_current_resources"),
+        )
+        assert src._unsupported_storage_count(con) == 0
+
+    def test_decoded_view_projects_resources_view(self):
+        con = _mock_hapi_connection()
+        att = quote_identifier(_HAPI_POSTGRES_ATTACHMENT_NAME)
+        con.execute(f"""
+            CREATE OR REPLACE VIEW {att}.public.fhir4ds_hapi_current_resources AS
+            SELECT
+                '1000'::VARCHAR AS id,
+                'Patient'::VARCHAR AS "resourceType",
+                '{{"resourceType":"Patient","id":"1000"}}'::JSON AS resource,
+                '1000'::VARCHAR AS patient_ref,
+                TIMESTAMP '2026-05-23 00:00:00' AS updated_at
+        """)
+
+        src = HapiPostgresSource(
+            "postgresql://unused",
+            schema=HapiPostgresSchema(decoded_view="fhir4ds_hapi_current_resources"),
+            fail_on_unsupported_storage=False,
+        )
+        con.execute(f"""
+            CREATE OR REPLACE VIEW resources AS {src._current_resources_select()}
+        """)
+        validate_schema(con, "HapiPostgresSource")
+
+        rows = con.execute("SELECT id, resourceType, patient_ref FROM resources").fetchall()
+        assert rows == [("1000", "Patient", "1000")]
 
     def test_schema_validation_catches_wrong_resource_type(self):
         con = duckdb.connect(":memory:", config={"allow_unsigned_extensions": True})

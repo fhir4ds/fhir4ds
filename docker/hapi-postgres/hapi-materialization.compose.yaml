@@ -14,6 +14,8 @@ postgres:
     deleted_at_column: res_deleted_at
     encoding_column: res_encoding
     text_vc_column: res_text_vc
+    text_lob_column: res_text
+    decoded_view: fhir4ds_hapi_current_resources
 
 period:
   start: "2026-01-01"
@@ -22,8 +24,16 @@ period:
 worker:
   batch_size: 100
   poll_interval_seconds: 30
+  max_attempts: 3
+  retry_backoff_seconds: 60
+  processing_timeout_seconds: 900
   notification_channel: fhir4ds_patient_changed
   fail_on_unsupported_storage: true
+
+retention:
+  inactive_result_days: 365
+  audit_days: 180
+  run_days: 365
 
 defaults:
   audit_mode: population

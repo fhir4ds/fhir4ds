@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from fhir4ds.dqm.hapi_materialization import (
     listen_and_process,
     load_materialization_config,
     process_queue_once,
+    prune_materialization_history,
     sync_measure_config,
 )
 from fhir4ds.dqm.types import AuditMode
@@ -100,8 +102,11 @@ def _add_hapi_args(parser: argparse.ArgumentParser) -> None:
     )
     install_parser.add_argument(
         "--connection",
-        required=True,
         help="PostgreSQL connection string for the HAPI database",
+    )
+    install_parser.add_argument(
+        "--config",
+        help="Optional HAPI materialization config; supplies connection, schema, and channel",
     )
 
     sync_parser = subparsers.add_parser(
@@ -116,25 +121,49 @@ def _add_hapi_args(parser: argparse.ArgumentParser) -> None:
     )
     process_parser.add_argument("--config", required=True, help="HAPI materialization config")
     process_parser.add_argument("--limit", type=int, help="Maximum patients to claim")
+    process_parser.add_argument("--log-level", default="WARNING", help="Python logging level")
 
     listen_parser = subparsers.add_parser(
         "listen",
         help="Listen for HAPI patient-change notifications and process continuously",
     )
     listen_parser.add_argument("--config", required=True, help="HAPI materialization config")
+    listen_parser.add_argument("--log-level", default="INFO", help="Python logging level")
+
+    prune_parser = subparsers.add_parser(
+        "prune",
+        help="Apply configured HAPI materialization retention policy",
+    )
+    prune_parser.add_argument("--config", required=True, help="HAPI materialization config")
+    prune_parser.add_argument("--log-level", default="WARNING", help="Python logging level")
 
 
 def _run_hapi(args: argparse.Namespace) -> int:
     if args.hapi_command is None:
         print(
             "fhir4ds dqm hapi requires a subcommand: "
-            "install, sync-config, process-queue, or listen",
+            "install, sync-config, process-queue, listen, or prune",
             file=sys.stderr,
         )
         return 2
 
     if args.hapi_command == "install":
-        install_materialization_schema(args.connection)
+        config = load_materialization_config(args.config) if args.config else None
+        connection = args.connection or (
+            config.postgres_connection_string if config is not None else None
+        )
+        if connection is None:
+            print("ERROR: hapi install requires --connection or --config", file=sys.stderr)
+            return 2
+        install_materialization_schema(
+            connection,
+            schema=config.hapi_schema if config is not None else None,
+            notification_channel=(
+                config.notification_channel
+                if config is not None
+                else "fhir4ds_patient_changed"
+            ),
+        )
         print("Installed HAPI materialization schema and triggers")
         return 0
 
@@ -144,6 +173,7 @@ def _run_hapi(args: argparse.Namespace) -> int:
         print(f"Synced {count} measure configuration row(s)")
         return 0
     if args.hapi_command == "process-queue":
+        _configure_logging(args.log_level)
         result = process_queue_once(config, limit=args.limit)
         metrics_suffix = ""
         if result.metrics:
@@ -155,15 +185,35 @@ def _run_hapi(args: argparse.Namespace) -> int:
         print(
             f"Processed queue batch: run_id={result.run_id}, "
             f"patients={len(result.claimed)}, measures={result.measures}, "
-            f"errors={len(result.errors)}{metrics_suffix}"
+            f"errors={len(result.errors)}, stale_reset={result.stale_reset}"
+            f"{metrics_suffix}"
         )
         return 1 if result.errors else 0
     if args.hapi_command == "listen":
+        _configure_logging(args.log_level)
         listen_and_process(config)
+        return 0
+    if args.hapi_command == "prune":
+        _configure_logging(args.log_level)
+        deleted = prune_materialization_history(
+            config.postgres_connection_string,
+            config.retention,
+        )
+        print(
+            "Pruned HAPI materialization history: "
+            f"audits={deleted['audits']}, "
+            f"inactive_results={deleted['inactive_results']}, "
+            f"runs={deleted['runs']}"
+        )
         return 0
 
     print(f"Unknown HAPI command: {args.hapi_command}", file=sys.stderr)
     return 2
+
+
+def _configure_logging(level_name: str) -> None:
+    level = getattr(logging, str(level_name).upper(), logging.INFO)
+    logging.basicConfig(level=level, format="%(message)s")
 
 
 def _add_config_and_run_args(parser: argparse.ArgumentParser) -> None:

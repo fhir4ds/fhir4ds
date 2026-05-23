@@ -40,6 +40,8 @@ HapiPostgresSchema(
     deleted_at_column: str = "res_deleted_at",
     encoding_column: str = "res_encoding",
     text_vc_column: str = "res_text_vc",
+    text_lob_column: str = "res_text",
+    decoded_view: str | None = None,
 )
 ```
 
@@ -59,6 +61,12 @@ hfj_res_ver.res_encoding = 'JSON'
 hfj_res_ver.res_text_vc IS NOT NULL
 ```
 
+When `decoded_view` is set, the adapter reads that installed PostgreSQL view
+instead of joining the HAPI tables directly. The default materialization install
+creates `fhir4ds_hapi_current_resources`, which exposes inline JSON and
+uncompressed JSON stored in HAPI's `res_text` large-object column. `JSONC`
+storage is still treated as unsupported.
+
 ### `unregister(con)`
 
 Drops the `resources` view and detaches the PostgreSQL attachment.
@@ -69,7 +77,7 @@ Returns `True`.
 
 ### `get_changed_patients(since)`
 
-Returns raw Patient IDs for current inline JSON resources updated after `since`.
+Returns raw Patient IDs for decodable current resources updated after `since`.
 Deletes and compressed historical bodies are outside the v1 delta scope.
 
 ## Example

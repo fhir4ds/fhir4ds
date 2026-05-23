@@ -88,9 +88,10 @@ fhir4ds.attach(con, source)
 ```
 
 `HapiPostgresSource` reads current resources from HAPI's
-`hfj_resource`/`hfj_res_ver` tables. V1 supports inline JSON resource bodies
-(`res_encoding = 'JSON'`, `res_text_vc` populated) and fails clearly when
-current resources require compressed/LOB decoding.
+`hfj_resource`/`hfj_res_ver` tables. V1 supports current resources with
+`res_encoding = 'JSON'`: inline `res_text_vc` by default, and uncompressed
+`res_text` large-object JSON when using the decoded view installed by
+`fhir4ds dqm hapi install`. Compressed `JSONC` rows fail clearly by default.
 
 ### CSV Files
 

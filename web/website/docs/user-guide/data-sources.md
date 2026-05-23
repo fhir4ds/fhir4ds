@@ -126,7 +126,9 @@ Connects directly to a HAPI FHIR JPA Server PostgreSQL backend and projects
 current resources from HAPI's resource/version tables.
 
 *   **Best for:** Read-only analytics against a HAPI database or read replica.
-*   **Scope:** Current inline JSON resources in `hfj_res_ver.res_text_vc`.
+*   **Scope:** Current resources with `res_encoding = 'JSON'`; inline
+    `res_text_vc` by default, plus `res_text` large-object JSON when using the
+    installed decoded view.
 
 ### CSV Files (`CSVSource`)
 Maps flat CSV files to the FHIR schema using a user-defined SQL projection.

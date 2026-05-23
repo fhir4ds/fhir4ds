@@ -30,6 +30,13 @@ fhir4ds dqm hapi install \
   --connection postgresql://hapi:hapi@localhost:15432/hapi
 ```
 
+If your config customizes HAPI table or column names, install from that config
+so the trigger SQL is rendered against the same mapping:
+
+```bash
+fhir4ds dqm hapi install --config hapi-dqm.yaml
+```
+
 This creates:
 
 - `fhir4ds_patient_change_queue`
@@ -37,6 +44,7 @@ This creates:
 - `fhir4ds_measure_run`
 - `fhir4ds_measure_result`
 - `fhir4ds_measure_audit`
+- `fhir4ds_hapi_current_resources`
 - trigger functions on `hfj_resource` and `hfj_res_ver`
 
 ## Configure Measures
@@ -50,6 +58,14 @@ postgres:
     schema: public
     resource_table: hfj_resource
     version_table: hfj_res_ver
+    text_lob_column: res_text
+    decoded_view: fhir4ds_hapi_current_resources
+
+worker:
+  batch_size: 100
+  max_attempts: 3
+  retry_backoff_seconds: 60
+  processing_timeout_seconds: 900
 
 period:
   start: "2026-01-01"
@@ -80,8 +96,10 @@ also carry measure definitions directly for local one-off runs.
 
 `postgres.hapi_schema` is optional. The defaults match the current HAPI JPA
 PostgreSQL table layout, and the fields can be overridden for older HAPI
-versions or local table/column customizations. The trigger install SQL currently
-targets the default HAPI table names.
+versions or local table/column customizations. `decoded_view` tells
+`HapiPostgresSource` to read the PostgreSQL-side decoded view created by
+`hapi install`, which supports both inline JSON in `res_text_vc` and
+uncompressed JSON stored in the `res_text` large-object column.
 
 ## Process Changes
 
@@ -99,6 +117,16 @@ fhir4ds dqm hapi listen --config hapi-dqm.yaml
 
 The durable queue is the source of truth. Notifications are wake-up messages
 only; if the worker is offline, pending rows remain in the queue.
+
+Failed rows are retried with linear backoff until `worker.max_attempts` is
+reached. Rows left in `processing` longer than
+`worker.processing_timeout_seconds` are returned to `pending` or marked failed
+if they have already exhausted their attempts. The `listen` worker handles
+SIGINT/SIGTERM and logs structured JSON events at the configured log level:
+
+```bash
+fhir4ds dqm hapi listen --config hapi-dqm.yaml --log-level INFO
+```
 
 The continuous `listen` worker keeps one DuckDB/evaluator runtime open and
 compiles each configured measure once per static configuration. It executes each
@@ -123,6 +151,17 @@ counts, and `metrics_json`. The top-level run columns are per-batch deltas; for
 the continuous worker, `metrics_json.cumulative` also carries the lifetime
 worker counters.
 
+Apply retention windows from the config with:
+
+```bash
+fhir4ds dqm hapi prune --config hapi-dqm.yaml
+```
+
+`retention.audit_days` removes old audit rows, `retention.inactive_result_days`
+removes old inactive result rows, and `retention.run_days` removes old run rows
+that are no longer referenced by retained results. Active result rows are never
+removed by the prune command.
+
 ## Worker Container
 
 Build and run the worker image with the compose profile:
@@ -138,9 +177,11 @@ the container. The compose profile mounts the repository read-only at
 
 ## Current Scope
 
-This integration currently supports HAPI current resources stored inline as
-JSON in `hfj_res_ver.res_text_vc`. Compressed `JSONC` resource bodies are
-detected by `HapiPostgresSource` and remain a later enhancement.
+This integration supports HAPI current resources where `res_encoding = 'JSON'`.
+It can read inline JSON from `hfj_res_ver.res_text_vc`, and the installed
+decoded view can decode uncompressed JSON from the PostgreSQL large-object
+column `hfj_res_ver.res_text`. Compressed `JSONC` resource bodies are detected
+and remain outside the v1 scope.
 
 ## 2025 eCQM Smoke Testing
 
@@ -158,3 +199,11 @@ The script prints a suggested `measures[]` config entry with the discovered
 Measure bundle, CQL file, include paths, and ValueSet paths. Start with one
 measure and one patient, then expand the patient limit and measure set after the
 queue/result workflow is behaving as expected.
+
+For an automated end-to-end smoke against the local compose stack:
+
+```bash
+python3 scripts/hapi/smoke_2025_materialization.py \
+  --measure CMS122 \
+  --limit-patients 1
+```

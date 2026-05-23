@@ -10,14 +10,20 @@ import pytest
 from fhir4ds.cli.main import main
 from fhir4ds.dqm.config import DQMConfigError
 from fhir4ds.dqm.hapi_materialization import (
+    DEFAULT_DECODED_VIEW,
     HapiMaterializedMeasure,
+    HapiRetentionPolicy,
     _compiled_metrics_delta,
+    claim_pending_patients,
     materialization_sql,
     materialized_measure_hash,
     parse_materialization_config,
+    prune_materialization_history,
+    reset_stale_processing,
     split_patient_result_rows,
 )
 from fhir4ds.dqm.types import AuditMode
+from fhir4ds.sources import HapiPostgresSchema
 
 
 def _write_measure_files(tmp_path: Path) -> tuple[Path, Path]:
@@ -31,13 +37,36 @@ def _write_measure_files(tmp_path: Path) -> tuple[Path, Path]:
 def test_materialization_sql_contains_queue_result_and_triggers():
     sql = materialization_sql()
 
+    assert "{{" not in sql
     assert "CREATE TABLE IF NOT EXISTS fhir4ds_patient_change_queue" in sql
     assert "CREATE TABLE IF NOT EXISTS fhir4ds_measure_result" in sql
     assert "CREATE TABLE IF NOT EXISTS fhir4ds_measure_audit" in sql
+    assert f'CREATE OR REPLACE VIEW "public"."{DEFAULT_DECODED_VIEW}"' in sql
+    assert "fhir4ds_hapi_resource_json" in sql
+    assert "lo_get(p_text_oid)" in sql
     assert "compile_cache_hits" in sql
     assert "fhir4ds_measure_result_run_idx" in sql
     assert "pg_notify(" in sql
     assert "fhir4ds_hfj_resource_change" in sql
+
+
+def test_materialization_sql_renders_custom_hapi_schema_and_channel():
+    schema = HapiPostgresSchema(
+        schema='custom "schema"',
+        resource_table="resource master",
+        version_table="version-table",
+        resource_pk_column="pid",
+        version_resource_fk_column="resource_pid",
+        decoded_view="decoded resources",
+    )
+
+    sql = materialization_sql(schema, notification_channel="custom_channel")
+
+    assert '"custom ""schema"""."resource master"' in sql
+    assert '"custom ""schema"""."version-table"' in sql
+    assert '"custom ""schema"""."decoded resources"' in sql
+    assert "pg_notify(\n        'custom_channel'" in sql
+    assert 'WHERE "resource_pid" = NEW."pid"' in sql
 
 
 def test_parse_materialization_config_resolves_paths_and_defaults(tmp_path):
@@ -47,11 +76,23 @@ def test_parse_materialization_config_resolves_paths_and_defaults(tmp_path):
         "period": {"start": "2026-01-01", "end": "2026-12-31"},
         "defaults": {"audit_mode": "population", "narratives": True},
         "results": {"persist_audit": True},
-        "worker": {"batch_size": 25, "poll_interval_seconds": 5},
+        "worker": {
+            "batch_size": 25,
+            "poll_interval_seconds": 5,
+            "max_attempts": 4,
+            "retry_backoff_seconds": 2.5,
+            "processing_timeout_seconds": 120,
+        },
+        "retention": {
+            "inactive_result_days": 90,
+            "audit_days": 30,
+            "run_days": 180,
+        },
         "hapi_schema": {
             "schema": "custom",
             "resource_table": "resources",
             "version_table": "versions",
+            "decoded_view": "decoded_resources",
         },
         "measures": [
             {
@@ -68,9 +109,16 @@ def test_parse_materialization_config_resolves_paths_and_defaults(tmp_path):
 
     assert config.postgres_connection_string == "postgresql://hapi:hapi@localhost/hapi"
     assert config.batch_size == 25
+    assert config.max_attempts == 4
+    assert config.retry_backoff_seconds == 2.5
+    assert config.processing_timeout_seconds == 120
     assert config.hapi_schema.schema == "custom"
     assert config.hapi_schema.resource_table == "resources"
     assert config.hapi_schema.version_table == "versions"
+    assert config.hapi_schema.decoded_view == "decoded_resources"
+    assert config.retention.inactive_result_days == 90
+    assert config.retention.audit_days == 30
+    assert config.retention.run_days == 180
     assert config.parameters["Measurement Period"] == ("2026-01-01", "2026-12-31")
     assert len(config.measures) == 1
     measure_config = config.measures[0]
@@ -106,6 +154,18 @@ def test_parse_materialization_config_rejects_unknown_hapi_schema_field(tmp_path
     }
 
     with pytest.raises(DQMConfigError, match="unknown field"):
+        parse_materialization_config(raw, base_dir=tmp_path)
+
+
+def test_parse_materialization_config_rejects_invalid_retention(tmp_path):
+    measure, _cql = _write_measure_files(tmp_path)
+    raw = {
+        "postgres": {"connection_string": "postgresql://hapi:hapi@localhost/hapi"},
+        "retention": {"audit_days": 0},
+        "measures": [{"path": str(measure)}],
+    }
+
+    with pytest.raises(DQMConfigError, match="retention.audit_days"):
         parse_materialization_config(raw, base_dir=tmp_path)
 
 
@@ -173,6 +233,105 @@ def test_materialized_measure_hash_changes_with_parameters(tmp_path):
     )
 
     assert materialized_measure_hash(base) != materialized_measure_hash(changed)
+
+
+def test_prune_materialization_history_uses_configured_retention(monkeypatch):
+    import fhir4ds.dqm.hapi_materialization as hapi_materialization
+
+    executed: list[tuple[str, list[int]]] = []
+
+    class FakeConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def execute(self, sql, params=None):
+            executed.append((sql, list(params or [])))
+            return self
+
+        def fetchall(self):
+            return [(1,), (2,)]
+
+        def commit(self):
+            return None
+
+    class FakePsycopg:
+        @staticmethod
+        def connect(connection_string):
+            assert connection_string == "postgresql://hapi:hapi@localhost/hapi"
+            return FakeConn()
+
+    monkeypatch.setattr(hapi_materialization, "require_psycopg", lambda: FakePsycopg)
+
+    deleted = prune_materialization_history(
+        "postgresql://hapi:hapi@localhost/hapi",
+        HapiRetentionPolicy(inactive_result_days=90, audit_days=30, run_days=180),
+    )
+
+    assert deleted == {"audits": 2, "inactive_results": 2, "runs": 2}
+    assert [params for _sql, params in executed] == [[30], [90], [180]]
+    assert any("DELETE FROM fhir4ds_measure_audit" in sql for sql, _params in executed)
+    assert any("DELETE FROM fhir4ds_measure_result" in sql for sql, _params in executed)
+    assert any("DELETE FROM fhir4ds_measure_run" in sql for sql, _params in executed)
+
+
+def test_claim_pending_patients_retries_failed_rows_with_backoff():
+    executed: list[tuple[str, list[float]]] = []
+
+    class FakeCursor:
+        def fetchall(self):
+            return [("p1", "watermark")]
+
+    class FakeConn:
+        def execute(self, sql, params=None):
+            executed.append((sql, list(params or [])))
+            return FakeCursor()
+
+        def commit(self):
+            return None
+
+    rows = claim_pending_patients(
+        FakeConn(),
+        10,
+        max_attempts=5,
+        retry_backoff_seconds=2.5,
+    )
+
+    assert rows[0].patient_id == "p1"
+    sql, params = executed[0]
+    assert "status = 'failed'" in sql
+    assert "attempts < %s" in sql
+    assert params == [5, 2.5, 10]
+
+
+def test_reset_stale_processing_marks_exhausted_rows_failed():
+    executed: list[tuple[str, list[float]]] = []
+
+    class FakeCursor:
+        def fetchall(self):
+            return [("p1",), ("p2",)]
+
+    class FakeConn:
+        def execute(self, sql, params=None):
+            executed.append((sql, list(params or [])))
+            return FakeCursor()
+
+        def commit(self):
+            return None
+
+    count = reset_stale_processing(
+        FakeConn(),
+        processing_timeout_seconds=120,
+        max_attempts=3,
+    )
+
+    assert count == 2
+    sql, params = executed[0]
+    assert "WHEN attempts >= %s THEN 'failed'" in sql
+    assert "Processing timeout; max attempts reached" in sql
+    assert params == [3, 3, 3, 120]
 
 
 def test_hapi_cli_requires_nested_subcommand(capsys):
