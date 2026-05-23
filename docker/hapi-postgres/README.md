@@ -87,6 +87,22 @@ python3 scripts/hapi/smoke_2025_materialization.py \
   --limit-patients 2
 ```
 
+By default, measure artifacts are read from local files while patient data is
+analyzed in HAPI PostgreSQL. To verify HAPI-hosted Measure, Library, and
+ValueSet artifacts, use:
+
+```bash
+python3 scripts/hapi/smoke_2025_materialization.py \
+  --measure CMS122 \
+  --limit-patients 1 \
+  --artifact-source hapi
+```
+
+For worker configuration, set `artifacts.source: hapi` and give each measure an
+`artifact_ref` matching the HAPI Measure id, canonical URL, or `Measure/<id>`.
+ValueSets declared by the primary CQL library are resolved from HAPI and must
+already contain an expansion or be expandable by HAPI.
+
 To verify generated individual `MeasureReport` JSON persistence, add
 `--persist-measure-report`. To also publish those reports back to HAPI through
 FHIR REST, add `--publish-measure-report-to-hapi`; generated reports use

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import time
 import warnings
 from dataclasses import asdict, dataclass
@@ -17,6 +18,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
+from .artifacts import ArtifactResolver, FileArtifactResolver, LibraryArtifact
 from .audit import AuditEngine
 from .errors import DQMError, MeasureParseError  # noqa: F401
 from .models import MeasureResult
@@ -28,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 _TARGET_PATIENT_TABLE = "_fhir4ds_target_patients"
+_CQL_INCLUDE_RE = re.compile(r"^\s*include\s+([A-Za-z][A-Za-z0-9_.]*)\b", re.MULTILINE)
 
 
 @dataclass
@@ -105,8 +108,8 @@ class MeasureEvaluator:
 
     def evaluate(
         self,
-        measure_bundle: str | Path | dict,
-        cql_library_path: str | Path,
+        measure_bundle: str | Path | dict | None = None,
+        cql_library_path: str | Path | dict | None = None,
         parameters: dict | None = None,
         audit: bool = False,
         audit_mode: str | AuditMode = AuditMode.NONE,
@@ -115,6 +118,8 @@ class MeasureEvaluator:
         include_paths: list[str] | None = None,
         generate_narratives: bool = False,
         include_supporting_evidence: bool = False,
+        artifact_resolver: ArtifactResolver | None = None,
+        measure_ref: str | Path | dict | None = None,
     ) -> MeasureResult:
         """Evaluate a FHIR Measure against the resources table.
 
@@ -161,14 +166,17 @@ class MeasureEvaluator:
         if generate_narratives and effective_mode == AuditMode.NONE:
             raise ValueError("Narratives require audit=True")
 
-        measure_dict = self._load_measure(measure_bundle)
+        resolver, measure_artifact, library_artifact = self._resolve_artifacts(
+            measure_bundle=measure_bundle,
+            cql_library_path=cql_library_path,
+            include_paths=include_paths,
+            artifact_resolver=artifact_resolver,
+            measure_ref=measure_ref,
+        )
+        measure_dict = measure_artifact.resource
         pop_map = self._parser.parse(measure_dict)
         self._last_pop_map = pop_map
         self._last_parameters = parameters or {}
-
-        cql_path = Path(cql_library_path)
-        if not cql_path.exists():
-            raise FileNotFoundError(f"CQL library not found: {cql_library_path}")
 
         try:
             from fhir4ds.cql import CQLToSQLTranslator, parse_cql
@@ -181,11 +189,11 @@ class MeasureEvaluator:
             df = self._evaluate_group(
                 group=group,
                 pop_map=pop_map,
-                cql_path=cql_path,
+                library_artifact=library_artifact,
+                artifact_resolver=resolver,
                 parameters=parameters or {},
                 patient_ids=patient_ids,
                 audit_mode=effective_mode,
-                include_paths=include_paths,
                 include_supporting_evidence=include_supporting_evidence,
                 parse_cql=parse_cql,
                 translator_cls=CQLToSQLTranslator,
@@ -226,8 +234,8 @@ class MeasureEvaluator:
 
     def compile_measure(
         self,
-        measure_bundle: str | Path | dict,
-        cql_library_path: str | Path,
+        measure_bundle: str | Path | dict | None = None,
+        cql_library_path: str | Path | dict | None = None,
         parameters: dict | None = None,
         audit: bool = False,
         audit_mode: str | AuditMode = AuditMode.NONE,
@@ -237,6 +245,8 @@ class MeasureEvaluator:
         include_paths: list[str] | None = None,
         generate_narratives: bool = False,
         include_supporting_evidence: bool = False,
+        artifact_resolver: ArtifactResolver | None = None,
+        measure_ref: str | Path | dict | None = None,
     ) -> CompiledMeasure:
         """Compile a Measure to reusable SQL without executing it."""
         effective_mode = AuditMode(audit_mode)
@@ -255,26 +265,28 @@ class MeasureEvaluator:
                 "when patient_scope='target_table'"
             )
 
-        measure_dict = self._load_measure(measure_bundle)
+        resolver, measure_artifact, library_artifact = self._resolve_artifacts(
+            measure_bundle=measure_bundle,
+            cql_library_path=cql_library_path,
+            include_paths=include_paths,
+            artifact_resolver=artifact_resolver,
+            measure_ref=measure_ref,
+        )
+        measure_dict = measure_artifact.resource
         pop_map = self._parser.parse(measure_dict)
         self._last_pop_map = pop_map
         self._last_parameters = parameters or {}
 
-        cql_path = Path(cql_library_path)
-        if not cql_path.exists():
-            raise FileNotFoundError(f"CQL library not found: {cql_library_path}")
-        if not cql_path.is_file():
-            raise ValueError(f"CQL library path must be a file: {cql_library_path}")
-
         cache_key = self._compiled_measure_cache_key(
             measure_dict=measure_dict,
-            cql_path=cql_path,
+            measure_source_id=measure_artifact.source_id,
+            library_artifact=library_artifact,
+            artifact_resolver=resolver,
             parameters=parameters or {},
             audit_mode=effective_mode,
             filter_to_ip=filter_to_ip,
             patient_ids=patient_ids,
             patient_scope=patient_scope,
-            include_paths=include_paths,
             generate_narratives=generate_narratives,
             include_supporting_evidence=include_supporting_evidence,
         )
@@ -291,20 +303,19 @@ class MeasureEvaluator:
             raise DQMError(f"cql-py is required: {e}") from e
 
         compile_started = time.perf_counter()
-        cql_text = cql_path.read_text()
-        library = parse_cql(cql_text)
+        library = parse_cql(library_artifact.text)
 
         groups = [
             self._compile_group(
                 group=group,
                 pop_map=pop_map,
                 library=library,
-                cql_path=cql_path,
+                library_artifact=library_artifact,
+                artifact_resolver=resolver,
                 parameters=parameters or {},
                 patient_ids=patient_ids,
                 patient_scope=patient_scope,
                 audit_mode=effective_mode,
-                include_paths=include_paths,
                 include_supporting_evidence=include_supporting_evidence,
                 parse_cql=parse_cql,
                 translator_cls=CQLToSQLTranslator,
@@ -1085,26 +1096,72 @@ class MeasureEvaluator:
                 f"Invalid JSON in measure file '{measure_bundle}': {e}"
             ) from e
 
+    def _resolve_artifacts(
+        self,
+        *,
+        measure_bundle: str | Path | dict | None,
+        cql_library_path: str | Path | dict | None,
+        include_paths: list[str] | None,
+        artifact_resolver: ArtifactResolver | None,
+        measure_ref: str | Path | dict | None,
+    ) -> tuple[ArtifactResolver, Any, LibraryArtifact]:
+        resolver: ArtifactResolver = artifact_resolver or FileArtifactResolver(
+            include_paths=include_paths,
+        )
+        resolved_measure_ref = measure_ref if measure_ref is not None else measure_bundle
+        if resolved_measure_ref is None:
+            raise ValueError("measure_bundle or measure_ref is required")
+        measure_artifact = resolver.resolve_measure(resolved_measure_ref)
+        library_artifact = resolver.resolve_library(
+            cql_library_path,
+            measure=measure_artifact.resource,
+            measure_source_id=measure_artifact.source_id,
+        )
+        self._prime_resolved_includes(resolver, library_artifact.text)
+        return resolver, measure_artifact, library_artifact
+
+    def _prime_resolved_includes(
+        self,
+        artifact_resolver: ArtifactResolver,
+        cql_text: str,
+        seen: set[str] | None = None,
+    ) -> None:
+        """Resolve transitive includes before cache-key fingerprinting."""
+        seen = seen or set()
+        for alias in _CQL_INCLUDE_RE.findall(cql_text):
+            if alias in seen:
+                continue
+            seen.add(alias)
+            artifact = artifact_resolver.resolve_include(alias)
+            if artifact is not None:
+                self._prime_resolved_includes(
+                    artifact_resolver,
+                    artifact.text,
+                    seen,
+                )
+
     def _compiled_measure_cache_key(
         self,
         *,
         measure_dict: dict,
-        cql_path: Path,
+        measure_source_id: str,
+        library_artifact: LibraryArtifact,
+        artifact_resolver: ArtifactResolver,
         parameters: dict,
         audit_mode: AuditMode,
         filter_to_ip: bool,
         patient_ids: list[str] | None,
         patient_scope: str,
-        include_paths: list[str] | None,
         generate_narratives: bool,
         include_supporting_evidence: bool,
     ) -> str:
         """Hash static inputs that affect generated measure SQL or result shape."""
         payload = {
             "measure": measure_dict,
-            "cql_path": str(cql_path),
-            "cql_hash": hashlib.sha256(cql_path.read_bytes()).hexdigest(),
-            "include_hash": self._include_paths_hash(include_paths, cql_path.parent),
+            "measure_source_id": measure_source_id,
+            "library_source_id": library_artifact.source_id,
+            "library_hash": library_artifact.content_hash,
+            "artifact_fingerprint": artifact_resolver.fingerprint(),
             "parameters": parameters,
             "audit_mode": audit_mode.value,
             "filter_to_ip": filter_to_ip,
@@ -1117,53 +1174,31 @@ class MeasureEvaluator:
         text = json.dumps(payload, sort_keys=True, default=str)
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-    def _include_paths_hash(
-        self,
-        include_paths: list[str] | None,
-        default_path: Path,
-    ) -> str:
-        """Hash CQL include files visible to the library loader."""
-        paths = [Path(p) for p in include_paths] if include_paths else [default_path]
-        items: list[tuple[str, str]] = []
-        for path in paths:
-            if path.is_dir():
-                candidates = sorted(path.glob("*.cql"))
-            else:
-                candidates = [path]
-            for candidate in candidates:
-                try:
-                    digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
-                    items.append((str(candidate), digest))
-                except OSError:
-                    items.append((str(candidate), "missing"))
-        text = json.dumps(items, sort_keys=True)
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
     def _evaluate_group(
         self,
         group: GroupMap,
         pop_map: PopulationMap,
-        cql_path: Path,
+        library_artifact: LibraryArtifact,
+        artifact_resolver: ArtifactResolver,
         parameters: dict,
         patient_ids: list[str] | None,
         audit_mode: AuditMode,
-        include_paths: list[str] | None,
         include_supporting_evidence: bool,
         parse_cql: Any,
         translator_cls: Any,
     ) -> pd.DataFrame:
         """Evaluate a single group from a FHIR Measure. Always returns DataFrame."""
-        library = parse_cql(cql_path.read_text())
+        library = parse_cql(library_artifact.text)
         compiled_group = self._compile_group(
             group=group,
             pop_map=pop_map,
             library=library,
-            cql_path=cql_path,
+            library_artifact=library_artifact,
+            artifact_resolver=artifact_resolver,
             parameters=parameters,
             patient_ids=patient_ids,
             patient_scope="literal",
             audit_mode=audit_mode,
-            include_paths=include_paths,
             include_supporting_evidence=include_supporting_evidence,
             parse_cql=parse_cql,
             translator_cls=translator_cls,
@@ -1200,12 +1235,12 @@ class MeasureEvaluator:
         group: GroupMap,
         pop_map: PopulationMap,
         library: Any,
-        cql_path: Path,
+        library_artifact: LibraryArtifact,
+        artifact_resolver: ArtifactResolver,
         parameters: dict,
         patient_ids: list[str] | None,
         patient_scope: str,
         audit_mode: AuditMode,
-        include_paths: list[str] | None,
         include_supporting_evidence: bool,
         parse_cql: Any,
         translator_cls: Any,
@@ -1236,10 +1271,10 @@ class MeasureEvaluator:
             if self._audit_or_strategy == AuditOrStrategy.ALL:
                 translator.context.set_audit_or_strategy("all")
 
-        # Default include path: the directory containing the CQL file, so that
-        # sibling CQL libraries (Status, QICoreCommon, etc.) are auto-discovered.
-        effective_include_paths = list(include_paths) if include_paths else [cql_path.parent]
-        translator.set_library_loader(self._make_library_loader(effective_include_paths, parse_cql))
+        del library_artifact
+        translator.set_library_loader(
+            self._make_library_loader(artifact_resolver, parse_cql)
+        )
 
         output_columns = {
             self._col_name(p.population_code): p.cql_expression
@@ -1438,29 +1473,23 @@ class MeasureEvaluator:
         return self._narrative.generate(population_code, [], bool(val),
                                         evidence_captured=evidence_captured)
 
-    def _make_library_loader(self, include_paths: list[str], parse_cql: Any):
+    def _make_library_loader(self, artifact_resolver: ArtifactResolver, parse_cql: Any):
         """Create a library loader function for included CQL libraries.
 
         Raises DQMError if a library file is found but fails to parse,
         since silent fallback would produce incorrect measure results.
         """
         def loader(alias: str):
-            # Resolve canonical URLs to simple filenames.
-            # e.g. "hl7.fhir.uv.cql.FHIRHelpers" → "FHIRHelpers"
-            resolved_alias = alias.rsplit(".", 1)[-1] if "." in alias else alias
-            for search_alias in dict.fromkeys([alias, resolved_alias]):
-                for path in include_paths:
-                    base = Path(path)
-                    # Try exact name first, then versioned filenames (e.g. FHIRHelpers-4.4.000.cql)
-                    candidates = [base / f"{search_alias}.cql"] + sorted(base.glob(f"{search_alias}-*.cql"))
-                    for lib_file in candidates:
-                        if lib_file.exists():
-                            try:
-                                return parse_cql(lib_file.read_text())
-                            except (SyntaxError, ValueError, KeyError) as e:
-                                raise DQMError(
-                                    f"Failed to parse included library '{lib_file}': {e}"
-                                ) from e
+            artifact = artifact_resolver.resolve_include(alias)
+            if artifact is None:
+                return None
+            try:
+                return parse_cql(artifact.text)
+            except (SyntaxError, ValueError, KeyError) as e:
+                label = artifact.name or artifact.source_id
+                raise DQMError(
+                    f"Failed to parse included library '{label}': {e}"
+                ) from e
             return None
         return loader
 

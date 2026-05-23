@@ -20,6 +20,11 @@ postgres:
 hapi:
   base_url: http://hapi:8080/fhir
 
+artifacts:
+  # Use "hapi" to resolve Measure/Library/ValueSet artifacts from hapi.base_url.
+  # HAPI measures should set artifact_ref to the Measure id or canonical URL.
+  source: files
+
 period:
   start: "2026-01-01"
   end: "2026-12-31"

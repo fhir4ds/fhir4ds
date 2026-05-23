@@ -1,5 +1,12 @@
 """dqm — Digital Quality Measure Orchestrator & Audit Engine."""
 
+from .artifacts import (
+    ArtifactResolver,
+    FileArtifactResolver,
+    HapiArtifactResolver,
+    LibraryArtifact,
+    MeasureArtifact,
+)
 from .audit import AuditEngine
 from .errors import DQMError, MeasureParseError
 from .evaluator import (
@@ -30,12 +37,17 @@ __all__ = [
     "AuditMode",
     "AuditOrStrategy",
     "AuditPersona",
+    "ArtifactResolver",
     "DQMError",
     "CompiledGroup",
     "CompiledMeasure",
     "CompiledMeasureMetrics",
+    "FileArtifactResolver",
     "GroupMap",
+    "HapiArtifactResolver",
+    "LibraryArtifact",
     "MeasureEvaluator",
+    "MeasureArtifact",
     "MeasureParseError",
     "MeasureParser",
     "MeasureResult",

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import re
 import subprocess
 import sys
 import time
@@ -65,6 +66,12 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=180.0)
     parser.add_argument("--batch-size", type=int, default=25)
     parser.add_argument(
+        "--artifact-source",
+        choices=["files", "hapi"],
+        default="files",
+        help="Resolve Measure/CQL/ValueSet artifacts from local files or HAPI",
+    )
+    parser.add_argument(
         "--max-process-loops",
         type=int,
         default=10,
@@ -113,6 +120,9 @@ def main() -> int:
 
     schema = HapiPostgresSchema(decoded_view=DEFAULT_DECODED_VIEW)
     install_materialization_schema(args.connection, schema=schema)
+    loaded_artifacts = 0
+    if args.artifact_source == "hapi":
+        loaded_artifacts = _put_hapi_artifacts(args.base_url, measure_configs)
 
     materialization_config = _build_materialization_config(
         args.connection,
@@ -129,6 +139,7 @@ def main() -> int:
         ),
         publish_measure_report_to_hapi=args.publish_measure_report_to_hapi,
         hapi_base_url=args.base_url,
+        artifact_source=args.artifact_source,
     )
     sync_measure_config(materialization_config)
 
@@ -228,6 +239,8 @@ def main() -> int:
                 },
                 "loaded_patients": len(target_patient_ids),
                 "loaded_resources": loaded_resources,
+                "loaded_artifacts": loaded_artifacts,
+                "artifact_source": args.artifact_source,
                 "target_patients": target_patient_ids,
                 "claimed_target_patients": sorted(
                     set(target_patient_ids).intersection(claimed_patients)
@@ -270,6 +283,76 @@ def put_resource(base_url: str, resource: dict[str, Any]) -> None:
         raise RuntimeError(
             f"HAPI PUT failed for {resource_type}/{resource_id}: {body}"
         ) from exc
+
+
+def _put_hapi_artifacts(base_url: str, measure_configs: list[Any]) -> int:
+    count = 0
+    seen: set[tuple[str, str]] = set()
+    for measure_config in measure_configs:
+        for resource in _hapi_artifacts_for_measure(measure_config):
+            resource_type = resource.get("resourceType")
+            resource_id = resource.get("id")
+            if not resource_type or not resource_id:
+                continue
+            key = (str(resource_type), str(resource_id))
+            if key in seen:
+                continue
+            put_resource(base_url, resource)
+            seen.add(key)
+            count += 1
+    return count
+
+
+def _hapi_artifacts_for_measure(measure_config: Any) -> list[dict[str, Any]]:
+    artifact_root = measure_config.test_dir.parents[3] / "input" / "resources"
+    resources: list[dict[str, Any]] = []
+
+    measure_path = artifact_root / "measure" / f"{measure_config.name}.json"
+    resources.append(_read_resource(measure_path))
+
+    for library_name in _cql_library_names(measure_config.cql_path):
+        library_path = artifact_root / "library" / f"{library_name}.json"
+        if not library_path.exists():
+            raise RuntimeError(f"Library resource not found: {library_path}")
+        resources.append(_read_resource(library_path))
+
+    valueset_bundle = _valueset_bundle_path(measure_config)
+    if valueset_bundle.exists():
+        bundle = _read_resource(valueset_bundle)
+        for entry in bundle.get("entry", []):
+            resource = entry.get("resource", {}) if isinstance(entry, dict) else {}
+            if resource.get("resourceType") == "ValueSet":
+                resources.append(resource)
+    return resources
+
+
+def _read_resource(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        raise RuntimeError(f"FHIR artifact resource not found: {path}")
+    return json.loads(path.read_text())
+
+
+def _cql_library_names(cql_path: Path) -> list[str]:
+    include_re = re.compile(r"^\s*include\s+([A-Za-z][A-Za-z0-9_.]*)\b", re.MULTILINE)
+    root = cql_path.parent
+    names: list[str] = []
+    seen: set[str] = set()
+
+    def visit(path: Path) -> None:
+        name = path.stem
+        if name in seen:
+            return
+        seen.add(name)
+        names.append(name)
+        text = path.read_text()
+        for include_name in include_re.findall(text):
+            simple_name = include_name.rsplit(".", 1)[-1]
+            include_path = root / f"{simple_name}.cql"
+            if include_path.exists():
+                visit(include_path)
+
+    visit(cql_path)
+    return names
 
 
 def patient_first(resources: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -363,6 +446,7 @@ def _build_materialization_config(
     persist_measure_report: bool,
     publish_measure_report_to_hapi: bool,
     hapi_base_url: str,
+    artifact_source: str,
 ) -> HapiMaterializationConfig:
     period = _shared_measurement_period(test_suite_periods)
     parameters = {"Measurement Period": (period["start"], period["end"])}
@@ -373,10 +457,28 @@ def _build_materialization_config(
         measures=[
             HapiMaterializedMeasure(
                 measure_id=measure_config.id,
-                measure_path=_measure_bundle_path(measure_config),
-                cql_path=measure_config.cql_path,
-                library_paths=list(measure_config.include_paths),
-                valueset_paths=list(measure_config.valueset_paths),
+                measure_path=(
+                    _measure_bundle_path(measure_config)
+                    if artifact_source == "files"
+                    else None
+                ),
+                cql_path=(
+                    measure_config.cql_path if artifact_source == "files" else None
+                ),
+                artifact_source=artifact_source,
+                artifact_ref=(
+                    measure_config.name if artifact_source == "hapi" else None
+                ),
+                library_paths=(
+                    list(measure_config.include_paths)
+                    if artifact_source == "files"
+                    else []
+                ),
+                valueset_paths=(
+                    list(measure_config.valueset_paths)
+                    if artifact_source == "files"
+                    else []
+                ),
                 measure_version=measure_version,
                 audit_mode=AuditMode.POPULATION if persist_audit else AuditMode.NONE,
                 persist_audit=persist_audit,
@@ -401,6 +503,17 @@ def _measure_bundle_path(measure_config: Any) -> Path:
         / "measure"
         / measure_config.name
         / f"{measure_config.name}-bundle.json"
+    )
+
+
+def _valueset_bundle_path(measure_config: Any) -> Path:
+    return (
+        measure_config.test_dir.parents[3]
+        / "bundles"
+        / "measure"
+        / measure_config.name
+        / f"{measure_config.name}-files"
+        / f"valuesets-{measure_config.name}-bundle.json"
     )
 
 

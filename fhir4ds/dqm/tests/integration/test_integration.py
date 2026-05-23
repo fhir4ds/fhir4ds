@@ -1,12 +1,13 @@
 """End-to-end integration tests for MeasureEvaluator with DuckDB."""
 
+import base64
 import json
 from pathlib import Path
 
 import duckdb
 import pytest
 
-from fhir4ds.dqm import MeasureEvaluator, MeasureParser
+from fhir4ds.dqm import FileArtifactResolver, MeasureEvaluator, MeasureParser
 
 TESTS_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "tests"
 DQM_2026 = TESTS_DIR / "data" / "dqm-content-qicore-2026" / "input"
@@ -178,6 +179,102 @@ define "Initial Population":
         assert metrics["execute_count"] == 2
         assert metrics["last_patient_count"] == 1
         assert metrics["prepared_count"] >= 1
+
+    def test_evaluate_with_inline_library_resource(self, conn):
+        """In-memory Measure/Library resources should avoid filesystem bridges."""
+        from fhir4ds.cql import FHIRDataLoader
+        loader = FHIRDataLoader(conn)
+        loader.load_resource({
+            "resourceType": "Patient",
+            "id": "p1",
+            "gender": "female",
+            "birthDate": "1990-01-01",
+        })
+
+        measure_json = {
+            "resourceType": "Measure",
+            "id": "inline-measure",
+            "library": ["http://example.com/Library/InlineMeasure"],
+            "group": [{
+                "population": [{
+                    "code": {"coding": [{"code": "initial-population"}]},
+                    "criteria": {"expression": "Initial Population"},
+                }]
+            }],
+        }
+        cql_text = '''library InlineMeasure
+using FHIR version '4.0.1'
+context Patient
+define "Initial Population":
+    Patient.gender = 'female'
+'''
+        library_resource = {
+            "resourceType": "Library",
+            "id": "InlineMeasure",
+            "name": "InlineMeasure",
+            "url": "http://example.com/Library/InlineMeasure",
+            "content": [{
+                "contentType": "text/cql",
+                "data": base64.b64encode(cql_text.encode()).decode(),
+            }],
+        }
+
+        evaluator = MeasureEvaluator(conn)
+        result = evaluator.evaluate(
+            measure_ref=measure_json,
+            cql_library_path=library_resource,
+            artifact_resolver=FileArtifactResolver(),
+        )
+
+        assert bool(result.dataframe.loc[0, "initial_population"]) is True
+
+    def test_file_resolver_uses_primary_library_directory_for_includes(
+        self, conn, tmp_path
+    ):
+        """Path callers should resolve sibling CQL includes through the resolver."""
+        from fhir4ds.cql import FHIRDataLoader
+        loader = FHIRDataLoader(conn)
+        loader.load_resource({
+            "resourceType": "Patient",
+            "id": "p1",
+            "gender": "male",
+            "birthDate": "1990-01-01",
+        })
+
+        measure_json = {
+            "resourceType": "Measure",
+            "id": "include-measure",
+            "library": ["http://example.com/Library/IncludeMeasure"],
+            "group": [{
+                "population": [{
+                    "code": {"coding": [{"code": "initial-population"}]},
+                    "criteria": {"expression": "Initial Population"},
+                }]
+            }],
+        }
+        main_cql = tmp_path / "IncludeMeasure.cql"
+        main_cql.write_text('''library IncludeMeasure
+using FHIR version '4.0.1'
+include HelperLibrary called Helper
+context Patient
+define "Initial Population":
+    Helper."Is Male"
+''')
+        helper_cql = tmp_path / "HelperLibrary.cql"
+        helper_cql.write_text('''library HelperLibrary
+using FHIR version '4.0.1'
+context Patient
+define "Is Male":
+    Patient.gender = 'male'
+''')
+
+        evaluator = MeasureEvaluator(conn)
+        result = evaluator.evaluate(
+            measure_bundle=measure_json,
+            cql_library_path=main_cql,
+        )
+
+        assert bool(result.dataframe.loc[0, "initial_population"]) is True
 
     def test_compiled_measure_omits_patient_columns_without_implicit_patient_access(
         self, conn, tmp_path

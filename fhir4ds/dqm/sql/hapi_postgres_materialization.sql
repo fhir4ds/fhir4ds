@@ -25,8 +25,11 @@ CREATE TABLE IF NOT EXISTS fhir4ds_measure_config (
     measure_id TEXT PRIMARY KEY,
     enabled BOOLEAN NOT NULL DEFAULT true,
     measure_version TEXT,
-    measure_path TEXT NOT NULL,
+    measure_path TEXT,
     cql_path TEXT,
+    artifact_source TEXT NOT NULL DEFAULT 'files'
+        CHECK (artifact_source IN ('files', 'hapi')),
+    artifact_ref TEXT,
     library_paths JSONB NOT NULL DEFAULT '[]'::jsonb,
     valueset_paths JSONB NOT NULL DEFAULT '[]'::jsonb,
     parameters JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -44,7 +47,12 @@ CREATE TABLE IF NOT EXISTS fhir4ds_measure_config (
 
 ALTER TABLE fhir4ds_measure_config
     ADD COLUMN IF NOT EXISTS persist_measure_report BOOLEAN NOT NULL DEFAULT false,
-    ADD COLUMN IF NOT EXISTS publish_measure_report_to_hapi BOOLEAN NOT NULL DEFAULT false;
+    ADD COLUMN IF NOT EXISTS publish_measure_report_to_hapi BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS artifact_source TEXT NOT NULL DEFAULT 'files',
+    ADD COLUMN IF NOT EXISTS artifact_ref TEXT;
+
+ALTER TABLE fhir4ds_measure_config
+    ALTER COLUMN measure_path DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS fhir4ds_measure_run (
     run_id BIGSERIAL PRIMARY KEY,

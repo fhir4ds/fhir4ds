@@ -55,6 +55,9 @@ def test_materialization_sql_contains_queue_result_and_triggers():
     assert "fhir4ds_measure_result_run_idx" in sql
     assert "measure_report_json JSONB" in sql
     assert "persist_measure_report BOOLEAN" in sql
+    assert "artifact_source TEXT NOT NULL DEFAULT 'files'" in sql
+    assert "artifact_ref TEXT" in sql
+    assert "ALTER COLUMN measure_path DROP NOT NULL" in sql
     assert "fhir4ds_is_generated_measure_report" in sql
     assert "LIKE 'fhir4ds-%'" in sql
     assert "pg_notify(" in sql
@@ -142,12 +145,49 @@ def test_parse_materialization_config_resolves_paths_and_defaults(tmp_path):
     assert measure_config.measure_id == "CMS_TEST"
     assert measure_config.measure_path == measure
     assert measure_config.cql_path == cql
+    assert measure_config.artifact_source == "files"
+    assert measure_config.artifact_ref is None
     assert measure_config.measure_version == "2026"
     assert measure_config.audit_mode == AuditMode.POPULATION
     assert measure_config.persist_audit is True
     assert measure_config.persist_measure_report is True
     assert measure_config.publish_measure_report_to_hapi is True
     assert measure_config.generate_narratives is True
+
+
+def test_parse_materialization_config_allows_hapi_artifact_source():
+    raw = {
+        "postgres": {"connection_string": "postgresql://hapi:hapi@localhost/hapi"},
+        "hapi": {"base_url": "http://localhost:18080/fhir"},
+        "artifacts": {"source": "hapi"},
+        "measures": [
+            {
+                "id": "CMS_TEST",
+                "artifact_ref": "CMS122FHIRDiabetesAssessGreaterThan9Percent",
+                "version": "2025",
+            }
+        ],
+    }
+
+    config = parse_materialization_config(raw)
+
+    measure_config = config.measures[0]
+    assert measure_config.measure_id == "CMS_TEST"
+    assert measure_config.measure_path is None
+    assert measure_config.cql_path is None
+    assert measure_config.artifact_source == "hapi"
+    assert measure_config.artifact_ref == "CMS122FHIRDiabetesAssessGreaterThan9Percent"
+
+
+def test_parse_materialization_config_requires_hapi_base_url_for_hapi_artifacts():
+    raw = {
+        "postgres": {"connection_string": "postgresql://hapi:hapi@localhost/hapi"},
+        "artifacts": {"source": "hapi"},
+        "measures": [{"id": "CMS_TEST", "artifact_ref": "MeasureRef"}],
+    }
+
+    with pytest.raises(DQMConfigError, match="hapi.base_url"):
+        parse_materialization_config(raw)
 
 
 def test_parse_materialization_config_requires_hapi_base_url_for_publish(tmp_path):
@@ -382,6 +422,25 @@ def test_materialized_measure_hash_changes_with_parameters(tmp_path):
     )
 
     assert materialized_measure_hash(base) != materialized_measure_hash(changed)
+
+
+def test_materialized_measure_hash_changes_with_artifact_source(tmp_path):
+    measure, cql = _write_measure_files(tmp_path)
+    file_measure = HapiMaterializedMeasure(
+        measure_id="CMS_TEST",
+        measure_path=measure,
+        cql_path=cql,
+        artifact_source="files",
+    )
+    hapi_measure = HapiMaterializedMeasure(
+        measure_id="CMS_TEST",
+        artifact_source="hapi",
+        artifact_ref="CMS_TEST",
+    )
+
+    assert materialized_measure_hash(file_measure) != materialized_measure_hash(
+        hapi_measure
+    )
 
 
 def test_prune_materialization_history_uses_configured_retention(monkeypatch):

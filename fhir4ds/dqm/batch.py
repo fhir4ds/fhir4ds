@@ -469,6 +469,13 @@ def _load_valuesets(conn: Any, paths: list[Path]) -> int:
             valuesets.append(data)
     if not valuesets:
         return 0
+    return _load_valueset_resources(conn, valuesets)
+
+
+def _load_valueset_resources(conn: Any, valuesets: list[dict[str, Any]]) -> int:
+    """Load already-resolved FHIR ValueSet resources into DuckDB terminology."""
+    if not valuesets:
+        return 0
     return FHIRDataLoader(conn, create_table=False).load_valuesets(valuesets)
 
 

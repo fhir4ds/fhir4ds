@@ -18,7 +18,8 @@ from pathlib import Path
 from typing import Any
 
 import fhir4ds
-from fhir4ds.dqm.batch import _load_valuesets, _resolve_cql_path
+from fhir4ds.dqm.artifacts import HapiArtifactResolver
+from fhir4ds.dqm.batch import _load_valueset_resources, _load_valuesets, _resolve_cql_path
 from fhir4ds.dqm.config import DQMConfigError, MeasureSpec
 from fhir4ds.dqm.evaluator import MeasureEvaluator
 from fhir4ds.dqm.models import MeasureResult
@@ -42,8 +43,10 @@ class HapiMaterializedMeasure:
     """One measure configured for HAPI queue materialization."""
 
     measure_id: str
-    measure_path: Path
+    measure_path: Path | None = None
     cql_path: Path | None = None
+    artifact_source: str = "files"
+    artifact_ref: str | None = None
     enabled: bool = True
     measure_version: str | None = None
     library_paths: list[Path] = field(default_factory=list)
@@ -122,6 +125,7 @@ class HapiMaterializationRuntime:
     source: HapiPostgresSource
     evaluator: MeasureEvaluator
     loaded_valueset_keys: set[tuple[str, ...]] = field(default_factory=set)
+    loaded_hapi_valueset_keys: set[tuple[str, ...]] = field(default_factory=set)
 
     @classmethod
     def open(cls, config: HapiMaterializationConfig) -> HapiMaterializationRuntime:
@@ -151,6 +155,16 @@ class HapiMaterializationRuntime:
             return
         _load_valuesets(self.duck_conn, paths)
         self.loaded_valueset_keys.add(key)
+
+    def load_valueset_resources_once(
+        self,
+        valuesets: list[dict[str, Any]],
+    ) -> None:
+        key = tuple(sorted(_valueset_identity(valueset) for valueset in valuesets))
+        if key in self.loaded_hapi_valueset_keys:
+            return
+        _load_valueset_resources(self.duck_conn, valuesets)
+        self.loaded_hapi_valueset_keys.add(key)
 
     def close(self) -> None:
         self.source.unregister(self.duck_conn)
@@ -281,6 +295,12 @@ def parse_materialization_config(
     results = raw.get("results") or {}
     if not isinstance(results, dict):
         raise DQMConfigError("'results' must be an object")
+    artifacts = raw.get("artifacts") or {}
+    if not isinstance(artifacts, dict):
+        raise DQMConfigError("'artifacts' must be an object")
+    artifact_source = str(artifacts.get("source", "files")).lower()
+    if artifact_source not in {"files", "hapi"}:
+        raise DQMConfigError("'artifacts.source' must be 'files' or 'hapi'")
 
     global_period = raw.get("period") or {}
     if global_period is None:
@@ -304,10 +324,14 @@ def parse_materialization_config(
         base=base,
         defaults=defaults,
         results=results,
+        artifact_source=artifact_source,
     )
-    if any(measure.publish_measure_report_to_hapi for measure in measures) and not hapi_base_url:
+    if (
+        any(measure.publish_measure_report_to_hapi for measure in measures)
+        or any(measure.artifact_source == "hapi" for measure in measures)
+    ) and not hapi_base_url:
         raise DQMConfigError(
-            "'hapi.base_url' is required when publishing MeasureReports to HAPI"
+            "'hapi.base_url' is required when publishing or resolving artifacts from HAPI"
         )
 
     return HapiMaterializationConfig(
@@ -354,6 +378,8 @@ def sync_measure_config(config: HapiMaterializationConfig) -> int:
                     measure_version,
                     measure_path,
                     cql_path,
+                    artifact_source,
+                    artifact_ref,
                     library_paths,
                     valueset_paths,
                     parameters,
@@ -368,7 +394,7 @@ def sync_measure_config(config: HapiMaterializationConfig) -> int:
                     updated_at
                 )
                 VALUES (
-                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
                     %s::jsonb, %s::jsonb, %s::jsonb, %s,
                     %s, %s, %s, %s, %s, %s, %s, now()
                 )
@@ -378,6 +404,8 @@ def sync_measure_config(config: HapiMaterializationConfig) -> int:
                     measure_version = EXCLUDED.measure_version,
                     measure_path = EXCLUDED.measure_path,
                     cql_path = EXCLUDED.cql_path,
+                    artifact_source = EXCLUDED.artifact_source,
+                    artifact_ref = EXCLUDED.artifact_ref,
                     library_paths = EXCLUDED.library_paths,
                     valueset_paths = EXCLUDED.valueset_paths,
                     parameters = EXCLUDED.parameters,
@@ -395,8 +423,10 @@ def sync_measure_config(config: HapiMaterializationConfig) -> int:
                     measure.measure_id,
                     measure.enabled,
                     measure.measure_version,
-                    str(measure.measure_path),
+                    str(measure.measure_path) if measure.measure_path else None,
                     str(measure.cql_path) if measure.cql_path else None,
+                    measure.artifact_source,
+                    measure.artifact_ref,
                     json.dumps(
                         [str(path) for path in [*config.library_paths, *measure.library_paths]]
                     ),
@@ -636,6 +666,8 @@ def load_enabled_measure_config(conn: Any) -> list[HapiMaterializedMeasure]:
             measure_version,
             measure_path,
             cql_path,
+            artifact_source,
+            artifact_ref,
             library_paths::text,
             valueset_paths::text,
             parameters::text,
@@ -658,19 +690,21 @@ def load_enabled_measure_config(conn: Any) -> list[HapiMaterializedMeasure]:
             HapiMaterializedMeasure(
                 measure_id=row[0],
                 measure_version=row[1],
-                measure_path=Path(row[2]),
+                measure_path=Path(row[2]) if row[2] else None,
                 cql_path=Path(row[3]) if row[3] else None,
-                library_paths=[Path(path) for path in json.loads(row[4] or "[]")],
-                valueset_paths=[Path(path) for path in json.loads(row[5] or "[]")],
-                parameters=json.loads(row[6] or "{}"),
-                tags=list(row[7] or []),
-                audit_mode=AuditMode(row[8]),
-                persist_audit=bool(row[9]),
-                persist_measure_report=bool(row[10]),
-                publish_measure_report_to_hapi=bool(row[11]),
-                generate_narratives=bool(row[12]),
-                include_supporting_evidence=bool(row[13]),
-                filter_to_ip=bool(row[14]),
+                artifact_source=row[4] or "files",
+                artifact_ref=row[5],
+                library_paths=[Path(path) for path in json.loads(row[6] or "[]")],
+                valueset_paths=[Path(path) for path in json.loads(row[7] or "[]")],
+                parameters=json.loads(row[8] or "{}"),
+                tags=list(row[9] or []),
+                audit_mode=AuditMode(row[10]),
+                persist_audit=bool(row[11]),
+                persist_measure_report=bool(row[12]),
+                publish_measure_report_to_hapi=bool(row[13]),
+                generate_narratives=bool(row[14]),
+                include_supporting_evidence=bool(row[15]),
+                filter_to_ip=bool(row[16]),
             )
         )
     return measures
@@ -917,8 +951,10 @@ def materialized_measure_hash(measure: HapiMaterializedMeasure) -> str:
     payload = {
         "measure_id": measure.measure_id,
         "measure_version": measure.measure_version,
-        "measure_path": str(measure.measure_path),
+        "measure_path": str(measure.measure_path) if measure.measure_path else None,
         "cql_path": str(measure.cql_path) if measure.cql_path else None,
+        "artifact_source": measure.artifact_source,
+        "artifact_ref": measure.artifact_ref,
         "library_paths": [str(path) for path in measure.library_paths],
         "valueset_paths": [str(path) for path in measure.valueset_paths],
         "parameters": measure.parameters,
@@ -964,7 +1000,7 @@ def _process_claimed_patients(
         try:
             runtime.load_valuesets_once(measure.valueset_paths)
             result = _evaluate_materialized_measure(
-                evaluator,
+                runtime,
                 config,
                 measure,
                 patient_ids,
@@ -1008,17 +1044,46 @@ def _process_claimed_patients(
 
 
 def _evaluate_materialized_measure(
-    evaluator: MeasureEvaluator,
+    runtime: HapiMaterializationRuntime,
     config: HapiMaterializationConfig,
     measure: HapiMaterializedMeasure,
     patient_ids: list[str],
 ) -> MeasureResult:
+    evaluator = runtime.evaluator
+    parameters = dict(config.parameters)
+    parameters.update(measure.parameters)
+    if measure.artifact_source == "hapi":
+        if not config.hapi_base_url:
+            raise DQMConfigError(
+                "'hapi.base_url' is required when resolving artifacts from HAPI"
+            )
+        resolver = HapiArtifactResolver(config.hapi_base_url)
+        measure_ref = measure.artifact_ref or measure.measure_id
+        measure_artifact = resolver.resolve_measure(measure_ref)
+        library_artifact = resolver.resolve_library(measure=measure_artifact.resource)
+        valuesets = resolver.resolve_valuesets_for_cql(library_artifact.text)
+        runtime.load_valueset_resources_once(valuesets)
+        compiled = evaluator.compile_measure(
+            measure_ref=measure_ref,
+            artifact_resolver=resolver,
+            parameters=parameters,
+            audit_mode=measure.audit_mode,
+            filter_to_ip=measure.filter_to_ip,
+            patient_scope="target_table",
+            generate_narratives=measure.generate_narratives,
+            include_supporting_evidence=measure.include_supporting_evidence
+            or measure.persist_audit,
+        )
+        return evaluator.execute_compiled_measure(compiled, patient_ids=patient_ids)
+
+    if measure.measure_path is None:
+        raise DQMConfigError(
+            f"Measure path is required for file artifact source: {measure.measure_id}"
+        )
     cql_path = measure.cql_path or _resolve_cql_path(
         MeasureSpec(path=measure.measure_path, cql=None, id=measure.measure_id),
         [*config.library_paths, *measure.library_paths],
     )
-    parameters = dict(config.parameters)
-    parameters.update(measure.parameters)
     compiled = evaluator.compile_measure(
         measure_bundle=measure.measure_path,
         cql_library_path=cql_path,
@@ -1194,12 +1259,25 @@ def _publish_measure_report_to_hapi(
         ) from exc
 
 
+def _valueset_identity(valueset: dict[str, Any]) -> str:
+    payload = {
+        "url": valueset.get("url"),
+        "version": valueset.get("version"),
+        "id": valueset.get("id"),
+        "hash": hashlib.sha256(
+            json.dumps(valueset, sort_keys=True, default=str).encode()
+        ).hexdigest(),
+    }
+    return json.dumps(payload, sort_keys=True)
+
+
 def _parse_materialized_measures(
     raw: Any,
     *,
     base: Path,
     defaults: dict[str, Any],
     results: dict[str, Any],
+    artifact_source: str = "files",
 ) -> list[HapiMaterializedMeasure]:
     if raw in (None, []):
         return []
@@ -1209,11 +1287,21 @@ def _parse_materialized_measures(
     for index, item in enumerate(raw):
         if not isinstance(item, dict):
             raise DQMConfigError(f"measures[{index}] must be an object")
+        source = str(item.get("artifact_source", artifact_source)).lower()
+        if source not in {"files", "hapi"}:
+            raise DQMConfigError(
+                f"measures[{index}].artifact_source must be 'files' or 'hapi'"
+            )
         path = item.get("path")
-        if not isinstance(path, str) or not path:
+        if source == "files" and (not isinstance(path, str) or not path):
             raise DQMConfigError(f"measures[{index}].path is required")
-        measure_path = _resolve_path(path, base)
-        measure_id = item.get("id") or measure_path.stem.replace("Measure-", "")
+        measure_path = _resolve_path(path, base) if isinstance(path, str) and path else None
+        artifact_ref = item.get("artifact_ref")
+        if artifact_ref is not None and not isinstance(artifact_ref, str):
+            raise DQMConfigError(f"measures[{index}].artifact_ref must be a string")
+        measure_id = item.get("id") or (
+            measure_path.stem.replace("Measure-", "") if measure_path else artifact_ref
+        )
         if not isinstance(measure_id, str) or not measure_id:
             raise DQMConfigError(f"measures[{index}].id must be a string")
 
@@ -1235,6 +1323,8 @@ def _parse_materialized_measures(
                 measure_id=measure_id,
                 measure_path=measure_path,
                 cql_path=_optional_path(item.get("cql"), base),
+                artifact_source=source,
+                artifact_ref=artifact_ref,
                 enabled=bool(item.get("enabled", True)),
                 measure_version=item.get("version"),
                 library_paths=_parse_paths(item.get("libraries", []), base),
