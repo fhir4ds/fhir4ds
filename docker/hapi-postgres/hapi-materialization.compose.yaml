@@ -20,11 +20,16 @@ postgres:
 hapi:
   base_url: http://hapi:8080/fhir
   timeout_seconds: 30
+  # latest selects the newest loadable HAPI ValueSet when CQL omits a version.
+  # Use "error" to require versioned CQL ValueSet declarations.
+  valueset_version_policy: latest
   headers: {}
 
 artifacts:
   # Use "hapi" to resolve Measure/Library/ValueSet artifacts from hapi.base_url.
   # HAPI measures should set artifact_ref to the Measure id or canonical URL.
+  # Versioned ValueSets may be declared in CQL as canonical|version or with a
+  # separate version qualifier.
   source: files
 
 period:

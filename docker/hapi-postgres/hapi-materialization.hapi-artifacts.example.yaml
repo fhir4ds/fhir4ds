@@ -20,6 +20,9 @@ postgres:
 hapi:
   base_url: http://localhost:18080/fhir
   timeout_seconds: 30
+  # latest selects the newest loadable HAPI ValueSet when CQL omits a version.
+  # Use "error" to require versioned CQL ValueSet declarations.
+  valueset_version_policy: latest
   # bearer_token: replace-with-token
   headers: {}
 
@@ -61,6 +64,8 @@ libraries:
 
 terminology:
   # HAPI artifact mode resolves CQL-declared ValueSets through hapi.base_url.
+  # ValueSets must contain an expansion, direct compose concepts, or be
+  # expandable by HAPI $expand.
   # Paths are only used by measures that override artifact_source: files.
   valuesets: []
 

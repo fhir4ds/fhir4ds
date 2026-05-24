@@ -40,6 +40,19 @@ class ValueSetRef:
     url: str
     version: str | None = None
 
+    @classmethod
+    def parse(cls, ref: str, *, version: str | None = None) -> ValueSetRef:
+        """Parse ``canonical`` or ``canonical|version`` ValueSet references."""
+        if not isinstance(ref, str) or not ref:
+            raise DQMConfigError("ValueSet reference must be a non-empty string")
+        url, canonical_version = _split_canonical(ref)
+        if version and canonical_version and version != canonical_version:
+            raise DQMConfigError(
+                "ValueSet reference contains conflicting canonical and "
+                f"version values: {ref} version '{version}'"
+            )
+        return cls(url=url, version=version or canonical_version)
+
     @property
     def label(self) -> str:
         return f"{self.url}|{self.version}" if self.version else self.url
@@ -89,6 +102,9 @@ class ArtifactResolver(Protocol):
         version: str | None = None,
     ) -> LibraryArtifact | None:
         """Resolve a CQL include alias to a library artifact."""
+
+    def resolve_valueset(self, ref: str | ValueSetRef) -> dict[str, Any]:
+        """Resolve one canonical ValueSet reference."""
 
     def resolve_valuesets_for_cql(self, cql_text: str) -> list[dict[str, Any]]:
         """Resolve ValueSet resources declared by CQL and transitive includes."""
@@ -213,8 +229,17 @@ class FileArtifactResolver:
         )
         valuesets: list[dict[str, Any]] = []
         for ref in refs:
-            valuesets.append(self._resolve_valueset_ref(ref))
+            valuesets.append(self.resolve_valueset(ref))
         return valuesets
+
+    def resolve_valueset(self, ref: str | ValueSetRef) -> dict[str, Any]:
+        """Resolve one ValueSet from configured local ValueSet files."""
+        value_set_ref = _coerce_valueset_ref(ref)
+        if not self.valueset_paths:
+            raise DQMConfigError(
+                "File ValueSet resolution requires valueset_paths to be configured"
+            )
+        return self._resolve_valueset_ref(value_set_ref)
 
     def fingerprint(self) -> str:
         items: list[tuple[str, str]] = []
@@ -285,7 +310,9 @@ class FileArtifactResolver:
                 if valueset.get("version") == ref.version
             ]
         if not candidates:
-            raise DQMConfigError(f"ValueSet not found in files: {ref.label}")
+            available = _available_versions(self._valueset_index().get(ref.url, []))
+            suffix = f". Available versions: {available}" if available else ""
+            raise DQMConfigError(f"ValueSet not found in files: {ref.label}{suffix}")
         if len(candidates) > 1 and not ref.version:
             versions = ", ".join(
                 sorted(str(valueset.get("version") or "<unversioned>") for valueset in candidates)
@@ -294,8 +321,17 @@ class FileArtifactResolver:
                 f"ValueSet reference is ambiguous in files: {ref.url}. "
                 f"Specify a version; available versions: {versions}"
             )
+        if len(candidates) > 1:
+            versions = ", ".join(
+                sorted(str(valueset.get("version") or "<unversioned>") for valueset in candidates)
+            )
+            raise DQMConfigError(
+                f"ValueSet reference is ambiguous in files: {ref.label}. "
+                f"Matched {len(candidates)} resources; available versions: {versions}"
+            )
 
         valueset = candidates[0]
+        _validate_valueset_resource(valueset, source=f"files:{ref.label}")
         self._valueset_cache[cache_key] = valueset
         return valueset
 
@@ -337,14 +373,20 @@ class HapiArtifactResolver:
         *,
         headers: dict[str, str] | None = None,
         timeout_seconds: float = 30.0,
+        unversioned_valueset_policy: str = "latest",
     ):
         if not base_url:
             raise DQMConfigError("HAPI artifact resolver requires a base URL")
         if timeout_seconds <= 0:
             raise DQMConfigError("HAPI artifact resolver timeout must be positive")
+        if unversioned_valueset_policy not in {"latest", "error"}:
+            raise DQMConfigError(
+                "HAPI unversioned ValueSet policy must be 'latest' or 'error'"
+            )
         self.base_url = base_url.rstrip("/")
         self.headers = _normalize_headers(headers)
         self.timeout_seconds = float(timeout_seconds)
+        self.unversioned_valueset_policy = unversioned_valueset_policy
         self._cache: dict[tuple[str, str], dict[str, Any]] = {}
         self._library_cache: dict[str, LibraryArtifact] = {}
         self._valueset_cache: dict[tuple[str, str | None], dict[str, Any]] = {}
@@ -392,6 +434,7 @@ class HapiArtifactResolver:
     def fingerprint(self) -> str:
         payload = {
             "base_url": self.base_url,
+            "unversioned_valueset_policy": self.unversioned_valueset_policy,
             "resources": [
                 _resource_source_id(key[0], resource)
                 for key, resource in sorted(self._cache.items())
@@ -417,12 +460,22 @@ class HapiArtifactResolver:
         valuesets: list[dict[str, Any]] = []
         for ref in refs:
             try:
-                valuesets.append(self._resolve_valueset_ref(ref))
+                valuesets.append(self.resolve_valueset(ref))
             except FileNotFoundError as exc:
                 raise DQMConfigError(
                     f"ValueSet not found in HAPI: {ref.label}"
                 ) from exc
         return valuesets
+
+    def resolve_valueset(self, ref: str | ValueSetRef) -> dict[str, Any]:
+        """Resolve one ValueSet from HAPI by canonical URL and optional version."""
+        try:
+            return self._resolve_valueset_ref(_coerce_valueset_ref(ref))
+        except FileNotFoundError as exc:
+            value_set_ref = _coerce_valueset_ref(ref)
+            raise DQMConfigError(
+                f"ValueSet not found in HAPI: {value_set_ref.label}"
+            ) from exc
 
     def _resolve_valueset_ref(self, ref: ValueSetRef) -> dict[str, Any]:
         cache_key = (ref.url, ref.version)
@@ -430,35 +483,35 @@ class HapiArtifactResolver:
         if cached is not None:
             return cached
 
-        params = {"url": ref.url}
-        if ref.version:
-            params["version"] = ref.version
-        valueset = self._search_one("ValueSet", params)
-        if valueset.get("expansion"):
-            self._valueset_cache[cache_key] = valueset
-            return valueset
+        last_expand_error: Exception | None = None
+        for valueset in self._search_valueset_candidates(ref):
+            if _valueset_has_terminology_payload(valueset):
+                _validate_valueset_resource(valueset, source=f"HAPI:{ref.label}")
+                self._valueset_cache[cache_key] = valueset
+                return valueset
 
-        try:
-            expanded = self._expand_valueset(ref, valueset)
-        except RuntimeError as exc:
-            raise DQMConfigError(
-                "HAPI ValueSet resolution requires an expanded ValueSet. "
-                f"The ValueSet resource had no expansion and $expand failed for: {ref.label}. "
-                f"{exc}"
-            ) from exc
-        if expanded.get("expansion"):
-            if not expanded.get("url"):
-                expanded = {**expanded, "url": ref.url}
-            if ref.version and not expanded.get("version"):
-                expanded = {**expanded, "version": ref.version}
-            self._valueset_cache[cache_key] = expanded
-            return expanded
+            try:
+                expanded = self._expand_valueset(ref, valueset)
+            except RuntimeError as exc:
+                last_expand_error = exc
+                continue
+            if _valueset_has_terminology_payload(expanded):
+                if not expanded.get("url"):
+                    expanded = {**expanded, "url": ref.url}
+                if ref.version and not expanded.get("version"):
+                    expanded = {**expanded, "version": ref.version}
+                _validate_valueset_resource(expanded, source=f"HAPI:{ref.label}")
+                self._valueset_cache[cache_key] = expanded
+                return expanded
 
-        raise DQMConfigError(
-            "HAPI ValueSet resolution requires an expanded ValueSet. "
+        message = (
+            "HAPI ValueSet resolution requires loadable terminology. "
             "HAPI returned the ValueSet resource, but neither the resource nor "
-            f"$expand contained expansion codes for: {ref.label}"
+            f"$expand contained an expansion or direct compose concepts for: {ref.label}"
         )
+        if last_expand_error is not None:
+            message += f". Last $expand error: {last_expand_error}"
+        raise DQMConfigError(message)
 
     def _resolve_library_ref(
         self,
@@ -547,6 +600,41 @@ class HapiArtifactResolver:
                 return resource
         raise FileNotFoundError(f"{resource_type} not found in HAPI for {params}")
 
+    def _search_valueset_candidates(self, ref: ValueSetRef) -> list[dict[str, Any]]:
+        params = {"url": ref.url}
+        if ref.version:
+            params["version"] = ref.version
+        query = urllib.parse.urlencode(params)
+        bundle = self._read_json(f"{self.base_url}/ValueSet?{query}")
+        matches: list[dict[str, Any]] = []
+        for entry in bundle.get("entry", []):
+            resource = entry.get("resource", {}) if isinstance(entry, dict) else {}
+            if resource.get("resourceType") != "ValueSet":
+                continue
+            if resource.get("url") != ref.url:
+                continue
+            if ref.version and resource.get("version") != ref.version:
+                continue
+            key = ("ValueSet", str(resource.get("id", "")))
+            self._cache[key] = resource
+            matches.append(resource)
+        if not matches:
+            raise FileNotFoundError(f"ValueSet not found in HAPI for {params}")
+        if len(matches) > 1:
+            versions = _available_versions(matches)
+            if ref.version:
+                raise DQMConfigError(
+                    f"ValueSet reference is ambiguous in HAPI: {ref.label}. "
+                    f"Matched {len(matches)} resources; available versions: {versions}"
+                )
+            if self.unversioned_valueset_policy == "latest":
+                return _sort_valuesets_latest_first(matches)
+            raise DQMConfigError(
+                f"ValueSet reference is ambiguous in HAPI: {ref.url}. "
+                f"Specify a version; available versions: {versions}"
+            )
+        return matches
+
     def _expand_valueset(
         self,
         ref: ValueSetRef,
@@ -590,14 +678,7 @@ class HapiArtifactResolver:
 def _valueset_refs_from_cql(cql_text: str) -> list[ValueSetRef]:
     refs: list[ValueSetRef] = []
     for raw_url, raw_version in _CQL_VALUESET_RE.findall(cql_text):
-        url, canonical_version = _split_canonical(raw_url)
-        version = raw_version or canonical_version
-        if raw_version and canonical_version and raw_version != canonical_version:
-            raise DQMConfigError(
-                "ValueSet declaration contains conflicting canonical and "
-                f"version values: {raw_url} version '{raw_version}'"
-            )
-        refs.append(ValueSetRef(url=url, version=version or None))
+        refs.append(ValueSetRef.parse(raw_url, version=raw_version or None))
     return refs
 
 
@@ -636,6 +717,99 @@ def _valueset_resources_from_json(data: Any) -> list[dict[str, Any]]:
     if isinstance(data, dict) and data.get("resourceType") == "ValueSet":
         return [data]
     return []
+
+
+def create_artifact_resolver(
+    source: str = "files",
+    *,
+    include_paths: list[str | Path] | None = None,
+    valueset_paths: list[str | Path] | None = None,
+    hapi_base_url: str | None = None,
+    hapi_headers: dict[str, str] | None = None,
+    hapi_timeout_seconds: float = 30.0,
+    hapi_unversioned_valueset_policy: str = "latest",
+) -> ArtifactResolver:
+    """Create a standard DQM artifact resolver.
+
+    ``source="files"`` resolves artifacts from local paths. ``source="hapi"``
+    resolves Measure, Library, and ValueSet resources through a FHIR REST API.
+    """
+    normalized = source.lower()
+    if normalized == "files":
+        return FileArtifactResolver(
+            include_paths=include_paths,
+            valueset_paths=valueset_paths,
+        )
+    if normalized == "hapi":
+        if not hapi_base_url:
+            raise DQMConfigError("hapi_base_url is required for a HAPI resolver")
+        return HapiArtifactResolver(
+            hapi_base_url,
+            headers=hapi_headers,
+            timeout_seconds=hapi_timeout_seconds,
+            unversioned_valueset_policy=hapi_unversioned_valueset_policy,
+        )
+    raise DQMConfigError("Artifact resolver source must be 'files' or 'hapi'")
+
+
+def _coerce_valueset_ref(ref: str | ValueSetRef) -> ValueSetRef:
+    if isinstance(ref, ValueSetRef):
+        return ref
+    return ValueSetRef.parse(ref)
+
+
+def _available_versions(valuesets: list[dict[str, Any]]) -> str:
+    versions = sorted(
+        str(valueset.get("version") or "<unversioned>") for valueset in valuesets
+    )
+    return ", ".join(versions) if versions else "<none>"
+
+
+def _sort_valuesets_latest_first(valuesets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        valuesets,
+        key=lambda valueset: _version_sort_key(str(valueset.get("version") or "")),
+        reverse=True,
+    )
+
+
+def _version_sort_key(version: str) -> tuple[Any, ...]:
+    parts: list[tuple[int, Any]] = []
+    for token in re.split(r"([0-9]+)", version):
+        if not token:
+            continue
+        parts.append((0, int(token)) if token.isdigit() else (1, token))
+    return tuple(parts)
+
+
+def _validate_valueset_resource(valueset: dict[str, Any], *, source: str) -> None:
+    if valueset.get("resourceType") != "ValueSet":
+        raise DQMConfigError(
+            f"Expected ValueSet resource from {source}, "
+            f"got {valueset.get('resourceType')!r}"
+        )
+    url = valueset.get("url")
+    if not isinstance(url, str) or not url:
+        raise DQMConfigError(f"ValueSet from {source} is missing a canonical url")
+    if not _valueset_has_terminology_payload(valueset):
+        raise DQMConfigError(
+            f"ValueSet {url} from {source} does not contain an expansion or "
+            "direct compose concepts. Pre-expand the ValueSet or configure a "
+            "FHIR terminology server that can expand it."
+        )
+
+
+def _valueset_has_terminology_payload(valueset: dict[str, Any]) -> bool:
+    if "expansion" in valueset:
+        return True
+    compose_includes = valueset.get("compose", {}).get("include", [])
+    if not isinstance(compose_includes, list):
+        return False
+    return any(
+        isinstance(include, dict)
+        and isinstance(include.get("concept"), list)
+        for include in compose_includes
+    )
 
 
 def _versioned_search_params(

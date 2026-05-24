@@ -42,6 +42,13 @@ fhir4ds dqm hapi listen \
   --config docker/hapi-postgres/hapi-materialization.example.yaml
 ```
 
+Check queue, recent runs, active results, and published MeasureReports:
+
+```bash
+fhir4ds dqm hapi status \
+  --config docker/hapi-postgres/hapi-materialization.example.yaml
+```
+
 ## Artifact Sources
 
 `artifacts.source: files` resolves Measure and CQL artifacts from the local
@@ -51,13 +58,18 @@ ValueSet paths in the config.
 `artifacts.source: hapi` resolves Measure, Library, and ValueSet artifacts from
 `hapi.base_url`. Each measure should set `artifact_ref` to a Measure id,
 `Measure/<id>`, or canonical URL. Referenced Library resources must contain a
-`text/cql` or `application/cql` attachment. Referenced ValueSets must either
-already contain an `expansion` or be expandable by HAPI `$expand`.
+`text/cql` or `application/cql` attachment. Referenced ValueSets must contain
+an `expansion`, direct `compose.include.concept` codes, or be expandable by HAPI
+`$expand`. If an unversioned CQL ValueSet declaration matches multiple HAPI
+resources, FHIR4DS tries candidate versions newest-first and uses the newest
+loadable or expandable ValueSet. Set `hapi.valueset_version_policy: error` to
+require CQL `version` qualifiers or `canonical|version` references.
 
 See:
 
 - `docker/hapi-postgres/hapi-materialization.example.yaml`
 - `docker/hapi-postgres/hapi-materialization.hapi-artifacts.example.yaml`
+- `docs/dqm-artifact-resolvers.md`
 
 ## Result Tables
 
@@ -99,4 +111,12 @@ and old run rows:
 ```bash
 fhir4ds dqm hapi prune \
   --config docker/hapi-postgres/hapi-materialization.example.yaml
+```
+
+`status` is read-only and does not print connection strings or credentials:
+
+```bash
+fhir4ds dqm hapi status \
+  --config docker/hapi-postgres/hapi-materialization.example.yaml \
+  --limit 10
 ```

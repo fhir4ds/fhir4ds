@@ -10,7 +10,12 @@ from typing import Any
 
 import pytest
 
-from fhir4ds.dqm.artifacts import FileArtifactResolver, HapiArtifactResolver
+from fhir4ds.dqm.artifacts import (
+    FileArtifactResolver,
+    HapiArtifactResolver,
+    ValueSetRef,
+    create_artifact_resolver,
+)
 from fhir4ds.dqm.config import DQMConfigError
 
 
@@ -123,6 +128,24 @@ def test_file_artifact_resolver_rejects_missing_valueset(tmp_path: Path):
         resolver.resolve_valuesets_for_cql(cql)
 
 
+def test_file_artifact_resolver_rejects_filter_only_valueset(tmp_path: Path):
+    valueset_url = "http://example.com/ValueSet/filter-only"
+    (tmp_path / "vs.json").write_text(
+        json.dumps(
+            {
+                "resourceType": "ValueSet",
+                "id": "filter-only",
+                "url": valueset_url,
+                "compose": {"include": [{"system": "x", "filter": []}]},
+            }
+        )
+    )
+    resolver = FileArtifactResolver(valueset_paths=[tmp_path])
+
+    with pytest.raises(DQMConfigError, match="does not contain an expansion"):
+        resolver.resolve_valueset(ValueSetRef(valueset_url))
+
+
 def test_file_artifact_resolver_rejects_ambiguous_unversioned_valueset(tmp_path: Path):
     valueset_url = "http://example.com/ValueSet/shared"
     for version in ("2024", "2025"):
@@ -143,6 +166,48 @@ def test_file_artifact_resolver_rejects_ambiguous_unversioned_valueset(tmp_path:
         resolver.resolve_valuesets_for_cql(
             "valueset \"Shared\": 'http://example.com/ValueSet/shared'"
         )
+
+
+def test_file_artifact_resolver_rejects_duplicate_versioned_valueset(tmp_path: Path):
+    valueset_url = "http://example.com/ValueSet/shared"
+    for index in range(2):
+        (tmp_path / f"vs-{index}.json").write_text(
+            json.dumps(
+                {
+                    "resourceType": "ValueSet",
+                    "id": f"shared-{index}",
+                    "url": valueset_url,
+                    "version": "2025",
+                    "expansion": {"contains": [{"system": "x", "code": str(index)}]},
+                }
+            )
+        )
+    resolver = FileArtifactResolver(valueset_paths=[tmp_path])
+
+    with pytest.raises(DQMConfigError, match="ambiguous"):
+        resolver.resolve_valueset(f"{valueset_url}|2025")
+
+
+def test_create_artifact_resolver_builds_file_and_hapi_resolvers(tmp_path: Path):
+    file_resolver = create_artifact_resolver(
+        "files",
+        include_paths=[tmp_path],
+        valueset_paths=[tmp_path],
+    )
+    hapi_resolver = create_artifact_resolver(
+        "hapi",
+        hapi_base_url="http://hapi.test/fhir",
+        hapi_headers={"X-Test": "yes"},
+        hapi_timeout_seconds=7,
+        hapi_unversioned_valueset_policy="error",
+    )
+
+    assert isinstance(file_resolver, FileArtifactResolver)
+    assert isinstance(hapi_resolver, HapiArtifactResolver)
+    assert hapi_resolver.base_url == "http://hapi.test/fhir"
+    assert hapi_resolver.headers["X-Test"] == "yes"
+    assert hapi_resolver.timeout_seconds == 7
+    assert hapi_resolver.unversioned_valueset_policy == "error"
 
 
 def test_hapi_artifact_resolver_extracts_library_cql(monkeypatch):
@@ -278,6 +343,44 @@ def test_hapi_artifact_resolver_expands_unexpanded_valueset(monkeypatch):
 
     assert valuesets[0]["expansion"]["contains"][0]["code"] == "y"
     assert any("/ValueSet/$expand?" in url for url in requested)
+
+
+def test_hapi_artifact_resolver_accepts_direct_compose_concepts(monkeypatch):
+    cql = "valueset \"Diabetes\": 'http://example.com/ValueSet/diabetes'"
+    resolver = HapiArtifactResolver("http://hapi.test/fhir")
+    requested: list[str] = []
+
+    def fake_read_json(url: str) -> dict[str, Any]:
+        requested.append(url)
+        if "/ValueSet?" in url:
+            return {
+                "resourceType": "Bundle",
+                "entry": [
+                    {
+                        "resource": {
+                            "resourceType": "ValueSet",
+                            "id": "diabetes",
+                            "url": "http://example.com/ValueSet/diabetes",
+                            "compose": {
+                                "include": [
+                                    {
+                                        "system": "x",
+                                        "concept": [{"code": "direct"}],
+                                    }
+                                ]
+                            },
+                        }
+                    }
+                ],
+            }
+        raise AssertionError(f"unexpected URL: {url}")
+
+    monkeypatch.setattr(resolver, "_read_json", fake_read_json)
+
+    valuesets = resolver.resolve_valuesets_for_cql(cql)
+
+    assert valuesets[0]["compose"]["include"][0]["concept"][0]["code"] == "direct"
+    assert not any("/ValueSet/$expand" in url for url in requested)
 
 
 def test_hapi_artifact_resolver_loads_included_library_valuesets(monkeypatch):
@@ -457,7 +560,130 @@ def test_hapi_artifact_resolver_requires_expanded_valueset(monkeypatch):
 
     monkeypatch.setattr(resolver, "_read_json", fake_read_json)
 
-    with pytest.raises(DQMConfigError, match="requires an expanded ValueSet"):
+    with pytest.raises(DQMConfigError, match="requires loadable terminology"):
+        resolver.resolve_valuesets_for_cql(cql)
+
+
+def test_hapi_artifact_resolver_uses_latest_unversioned_valueset_by_default(monkeypatch):
+    cql = "valueset \"Shared\": 'http://example.com/ValueSet/shared'"
+    resolver = HapiArtifactResolver("http://hapi.test/fhir")
+
+    def fake_read_json(url: str) -> dict[str, Any]:
+        if "/ValueSet?" in url:
+            return {
+                "resourceType": "Bundle",
+                "entry": [
+                    {
+                        "resource": {
+                            "resourceType": "ValueSet",
+                            "id": "shared-2024",
+                            "url": "http://example.com/ValueSet/shared",
+                            "version": "2024",
+                            "expansion": {"contains": []},
+                        }
+                    },
+                    {
+                        "resource": {
+                            "resourceType": "ValueSet",
+                            "id": "shared-2025",
+                            "url": "http://example.com/ValueSet/shared",
+                            "version": "2025",
+                            "expansion": {"contains": []},
+                        }
+                    },
+                ],
+            }
+        raise AssertionError(f"unexpected URL: {url}")
+
+    monkeypatch.setattr(resolver, "_read_json", fake_read_json)
+
+    valuesets = resolver.resolve_valuesets_for_cql(cql)
+
+    assert valuesets[0]["version"] == "2025"
+
+
+def test_hapi_artifact_resolver_falls_back_to_latest_loadable_valueset(monkeypatch):
+    cql = "valueset \"Shared\": 'http://example.com/ValueSet/shared'"
+    resolver = HapiArtifactResolver("http://hapi.test/fhir")
+    requested: list[str] = []
+
+    def fake_read_json(url: str) -> dict[str, Any]:
+        requested.append(url)
+        if "/ValueSet?" in url:
+            return {
+                "resourceType": "Bundle",
+                "entry": [
+                    {
+                        "resource": {
+                            "resourceType": "ValueSet",
+                            "id": "shared-2024",
+                            "url": "http://example.com/ValueSet/shared",
+                            "version": "2024",
+                            "expansion": {"contains": [{"system": "x", "code": "old"}]},
+                        }
+                    },
+                    {
+                        "resource": {
+                            "resourceType": "ValueSet",
+                            "id": "shared-2025",
+                            "url": "http://example.com/ValueSet/shared",
+                            "version": "2025",
+                            "compose": {"include": [{"system": "x", "filter": []}]},
+                        }
+                    },
+                ],
+            }
+        if "/ValueSet/$expand?" in url:
+            raise RuntimeError("cannot expand latest")
+        raise AssertionError(f"unexpected URL: {url}")
+
+    monkeypatch.setattr(resolver, "_read_json", fake_read_json)
+
+    valuesets = resolver.resolve_valuesets_for_cql(cql)
+
+    assert valuesets[0]["version"] == "2024"
+    assert any("/ValueSet/$expand?" in url for url in requested)
+
+
+def test_hapi_artifact_resolver_can_reject_ambiguous_unversioned_valueset(
+    monkeypatch,
+):
+    cql = "valueset \"Shared\": 'http://example.com/ValueSet/shared'"
+    resolver = HapiArtifactResolver(
+        "http://hapi.test/fhir",
+        unversioned_valueset_policy="error",
+    )
+
+    def fake_read_json(url: str) -> dict[str, Any]:
+        if "/ValueSet?" in url:
+            return {
+                "resourceType": "Bundle",
+                "entry": [
+                    {
+                        "resource": {
+                            "resourceType": "ValueSet",
+                            "id": "shared-2024",
+                            "url": "http://example.com/ValueSet/shared",
+                            "version": "2024",
+                            "expansion": {"contains": []},
+                        }
+                    },
+                    {
+                        "resource": {
+                            "resourceType": "ValueSet",
+                            "id": "shared-2025",
+                            "url": "http://example.com/ValueSet/shared",
+                            "version": "2025",
+                            "expansion": {"contains": []},
+                        }
+                    },
+                ],
+            }
+        raise AssertionError(f"unexpected URL: {url}")
+
+    monkeypatch.setattr(resolver, "_read_json", fake_read_json)
+
+    with pytest.raises(DQMConfigError, match="Specify a version"):
         resolver.resolve_valuesets_for_cql(cql)
 
 

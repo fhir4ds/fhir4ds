@@ -24,6 +24,7 @@ from fhir4ds.dqm.hapi_materialization import (
     install_materialization_schema,
     listen_and_process,
     load_materialization_config,
+    materialization_status,
     process_queue_once,
     prune_materialization_history,
     sync_measure_config,
@@ -137,12 +138,24 @@ def _add_hapi_args(parser: argparse.ArgumentParser) -> None:
     prune_parser.add_argument("--config", required=True, help="HAPI materialization config")
     prune_parser.add_argument("--log-level", default="WARNING", help="Python logging level")
 
+    status_parser = subparsers.add_parser(
+        "status",
+        help="Show queue, run, result, and MeasureReport materialization status",
+    )
+    status_parser.add_argument("--config", required=True, help="HAPI materialization config")
+    status_parser.add_argument(
+        "--limit",
+        type=int,
+        default=5,
+        help="Number of recent runs to include",
+    )
+
 
 def _run_hapi(args: argparse.Namespace) -> int:
     if args.hapi_command is None:
         print(
             "fhir4ds dqm hapi requires a subcommand: "
-            "install, sync-config, process-queue, listen, or prune",
+            "install, sync-config, process-queue, listen, prune, or status",
             file=sys.stderr,
         )
         return 2
@@ -204,6 +217,18 @@ def _run_hapi(args: argparse.Namespace) -> int:
             f"audits={deleted['audits']}, "
             f"inactive_results={deleted['inactive_results']}, "
             f"runs={deleted['runs']}"
+        )
+        return 0
+    if args.hapi_command == "status":
+        print(
+            json.dumps(
+                materialization_status(
+                    config.postgres_connection_string,
+                    limit=args.limit,
+                ),
+                indent=2,
+                default=str,
+            )
         )
         return 0
 

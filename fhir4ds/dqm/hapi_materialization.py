@@ -80,6 +80,7 @@ class HapiMaterializationConfig:
     hapi_base_url: str | None = None
     hapi_headers: dict[str, str] = field(default_factory=dict)
     hapi_timeout_seconds: float = 30.0
+    hapi_valueset_version_policy: str = "latest"
     measures: list[HapiMaterializedMeasure] = field(default_factory=list)
     parameters: dict[str, Any] = field(default_factory=dict)
     library_paths: list[Path] = field(default_factory=list)
@@ -268,6 +269,13 @@ def parse_materialization_config(
         hapi.get("timeout_seconds", 30.0),
         "hapi.timeout_seconds",
     )
+    hapi_valueset_version_policy = str(
+        hapi.get("valueset_version_policy", "latest")
+    ).lower()
+    if hapi_valueset_version_policy not in {"latest", "error"}:
+        raise DQMConfigError(
+            "'hapi.valueset_version_policy' must be 'latest' or 'error'"
+        )
 
     worker = raw.get("worker") or {}
     if not isinstance(worker, dict):
@@ -327,6 +335,7 @@ def parse_materialization_config(
         hapi_base_url=hapi_base_url,
         hapi_headers=hapi_headers,
         hapi_timeout_seconds=hapi_timeout_seconds,
+        hapi_valueset_version_policy=hapi_valueset_version_policy,
         measures=measures,
         parameters=global_parameters,
         library_paths=global_libraries,
@@ -973,6 +982,123 @@ def prune_materialization_history(
     return deleted
 
 
+def materialization_status(
+    connection_string: str,
+    *,
+    limit: int = 5,
+) -> dict[str, Any]:
+    """Return operational status for HAPI materialization tables."""
+    if limit <= 0:
+        raise DQMConfigError("status limit must be positive")
+    psycopg = require_psycopg()
+    with psycopg.connect(connection_string) as conn:
+        queue_rows = conn.execute(
+            """
+            SELECT status, count(*)
+            FROM fhir4ds_patient_change_queue
+            GROUP BY status
+            ORDER BY status
+            """
+        ).fetchall()
+        result_rows = conn.execute(
+            """
+            SELECT active, status, count(*)
+            FROM fhir4ds_measure_result
+            GROUP BY active, status
+            ORDER BY active DESC, status
+            """
+        ).fetchall()
+        report_rows = conn.execute(
+            """
+            SELECT active, published_to_hapi, count(*)
+            FROM fhir4ds_measure_report
+            GROUP BY active, published_to_hapi
+            ORDER BY active DESC, published_to_hapi DESC
+            """
+        ).fetchall()
+        run_rows = conn.execute(
+            """
+            SELECT
+                run_id,
+                status,
+                started_at,
+                completed_at,
+                patient_count,
+                measure_count,
+                compile_cache_hits,
+                compile_cache_misses,
+                prepared_count,
+                prepared_fallback_count,
+                error
+            FROM fhir4ds_measure_run
+            ORDER BY started_at DESC
+            LIMIT %s
+            """,
+            [limit],
+        ).fetchall()
+        measure_rows = conn.execute(
+            """
+            SELECT
+                measure_id,
+                enabled,
+                artifact_source,
+                publish_measure_report_to_hapi,
+                updated_at
+            FROM fhir4ds_measure_config
+            ORDER BY measure_id
+            """
+        ).fetchall()
+
+    return {
+        "queue": {
+            str(status): int(count)
+            for status, count in queue_rows
+        },
+        "results": [
+            {
+                "active": bool(active),
+                "status": str(status),
+                "count": int(count),
+            }
+            for active, status, count in result_rows
+        ],
+        "measure_reports": [
+            {
+                "active": bool(active),
+                "published_to_hapi": bool(published),
+                "count": int(count),
+            }
+            for active, published, count in report_rows
+        ],
+        "latest_runs": [
+            {
+                "run_id": int(row[0]),
+                "status": row[1],
+                "started_at": _jsonable(row[2]),
+                "completed_at": _jsonable(row[3]),
+                "patient_count": int(row[4] or 0),
+                "measure_count": int(row[5] or 0),
+                "compile_cache_hits": int(row[6] or 0),
+                "compile_cache_misses": int(row[7] or 0),
+                "prepared_count": int(row[8] or 0),
+                "prepared_fallback_count": int(row[9] or 0),
+                "error": row[10],
+            }
+            for row in run_rows
+        ],
+        "measures": [
+            {
+                "measure_id": row[0],
+                "enabled": bool(row[1]),
+                "artifact_source": row[2],
+                "publish_measure_report_to_hapi": bool(row[3]),
+                "updated_at": _jsonable(row[4]),
+            }
+            for row in measure_rows
+        ],
+    }
+
+
 def split_patient_result_rows(rows: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]]:
     """Return compact result JSON and full audit JSON for patient result rows."""
     compact_rows = [_compact_row(row) for row in rows]
@@ -1096,6 +1222,7 @@ def _evaluate_materialized_measure(
             config.hapi_base_url,
             headers=config.hapi_headers,
             timeout_seconds=config.hapi_timeout_seconds,
+            unversioned_valueset_policy=config.hapi_valueset_version_policy,
         )
         measure_ref = measure.artifact_ref or measure.measure_id
         compiled = evaluator.compile_measure(

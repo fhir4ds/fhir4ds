@@ -18,7 +18,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from .artifacts import ArtifactResolver, FileArtifactResolver, LibraryArtifact
+from .artifacts import ArtifactResolver, LibraryArtifact, create_artifact_resolver
 from .audit import AuditEngine
 from .errors import DQMError, MeasureParseError  # noqa: F401
 from .models import MeasureResult
@@ -1123,7 +1123,8 @@ class MeasureEvaluator:
         artifact_resolver: ArtifactResolver | None,
         measure_ref: str | Path | dict | None,
     ) -> tuple[ArtifactResolver, Any, LibraryArtifact]:
-        resolver: ArtifactResolver = artifact_resolver or FileArtifactResolver(
+        resolver: ArtifactResolver = artifact_resolver or create_artifact_resolver(
+            "files",
             include_paths=include_paths,
             valueset_paths=valueset_paths,
         )

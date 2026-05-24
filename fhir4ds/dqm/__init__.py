@@ -7,6 +7,7 @@ from .artifacts import (
     LibraryArtifact,
     MeasureArtifact,
     ValueSetRef,
+    create_artifact_resolver,
 )
 from .audit import AuditEngine
 from .errors import DQMError, MeasureParseError
@@ -58,4 +59,5 @@ __all__ = [
     "ReactiveEvaluator",
     "SupportingEvidenceDef",
     "ValueSetRef",
+    "create_artifact_resolver",
 ]

@@ -44,6 +44,9 @@ fhir4ds dqm hapi sync-config \
 
 fhir4ds dqm hapi process-queue \
   --config docker/hapi-postgres/hapi-materialization.example.yaml
+
+fhir4ds dqm hapi status \
+  --config docker/hapi-postgres/hapi-materialization.example.yaml
 ```
 
 `install` creates FHIR4DS-owned queue/result tables, the decoded current-resource
@@ -112,8 +115,12 @@ python3 scripts/hapi/smoke_2025_materialization.py \
 For worker configuration, set `artifacts.source: hapi` and give each measure an
 `artifact_ref` matching the HAPI Measure id, canonical URL, or `Measure/<id>`.
 ValueSets declared by the primary CQL library and included libraries are
-resolved from HAPI, including `version` qualifiers. Each ValueSet must already
-contain an expansion or be expandable by HAPI.
+resolved from HAPI, including `version` qualifiers. Each ValueSet must contain
+an expansion, direct compose concepts, or be expandable by HAPI. If an
+unversioned declaration matches multiple HAPI ValueSet resources, the worker
+tries candidate versions newest-first and uses the newest loadable or expandable
+ValueSet; set `hapi.valueset_version_policy: error` to require an explicit CQL
+version or `canonical|version`.
 
 Authenticated HAPI servers can be configured with static headers, a bearer
 token, and a request timeout:

@@ -22,6 +22,7 @@ from fhir4ds.dqm.hapi_materialization import (
     _publish_measure_report_to_hapi,
     claim_pending_patients,
     materialization_sql,
+    materialization_status,
     materialized_measure_hash,
     parse_materialization_config,
     persist_patient_measure_result,
@@ -133,6 +134,7 @@ def test_parse_materialization_config_resolves_paths_and_defaults(tmp_path):
     assert config.hapi_base_url == "http://localhost:18080/fhir"
     assert config.hapi_headers == {}
     assert config.hapi_timeout_seconds == 30.0
+    assert config.hapi_valueset_version_policy == "latest"
     assert config.batch_size == 25
     assert config.max_attempts == 4
     assert config.retry_backoff_seconds == 2.5
@@ -192,6 +194,7 @@ def test_parse_materialization_config_accepts_hapi_headers_and_timeout():
             "headers": {"X-Tenant": "quality"},
             "bearer_token": "secret-token",
             "timeout_seconds": 15,
+            "valueset_version_policy": "error",
         },
         "artifacts": {"source": "hapi"},
         "measures": [{"id": "CMS_TEST", "artifact_ref": "MeasureRef"}],
@@ -204,6 +207,22 @@ def test_parse_materialization_config_accepts_hapi_headers_and_timeout():
         "Authorization": "Bearer secret-token",
     }
     assert config.hapi_timeout_seconds == 15.0
+    assert config.hapi_valueset_version_policy == "error"
+
+
+def test_parse_materialization_config_rejects_invalid_hapi_valueset_policy():
+    raw = {
+        "postgres": {"connection_string": "postgresql://hapi:hapi@localhost/hapi"},
+        "hapi": {
+            "base_url": "http://localhost:18080/fhir",
+            "valueset_version_policy": "newest",
+        },
+        "artifacts": {"source": "hapi"},
+        "measures": [{"id": "CMS_TEST", "artifact_ref": "MeasureRef"}],
+    }
+
+    with pytest.raises(DQMConfigError, match="valueset_version_policy"):
+        parse_materialization_config(raw)
 
 
 def test_parse_materialization_config_requires_hapi_base_url_for_hapi_artifacts():
@@ -523,6 +542,76 @@ def test_prune_materialization_history_uses_configured_retention(monkeypatch):
     assert any("DELETE FROM fhir4ds_measure_run" in sql for sql, _params in executed)
 
 
+def test_materialization_status_summarizes_operational_tables(monkeypatch):
+    import fhir4ds.dqm.hapi_materialization as hapi_materialization
+
+    executed: list[tuple[str, list[int]]] = []
+    results = [
+        [("pending", 2), ("failed", 1)],
+        [(True, "ok", 4), (False, "error", 1)],
+        [(True, True, 3), (True, False, 1)],
+        [
+            (
+                7,
+                "ok",
+                "started",
+                "completed",
+                2,
+                3,
+                4,
+                5,
+                6,
+                0,
+                None,
+            )
+        ],
+        [("CMS_TEST", True, "hapi", True, "updated")],
+    ]
+
+    class FakeCursor:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def fetchall(self):
+            return self._rows
+
+    class FakeConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def execute(self, sql, params=None):
+            executed.append((sql, list(params or [])))
+            return FakeCursor(results[len(executed) - 1])
+
+    class FakePsycopg:
+        @staticmethod
+        def connect(connection_string):
+            assert connection_string == "postgresql://hapi:hapi@localhost/hapi"
+            return FakeConn()
+
+    monkeypatch.setattr(hapi_materialization, "require_psycopg", lambda: FakePsycopg)
+
+    status = materialization_status(
+        "postgresql://hapi:hapi@localhost/hapi",
+        limit=3,
+    )
+
+    assert status["queue"] == {"pending": 2, "failed": 1}
+    assert status["results"][0] == {"active": True, "status": "ok", "count": 4}
+    assert status["measure_reports"][0] == {
+        "active": True,
+        "published_to_hapi": True,
+        "count": 3,
+    }
+    assert status["latest_runs"][0]["run_id"] == 7
+    assert status["latest_runs"][0]["prepared_fallback_count"] == 0
+    assert status["measures"][0]["artifact_source"] == "hapi"
+    assert executed[3][1] == [3]
+
+
 def test_claim_pending_patients_retries_failed_rows_with_backoff():
     executed: list[tuple[str, list[float]]] = []
 
@@ -586,3 +675,36 @@ def test_hapi_cli_requires_nested_subcommand(capsys):
     captured = capsys.readouterr()
     assert exit_code == 2
     assert "requires a subcommand" in captured.err
+
+
+def test_hapi_cli_status_prints_json(monkeypatch, tmp_path, capsys):
+    import fhir4ds.cli.dqm as dqm_cli
+
+    config_path = tmp_path / "hapi.yaml"
+    config_path.write_text(
+        """
+postgres:
+  connection_string: postgresql://hapi:hapi@localhost/hapi
+measures:
+  - id: CMS_TEST
+    artifact_source: hapi
+    artifact_ref: CMS_TEST
+hapi:
+  base_url: http://localhost:18080/fhir
+"""
+    )
+
+    monkeypatch.setattr(
+        dqm_cli,
+        "materialization_status",
+        lambda connection_string, limit=5: {
+            "queue": {"pending": 1},
+            "limit": limit,
+        },
+    )
+
+    exit_code = main(["dqm", "hapi", "status", "--config", str(config_path), "--limit", "2"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert json.loads(captured.out) == {"queue": {"pending": 1}, "limit": 2}
