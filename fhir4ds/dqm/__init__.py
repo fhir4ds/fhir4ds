@@ -6,6 +6,7 @@ from .artifacts import (
     HapiArtifactResolver,
     LibraryArtifact,
     MeasureArtifact,
+    ValueSetRef,
 )
 from .audit import AuditEngine
 from .errors import DQMError, MeasureParseError
@@ -56,4 +57,5 @@ __all__ = [
     "PopulationMap",
     "ReactiveEvaluator",
     "SupportingEvidenceDef",
+    "ValueSetRef",
 ]

@@ -18,8 +18,8 @@ from pathlib import Path
 from typing import Any
 
 import fhir4ds
-from fhir4ds.dqm.artifacts import HapiArtifactResolver
-from fhir4ds.dqm.batch import _load_valueset_resources, _load_valuesets, _resolve_cql_path
+from fhir4ds.dqm.artifacts import FileArtifactResolver, HapiArtifactResolver
+from fhir4ds.dqm.batch import _resolve_cql_path
 from fhir4ds.dqm.config import DQMConfigError, MeasureSpec
 from fhir4ds.dqm.evaluator import MeasureEvaluator
 from fhir4ds.dqm.models import MeasureResult
@@ -126,8 +126,6 @@ class HapiMaterializationRuntime:
     duck_conn: Any
     source: HapiPostgresSource
     evaluator: MeasureEvaluator
-    loaded_valueset_keys: set[tuple[str, ...]] = field(default_factory=set)
-    loaded_hapi_valueset_keys: set[tuple[str, ...]] = field(default_factory=set)
 
     @classmethod
     def open(cls, config: HapiMaterializationConfig) -> HapiMaterializationRuntime:
@@ -144,29 +142,11 @@ class HapiMaterializationRuntime:
                 source=source,
                 evaluator=MeasureEvaluator(duck_conn),
             )
-            runtime.load_valuesets_once(config.valueset_paths)
             return runtime
         except Exception:
             source.unregister(duck_conn)
             duck_conn.close()
             raise
-
-    def load_valuesets_once(self, paths: list[Path]) -> None:
-        key = tuple(sorted(str(path) for path in paths))
-        if key in self.loaded_valueset_keys:
-            return
-        _load_valuesets(self.duck_conn, paths)
-        self.loaded_valueset_keys.add(key)
-
-    def load_valueset_resources_once(
-        self,
-        valuesets: list[dict[str, Any]],
-    ) -> None:
-        key = tuple(sorted(_valueset_identity(valueset) for valueset in valuesets))
-        if key in self.loaded_hapi_valueset_keys:
-            return
-        _load_valueset_resources(self.duck_conn, valuesets)
-        self.loaded_hapi_valueset_keys.add(key)
 
     def close(self) -> None:
         self.source.unregister(self.duck_conn)
@@ -1052,10 +1032,8 @@ def _process_claimed_patients(
 
     metrics: dict[str, Any] = {}
     evaluator = runtime.evaluator
-    runtime.load_valuesets_once(config.valueset_paths)
     for measure in measures:
         try:
-            runtime.load_valuesets_once(measure.valueset_paths)
             result = _evaluate_materialized_measure(
                 runtime,
                 config,
@@ -1120,10 +1098,6 @@ def _evaluate_materialized_measure(
             timeout_seconds=config.hapi_timeout_seconds,
         )
         measure_ref = measure.artifact_ref or measure.measure_id
-        measure_artifact = resolver.resolve_measure(measure_ref)
-        library_artifact = resolver.resolve_library(measure=measure_artifact.resource)
-        valuesets = resolver.resolve_valuesets_for_cql(library_artifact.text)
-        runtime.load_valueset_resources_once(valuesets)
         compiled = evaluator.compile_measure(
             measure_ref=measure_ref,
             artifact_resolver=resolver,
@@ -1145,14 +1119,18 @@ def _evaluate_materialized_measure(
         MeasureSpec(path=measure.measure_path, cql=None, id=measure.measure_id),
         [*config.library_paths, *measure.library_paths],
     )
+    resolver = FileArtifactResolver(
+        include_paths=[*config.library_paths, *measure.library_paths],
+        valueset_paths=[*config.valueset_paths, *measure.valueset_paths],
+    )
     compiled = evaluator.compile_measure(
         measure_bundle=measure.measure_path,
         cql_library_path=cql_path,
+        artifact_resolver=resolver,
         parameters=parameters,
         audit_mode=measure.audit_mode,
         filter_to_ip=measure.filter_to_ip,
         patient_scope="target_table",
-        include_paths=[str(path) for path in [*config.library_paths, *measure.library_paths]],
         generate_narratives=measure.generate_narratives,
         include_supporting_evidence=measure.include_supporting_evidence
         or measure.persist_audit,
@@ -1323,18 +1301,6 @@ def _publish_measure_report_to_hapi(
         raise RuntimeError(
             f"HAPI MeasureReport publish failed for {resource_id}: {exc}"
         ) from exc
-
-
-def _valueset_identity(valueset: dict[str, Any]) -> str:
-    payload = {
-        "url": valueset.get("url"),
-        "version": valueset.get("version"),
-        "id": valueset.get("id"),
-        "hash": hashlib.sha256(
-            json.dumps(valueset, sort_keys=True, default=str).encode()
-        ).hexdigest(),
-    }
-    return json.dumps(payload, sort_keys=True)
 
 
 def _parse_materialized_measures(

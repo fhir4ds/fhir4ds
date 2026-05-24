@@ -90,16 +90,32 @@ class ArtifactResolver(Protocol):
     ) -> LibraryArtifact | None:
         """Resolve a CQL include alias to a library artifact."""
 
+    def resolve_valuesets_for_cql(self, cql_text: str) -> list[dict[str, Any]]:
+        """Resolve ValueSet resources declared by CQL and transitive includes."""
+
     def fingerprint(self) -> str:
         """Return a stable fingerprint for artifacts visible to this resolver."""
 
 
 @dataclass
 class FileArtifactResolver:
-    """Resolve Measure and CQL artifacts from local files or in-memory dicts."""
+    """Resolve Measure, CQL, and ValueSet artifacts from local files."""
 
     include_paths: list[str | Path] | None = None
+    valueset_paths: list[str | Path] | None = None
     _default_include_paths: list[Path] = field(default_factory=list, init=False)
+    _include_cache: dict[tuple[str, str | None], LibraryArtifact] = field(
+        default_factory=dict,
+        init=False,
+    )
+    _valueset_cache: dict[tuple[str, str | None], dict[str, Any]] = field(
+        default_factory=dict,
+        init=False,
+    )
+    _valueset_index_cache: dict[str, list[dict[str, Any]]] | None = field(
+        default=None,
+        init=False,
+    )
 
     def resolve_measure(self, ref: str | Path | dict[str, Any]) -> MeasureArtifact:
         if isinstance(ref, dict):
@@ -152,6 +168,14 @@ class FileArtifactResolver:
         alias: str,
         version: str | None = None,
     ) -> LibraryArtifact | None:
+        cached = self._include_cache.get((alias, version))
+        if cached is not None:
+            return cached
+        if version is None:
+            cached = self._include_cache.get((alias, None))
+            if cached is not None:
+                return cached
+
         resolved_alias = alias.rsplit(".", 1)[-1] if "." in alias else alias
         for search_alias in dict.fromkeys([alias, resolved_alias]):
             for directory in self._search_dirs():
@@ -162,8 +186,35 @@ class FileArtifactResolver:
                 candidates.extend(sorted(directory.glob(f"{search_alias}-*.cql")))
                 for path in candidates:
                     if path.exists():
-                        return self._library_from_path(path, label=str(path))
+                        artifact = self._library_from_path(path, label=str(path))
+                        self._include_cache[(alias, version)] = artifact
+                        self._include_cache.setdefault((search_alias, version), artifact)
+                        self._include_cache.setdefault((search_alias, None), artifact)
+                        if artifact.name:
+                            self._include_cache.setdefault((artifact.name, version), artifact)
+                            self._include_cache.setdefault((artifact.name, None), artifact)
+                        return artifact
         return None
+
+    def resolve_valuesets_for_cql(self, cql_text: str) -> list[dict[str, Any]]:
+        """Resolve CQL-declared ValueSets from configured files.
+
+        If ``valueset_paths`` is omitted, file-based resolution is intentionally
+        passive for backward compatibility: existing callers may have loaded
+        terminology by other means.
+        """
+        if not self.valueset_paths:
+            return []
+
+        refs = _valueset_refs_for_cql(
+            cql_text,
+            resolve_include=self.resolve_include,
+            seen_libraries=set(),
+        )
+        valuesets: list[dict[str, Any]] = []
+        for ref in refs:
+            valuesets.append(self._resolve_valueset_ref(ref))
+        return valuesets
 
     def fingerprint(self) -> str:
         items: list[tuple[str, str]] = []
@@ -172,6 +223,13 @@ class FileArtifactResolver:
                 candidates = sorted(path.glob("*.cql"))
             else:
                 candidates = [path]
+            for candidate in candidates:
+                try:
+                    items.append((str(candidate.resolve()), _file_hash(candidate)))
+                except OSError:
+                    items.append((str(candidate), "missing"))
+        for path in self._valueset_search_paths():
+            candidates = sorted(path.rglob("*.json")) if path.is_dir() else [path]
             for candidate in candidates:
                 try:
                     items.append((str(candidate.resolve()), _file_hash(candidate)))
@@ -209,6 +267,65 @@ class FileArtifactResolver:
     def _add_default_include_path(self, path: Path) -> None:
         if not any(existing == path for existing in self._default_include_paths):
             self._default_include_paths.append(path)
+
+    def _valueset_search_paths(self) -> list[Path]:
+        return [Path(path) for path in self.valueset_paths or []]
+
+    def _resolve_valueset_ref(self, ref: ValueSetRef) -> dict[str, Any]:
+        cache_key = (ref.url, ref.version)
+        cached = self._valueset_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        candidates = list(self._valueset_index().get(ref.url, []))
+        if ref.version:
+            candidates = [
+                valueset
+                for valueset in candidates
+                if valueset.get("version") == ref.version
+            ]
+        if not candidates:
+            raise DQMConfigError(f"ValueSet not found in files: {ref.label}")
+        if len(candidates) > 1 and not ref.version:
+            versions = ", ".join(
+                sorted(str(valueset.get("version") or "<unversioned>") for valueset in candidates)
+            )
+            raise DQMConfigError(
+                f"ValueSet reference is ambiguous in files: {ref.url}. "
+                f"Specify a version; available versions: {versions}"
+            )
+
+        valueset = candidates[0]
+        self._valueset_cache[cache_key] = valueset
+        return valueset
+
+    def _valueset_index(self) -> dict[str, list[dict[str, Any]]]:
+        if self._valueset_index_cache is not None:
+            return self._valueset_index_cache
+
+        index: dict[str, list[dict[str, Any]]] = {}
+        for path in self._iter_valueset_files():
+            try:
+                data = json.loads(path.read_text())
+            except json.JSONDecodeError as exc:
+                raise DQMConfigError(f"Invalid ValueSet JSON {path}: {exc}") from exc
+            for resource in _valueset_resources_from_json(data):
+                url = resource.get("url")
+                if not isinstance(url, str) or not url:
+                    raise DQMConfigError(f"ValueSet JSON is missing a canonical url: {path}")
+                index.setdefault(url, []).append(resource)
+
+        self._valueset_index_cache = index
+        return index
+
+    def _iter_valueset_files(self):
+        for path in self._valueset_search_paths():
+            if path.is_dir():
+                yield from sorted(path.rglob("*.json"))
+            elif path.is_file():
+                yield path
+            else:
+                raise FileNotFoundError(f"ValueSet path not found: {path}")
 
 
 class HapiArtifactResolver:
@@ -292,7 +409,11 @@ class HapiArtifactResolver:
 
     def resolve_valuesets_for_cql(self, cql_text: str) -> list[dict[str, Any]]:
         """Resolve transitive ValueSet declarations in CQL through HAPI."""
-        refs = self._valueset_refs_for_cql(cql_text, seen_libraries=set())
+        refs = _valueset_refs_for_cql(
+            cql_text,
+            resolve_include=self.resolve_include,
+            seen_libraries=set(),
+        )
         valuesets: list[dict[str, Any]] = []
         for ref in refs:
             try:
@@ -302,28 +423,6 @@ class HapiArtifactResolver:
                     f"ValueSet not found in HAPI: {ref.label}"
                 ) from exc
         return valuesets
-
-    def _valueset_refs_for_cql(
-        self,
-        cql_text: str,
-        *,
-        seen_libraries: set[str],
-    ) -> list[ValueSetRef]:
-        refs = set(_valueset_refs_from_cql(cql_text))
-        for alias, version in _CQL_INCLUDE_RE.findall(cql_text):
-            key = f"{alias}|{version}" if version else alias
-            if key in seen_libraries:
-                continue
-            seen_libraries.add(key)
-            artifact = self.resolve_include(alias, version=version or None)
-            if artifact is not None:
-                refs.update(
-                    self._valueset_refs_for_cql(
-                        artifact.text,
-                        seen_libraries=seen_libraries,
-                    )
-                )
-        return sorted(refs)
 
     def _resolve_valueset_ref(self, ref: ValueSetRef) -> dict[str, Any]:
         cache_key = (ref.url, ref.version)
@@ -500,6 +599,43 @@ def _valueset_refs_from_cql(cql_text: str) -> list[ValueSetRef]:
             )
         refs.append(ValueSetRef(url=url, version=version or None))
     return refs
+
+
+def _valueset_refs_for_cql(
+    cql_text: str,
+    *,
+    resolve_include: Any,
+    seen_libraries: set[str],
+) -> list[ValueSetRef]:
+    refs = set(_valueset_refs_from_cql(cql_text))
+    for alias, version in _CQL_INCLUDE_RE.findall(cql_text):
+        key = f"{alias}|{version}" if version else alias
+        if key in seen_libraries:
+            continue
+        seen_libraries.add(key)
+        artifact = resolve_include(alias, version=version or None)
+        if artifact is not None:
+            refs.update(
+                _valueset_refs_for_cql(
+                    artifact.text,
+                    resolve_include=resolve_include,
+                    seen_libraries=seen_libraries,
+                )
+            )
+    return sorted(refs)
+
+
+def _valueset_resources_from_json(data: Any) -> list[dict[str, Any]]:
+    if isinstance(data, dict) and data.get("resourceType") == "Bundle":
+        resources: list[dict[str, Any]] = []
+        for entry in data.get("entry", []):
+            resource = entry.get("resource", {}) if isinstance(entry, dict) else {}
+            if isinstance(resource, dict) and resource.get("resourceType") == "ValueSet":
+                resources.append(resource)
+        return resources
+    if isinstance(data, dict) and data.get("resourceType") == "ValueSet":
+        return [data]
+    return []
 
 
 def _versioned_search_params(

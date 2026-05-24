@@ -276,6 +276,53 @@ define "Is Male":
 
         assert bool(result.dataframe.loc[0, "initial_population"]) is True
 
+    def test_measure_ref_file_resolver_matches_legacy_path_args(self, conn, tmp_path):
+        """The preferred resolver API should preserve path-based behavior."""
+        from fhir4ds.cql import FHIRDataLoader
+        loader = FHIRDataLoader(conn)
+        loader.load_resource({
+            "resourceType": "Patient",
+            "id": "p1",
+            "gender": "female",
+            "birthDate": "1990-01-01",
+        })
+
+        measure_json = {
+            "resourceType": "Measure",
+            "id": "resolver-api-measure",
+            "library": ["http://example.com/Library/ResolverApi"],
+            "group": [{
+                "population": [{
+                    "code": {"coding": [{"code": "initial-population"}]},
+                    "criteria": {"expression": "Initial Population"},
+                }]
+            }],
+        }
+        measure_path = tmp_path / "Measure-ResolverApi.json"
+        measure_path.write_text(json.dumps(measure_json))
+        cql_path = tmp_path / "ResolverApi.cql"
+        cql_path.write_text('''library ResolverApi
+using FHIR version '4.0.1'
+context Patient
+define "Initial Population":
+    Patient.gender = 'female'
+''')
+
+        legacy = MeasureEvaluator(conn).evaluate(
+            measure_bundle=measure_path,
+            cql_library_path=cql_path,
+        )
+        resolver_result = MeasureEvaluator(conn).evaluate(
+            measure_ref=measure_path,
+            artifact_resolver=FileArtifactResolver(include_paths=[tmp_path]),
+        )
+
+        legacy_rows = legacy.dataframe.sort_values("patient_id").reset_index(drop=True)
+        resolver_rows = resolver_result.dataframe.sort_values("patient_id").reset_index(drop=True)
+        assert legacy_rows[["patient_id", "initial_population"]].equals(
+            resolver_rows[["patient_id", "initial_population"]]
+        )
+
     def test_compiled_measure_omits_patient_columns_without_implicit_patient_access(
         self, conn, tmp_path
     ):

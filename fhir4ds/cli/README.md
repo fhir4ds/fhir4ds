@@ -28,6 +28,9 @@ fhir4ds dqm hapi process-queue --config hapi-dqm.yaml --limit 100
 fhir4ds dqm hapi listen --config hapi-dqm.yaml
 ```
 
+See `docs/hapi-materialization.md` for the full HAPI workflow, including
+hosted Measure/Library/ValueSet artifacts and MeasureReport publishing.
+
 The DQM command also supports a single-measure flag-based workflow:
 
 ```bash

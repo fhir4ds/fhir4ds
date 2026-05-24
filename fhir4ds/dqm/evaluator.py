@@ -109,6 +109,7 @@ class MeasureEvaluator:
         self._cached_model_config: Any = None
         self._compiled_measure_cache: dict[str, CompiledMeasure] = {}
         self._compiled_measure_metrics = CompiledMeasureMetrics()
+        self._loaded_terminology_keys: set[str] = set()
 
     def evaluate(
         self,
@@ -120,6 +121,7 @@ class MeasureEvaluator:
         filter_to_ip: bool = False,
         patient_ids: list[str] | None = None,
         include_paths: list[str] | None = None,
+        valueset_paths: list[str | Path] | None = None,
         generate_narratives: bool = False,
         include_supporting_evidence: bool = False,
         artifact_resolver: ArtifactResolver | None = None,
@@ -145,6 +147,9 @@ class MeasureEvaluator:
                 the Initial Population criteria.
             patient_ids: Optional patient ID filter.
             include_paths: Paths to directories containing included CQL libraries.
+            valueset_paths: Optional ValueSet JSON files or directories. When
+                supplied without an explicit artifact resolver, these are used
+                by the default file resolver to load CQL-declared terminology.
             generate_narratives: If True (requires audit), enriches each
                    audit struct in-place with a ``narrative`` field containing
                    a plain-English explanation.  No separate columns are added.
@@ -174,6 +179,7 @@ class MeasureEvaluator:
             measure_bundle=measure_bundle,
             cql_library_path=cql_library_path,
             include_paths=include_paths,
+            valueset_paths=valueset_paths,
             artifact_resolver=artifact_resolver,
             measure_ref=measure_ref,
         )
@@ -247,6 +253,7 @@ class MeasureEvaluator:
         patient_ids: list[str] | None = None,
         patient_scope: str = "literal",
         include_paths: list[str] | None = None,
+        valueset_paths: list[str | Path] | None = None,
         generate_narratives: bool = False,
         include_supporting_evidence: bool = False,
         artifact_resolver: ArtifactResolver | None = None,
@@ -273,6 +280,7 @@ class MeasureEvaluator:
             measure_bundle=measure_bundle,
             cql_library_path=cql_library_path,
             include_paths=include_paths,
+            valueset_paths=valueset_paths,
             artifact_resolver=artifact_resolver,
             measure_ref=measure_ref,
         )
@@ -1111,11 +1119,13 @@ class MeasureEvaluator:
         measure_bundle: str | Path | dict | None,
         cql_library_path: str | Path | dict | None,
         include_paths: list[str] | None,
+        valueset_paths: list[str | Path] | None,
         artifact_resolver: ArtifactResolver | None,
         measure_ref: str | Path | dict | None,
     ) -> tuple[ArtifactResolver, Any, LibraryArtifact]:
         resolver: ArtifactResolver = artifact_resolver or FileArtifactResolver(
             include_paths=include_paths,
+            valueset_paths=valueset_paths,
         )
         resolved_measure_ref = measure_ref if measure_ref is not None else measure_bundle
         if resolved_measure_ref is None:
@@ -1127,7 +1137,41 @@ class MeasureEvaluator:
             measure_source_id=measure_artifact.source_id,
         )
         self._prime_resolved_includes(resolver, library_artifact.text)
+        self._load_resolved_valuesets(resolver, library_artifact.text)
         return resolver, measure_artifact, library_artifact
+
+    def _load_resolved_valuesets(
+        self,
+        artifact_resolver: ArtifactResolver,
+        cql_text: str,
+    ) -> None:
+        if self.conn is None:
+            return
+        valuesets = artifact_resolver.resolve_valuesets_for_cql(cql_text)
+        if not valuesets:
+            return
+        key_payload = [
+            {
+                "url": valueset.get("url"),
+                "version": valueset.get("version"),
+                "id": valueset.get("id"),
+                "hash": hashlib.sha256(
+                    json.dumps(valueset, sort_keys=True, default=str).encode()
+                ).hexdigest(),
+            }
+            for valueset in valuesets
+        ]
+        key = hashlib.sha256(
+            json.dumps(key_payload, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        if key in self._loaded_terminology_keys:
+            return
+        try:
+            from fhir4ds.cql.loader import FHIRDataLoader
+            FHIRDataLoader(self.conn, create_table=False).load_valuesets(valuesets)
+        except Exception as exc:
+            raise DQMError(f"Failed to load resolved ValueSets: {exc}") from exc
+        self._loaded_terminology_keys.add(key)
 
     def _prime_resolved_includes(
         self,

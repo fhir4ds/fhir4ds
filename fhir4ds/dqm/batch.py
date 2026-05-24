@@ -145,7 +145,6 @@ def run_batch(config: DQMRunConfig) -> BatchRunResult:
 
     conn = _create_connection(config.source)
     try:
-        _load_valuesets(conn, config.terminology.valuesets)
         evaluator = MeasureEvaluator(conn)
         records: list[MeasureRunRecord] = []
         for measure in config.measures:
@@ -186,6 +185,7 @@ def _run_one_measure(
             filter_to_ip=config.filter_to_ip,
             patient_ids=config.patient_ids,
             include_paths=[str(path) for path in config.libraries],
+            valueset_paths=[str(path) for path in config.terminology.valuesets],
             generate_narratives=config.audit.narratives,
             include_supporting_evidence=config.outputs.measure_reports in {"individual", "both"},
         )

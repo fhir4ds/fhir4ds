@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import fhir4ds
 from fhir4ds.dqm.evaluator import MeasureEvaluator
 from fhir4ds.dqm.models import MeasureResult
 from fhir4ds.dqm.types import (
@@ -81,6 +82,40 @@ def _make_measure_result():
         measure_url=pop_map.cql_library_ref,
         pop_map=pop_map,
     )
+
+
+def test_evaluator_loads_resolver_valuesets_once():
+    conn = fhir4ds.create_connection()
+    evaluator = MeasureEvaluator(conn)
+
+    class Resolver:
+        def __init__(self):
+            self.calls = 0
+
+        def resolve_valuesets_for_cql(self, cql_text):
+            self.calls += 1
+            return [
+                {
+                    "resourceType": "ValueSet",
+                    "id": "vs",
+                    "url": "http://example.com/ValueSet/resolved",
+                    "expansion": {
+                        "contains": [{"system": "http://loinc.org", "code": "1234-5"}]
+                    },
+                }
+            ]
+
+    resolver = Resolver()
+
+    evaluator._load_resolved_valuesets(resolver, "library Test")
+    evaluator._load_resolved_valuesets(resolver, "library Test")
+
+    count = conn.execute(
+        "SELECT COUNT(*) FROM valueset_codes WHERE valueset_url = ?",
+        ["http://example.com/ValueSet/resolved"],
+    ).fetchone()[0]
+    assert count == 1
+    assert resolver.calls == 2
 
 
 def _make_stratified_measure_result():
