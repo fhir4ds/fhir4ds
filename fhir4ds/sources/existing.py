@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fhir4ds.sources.base import SchemaValidationError, quote_identifier, validate_schema
+from fhir4ds.sources.base import quote_identifier, validate_schema
 
 
 class ExistingTableSource:

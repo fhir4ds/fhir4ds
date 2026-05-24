@@ -10,8 +10,7 @@ all adapters depend on.
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, List, runtime_checkable
+from typing import Any, runtime_checkable
 
 try:
     from typing import Protocol

@@ -10,7 +10,6 @@ Tests that verify:
 
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 
@@ -20,8 +19,8 @@ import pytest
 import fhir4ds
 from fhir4ds import sources
 from fhir4ds.sources import (
-    CSVSource,
     CloudCredentials,
+    CSVSource,
     ExistingTableSource,
     FileSystemSource,
     PostgresSource,
@@ -29,7 +28,6 @@ from fhir4ds.sources import (
     SchemaValidationError,
     SourceAdapter,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -178,7 +176,7 @@ class TestCreateConnectionWithSource:
         con = fhir4ds.create_connection(register_udfs=False)
         assert con is not None
         # No 'resources' view exists yet — that's expected
-        with pytest.raises(Exception):
+        with pytest.raises(duckdb.CatalogException):
             con.execute("SELECT * FROM resources").fetchall()
 
     def test_create_connection_raises_type_error_for_non_adapter(self):

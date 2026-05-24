@@ -1,18 +1,21 @@
-"""
-Database initialization and data loading.
-"""
+"""Database initialization and data loading."""
+
+from __future__ import annotations
+
 import logging
-import duckdb
 import os
-from pathlib import Path
-from typing import List, Dict, Any, Optional
 import time
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import duckdb
+
+if TYPE_CHECKING:
+    from .config import MeasureConfig
 
 logger = logging.getLogger(__name__)
 
-def _fix_claim_encounter_refs(
-    claim: dict, encounter_ids: set,
-) -> dict:
+def _fix_claim_encounter_refs(claim: dict, encounter_ids: set) -> dict:
     """Fix Claim item.encounter references that don't match any bundle encounter.
 
     eCQM test fixtures sometimes have Claim.item.encounter pointing to a
@@ -64,7 +67,7 @@ class BenchmarkDatabase:
     def __init__(self, db_path: str = ":memory:"):
         # Enable loading unsigned extensions before connecting
         self.conn = duckdb.connect(db_path, config={'allow_unsigned_extensions': 'true'})
-        self._setup_timings: Dict[str, float] = {}
+        self._setup_timings: dict[str, float] = {}
 
         # CQL semantics use singleton promotion/demotion, so scalar subqueries
         # may legitimately return multiple rows in certain patterns
@@ -75,7 +78,7 @@ class BenchmarkDatabase:
         workspace_root = Path(__file__).resolve().parent
         while not (workspace_root / "extensions").exists() and workspace_root != workspace_root.parent:
             workspace_root = workspace_root.parent
-        
+
         # Try both build directory and bundled package locations
         fhirpath_cpp_candidates = [
             workspace_root / "extensions" / "fhirpath" / "build" / "release" / "extension" / "fhirpath" / "fhirpath.duckdb_extension",
@@ -91,7 +94,7 @@ class BenchmarkDatabase:
 
         use_cpp = os.environ.get("USE_CPP_EXTENSIONS", "1").lower() in ("1", "true", "yes")
         loaded_cpp = False
-        
+
         if use_cpp and fhirpath_cpp and cql_cpp:
             try:
                 # On WSL2, loading .duckdb_extension binaries directly from the Windows
@@ -116,12 +119,12 @@ class BenchmarkDatabase:
                     self.conn.execute("CREATE OR REPLACE MACRO fhirpath_udf(res, expr) AS fhirpath(res, expr)")
                 except Exception as e:
                     print(f"  Warning: Failed to create fhirpath_udf macro: {e}")
-                
+
                 # We need to make sure 'fhirpath' used by Python UDFs (like in_valueset)
                 # resolves to the one we want. When C++ is loaded, 'fhirpath' is native.
                 loaded_cpp = True
                 # print("  Loaded C++ native extensions (fhirpath, cql)")
-            except Exception as e:
+            except Exception:
                 # print(f"  Warning: Failed to load C++ extensions: {e}")
                 pass
 
@@ -187,7 +190,7 @@ class BenchmarkDatabase:
             "FROM _resources_all"
         )
 
-    def load_all_test_data(self, measure_configs: List["MeasureConfig"]) -> Dict[str, Any]:
+    def load_all_test_data(self, measure_configs: list[MeasureConfig]) -> dict[str, Any]:
         """Load ALL test patients from ALL measures into the database."""
         import json as _json
         start = time.perf_counter()
@@ -307,8 +310,7 @@ class BenchmarkDatabase:
                 for bundle_path in config.test_dir.glob("tests-*-bundle.json"):
                     with open(bundle_path) as f:
                         bundle = _json.load(f)
-                    for entry in bundle.get("entry", []):
-                        resource = entry.get("resource", {})
+                    for _entry in bundle.get("entry", []):
                         total_resources += 1
 
         self._setup_timings["data_load"] = time.perf_counter() - start
@@ -345,7 +347,7 @@ class BenchmarkDatabase:
             "total_resources": total_resources,
         }
 
-    def load_all_valuesets(self, valueset_paths: List[Path]) -> Dict[str, Any]:
+    def load_all_valuesets(self, valueset_paths: list[Path]) -> dict[str, Any]:
         """Load ALL valuesets into valueset_codes table."""
         import json as _json
         start = time.perf_counter()
@@ -438,7 +440,7 @@ class BenchmarkDatabase:
             # Resolve valueset-includes: when a parent VS includes a child VS
             # and the parent expansion is a subset of the child (thin wrapper),
             # propagate compose-added codes from child to parent.
-            url_to_parsed: Dict[str, dict] = {}
+            url_to_parsed: dict[str, dict] = {}
             for vs_data in all_parsed:
                 url_to_parsed[vs_data["url"]] = vs_data
 
@@ -528,7 +530,7 @@ class BenchmarkDatabase:
             "total_codes": total_codes,
         }
 
-    def get_setup_stats(self) -> Dict[str, Any]:
+    def get_setup_stats(self) -> dict[str, Any]:
         """Return initialization statistics."""
         return {
             "timings": self._setup_timings,

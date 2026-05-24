@@ -2,12 +2,11 @@
 Command-line interface for benchmarking runner.
 """
 import argparse
-import os
-from pathlib import Path
-import sys
 import json
+import os
 import re
-import time
+import sys
+from pathlib import Path
 
 # Deeply-nested CQL libraries (e.g. with many included fluent functions)
 # can exceed Python's default recursion limit during AST translation.
@@ -80,11 +79,11 @@ def main():
     args = parser.parse_args()
 
     # Import modules (deferred to handle dependencies)
-    from .config import OUTPUT_CQL_PY_DIR, SKIP_ON_FAILURE, KNOWN_FAILURES, MeasureConfig
+    from .config import KNOWN_FAILURES, OUTPUT_CQL_PY_DIR, SKIP_ON_FAILURE
     from .database import BenchmarkDatabase
     from .loader import load_test_suite
-    from .runner import run_measure
     from .result_writer import write_results
+    from .runner import run_measure
 
     # Set output directory
     output_dir = args.output or OUTPUT_CQL_PY_DIR
@@ -197,7 +196,7 @@ def main():
             paths = write_results(result, output_dir, args.sql_format)
 
             # Print summary
-            print(f"\nResults:")
+            print("\nResults:")
             print(f"  Patients: {result.patient_count}")
             print(f"  Total time: {result.timings.get('total_ms', 0):.1f}ms")
 
@@ -221,7 +220,7 @@ def main():
                     for mm in result.comparison.mismatched_patients:
                         print(f"  - {mm['patient_id']}: {mm['mismatches']}")
 
-            print(f"\nOutputs:")
+            print("\nOutputs:")
             for name, path in paths.items():
                 print(f"  {name}: {path}")
 
@@ -279,7 +278,7 @@ def main():
         if success_results:
             total_patients = sum(r['patient_count'] for r in success_results)
             total_time = sum(r['total_ms'] for r in success_results)
-            print(f"\nOverall:")
+            print("\nOverall:")
             print(f"  Total patients: {total_patients}")
             print(f"  Total time: {total_time/1000:.1f}s")
             if total_time > 0:
@@ -370,7 +369,10 @@ def _discover_measures(suite: str = "2025"):
         suite: "2025" for ecqm-content-qicore-2025, "2026" for dqm-content-qicore-2026.
     """
     from .config import (
-        VALIDATOR_VALUESET_DIR, SUPPLEMENTAL_VALUESET_DIR, MeasureConfig, get_suite_paths
+        SUPPLEMENTAL_VALUESET_DIR,
+        VALIDATOR_VALUESET_DIR,
+        MeasureConfig,
+        get_suite_paths,
     )
 
     suite_paths = get_suite_paths(suite)
@@ -454,7 +456,6 @@ def _extract_measure_id(measure_name: str) -> str:
     - CMSFHIR844HybridHospitalWideMortality -> CMSFHIR844
     - NHSNGlycemicControlHypoglycemiaInitialPopulation -> NHSNGlycemicControl
     """
-    import re
 
     # CMS with optional FHIR prefix/suffix
     match = re.match(r'^(CMS(?:FHIR)?\d+)', measure_name)
@@ -503,7 +504,6 @@ def _extract_population_definitions(test_dir: Path) -> list:
 
 def _extract_population_definitions_from_report(data: dict) -> list:
     """Extract population definitions from one representative MeasureReport."""
-    import re
 
     mapping = {
         "initial-population": "Initial Population",

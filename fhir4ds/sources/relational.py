@@ -12,15 +12,13 @@ problem is out of scope for this release (see the plan's Appendix A).
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from fhir4ds.sources.base import (
-    SchemaValidationError,
     quote_identifier,
     quote_sql_literal,
     validate_schema,
 )
-
 
 # Name used for the DuckDB Postgres attachment.
 # Isolated to avoid conflicts if users attach their own Postgres databases.
@@ -168,7 +166,7 @@ class PostgresSource:
         self._connection_string = connection_string
         self._mappings = table_mappings
         self._attached: bool = False
-        self._con: Optional[Any] = None
+        self._con: Any | None = None
 
     # ------------------------------------------------------------------
     # SourceAdapter interface
@@ -230,7 +228,7 @@ class PostgresSource:
         """Returns ``True`` — PostgresSource supports delta tracking via ``updated_at``."""
         return True
 
-    def get_changed_patients(self, since: "datetime") -> list[str]:  # type: ignore[name-defined]  # noqa: F821
+    def get_changed_patients(self, since: datetime) -> list[str]:  # type: ignore[name-defined]  # noqa: F821
         """
         Returns patients modified since *since* by querying ``updated_at``
         columns in all mapped tables.
@@ -272,13 +270,13 @@ class PostgresSource:
                 self._con.execute(
                     f"SELECT updated_at FROM {att}.{schema}.{table} LIMIT 0"
                 )
-            except Exception:
+            except Exception as exc:
                 raise NotImplementedError(
                     f"PostgresSource cannot detect changes for table "
                     f"'{mapping.schema}.{mapping.table_name}' because it does not "
                     f"have an 'updated_at' column. Delta tracking requires an "
                     f"updated_at timestamp column on all mapped tables."
-                )
+                ) from exc
 
             rows = self._con.execute(f"""
                 SELECT DISTINCT {patient_col}::VARCHAR

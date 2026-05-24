@@ -1,9 +1,14 @@
-"""
-Execute measures and collect results.
-"""
+"""Execute measures and collect results."""
+
+from __future__ import annotations
+
 import time
-from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import MeasureConfig
+    from .loader import TestSuite
 
 @dataclass
 class TimingMetrics:
@@ -16,17 +21,17 @@ class MeasureResult:
     """Results from running a single measure."""
     measure_id: str
     patient_count: int
-    timings: Dict[str, float]  # phase -> duration_ms
+    timings: dict[str, float]  # phase -> duration_ms
     sql: str                   # Generated SQL
-    results: List[Dict]        # Per-patient results
-    comparison: Optional["ComparisonResult"] = None
+    results: list[dict]        # Per-patient results
+    comparison: ComparisonResult | None = None
 
 @dataclass
 class ComparisonResult:
     """Comparison between cql-py and expected results."""
     total_patients: int
     matching_patients: int
-    mismatched_patients: List[Dict]  # Details of mismatches
+    mismatched_patients: list[dict]  # Details of mismatches
     accuracy_pct: float
 
 
@@ -45,12 +50,12 @@ def _elapsed_ms(start: float) -> float:
 
 def run_measure(
     conn,
-    measure_config: "MeasureConfig",
-    test_suite: "TestSuite",
+    measure_config: MeasureConfig,
+    test_suite: TestSuite,
     verbose: bool = False,
     all_columns: bool = True,
     audit: bool = False,
-    library_cache: Optional[dict] = None,
+    library_cache: dict | None = None,
 ) -> MeasureResult:
     """
     Execute a single measure and collect results.
@@ -348,7 +353,7 @@ def _translate_measure(
     patient_ids,
     audit_mode: bool,
     audit_expressions: bool = True,
-    library_cache: Optional[dict] = None,
+    library_cache: dict | None = None,
 ) -> tuple:
     """Translate a CQL library to population SQL.
 
@@ -388,7 +393,6 @@ def _translate_measure(
 
 def _write_sql(sql: str, measure_config, verbose: bool, suffix: str = "") -> None:
     """Write generated SQL to output file for debugging."""
-    from pathlib import Path
     from .config import OUTPUT_CQL_PY_DIR
 
     sql_dir = OUTPUT_CQL_PY_DIR / "sql"
@@ -417,10 +421,10 @@ def _unwrap_audit(val):
 
 
 def compare_results(
-    actual_results: List[Dict],
-    test_suite: "TestSuite",
-    measure_config: "MeasureConfig",
-    pop_name_map: Optional[Dict[str, str]] = None,
+    actual_results: list[dict],
+    test_suite: TestSuite,
+    measure_config: MeasureConfig,
+    pop_name_map: dict[str, str] | None = None,
 ) -> ComparisonResult:
     """Compare actual results with expected results from test suite."""
     if pop_name_map is None:
@@ -459,7 +463,9 @@ def compare_results(
         patient_matches = True
         mismatches = {}
 
-        def _get_or_value(pop_key, default_key=None):
+        actual_result = result
+
+        def _get_or_value(pop_key, default_key=None, row=actual_result):
             """Get actual value for a population.
 
             Tries the exact key first, then falls back to the unnumbered
@@ -468,19 +474,19 @@ def compare_results(
             """
             mapped = pop_name_map.get(pop_key, default_key or pop_key)
             if isinstance(mapped, list):
-                return any(bool(_unwrap_audit(result.get(n, False))) for n in mapped)
-            val = _unwrap_audit(result.get(mapped))
+                return any(bool(_unwrap_audit(row.get(n, False))) for n in mapped)
+            val = _unwrap_audit(row.get(mapped))
             if val is not None:
                 return bool(val)
             # Fallback: try unnumbered base name for shared populations
             base = _base_name(mapped)
             if base != mapped:
-                val = _unwrap_audit(result.get(base))
+                val = _unwrap_audit(row.get(base))
                 if val is not None:
                     return bool(val)
             return False
 
-        def _get_count(pop_key, default_key=None):
+        def _get_count(pop_key, default_key=None, row=actual_result):
             """Get the encounter/resource count for a population.
 
             Returns the number of items in a JSON list result, or 1/0 for
@@ -490,11 +496,11 @@ def compare_results(
             mapped = pop_name_map.get(pop_key, default_key or pop_key)
             if isinstance(mapped, list):
                 return sum(_get_count(n) for n in mapped)
-            val = _unwrap_audit(result.get(mapped))
+            val = _unwrap_audit(row.get(mapped))
             if val is None:
                 base = _base_name(mapped)
                 if base != mapped:
-                    val = _unwrap_audit(result.get(base))
+                    val = _unwrap_audit(row.get(base))
             if val is None:
                 return 0
             if isinstance(val, bool):
@@ -511,7 +517,7 @@ def compare_results(
                 return len(val)
             return 1 if val else 0
 
-        def _extract_group_suffix(name: str) -> Optional[str]:
+        def _extract_group_suffix(name: str) -> str | None:
             """Extract trailing group number from a numbered population name."""
             import re
             m = re.search(r'\s+(\d+)$', name)
@@ -631,7 +637,7 @@ def compare_results(
 
 
 def _normalize_population_definitions(
-    pop_defs: List[str], actual_defs: set
+    pop_defs: list[str], actual_defs: set
 ) -> tuple:
     """
     Normalize population definition names to match actual CQL definition names.

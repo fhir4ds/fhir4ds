@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .types import AuditPersona, AuditOrStrategy, PopulationMap  # noqa: F401
+from .types import AuditOrStrategy, AuditPersona, PopulationMap  # noqa: F401
 
 
 class AuditEngine:
@@ -54,7 +54,7 @@ class AuditEngine:
             attr = item.get("attribute")
             op = item.get("operator")
             thresh = item.get("threshold")
-            
+
             group_key = (trace, attr, op, thresh)
             if group_key not in compacted:
                 compacted[group_key] = {
@@ -64,15 +64,15 @@ class AuditEngine:
                     "threshold": thresh,
                     "findings": []
                 }
-            
+
             # Avoid duplicate targets within the same finding group
             target = item.get("target")
             val = item.get("value")
             finding = {"target": target}
             if val is not None:
                 finding["value"] = val
-                
+
             if finding not in compacted[group_key]["findings"]:
                 compacted[group_key]["findings"].append(finding)
-                
+
         return list(compacted.values())

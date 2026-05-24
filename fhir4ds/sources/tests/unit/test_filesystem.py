@@ -26,7 +26,6 @@ import pytest
 from fhir4ds.sources.base import SchemaValidationError
 from fhir4ds.sources.filesystem import CloudCredentials, FileSystemSource
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -165,7 +164,7 @@ class TestParquetSource:
             source = FileSystemSource(path)
             source.register(con)
             source.unregister(con)
-            with pytest.raises(Exception):
+            with pytest.raises(duckdb.CatalogException):
                 con.execute("SELECT * FROM resources").fetchall()
 
     def test_unregister_before_register_no_exception(self):

@@ -1,9 +1,8 @@
 """
 Measure configuration and paths.
 """
-from pathlib import Path
-from typing import List
 from dataclasses import dataclass
+from pathlib import Path
 
 # Base paths
 WORKSPACE_ROOT = Path(__file__).parent.parent.parent.parent.parent.absolute()
@@ -96,6 +95,6 @@ class MeasureConfig:
     name: str                            # e.g., "Controlling High Blood Pressure"
     cql_path: Path                       # Path to main CQL file
     test_dir: Path                       # Directory with test bundles
-    include_paths: List[Path]            # Paths for included libraries
-    valueset_paths: List[Path]           # Paths for ValueSets
-    population_definitions: List[str]    # e.g., ["Initial Population", "Denominator", "Numerator"]
+    include_paths: list[Path]            # Paths for included libraries
+    valueset_paths: list[Path]           # Paths for ValueSets
+    population_definitions: list[str]    # e.g., ["Initial Population", "Denominator", "Numerator"]

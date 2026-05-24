@@ -22,7 +22,17 @@ manual runs.
 
 ## Blocking vs Report-Only
 
-The `CI` workflow has one blocking gate:
+The `CI` workflow has two blocking Python 3.10 gates. Ruff is blocking for the
+packages that have been made lint-clean:
+
+```bash
+python -m ruff check \
+  fhir4ds/cli \
+  fhir4ds/dqm \
+  fhir4ds/sources
+```
+
+The focused pytest gate is also blocking:
 
 ```bash
 python -m pytest \
@@ -33,10 +43,9 @@ python -m pytest \
   fhir4ds/viewdef
 ```
 
-Ruff currently runs in report-only mode because the repository has existing
-global lint findings outside the current blocking gate. Treat Ruff annotations as
-cleanup guidance until a package is made lint-clean and promoted to a blocking
-check.
+The workflow also has a non-blocking Python 3.11 compatibility job that runs the
+same focused pytest set. It is a signal job while Python 3.11 failures are being
+investigated; the required compatibility target remains Python 3.10.
 
 ## Conformance
 
@@ -124,6 +133,8 @@ DuckDB source trees that are not needed for the standard Python CI jobs.
 Run the blocking CI pytest gate locally:
 
 ```bash
+python3 -m ruff check fhir4ds/cli fhir4ds/dqm fhir4ds/sources
+
 python3 -m pytest \
   fhir4ds/cli/tests \
   fhir4ds/dqm \

@@ -13,9 +13,7 @@ tracking via :meth:`~fhir4ds.sources.base.SourceAdapter.get_changed_patients`.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
-
-from fhir4ds.sources.base import SourceAdapter
+from typing import Any
 
 
 class ReactiveEvaluator:
@@ -83,9 +81,9 @@ class ReactiveEvaluator:
         self._cql_library_path = cql_library_path
         self._adapter = adapter
         self._audit_mode = audit_mode
-        self._last_sync: Optional[datetime] = None
+        self._last_sync: datetime | None = None
 
-    def update(self, as_of: Optional[datetime] = None) -> Optional[dict]:
+    def update(self, as_of: datetime | None = None) -> dict | None:
         """
         Identifies changed patients since the last sync, re-evaluates them,
         and returns a delta result that can be merged into the population
@@ -125,6 +123,6 @@ class ReactiveEvaluator:
         return delta
 
     @property
-    def last_sync(self) -> Optional[datetime]:
+    def last_sync(self) -> datetime | None:
         """The timestamp of the last successful :meth:`update` call."""
         return self._last_sync

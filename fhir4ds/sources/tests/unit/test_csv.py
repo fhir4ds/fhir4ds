@@ -19,10 +19,9 @@ import tempfile
 import duckdb
 import pytest
 
+import fhir4ds
 from fhir4ds.sources.base import SchemaValidationError
 from fhir4ds.sources.csv import CSVSource
-import fhir4ds
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -106,7 +105,7 @@ class TestCSVSourceHappyPath:
             source = CSVSource(path, _GOOD_PROJECTION)
             source.register(con)
             source.unregister(con)
-            with pytest.raises(Exception):
+            with pytest.raises(duckdb.CatalogException):
                 con.execute("SELECT * FROM resources").fetchall()
 
     def test_unregister_before_register_no_exception(self):
@@ -281,5 +280,5 @@ class TestApiUniformity:
             source = CSVSource(path, _GOOD_PROJECTION)
             fhir4ds.attach(con, source)
             fhir4ds.detach(con, source)
-            with pytest.raises(Exception):
+            with pytest.raises(duckdb.CatalogException):
                 con.execute("SELECT * FROM resources").fetchall()
