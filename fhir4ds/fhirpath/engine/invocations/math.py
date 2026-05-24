@@ -287,15 +287,26 @@ def power(ctx, x, degree):
     if is_empty(x) or is_empty(degree):
         return []
 
-    num = Decimal(ensure_number_singleton(x))
-    num2 = Decimal(ensure_number_singleton(degree))
+    base_raw = ensure_number_singleton(x)
+    exponent_raw = ensure_number_singleton(degree)
+    num = Decimal(base_raw)
+    num2 = Decimal(exponent_raw)
 
     if num == 0 and num2 <= 0:
         return []
     if num < 0 and num2.to_integral_value(rounding="ROUND_FLOOR") != num2:
         return []
 
-    return pow(num, num2)
+    if isinstance(base_raw, int) and isinstance(exponent_raw, int) and exponent_raw >= 0:
+        return int(pow(base_raw, exponent_raw))
+
+    result = pow(num, num2)
+    if isinstance(result, Decimal):
+        text = format(result.normalize(), "f")
+        if "." not in text:
+            text += ".0"
+        return Decimal(text)
+    return result
 
 
 def rround(ctx, x, acc=None):
@@ -304,8 +315,8 @@ def rround(ctx, x, acc=None):
 
     num = Decimal(ensure_number_singleton(x))
     if acc is None:
-        # FHIRPath §5.5: ties round towards positive infinity (ROUND_HALF_UP)
-        return int(num.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+        # FHIRPath §5.7.8 returns Decimal; omitted precision defaults to 0.
+        return num.quantize(Decimal('1'), rounding=ROUND_HALF_UP)
 
     if is_empty(acc):
         return []

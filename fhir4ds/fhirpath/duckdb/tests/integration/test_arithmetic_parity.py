@@ -170,6 +170,10 @@ def test_temporal_arithmetic_match_cpp() -> None:
             (["4294967294.0"], "4294967294.0", "[4294967294.0]", None, 4294967294.0, True),
         ),
         (
+            "1.2 * 1.8",
+            (["2.16"], "2.16", "[2.16]", None, 2.16, True),
+        ),
+        (
             "1 'cm' + 10 'mm'",
             (["0.02 'm'"], "0.02 'm'", '[{"value":0.02,"unit":"m"}]', None, 0.02, True),
         ),
@@ -191,6 +195,14 @@ def test_temporal_arithmetic_match_cpp() -> None:
         (
             "1 'cm' / 10 'mm'",
             (["1 '1'"], "1 '1'", '[{"value":1,"unit":"1"}]', None, 1.0, True),
+        ),
+        (
+            "2 / 1 'mg'",
+            (["2 '1/mg'"], "2 '1/mg'", '[{"value":2,"unit":"1/mg"}]', None, 2.0, True),
+        ),
+        (
+            "(1 | 2) + 1",
+            ([], None, None, None, None, False),
         ),
     ],
 )
@@ -233,6 +245,10 @@ def test_numeric_quantity_public_surfaces_native_and_fallback(
             ([], None, None, None, None, False),
         ),
         (
+            "@1974-12-25 + 7",
+            ([], None, None, None, None, False),
+        ),
+        (
             "@T12:34 + 30 seconds",
             (["T12:34"], "T12:34", '["T12:34"]', None, None, True),
         ),
@@ -245,7 +261,49 @@ def test_numeric_quantity_public_surfaces_native_and_fallback(
             (["T13"], "T13", '["T13"]', None, None, True),
         ),
         (
+            "@T00:00:00.500 + 0.5 seconds",
+            (["T00:00:00.500"], "T00:00:00.500", '["T00:00:00.500"]', None, None, True),
+        ),
+        (
+            "@2016-01-01T00:00:00.500 + 0.5 seconds",
+            (
+                ["2016-01-01T00:00:00.500"],
+                "2016-01-01T00:00:00.500",
+                '["2016-01-01T00:00:00.500"]',
+                None,
+                None,
+                True,
+            ),
+        ),
+        (
+            "@2016-01-01T00:00:00 + 1.5 seconds",
+            (
+                ["2016-01-01T00:00:01"],
+                "2016-01-01T00:00:01",
+                '["2016-01-01T00:00:01"]',
+                None,
+                None,
+                True,
+            ),
+        ),
+        (
             "@T12 + 1 day",
+            ([], None, None, None, None, False),
+        ),
+        (
+            "@1974-12-25 - 1 'cm'",
+            ([], None, None, None, None, False),
+        ),
+        (
+            "1 day + @2014",
+            ([], None, None, None, None, False),
+        ),
+        (
+            "1 second + @2014-01-01T00:00:00",
+            ([], None, None, None, None, False),
+        ),
+        (
+            "1 minute + @T12:00",
             ([], None, None, None, None, False),
         ),
         (
@@ -282,6 +340,30 @@ def test_numeric_quantity_public_surfaces_native_and_fallback(
             "@2016-02-29T23:59+61 seconds",
             (["2016-03-01T00:00"], "2016-03-01T00:00", '["2016-03-01T00:00"]', None, None, True),
         ),
+        (
+            "@9999 + 1 year",
+            ([], None, None, None, None, False),
+        ),
+        (
+            "@0001 - 1 year",
+            ([], None, None, None, None, False),
+        ),
+        (
+            "@9999-12-31 + 1 day",
+            ([], None, None, None, None, False),
+        ),
+        (
+            "@0001-01-01 - 1 day",
+            ([], None, None, None, None, False),
+        ),
+        (
+            "@9999-12-31T23:59:59 + 1 second",
+            ([], None, None, None, None, False),
+        ),
+        (
+            "@0001-01-01T00:00:00 - 1 second",
+            ([], None, None, None, None, False),
+        ),
     ],
 )
 def test_temporal_arithmetic_spec_edges_native_and_fallback(
@@ -302,11 +384,45 @@ def test_temporal_arithmetic_spec_edges_native_and_fallback(
 
 
 @pytest.mark.parametrize(
+    "expression",
+    [
+        "boundaryDate + 1 day",
+        "lowDate - 1 day",
+        "effectiveDateTime + 1 second",
+    ],
+)
+def test_resource_backed_temporal_overflow_is_row_resilient(
+    expression: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "boundaryDate": "9999-12-31",
+            "lowDate": "0001-01-01",
+            "effectiveDateTime": "9999-12-31T23:59:59",
+        }
+    )
+    expected = ([], None, None, None, None, True)
+
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        assert _surfaces(native, resource, expression) == expected
+        assert _surfaces(fallback, resource, expression) == expected
+    finally:
+        native.close()
+        fallback.close()
+
+
+@pytest.mark.parametrize(
     ("expression", "expected_json"),
     [
         ("effectiveDateTime + 1 second", '["2016-03-01T00:00:00"]'),
         ("effectiveDateTime + 1 's'", '["2016-03-01T00:00:00"]'),
         ("effectiveTime + 750 milliseconds", '["T00:00:00.250"]'),
+        ("effectiveDateTime + 0.5 seconds", '["2016-02-29T23:59:59"]'),
+        ("effectiveTime + 0.5 seconds", '["T23:59:59.500"]'),
     ],
 )
 def test_fhir_temporal_path_arithmetic_native_and_fallback(

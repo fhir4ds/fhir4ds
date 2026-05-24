@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import duckdb
+import pytest
 
 from fhir4ds.fhirpath.duckdb import register_fhirpath
 from fhir4ds.fhirpath.duckdb.udf import (
@@ -100,6 +101,18 @@ def test_math_argument_validation_matches_forced_python_fallback(monkeypatch) ->
         }
     )
     expressions = [
+        "1.abs(2)",
+        "1.ceiling(2)",
+        "1.exp(2)",
+        "1.floor(2)",
+        "1.ln(2)",
+        "10.log()",
+        "10.log(2, 3)",
+        "2.power()",
+        "2.power(3, 4)",
+        "2.round(1, 2)",
+        "2.sqrt(1)",
+        "2.truncate(1)",
         "10.log((2 | 3))",
         "2.power((3 | 4))",
         "p.round((2 | 3))",
@@ -122,6 +135,63 @@ def test_math_argument_validation_matches_forced_python_fallback(monkeypatch) ->
                 [resource, expression, resource, expression, resource, expression, resource, expression],
             ).fetchone()
             assert cpp_result == py_result == ([], None, None, None), expression
+            assert cpp.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone()[0] is False
+            assert py.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone()[0] is False
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_round_omitted_precision_returns_decimal_like_explicit_zero(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Observation"})
+    cases = {
+        "1.round()": (["1.0"], "1.0", "[1.0]"),
+        "1.round().type().name": (["Decimal"], "Decimal", '["Decimal"]'),
+        "1.round(0).type().name": (["Decimal"], "Decimal", '["Decimal"]'),
+        "1.round() is Decimal": (["true"], "true", "[true]"),
+        "1.round() is Integer": (["false"], "false", "[false]"),
+    }
+
+    cpp = _cpp_connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            cpp_result = cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py_result = py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp_result == py_result == expected, expression
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_round_preserves_decimal_source_text_for_high_precision_and_ties(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Observation"})
+    cases = {
+        "1.23456789.round(20)": (["1.23456789"], "1.23456789", "[1.23456789]"),
+        "1.2300.round(20)": (["1.23"], "1.23", "[1.23]"),
+        "1.005.round(2)": (["1.01"], "1.01", "[1.01]"),
+        "(-1.005).round(2)": (["-1.01"], "-1.01", "[-1.01]"),
+    }
+
+    cpp = _cpp_connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            cpp_result = cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py_result = py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp_result == py_result == expected, expression
     finally:
         cpp.close()
         py.close()
@@ -154,6 +224,54 @@ def test_only_abs_accepts_quantity_math_input_in_cpp_and_fallback(monkeypatch) -
                 [resource, expression, resource, expression, resource, expression],
             ).fetchone()
             assert cpp_result == py_result == expected, expression
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_math_incompatible_constants_and_dynamic_arguments_match_fallback(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Observation", "p": 2.5, "base": 2, "exp": 3})
+    invalid_constants = [
+        "'2.5'.sqrt()",
+        "true.abs()",
+        "5 'mg'.sqrt()",
+        "5 'mg'.ceiling()",
+    ]
+
+    cpp = _cpp_connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in invalid_constants:
+            cpp_result = cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_number(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            py_result = py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_number(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert cpp_result == py_result == ([], None, None, None, False), expression
+
+        cpp_log = cpp.execute(
+            "SELECT fhirpath_text(?::JSON, 'p.log(base)'), fhirpath_number(?::JSON, 'p.log(base)')",
+            [resource, resource],
+        ).fetchone()
+        py_log = py.execute(
+            "SELECT fhirpath_text(?::JSON, 'p.log(base)'), fhirpath_number(?::JSON, 'p.log(base)')",
+            [resource, resource],
+        ).fetchone()
+        assert cpp_log == py_log
+        assert cpp_log[1] == pytest.approx(1.3219280948873624)
+
+        cpp_power = cpp.execute(
+            "SELECT fhirpath(?::JSON, '2.power(3)'), fhirpath_text(?::JSON, '2.power(3)'), fhirpath_json(?::JSON, '2.power(3)')",
+            [resource, resource, resource],
+        ).fetchone()
+        py_power = py.execute(
+            "SELECT fhirpath(?::JSON, '2.power(3)'), fhirpath_text(?::JSON, '2.power(3)'), fhirpath_json(?::JSON, '2.power(3)')",
+            [resource, resource, resource],
+        ).fetchone()
+        assert cpp_power == py_power == (["8"], "8", "[8]")
     finally:
         cpp.close()
         py.close()

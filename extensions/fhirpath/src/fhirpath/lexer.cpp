@@ -44,6 +44,10 @@ static bool isDigitAt(const std::string &value, size_t pos) {
 	return pos < value.size() && std::isdigit(static_cast<unsigned char>(value[pos]));
 }
 
+static bool isFhirPathWhitespace(char c) {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
 static bool consumeTimezoneFormat(const std::string &value, size_t &pos) {
 	if (pos >= value.size()) {
 		return true;
@@ -168,6 +172,67 @@ static bool hasLaterSingleQuote(const std::string &value, size_t pos) {
 	return false;
 }
 
+static bool isHex4At(const std::string &value, size_t pos) {
+	if (pos + 4 > value.size()) {
+		return false;
+	}
+	for (size_t i = pos; i < pos + 4; ++i) {
+		if (!std::isxdigit(static_cast<unsigned char>(value[i]))) {
+			return false;
+		}
+	}
+	return true;
+}
+
+static unsigned int parseHex4At(const std::string &value, size_t pos) {
+	return static_cast<unsigned int>(std::stoul(value.substr(pos, 4), nullptr, 16));
+}
+
+static void appendUtf8(std::string &value, unsigned int cp) {
+	if (cp < 0x80) {
+		value += static_cast<char>(cp);
+	} else if (cp < 0x800) {
+		value += static_cast<char>(0xC0 | (cp >> 6));
+		value += static_cast<char>(0x80 | (cp & 0x3F));
+	} else if (cp < 0x10000) {
+		value += static_cast<char>(0xE0 | (cp >> 12));
+		value += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+		value += static_cast<char>(0x80 | (cp & 0x3F));
+	} else {
+		value += static_cast<char>(0xF0 | (cp >> 18));
+		value += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+		value += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+		value += static_cast<char>(0x80 | (cp & 0x3F));
+	}
+}
+
+static bool appendUnicodeEscape(std::string &out, const std::string &input, size_t &pos, const std::string &hex) {
+	bool valid_hex = hex.size() == 4;
+	for (char h : hex) {
+		if (!std::isxdigit(static_cast<unsigned char>(h))) {
+			valid_hex = false;
+			break;
+		}
+	}
+	if (!valid_hex) {
+		out += 'u';
+		out += hex;
+		return false;
+	}
+
+	unsigned int cp = static_cast<unsigned int>(std::stoul(hex, nullptr, 16));
+	if (cp >= 0xD800 && cp <= 0xDBFF && pos + 6 <= input.size() &&
+	    input[pos] == '\\' && input[pos + 1] == 'u' && isHex4At(input, pos + 2)) {
+		unsigned int low = parseHex4At(input, pos + 2);
+		if (low >= 0xDC00 && low <= 0xDFFF) {
+			cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+			pos += 6;
+		}
+	}
+	appendUtf8(out, cp);
+	return true;
+}
+
 std::vector<Token> Lexer::tokenize() {
 	std::vector<Token> tokens;
 	while (!isAtEnd()) {
@@ -184,7 +249,7 @@ std::vector<Token> Lexer::tokenize() {
 void Lexer::skipWhitespace() {
 	while (!isAtEnd()) {
 		char c = input_[pos_];
-		if (std::isspace(static_cast<unsigned char>(c))) {
+		if (isFhirPathWhitespace(c)) {
 			pos_++;
 			continue;
 		}
@@ -282,6 +347,9 @@ Token Lexer::nextToken() {
 	// % environment variable
 	if (c == '%') {
 		advance();
+		// externalConstant is '%' followed by an identifier or STRING in the
+		// formal grammar; whitespace/comments are hidden tokens between them.
+		skipWhitespace();
 		std::string name;
 		// Handle backtick-delimited names
 		if (!isAtEnd() && peek() == '`') {
@@ -401,36 +469,14 @@ Token Lexer::readDelimitedIdentifier() {
 			case 'f':
 				value += '\f';
 				break;
-			case 'u': {
-				std::string hex;
-				for (int i = 0; i < 4 && !isAtEnd() && peek() != '`'; ++i) {
-					hex += advance();
-				}
-				bool valid_hex = hex.size() == 4;
-				for (char h : hex) {
-					if (!std::isxdigit(static_cast<unsigned char>(h))) {
-						valid_hex = false;
-						break;
+				case 'u': {
+					std::string hex;
+					for (int i = 0; i < 4 && !isAtEnd() && peek() != '`'; ++i) {
+						hex += advance();
 					}
+					appendUnicodeEscape(value, input_, pos_, hex);
+					break;
 				}
-				if (valid_hex) {
-					unsigned int cp = std::stoul(hex, nullptr, 16);
-					if (cp < 0x80) {
-						value += static_cast<char>(cp);
-					} else if (cp < 0x800) {
-						value += static_cast<char>(0xC0 | (cp >> 6));
-						value += static_cast<char>(0x80 | (cp & 0x3F));
-					} else {
-						value += static_cast<char>(0xE0 | (cp >> 12));
-						value += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-						value += static_cast<char>(0x80 | (cp & 0x3F));
-					}
-				} else {
-					value += 'u';
-					value += hex;
-				}
-				break;
-			}
 			default:
 				value += escaped;
 				break;
@@ -489,29 +535,7 @@ Token Lexer::readString() {
 					for (int i = 0; i < 4 && !isAtEnd() && peek() != '\''; ++i) {
 						hex += advance();
 					}
-					bool valid_hex = hex.size() == 4;
-					for (char h : hex) {
-						if (!std::isxdigit(static_cast<unsigned char>(h))) {
-							valid_hex = false;
-							break;
-						}
-					}
-					if (valid_hex) {
-						unsigned int cp = std::stoul(hex, nullptr, 16);
-						if (cp < 0x80) {
-							value += static_cast<char>(cp);
-						} else if (cp < 0x800) {
-							value += static_cast<char>(0xC0 | (cp >> 6));
-							value += static_cast<char>(0x80 | (cp & 0x3F));
-						} else {
-							value += static_cast<char>(0xE0 | (cp >> 12));
-							value += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-							value += static_cast<char>(0x80 | (cp & 0x3F));
-						}
-					} else {
-						value += 'u';
-						value += hex;
-					}
+					appendUnicodeEscape(value, input_, pos_, hex);
 					break;
 				}
 				default:
@@ -617,7 +641,7 @@ Token Lexer::readDateLiteral() {
 			           std::isdigit(static_cast<unsigned char>(input_[pos_ + 2])) &&
 			           (pos_ + 3 >= input_.size() ||
 			            (!std::isdigit(static_cast<unsigned char>(input_[pos_ + 3])) &&
-			             !std::isspace(static_cast<unsigned char>(input_[pos_ + 3]))))) {
+			             !isFhirPathWhitespace(input_[pos_ + 3])))) {
 				error_ = true;
 				value += advance();
 			} else {

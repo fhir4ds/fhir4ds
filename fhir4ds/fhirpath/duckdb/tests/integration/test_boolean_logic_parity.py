@@ -52,6 +52,7 @@ def test_boolean_logic_operators_match_cpp() -> None:
         "t xor t",
         "t implies f",
         "f implies t",
+        "not()",
         "t.not()",
         "f.not()",
         "{}.not()",
@@ -161,6 +162,7 @@ def test_multi_item_boolean_operands_return_empty_in_native_and_fallback(
         ("{} implies t", "[true]", True),
         ("{} implies f", None, None),
         ("{} implies {}", None, None),
+        ("not()", "[false]", False),
         ("t.not()", "[false]", False),
         ("f.not()", "[true]", True),
         ("{}.not()", None, None),
@@ -238,6 +240,35 @@ def test_boolean_logic_singleton_precedence_and_short_circuit_parity(
             [resource, expression, resource, expression, resource, expression],
         ).fetchone()
         assert native_result == fallback_result == (expected_text, expected_json, expected_bool)
+    finally:
+        native.close()
+        fallback.close()
+
+
+@pytest.mark.parametrize("expression", ["t.not(false)", "not(false)"])
+def test_boolean_not_rejects_arguments_in_native_and_fallback(
+    expression: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "t": True,
+        }
+    )
+
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        native_result = native.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+            [resource, expression, resource, expression, resource, expression, expression],
+        ).fetchone()
+        fallback_result = fallback.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+            [resource, expression, resource, expression, resource, expression, expression],
+        ).fetchone()
+        assert native_result == fallback_result == ([], None, None, False)
     finally:
         native.close()
         fallback.close()

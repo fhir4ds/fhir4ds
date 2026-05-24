@@ -154,3 +154,93 @@ def test_aggregate_scope_restoration_matches_cpp(monkeypatch) -> None:
     finally:
         con.close()
         fallback.close()
+
+
+def test_aggregate_init_expression_uses_outer_focus_like_fallback(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Patient", "seed": 10, "a": [1, 2, 3]})
+    expressions = {
+        "a.aggregate($total + $this, seed)": (["16"], "[16]", "16", True),
+        "{}.aggregate($this + $total, seed)": (["10"], "[10]", "10", True),
+    }
+
+    con = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expressions.items():
+            native = con.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native == expected
+            assert native == py
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_aggregate_arity_matches_fallback(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Patient", "a": [1, 2, 3]})
+    invalid_expressions = [
+        "a.aggregate()",
+        "a.aggregate($this, 0, 1)",
+        "aggregate()",
+        "aggregate($this, {}, {})",
+    ]
+
+    con = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        for expression in invalid_expressions:
+            native = con.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native == ([], None, False)
+            assert native == py
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_reserved_keywords_and_strict_whitespace_match_fallback(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Patient", "div": "d", "mod": "m"})
+    valid_delimited = {
+        "`div`": (["d"], "d", True),
+        "`mod`": (["m"], "m", True),
+    }
+    invalid_expressions = [
+        "div",
+        "mod",
+        "1\f+\f2",
+        "1\v+\v2",
+    ]
+
+    con = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        for expression, expected in valid_delimited.items():
+            native = con.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native == expected
+            assert native == py
+
+        for expression in invalid_expressions:
+            assert con.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (False,)
+            assert fallback.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (False,)
+    finally:
+        con.close()
+        fallback.close()

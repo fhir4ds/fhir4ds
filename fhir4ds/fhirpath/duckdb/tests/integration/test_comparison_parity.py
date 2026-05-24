@@ -158,6 +158,60 @@ def test_valid_empty_result_expressions_keep_is_valid_parity(monkeypatch) -> Non
         fallback.close()
 
 
+def test_time_only_values_are_not_ordered_against_dates_or_datetimes(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Observation"})
+    cases = [
+        "@2018-01-01 < @T10:00:00",
+        "@T10:00:00 > @2018-01-01",
+        "@2018-01-01T00:00:00 < @T10:00:00",
+        "@T10:00:00 >= @2018-01-01T00:00:00",
+    ]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in cases:
+            native_result = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            fallback_result = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native_result == fallback_result == ([], None, None, True), expression
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_one_sided_datetime_timezone_policy_matches_native(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Observation"})
+    cases = {
+        "@2017-11-05T01:30:00.0-04:00 < @2017-11-05T01:30:00.0": (["false"], "[false]", False, True),
+        "@2017-11-05T01:30:00.0-04:00 > @2017-11-05T01:30:00.0": (["false"], "[false]", False, True),
+        "@2017-11-05T01:30:00.0-04:00 <= @2017-11-05T01:30:00.0": (["true"], "[true]", True, True),
+        "@2017-11-05T01:30:00.0-04:00 >= @2017-11-05T01:30:00.0": (["true"], "[true]", True, True),
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            native_result = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            fallback_result = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native_result == fallback_result == expected, expression
+    finally:
+        native.close()
+        fallback.close()
+
+
 def test_fhir_quantity_path_comparisons_match_python_fallback(monkeypatch) -> None:
     resource = json.dumps(
         {
@@ -250,6 +304,94 @@ def test_fhir_quantity_unit_only_path_comparisons_match_python_fallback(monkeypa
             ],
         ).fetchone()
         assert native_result == fallback_result == (["true"], "[true]", True)
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_boolean_comparison_is_not_ordered(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "truth": True,
+            "falsity": False,
+        }
+    )
+    cases = {
+        "true > false": ([], None, None, False),
+        "truth > falsity": ([], None, None, True),
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            native_result = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            fallback_result = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native_result == fallback_result == expected, expression
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_comparison_singleton_errors_match_for_literal_multi_item_operands(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Observation", "arr": [1, 2], "b": 3})
+    cases = {
+        "(1 | 2) < 3": ([], None, None, False),
+        "1 < (2 | 3)": ([], None, None, False),
+        "arr < b": ([], None, None, True),
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            native_result = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            fallback_result = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native_result == fallback_result == expected, expression
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_calendar_duration_ucum_duration_comparisons_above_seconds_are_empty(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Observation"})
+    cases = {
+        "1 year > 1 'a'": ([], None, None, True),
+        "1 month <= 1 'mo'": ([], None, None, True),
+        "1 week > 1 'wk'": ([], None, None, True),
+        "1 day > 1 'd'": ([], None, None, True),
+        "1 hour > 1 'h'": ([], None, None, True),
+        "1 minute > 1 'min'": ([], None, None, True),
+        "10 seconds > 1 's'": (["true"], "[true]", True, True),
+        "10 milliseconds > 1 'ms'": (["true"], "[true]", True, True),
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            native_result = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            fallback_result = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert native_result == fallback_result == expected, expression
     finally:
         native.close()
         fallback.close()

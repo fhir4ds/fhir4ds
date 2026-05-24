@@ -168,6 +168,8 @@ def tail_fn(ctx, x):
 
 
 def take_fn(ctx, x, n):
+    if util.is_empty(n):
+        return []
     n = int(n)
     if len(x) == 0 or n <= 0:
         return []
@@ -175,6 +177,8 @@ def take_fn(ctx, x, n):
 
 
 def skip_fn(ctx, x, n):
+    if util.is_empty(n):
+        return []
     n = int(n)
     if len(x) == 0 or n <= 0:
         return list(x)
@@ -182,8 +186,13 @@ def skip_fn(ctx, x, n):
 
 
 def of_type_fn(ctx, coll, tp):
+    from .types import _is_any_type, _matches_unqualified_choice_primitive
+
     result = []
     for value in coll:
+        if _is_any_type(tp) or _matches_unqualified_choice_primitive(value, tp):
+            result.append(value)
+            continue
         value_type = nodes.TypeInfo.from_value(value)
         if value_type.is_exact_type(tp):
             result.append(value)

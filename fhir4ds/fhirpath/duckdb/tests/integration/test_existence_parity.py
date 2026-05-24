@@ -187,6 +187,61 @@ def test_criteria_functions_reject_non_boolean_results_like_fallback(monkeypatch
         fallback.close()
 
 
+def test_exists_criteria_validates_later_items_before_exists_result(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "nested": [
+                {"flags": [True]},
+                {"flags": [False, True]},
+            ],
+        }
+    )
+    expression = "nested.exists(flags)"
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        cpp = native.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+            [resource, expression, resource, expression, resource, expression],
+        ).fetchone()
+        py = fallback.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+            [resource, expression, resource, expression, resource, expression],
+        ).fetchone()
+        direct = (
+            fhirpath_scalar(resource, expression),
+            fhirpath_json_udf(resource, expression),
+            fhirpath_bool_udf(resource, expression),
+        )
+        assert cpp == py == direct == ([], None, None)
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_parenthesized_logical_operators_are_valid_in_criteria(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Patient", "a": [1, 2, 3]})
+    expression = "a.all(($this > 0) and ($index < 3))"
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        cpp = native.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+            [resource, expression, resource, expression, resource, expression, expression],
+        ).fetchone()
+        py = fallback.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+            [resource, expression, resource, expression, resource, expression, expression],
+        ).fetchone()
+        assert cpp == py == (["true"], "[true]", True, True)
+    finally:
+        native.close()
+        fallback.close()
+
+
 def test_boolean_aggregates_validate_full_collection_before_short_circuit(monkeypatch) -> None:
     expressions = [
         "true.combine('x').anyTrue()",

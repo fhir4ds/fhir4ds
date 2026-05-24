@@ -1,5 +1,7 @@
 from collections import abc
+from decimal import Decimal
 from functools import reduce
+import json
 from ...engine import util as util
 from ...engine import nodes as nodes
 
@@ -174,13 +176,38 @@ def children(ctx, coll):
 
 def descendants(ctx, coll):
     from collections import deque
+
     result = []
-    queue = deque(reduce(create_reduce_children(ctx, False), coll, []))
+    seen = set()
+    # FHIRPath §5.8.2 defines descendants() as shorthand for repeat(children()),
+    # so it must use the same child projection as children().
+    queue = deque(coll)
     while queue:
         item = queue.popleft()
-        result.append(item)
-        queue.extend(reduce(create_reduce_children(ctx, False), [item], []))
+        new_children = []
+        pending = set()
+        for child in reduce(create_reduce_children(ctx, True), [item], []):
+            key = _descendant_repeat_key(child)
+            if key not in seen and key not in pending:
+                new_children.append(child)
+                pending.add(key)
+        result.extend(new_children)
+        seen.update(pending)
+        queue.extend(new_children)
     return result
+
+
+def _descendant_repeat_key(item):
+    data = util.get_data(item)
+    if data is None:
+        return ("null", None)
+    if isinstance(data, bool):
+        return ("boolean", data)
+    if isinstance(data, (int, float, Decimal)) and not isinstance(data, bool):
+        return ("number", str(Decimal(str(data)).normalize()))
+    if isinstance(data, (dict, list)):
+        return ("json", json.dumps(data, sort_keys=True, separators=(",", ":"), default=str))
+    return (type(data).__name__, str(data))
 
 
 def get_resource_key(ctx, coll):

@@ -105,13 +105,25 @@ def sort_fn(ctx, coll, *exprs):
     # Each expression is a lambda that can be called with an item to get the sort key
     # A negative sign prefix (detected during parsing) indicates descending order
 
+    def eval_sort_expr(expr, item):
+        marker = object()
+        previous = ctx.get("_sort_expression", marker)
+        ctx["_sort_expression"] = True
+        try:
+            return expr(item)
+        finally:
+            if previous is marker:
+                ctx.pop("_sort_expression", None)
+            else:
+                ctx["_sort_expression"] = previous
+
     def multi_sort_key(item):
         """Generate a sort key tuple for multiple criteria."""
         keys = []
         for expr in exprs:
             if callable(expr):
                 # Evaluate the expression on the item
-                result = expr(item)
+                result = eval_sort_expr(expr, item)
                 # Get the first value if it's a list
                 if isinstance(result, list) and len(result) > 0:
                     result = result[0]
@@ -145,8 +157,8 @@ def sort_fn(ctx, coll, *exprs):
                 continue
 
             # Evaluate expressions
-            val_a = expr(a)
-            val_b = expr(b)
+            val_a = eval_sort_expr(expr, a)
+            val_b = eval_sort_expr(expr, b)
 
             # Check for DescendingSortMarker (for descending sort of non-numeric values)
             descending_a = isinstance(val_a, list) and len(val_a) > 0 and isinstance(val_a[0], DescendingSortMarker)

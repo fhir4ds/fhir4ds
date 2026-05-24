@@ -119,6 +119,8 @@ def type_specifier(ctx, parent_data, node):
     else:
         raise FHIRPathError(f"Expected TypeSpecifier node, got {node}")
 
+    explicit_namespace = namespace is not None
+
     # Validate that the type resolves in the requested model namespace.
     # This catches typos like "string1" and invalid qualified FHIR aliases such
     # as FHIR.Integer while preserving official R4 behavior where
@@ -148,7 +150,12 @@ def type_specifier(ctx, parent_data, node):
     elif namespace is None and name and name[0].islower():
         namespace = TypeInfo.FHIR
 
-    return TypeInfo(name=name, namespace=namespace)
+    type_info = TypeInfo(name=name, namespace=namespace)
+    # Preserve whether a System/FHIR namespace was authored. Unqualified
+    # capitalized choice specifiers such as Integer can match valueInteger,
+    # but explicit System.Integer must stay distinct from FHIR primitives.
+    type_info.explicit_namespace = explicit_namespace
+    return type_info
 
 
 param_check_table = {

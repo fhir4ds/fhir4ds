@@ -38,7 +38,10 @@ def _validate_regex(pattern: str) -> None:
 def _compile_regex(pattern: str, flags: int = 0) -> re.Pattern:
     """Cache compiled regex patterns to avoid recompilation."""
     _validate_regex(pattern)
-    return re.compile(pattern, flags)
+    try:
+        return re.compile(pattern, flags)
+    except re.error as exc:
+        raise FHIRPathError(f"Invalid regular expression: {exc}") from exc
 
 
 def matchesFull(ctx, coll, regex):
@@ -246,8 +249,6 @@ def replace(ctx, coll, regex, repl):
         if string == "":
             return repl
         return repl + repl.join(character for character in string) + repl
-    if not string or not regex:
-        return []
     return string.replace(regex, repl)
 
 
@@ -271,10 +272,8 @@ def replace_matches(ctx, coll, regex, repl):
 def length(ctx, coll):
     if not coll:
         return []
-    data = util.get_data(coll[0])
-    if not isinstance(data, str):
-        return []
-    return len(data)
+    string = ensure_string_singleton(coll)
+    return len(string)
 
 
 def toChars(ctx, coll):

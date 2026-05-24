@@ -92,7 +92,9 @@ def define_variable(ctx, coll, name, value_expr=None):
 
 
 def to_integer(ctx, coll):
-    if len(coll) != 1:
+    if len(coll) > 1:
+        raise FHIRPathError("toInteger() requires a single item input collection")
+    if len(coll) == 0:
         return []
 
     value = util.get_data(coll[0])
@@ -125,6 +127,9 @@ quantity_regex_map = {"value": 1, "unit": 5, "time": 6}
 def to_quantity(ctx, coll, to_unit=None):
     result = None
 
+    if to_unit == []:
+        return []
+
     # Surround UCUM unit code in the to_unit parameter with single quotes
     if to_unit and not nodes.FP_Quantity.timeUnitsToUCUM.get(to_unit):
         to_unit = f"'{to_unit}'"
@@ -132,7 +137,7 @@ def to_quantity(ctx, coll, to_unit=None):
     if len(coll) > 1:
         raise FHIRPathError("Could not convert to quantity: input collection contains multiple items")
     elif len(coll) == 1:
-        v = util.val_data_converted(coll[0])
+        v = util.parse_value(util.val_data_converted(coll[0]))
         quantity_regex_res = None
 
         if isinstance(v, bool):
@@ -175,7 +180,9 @@ def to_quantity(ctx, coll, to_unit=None):
 
 
 def to_decimal(ctx, coll):
-    if len(coll) != 1:
+    if len(coll) > 1:
+        raise FHIRPathError("toDecimal() requires a single item input collection")
+    if len(coll) == 0:
         return []
 
     value = util.get_data(coll[0])
@@ -199,10 +206,12 @@ def to_decimal(ctx, coll):
 
 
 def to_string(ctx, coll):
-    if len(coll) != 1:
+    if len(coll) > 1:
+        raise FHIRPathError("toString() requires a single item input collection")
+    if len(coll) == 0:
         return []
 
-    value = util.get_data(coll[0])
+    value = util.parse_value(util.val_data_converted(coll[0]))
 
     if isinstance(value, (dict, list)):
         return []
@@ -227,10 +236,14 @@ def to_date_time(ctx, coll):
     if ln == 1:
         value = util.get_data(coll[0])
 
+        if isinstance(value, nodes.FP_DateTime):
+            rtn.append(value)
+        elif isinstance(value, nodes.FP_Date):
+            dateTimeObject = nodes.FP_DateTime(str(value) + 'T')
+            if dateTimeObject:
+                rtn.append(dateTimeObject)
         # First try FP_DateTime directly
-        dateTimeObject = nodes.FP_DateTime(value)
-
-        if dateTimeObject:
+        elif (dateTimeObject := nodes.FP_DateTime(value)):
             rtn.append(dateTimeObject)
         else:
             # If that fails, try FP_Date for date-only strings (e.g., "2015", "2015-02")
@@ -241,6 +254,7 @@ def to_date_time(ctx, coll):
                 dateTimeObject = nodes.FP_DateTime(value + 'T')
                 if dateTimeObject:
                     rtn.append(dateTimeObject)
+
 
     return util.get_data(rtn[0]) if rtn else []
 
@@ -272,10 +286,18 @@ def to_date(ctx, coll):
     if ln == 1:
         value = util.get_data(coll[0])
 
+        if isinstance(value, nodes.FP_Date):
+            rtn.append(value)
+        elif isinstance(value, nodes.FP_DateTime):
+            date_str = str(value)
+            tpos = date_str.find("T")
+            if tpos != -1:
+                date_str = date_str[:tpos]
+            dateObject = nodes.FP_Date(date_str)
+            if dateObject:
+                rtn.append(dateObject)
         # Try FP_Date first for date-only strings (e.g., "2015", "2015-02", "2015-02-04")
-        dateObject = nodes.FP_Date(value)
-
-        if dateObject:
+        elif (dateObject := nodes.FP_Date(value)):
             rtn.append(dateObject)
         else:
             dateTimeObject = nodes.FP_DateTime(value)
@@ -303,7 +325,9 @@ def create_converts_to_fn(to_function, _type):
             if args:
                 # 1-param form: treat args[0] as the input collection
                 coll = util.arraify(args[0])
-            if len(coll) != 1:
+            if len(coll) > 1:
+                raise FHIRPathError("Conversion function requires a single item input collection")
+            if len(coll) == 0:
                 return []
             return type(to_function(ctx, coll)).__name__ == _type
         return in_function
@@ -311,7 +335,9 @@ def create_converts_to_fn(to_function, _type):
     def in_function(ctx, coll, *args):
         if args:
             coll = util.arraify(args[0])
-        if len(coll) != 1:
+        if len(coll) > 1:
+            raise FHIRPathError("Conversion function requires a single item input collection")
+        if len(coll) == 0:
             return []
         return isinstance(to_function(ctx, coll), _type)
 
@@ -319,7 +345,11 @@ def create_converts_to_fn(to_function, _type):
 
 
 def converts_to_quantity(ctx, coll, to_unit=None):
-    if len(coll) != 1:
+    if len(coll) > 1:
+        raise FHIRPathError("convertsToQuantity() requires a single item input collection")
+    if len(coll) == 0:
+        return []
+    if to_unit == []:
         return []
     return isinstance(to_quantity(ctx, coll, to_unit), nodes.FP_Quantity)
 
@@ -328,7 +358,9 @@ def to_boolean(ctx, coll):
     true_strings = ['true', 't', 'yes', 'y', '1', '1.0']
     false_strings = ['false', 'f', 'no', 'n', '0', '0.0']
 
-    if len(coll) != 1:
+    if len(coll) > 1:
+        raise FHIRPathError("toBoolean() requires a single item input collection")
+    if len(coll) == 0:
         return []
 
     val = util.get_data(coll[0])

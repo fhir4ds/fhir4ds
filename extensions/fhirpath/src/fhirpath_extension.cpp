@@ -1432,22 +1432,32 @@ static void FhirpathJsonFunction(DataChunk &args, ExpressionState &state, Vector
 			} else if (val.type == fhirpath::FPValue::Type::Boolean) {
 				json_str += val.bool_val ? "true" : "false";
 			} else if (val.type == fhirpath::FPValue::Type::Quantity) {
-				// Serialize as JSON object {"value": X, "unit": "Y"}
-				json_str += "{\"value\":";
-				char buf[64];
-				snprintf(buf, sizeof(buf), "%.17g", val.quantity_value);
-				json_str += buf;
-				json_str += ",\"unit\":\"";
-				for (unsigned char c : val.quantity_unit) {
-					if (c == '"') {
-						json_str += "\\\"";
-					} else if (c == '\\') {
-						json_str += "\\\\";
-					} else {
-						json_str += static_cast<char>(c);
+					// Serialize as JSON object {"value": X, "unit": "Y"}
+					json_str += "{\"value\":";
+					char buf[64];
+					snprintf(buf, sizeof(buf), "%.15g", val.quantity_value);
+					json_str += buf;
+					json_str += ",\"unit\":\"";
+					for (unsigned char c : val.quantity_unit) {
+						switch (c) {
+						case '"':  json_str += "\\\""; break;
+						case '\\': json_str += "\\\\"; break;
+						case '\b': json_str += "\\b"; break;
+						case '\f': json_str += "\\f"; break;
+						case '\n': json_str += "\\n"; break;
+						case '\r': json_str += "\\r"; break;
+						case '\t': json_str += "\\t"; break;
+						default:
+							if (c < 0x20) {
+								char esc[8];
+								snprintf(esc, sizeof(esc), "\\u%04x", c);
+								json_str += esc;
+							} else {
+								json_str += static_cast<char>(c);
+							}
+						}
 					}
-				}
-				json_str += "\"}";
+					json_str += "\"}";
 			} else if (val.type == fhirpath::FPValue::Type::Null) {
 				json_str += "null";
 			} else if (val.type == fhirpath::FPValue::Type::JsonVal && val.json_val) {
@@ -1498,6 +1508,145 @@ static void FhirpathJsonFunction(DataChunk &args, ExpressionState &state, Vector
 }
 
 // fhirpath_timestamp(resource JSON, expression VARCHAR) → VARCHAR
+static bool IsDateTimeText(const std::string &value) {
+	size_t tpos = value.find('T');
+	if (tpos == std::string::npos) {
+		return false;
+	}
+	if (!(tpos == 4 || tpos == 7 || tpos == 10)) {
+		return false;
+	}
+	if (!std::isdigit((unsigned char)value[0]) ||
+	    !std::isdigit((unsigned char)value[1]) ||
+	    !std::isdigit((unsigned char)value[2]) ||
+	    !std::isdigit((unsigned char)value[3])) {
+		return false;
+	}
+	if (tpos >= 7 &&
+	    (value[4] != '-' || !std::isdigit((unsigned char)value[5]) ||
+	     !std::isdigit((unsigned char)value[6]))) {
+		return false;
+	}
+	if (tpos == 10 &&
+	    (value[7] != '-' || !std::isdigit((unsigned char)value[8]) ||
+	     !std::isdigit((unsigned char)value[9]))) {
+		return false;
+	}
+	if (tpos + 1 == value.size()) {
+		return true;
+	}
+	size_t pos = tpos + 1;
+	if (pos + 2 > value.size() || !std::isdigit((unsigned char)value[pos]) ||
+	    !std::isdigit((unsigned char)value[pos + 1])) {
+		return false;
+	}
+	pos += 2;
+	if (pos == value.size()) {
+		return true;
+	}
+	if (value[pos] == 'Z') {
+		return pos + 1 == value.size();
+	}
+	if (value[pos] == '+' || value[pos] == '-') {
+		return pos + 6 == value.size() && value[pos + 3] == ':' &&
+		       std::isdigit((unsigned char)value[pos + 1]) &&
+		       std::isdigit((unsigned char)value[pos + 2]) &&
+		       std::isdigit((unsigned char)value[pos + 4]) &&
+		       std::isdigit((unsigned char)value[pos + 5]);
+	}
+	if (value[pos] != ':') {
+		return false;
+	}
+	pos++;
+	if (pos + 2 > value.size() || !std::isdigit((unsigned char)value[pos]) ||
+	    !std::isdigit((unsigned char)value[pos + 1])) {
+		return false;
+	}
+	pos += 2;
+	if (pos == value.size()) {
+		return true;
+	}
+	if (value[pos] == 'Z') {
+		return pos + 1 == value.size();
+	}
+	if (value[pos] == '+' || value[pos] == '-') {
+		return pos + 6 == value.size() && value[pos + 3] == ':' &&
+		       std::isdigit((unsigned char)value[pos + 1]) &&
+		       std::isdigit((unsigned char)value[pos + 2]) &&
+		       std::isdigit((unsigned char)value[pos + 4]) &&
+		       std::isdigit((unsigned char)value[pos + 5]);
+	}
+	if (value[pos] != ':') {
+		return false;
+	}
+	pos++;
+	if (pos + 2 > value.size() || !std::isdigit((unsigned char)value[pos]) ||
+	    !std::isdigit((unsigned char)value[pos + 1])) {
+		return false;
+	}
+	pos += 2;
+	if (pos < value.size() && value[pos] == '.') {
+		pos++;
+		size_t frac_start = pos;
+		while (pos < value.size() && std::isdigit((unsigned char)value[pos])) {
+			pos++;
+		}
+		if (pos == frac_start) {
+			return false;
+		}
+	}
+	if (pos == value.size()) {
+		return true;
+	}
+	if (value[pos] == 'Z') {
+		return pos + 1 == value.size();
+	}
+	if (value[pos] == '+' || value[pos] == '-') {
+		return pos + 6 == value.size() && value[pos + 3] == ':' &&
+		       std::isdigit((unsigned char)value[pos + 1]) &&
+		       std::isdigit((unsigned char)value[pos + 2]) &&
+		       std::isdigit((unsigned char)value[pos + 4]) &&
+		       std::isdigit((unsigned char)value[pos + 5]);
+	}
+	return false;
+}
+
+static bool IsTimestampValue(const fhirpath::FPValue &value) {
+	if (value.type == fhirpath::FPValue::Type::DateTime) {
+		return true;
+	}
+	if (value.type == fhirpath::FPValue::Type::String) {
+		return IsDateTimeText(value.string_val);
+	}
+	if (value.type == fhirpath::FPValue::Type::JsonVal && value.json_val && yyjson_is_str(value.json_val)) {
+		const char *str = yyjson_get_str(value.json_val);
+		return str && IsDateTimeText(str);
+	}
+	return false;
+}
+
+static bool IsQuantityValue(const fhirpath::FPValue &value) {
+	if (value.type == fhirpath::FPValue::Type::Quantity) {
+		return true;
+	}
+	if (value.type == fhirpath::FPValue::Type::JsonVal && value.json_val && yyjson_is_obj(value.json_val)) {
+		return yyjson_obj_get(value.json_val, "value") &&
+		       (yyjson_obj_get(value.json_val, "code") || yyjson_obj_get(value.json_val, "unit"));
+	}
+	if (value.type == fhirpath::FPValue::Type::String && value.fhir_type == "__json__") {
+		yyjson_doc *doc = yyjson_read(value.string_val.data(), value.string_val.size(), 0);
+		if (!doc) {
+			return false;
+		}
+		yyjson_val *root = yyjson_doc_get_root(doc);
+		bool is_quantity = root && yyjson_is_obj(root) && yyjson_obj_get(root, "value") &&
+		                   (yyjson_obj_get(root, "code") || yyjson_obj_get(root, "unit"));
+		yyjson_doc_free(doc);
+		return is_quantity;
+	}
+	return false;
+}
+
 static void FhirpathTimestampFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	auto func_state = GetFhirpathState(state);
 	idx_t count = args.size();
@@ -1529,6 +1678,8 @@ static void FhirpathTimestampFunction(DataChunk &args, ExpressionState &state, V
 		                     expressions[e_idx].GetString());
 
 		if (fp_results.empty()) {
+			result_mask.SetInvalid(i);
+		} else if (!IsTimestampValue(fp_results[0])) {
 			result_mask.SetInvalid(i);
 		} else {
 			auto str = str_helper.toString(fp_results[0]);
@@ -1569,6 +1720,8 @@ static void FhirpathQuantityFunction(DataChunk &args, ExpressionState &state, Ve
 		                     expressions[e_idx].GetString());
 
 		if (fp_results.empty()) {
+			result_mask.SetInvalid(i);
+		} else if (!IsQuantityValue(fp_results[0])) {
 			result_mask.SetInvalid(i);
 		} else {
 			auto str = str_helper.toString(fp_results[0]);

@@ -157,3 +157,81 @@ def test_iif_rejects_multi_item_input_in_public_udfs(monkeypatch: pytest.MonkeyP
     finally:
         cpp.close()
         py.close()
+
+
+def test_type_operators_bind_tighter_than_union_in_native_and_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cases = {
+        "1 | 2 is Integer": (["1", "true"], "[1,true]", True),
+        "1 | 'a' as String": (["1", "a"], '[1,"a"]', True),
+    }
+
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            query = """
+                SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)
+            """
+            params = [RESOURCE, expression, RESOURCE, expression, expression]
+            assert cpp.execute(query, params).fetchone() == expected
+            assert py.execute(query, params).fetchone() == expected
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_native_trim_rejects_multi_item_input_like_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    expression = "name.given.trim()"
+
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        assert _all_udfs(cpp, RESOURCE, expression) == ([], None, None, None, None)
+        assert _all_udfs(cpp, RESOURCE, expression) == _all_udfs(py, RESOURCE, expression)
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_unary_operators_enforce_singleton_after_dot_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cases = {
+        "-7.combine(3)": ([], None, None, None, None, False),
+        "+7.combine(3)": ([], None, None, None, None, False),
+        "(-7).combine(3)": (["-7", "3"], "-7", "[-7,3]", None, None, True),
+    }
+
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in cases.items():
+            query = """
+                SELECT
+                    fhirpath(?::JSON, ?),
+                    fhirpath_text(?::JSON, ?),
+                    fhirpath_json(?::JSON, ?),
+                    fhirpath_bool(?::JSON, ?),
+                    fhirpath_number(?::JSON, ?),
+                    fhirpath_is_valid(?)
+            """
+            params = [
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                expression,
+            ]
+            assert cpp.execute(query, params).fetchone() == expected
+            assert py.execute(query, params).fetchone() == expected
+    finally:
+        cpp.close()
+        py.close()
