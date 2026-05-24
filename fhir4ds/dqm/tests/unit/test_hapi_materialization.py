@@ -21,12 +21,14 @@ from fhir4ds.dqm.hapi_materialization import (
     _prepare_measure_report_for_materialization,
     _publish_measure_report_to_hapi,
     claim_pending_patients,
+    enqueue_current_patients,
     materialization_sql,
     materialization_status,
     materialized_measure_hash,
     parse_materialization_config,
     persist_patient_measure_result,
     prune_materialization_history,
+    reset_patient_queue,
     reset_stale_processing,
     split_patient_result_rows,
 )
@@ -283,6 +285,55 @@ def test_parse_materialization_config_rejects_invalid_retention(tmp_path):
     }
 
     with pytest.raises(DQMConfigError, match="retention.audit_days"):
+        parse_materialization_config(raw, base_dir=tmp_path)
+
+
+def test_parse_materialization_config_expands_environment_variables(monkeypatch, tmp_path):
+    monkeypatch.setenv("FHIR4DS_TEST_PG", "postgresql://pilot:secret@db/hapi")
+    monkeypatch.setenv("FHIR4DS_TEST_HAPI", "https://hapi.example/fhir")
+    monkeypatch.setenv("FHIR4DS_TEST_TOKEN", "token-1")
+    raw = {
+        "postgres": {"connection_string": "${FHIR4DS_TEST_PG}"},
+        "hapi": {
+            "base_url": "${FHIR4DS_TEST_HAPI}",
+            "bearer_token": "${FHIR4DS_TEST_TOKEN}",
+        },
+        "measures": [
+            {
+                "id": "CMS_TEST",
+                "artifact_source": "hapi",
+                "artifact_ref": "CMS_TEST",
+            }
+        ],
+    }
+
+    config = parse_materialization_config(raw, base_dir=tmp_path)
+
+    assert config.postgres_connection_string == "postgresql://pilot:secret@db/hapi"
+    assert config.hapi_base_url == "https://hapi.example/fhir"
+    assert config.hapi_headers["Authorization"] == "Bearer token-1"
+
+
+def test_parse_materialization_config_expands_environment_defaults(monkeypatch, tmp_path):
+    monkeypatch.delenv("FHIR4DS_OPTIONAL_TOKEN", raising=False)
+    raw = {
+        "postgres": {"connection_string": "postgresql://hapi:hapi@localhost/hapi"},
+        "hapi": {"bearer_token": "${FHIR4DS_OPTIONAL_TOKEN:-}"},
+        "measures": [],
+    }
+
+    config = parse_materialization_config(raw, base_dir=tmp_path)
+
+    assert "Authorization" not in config.hapi_headers
+
+
+def test_parse_materialization_config_rejects_missing_environment_variable(tmp_path):
+    raw = {
+        "postgres": {"connection_string": "${FHIR4DS_MISSING_PG}"},
+        "measures": [],
+    }
+
+    with pytest.raises(DQMConfigError, match="FHIR4DS_MISSING_PG"):
         parse_materialization_config(raw, base_dir=tmp_path)
 
 
@@ -669,6 +720,98 @@ def test_reset_stale_processing_marks_exhausted_rows_failed():
     assert params == [3, 3, 3, 120]
 
 
+def test_reset_patient_queue_requeues_selected_rows():
+    executed: list[tuple[str, list[object]]] = []
+
+    class FakeCursor:
+        def fetchall(self):
+            return [("p1",), ("p2",)]
+
+    class FakeConn:
+        def execute(self, sql, params=None):
+            executed.append((sql, list(params or [])))
+            return FakeCursor()
+
+        def commit(self):
+            return None
+
+    count = reset_patient_queue(
+        FakeConn(),
+        statuses=("failed", "processing", "failed"),
+        patient_ids=("p2", "p1", "p1"),
+    )
+
+    assert count == 2
+    sql, params = executed[0]
+    assert "SET status = 'pending'" in sql
+    assert "attempts = 0" in sql
+    assert "status = ANY(%s::text[])" in sql
+    assert "patient_id = ANY(%s::text[])" in sql
+    assert params == [["failed", "processing"], ["p1", "p2"]]
+
+
+def test_reset_patient_queue_can_preserve_attempts():
+    executed: list[tuple[str, list[object]]] = []
+
+    class FakeCursor:
+        def fetchall(self):
+            return [("p1",)]
+
+    class FakeConn:
+        def execute(self, sql, params=None):
+            executed.append((sql, list(params or [])))
+            return FakeCursor()
+
+        def commit(self):
+            return None
+
+    count = reset_patient_queue(FakeConn(), statuses=("complete",), reset_attempts=False)
+
+    assert count == 1
+    assert "attempts = 0" not in executed[0][0]
+    assert executed[0][1] == [["complete"]]
+
+
+def test_enqueue_current_patients_queues_from_decoded_view():
+    executed: list[tuple[str, list[object]]] = []
+
+    class FakeCursor:
+        def __init__(self, row):
+            self._row = row
+
+        def fetchone(self):
+            return self._row
+
+    class FakeConn:
+        def execute(self, sql, params=None):
+            executed.append((sql, list(params or [])))
+            if "SELECT count(*) FROM upserted" in sql:
+                return FakeCursor((2,))
+            return FakeCursor((None,))
+
+        def commit(self):
+            return None
+
+    count = enqueue_current_patients(
+        FakeConn(),
+        schema=HapiPostgresSchema(schema="hapi", decoded_view="current_resources"),
+        notification_channel="custom_channel",
+        patient_ids=("p2", "p1", "p1"),
+        limit=5,
+    )
+
+    assert count == 2
+    sql, params = executed[0]
+    assert 'FROM "hapi"."current_resources"' in sql
+    assert '"resourceType" = %s' in sql
+    assert '"id" = ANY(%s::text[])' in sql
+    assert params == ["Patient", ["p1", "p2"], 5]
+    assert executed[1] == (
+        "SELECT pg_notify(%s, %s)",
+        ['custom_channel', '{"reason": "manual_patient_enqueue", "patient_count": 2}'],
+    )
+
+
 def test_hapi_cli_requires_nested_subcommand(capsys):
     exit_code = main(["dqm", "hapi"])
 
@@ -708,3 +851,132 @@ hapi:
     captured = capsys.readouterr()
     assert exit_code == 0
     assert json.loads(captured.out) == {"queue": {"pending": 1}, "limit": 2}
+
+
+def test_hapi_cli_enqueue_patients_requires_scope(tmp_path, capsys):
+    config_path = tmp_path / "hapi.yaml"
+    config_path.write_text(
+        """
+postgres:
+  connection_string: postgresql://hapi:hapi@localhost/hapi
+measures: []
+"""
+    )
+
+    exit_code = main(["dqm", "hapi", "enqueue-patients", "--config", str(config_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "requires --patient-id or --all" in captured.err
+
+
+def test_hapi_cli_enqueue_patients_invokes_enqueue(monkeypatch, tmp_path, capsys):
+    import fhir4ds.cli.dqm as dqm_cli
+
+    config_path = tmp_path / "hapi.yaml"
+    config_path.write_text(
+        """
+postgres:
+  connection_string: postgresql://hapi:hapi@localhost/hapi
+measures: []
+"""
+    )
+    calls: list[dict[str, object]] = []
+
+    def fake_enqueue(config, **kwargs):
+        calls.append({"connection_string": config.postgres_connection_string, **kwargs})
+        return 4
+
+    monkeypatch.setattr(dqm_cli, "enqueue_existing_patients", fake_enqueue)
+
+    exit_code = main(
+        [
+            "dqm",
+            "hapi",
+            "enqueue-patients",
+            "--config",
+            str(config_path),
+            "--patient-id",
+            "p1",
+            "--patient-id",
+            "p2",
+            "--limit",
+            "2",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "count=4" in captured.out
+    assert calls == [
+        {
+            "connection_string": "postgresql://hapi:hapi@localhost/hapi",
+            "patient_ids": ["p1", "p2"],
+            "limit": 2,
+        }
+    ]
+
+
+def test_hapi_cli_reset_queue_requires_scope(tmp_path, capsys):
+    config_path = tmp_path / "hapi.yaml"
+    config_path.write_text(
+        """
+postgres:
+  connection_string: postgresql://hapi:hapi@localhost/hapi
+measures: []
+"""
+    )
+
+    exit_code = main(["dqm", "hapi", "reset-queue", "--config", str(config_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "requires --patient-id or --all" in captured.err
+
+
+def test_hapi_cli_reset_queue_invokes_reset(monkeypatch, tmp_path, capsys):
+    import fhir4ds.cli.dqm as dqm_cli
+
+    config_path = tmp_path / "hapi.yaml"
+    config_path.write_text(
+        """
+postgres:
+  connection_string: postgresql://hapi:hapi@localhost/hapi
+measures: []
+"""
+    )
+    calls: list[dict[str, object]] = []
+
+    def fake_reset(connection_string, **kwargs):
+        calls.append({"connection_string": connection_string, **kwargs})
+        return 3
+
+    monkeypatch.setattr(dqm_cli, "reset_materialization_queue", fake_reset)
+
+    exit_code = main(
+        [
+            "dqm",
+            "hapi",
+            "reset-queue",
+            "--config",
+            str(config_path),
+            "--all",
+            "--status",
+            "failed",
+            "--status",
+            "processing",
+            "--keep-attempts",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "count=3" in captured.out
+    assert calls == [
+        {
+            "connection_string": "postgresql://hapi:hapi@localhost/hapi",
+            "statuses": ["failed", "processing"],
+            "patient_ids": None,
+            "reset_attempts": False,
+        }
+    ]

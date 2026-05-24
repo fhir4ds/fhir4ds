@@ -45,6 +45,11 @@ fhir4ds dqm hapi sync-config \
 fhir4ds dqm hapi process-queue \
   --config docker/hapi-postgres/hapi-materialization.example.yaml
 
+fhir4ds dqm hapi enqueue-patients \
+  --config docker/hapi-postgres/hapi-materialization.example.yaml \
+  --all \
+  --limit 25
+
 fhir4ds dqm hapi status \
   --config docker/hapi-postgres/hapi-materialization.example.yaml
 ```
@@ -63,6 +68,11 @@ docker compose --profile worker up --build worker
 The worker image installs `fhir4ds-v2[hapi]`, including `psycopg[binary]`. The
 compose profile uses the internal PostgreSQL hostname `postgres` and mounts the
 repo read-only at `/workspace` for local measure/config paths.
+
+The compose stack pins HAPI by default with
+`HAPI_IMAGE=hapiproject/hapi:v8.8.0-1` and uses
+`FHIR4DS_WORKER_PYTHON_IMAGE=python:3.11.13-slim` for the worker base image.
+Override those environment variables when testing another verified image.
 
 Load a small 2025 eCQM fixture into HAPI:
 
@@ -134,6 +144,28 @@ hapi:
     X-Tenant: quality
 ```
 
+For an external non-production HAPI pilot, start from
+`hapi-materialization.external.example.yaml`. It supports `${NAME}` and
+`${NAME:-default}` environment interpolation for connection strings, bearer
+tokens, and mounted artifact paths.
+
+Retry failed queue rows without hand-written SQL:
+
+```bash
+fhir4ds dqm hapi reset-queue \
+  --config docker/hapi-postgres/hapi-materialization.example.yaml \
+  --all
+```
+
+Export patient-level population rows for comparison:
+
+```bash
+python3 scripts/hapi/export_materialization_results.py \
+  --config docker/hapi-postgres/hapi-materialization.example.yaml \
+  --format csv \
+  --output hapi-results.csv
+```
+
 To verify generated individual `MeasureReport` JSON persistence, add
 `--persist-measure-report`. Reports are stored on the active result row and in
 `fhir4ds_measure_report` for direct querying/history. To also publish those
@@ -147,6 +179,5 @@ Cleanup:
 docker compose down -v
 ```
 
-The compose file uses `hapiproject/hapi:latest` because HAPI's GitHub release
-tags do not always map directly to Docker image tags. Pin a verified image tag
-before using this stack in repeatable CI.
+The compose file defaults to a verified HAPI Docker tag. For repeatable CI or
+site testing, set `HAPI_IMAGE` explicitly and record it with the pilot results.

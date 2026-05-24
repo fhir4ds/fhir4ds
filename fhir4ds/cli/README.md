@@ -24,9 +24,11 @@ HAPI PostgreSQL materialization:
 ```bash
 fhir4ds dqm hapi install --connection postgresql://hapi:hapi@localhost:15432/hapi
 fhir4ds dqm hapi sync-config --config hapi-dqm.yaml
+fhir4ds dqm hapi enqueue-patients --config hapi-dqm.yaml --all --limit 25
 fhir4ds dqm hapi process-queue --config hapi-dqm.yaml --limit 100
 fhir4ds dqm hapi listen --config hapi-dqm.yaml
 fhir4ds dqm hapi status --config hapi-dqm.yaml
+fhir4ds dqm hapi reset-queue --config hapi-dqm.yaml --all
 fhir4ds dqm hapi prune --config hapi-dqm.yaml
 ```
 

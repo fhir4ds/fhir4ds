@@ -35,6 +35,15 @@ fhir4ds dqm hapi process-queue \
   --limit 100
 ```
 
+Queue current Patient resources for an initial run or controlled re-run:
+
+```bash
+fhir4ds dqm hapi enqueue-patients \
+  --config docker/hapi-postgres/hapi-materialization.example.yaml \
+  --all \
+  --limit 25
+```
+
 Run as a long-lived worker:
 
 ```bash
@@ -48,6 +57,8 @@ Check queue, recent runs, active results, and published MeasureReports:
 fhir4ds dqm hapi status \
   --config docker/hapi-postgres/hapi-materialization.example.yaml
 ```
+
+For a staged non-production workflow, see `docs/hapi-pilot-runbook.md`.
 
 ## Artifact Sources
 
@@ -69,6 +80,7 @@ See:
 
 - `docker/hapi-postgres/hapi-materialization.example.yaml`
 - `docker/hapi-postgres/hapi-materialization.hapi-artifacts.example.yaml`
+- `docker/hapi-postgres/hapi-materialization.external.example.yaml`
 - `docs/dqm-artifact-resolvers.md`
 
 ## Result Tables
@@ -119,4 +131,21 @@ fhir4ds dqm hapi prune \
 fhir4ds dqm hapi status \
   --config docker/hapi-postgres/hapi-materialization.example.yaml \
   --limit 10
+```
+
+To manually retry failed queue rows:
+
+```bash
+fhir4ds dqm hapi reset-queue \
+  --config docker/hapi-postgres/hapi-materialization.example.yaml \
+  --all
+```
+
+To export patient-level materialized results for baseline comparison:
+
+```bash
+python3 scripts/hapi/export_materialization_results.py \
+  --config docker/hapi-postgres/hapi-materialization.example.yaml \
+  --format csv \
+  --output hapi-results.csv
 ```

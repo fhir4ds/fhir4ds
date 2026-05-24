@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import signal
 import time
@@ -35,6 +36,7 @@ FHIR4DS_MEASURE_REPORT_IDENTIFIER_SYSTEM = (
     "https://fhir4ds.com/materialization/measure-report"
 )
 _PG_CHANNEL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_ENV_REF_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*?))?\}")
 logger = logging.getLogger(__name__)
 
 
@@ -248,6 +250,7 @@ def parse_materialization_config(
     """Parse a HAPI materialization config dictionary."""
     if not isinstance(raw, dict):
         raise DQMConfigError("HAPI materialization config must be an object")
+    raw = _expand_env_refs(raw)
     base = base_dir or Path.cwd()
 
     postgres = raw.get("postgres") or {}
@@ -653,6 +656,177 @@ def reset_stale_processing(
     ).fetchall()
     conn.commit()
     return len(row)
+
+
+def reset_patient_queue(
+    conn: Any,
+    *,
+    statuses: list[str] | tuple[str, ...] = ("failed",),
+    patient_ids: list[str] | tuple[str, ...] | None = None,
+    reset_attempts: bool = True,
+) -> int:
+    """Reset selected queue rows to ``pending`` for a manual retry."""
+    allowed_statuses = {"failed", "processing", "complete"}
+    selected_statuses = sorted(set(statuses))
+    if not selected_statuses:
+        raise DQMConfigError("At least one queue status is required")
+    unsupported = sorted(set(selected_statuses) - allowed_statuses)
+    if unsupported:
+        raise DQMConfigError(
+            "Queue reset supports statuses: "
+            + ", ".join(sorted(allowed_statuses))
+            + f"; got {', '.join(unsupported)}"
+        )
+
+    conditions = ["status = ANY(%s::text[])"]
+    params: list[Any] = [selected_statuses]
+    if patient_ids:
+        patient_list = sorted(set(patient_ids))
+        conditions.append("patient_id = ANY(%s::text[])")
+        params.append(patient_list)
+
+    attempts_sql = "attempts = 0," if reset_attempts else ""
+    rows = conn.execute(
+        f"""
+        UPDATE fhir4ds_patient_change_queue
+        SET status = 'pending',
+            {attempts_sql}
+            processing_started_at = NULL,
+            processed_at = NULL,
+            last_error = NULL
+        WHERE {" AND ".join(conditions)}
+        RETURNING patient_id
+        """,
+        params,
+    ).fetchall()
+    conn.commit()
+    return len(rows)
+
+
+def reset_materialization_queue(
+    connection_string: str,
+    *,
+    statuses: list[str] | tuple[str, ...] = ("failed",),
+    patient_ids: list[str] | tuple[str, ...] | None = None,
+    reset_attempts: bool = True,
+) -> int:
+    """Reset HAPI materialization queue rows to ``pending`` for retry."""
+    psycopg = require_psycopg()
+    with psycopg.connect(connection_string) as conn:
+        return reset_patient_queue(
+            conn,
+            statuses=statuses,
+            patient_ids=patient_ids,
+            reset_attempts=reset_attempts,
+        )
+
+
+def enqueue_current_patients(
+    conn: Any,
+    *,
+    schema: HapiPostgresSchema | None = None,
+    notification_channel: str = NOTIFICATION_CHANNEL,
+    patient_ids: list[str] | tuple[str, ...] | None = None,
+    limit: int | None = None,
+) -> int:
+    """Queue current Patient resources for initial materialization or re-run."""
+    if limit is not None and limit <= 0:
+        raise DQMConfigError("enqueue patient limit must be positive")
+    hapi_schema = schema or HapiPostgresSchema()
+    channel = _validate_notification_channel(notification_channel)
+    view_relation = _decoded_view_relation(hapi_schema)
+    conditions = [f"{quote_identifier('resourceType')} = %s"]
+    params: list[Any] = ["Patient"]
+    if patient_ids:
+        conditions.append(f"{quote_identifier('id')} = ANY(%s::text[])")
+        params.append(sorted(set(patient_ids)))
+    limit_sql = ""
+    if limit is not None:
+        limit_sql = "LIMIT %s"
+        params.append(limit)
+
+    row = conn.execute(
+        f"""
+        WITH selected AS (
+            SELECT {quote_identifier('id')} AS patient_id
+            FROM {view_relation}
+            WHERE {" AND ".join(conditions)}
+            ORDER BY {quote_identifier('id')}
+            {limit_sql}
+        ),
+        upserted AS (
+            INSERT INTO fhir4ds_patient_change_queue (
+                patient_id,
+                first_seen_at,
+                last_seen_at,
+                status,
+                attempts,
+                processing_started_at,
+                processed_at,
+                last_error,
+                last_resource_type,
+                last_resource_id,
+                notify_count
+            )
+            SELECT
+                patient_id,
+                now(),
+                now(),
+                'pending',
+                0,
+                NULL,
+                NULL,
+                NULL,
+                'Patient',
+                patient_id,
+                1
+            FROM selected
+            ON CONFLICT (patient_id)
+            DO UPDATE SET
+                last_seen_at = now(),
+                status = 'pending',
+                attempts = 0,
+                processing_started_at = NULL,
+                processed_at = NULL,
+                last_error = NULL,
+                last_resource_type = 'Patient',
+                last_resource_id = EXCLUDED.last_resource_id,
+                notify_count = fhir4ds_patient_change_queue.notify_count + 1
+            RETURNING patient_id
+        )
+        SELECT count(*) FROM upserted
+        """,
+        params,
+    ).fetchone()
+    count = int(row[0] if row else 0)
+    if count:
+        conn.execute(
+            "SELECT pg_notify(%s, %s)",
+            [
+                channel,
+                json.dumps({"reason": "manual_patient_enqueue", "patient_count": count}),
+            ],
+        )
+    conn.commit()
+    return count
+
+
+def enqueue_existing_patients(
+    config: HapiMaterializationConfig,
+    *,
+    patient_ids: list[str] | tuple[str, ...] | None = None,
+    limit: int | None = None,
+) -> int:
+    """Queue current Patient resources from the configured HAPI decoded view."""
+    psycopg = require_psycopg()
+    with psycopg.connect(config.postgres_connection_string) as conn:
+        return enqueue_current_patients(
+            conn,
+            schema=config.hapi_schema,
+            notification_channel=config.notification_channel,
+            patient_ids=patient_ids,
+            limit=limit,
+        )
 
 
 def load_enabled_measure_config(conn: Any) -> list[HapiMaterializedMeasure]:
@@ -1552,6 +1726,10 @@ def _pg_relation(schema_name: str, table_name: str) -> str:
     return f"{quote_identifier(schema_name)}.{quote_identifier(table_name)}"
 
 
+def _decoded_view_relation(schema: HapiPostgresSchema) -> str:
+    return _pg_relation(schema.schema, schema.decoded_view or DEFAULT_DECODED_VIEW)
+
+
 def _pg_col(alias: str, column_name: str) -> str:
     return f"{alias}.{quote_identifier(column_name)}"
 
@@ -1605,10 +1783,34 @@ def _parse_hapi_headers(raw_hapi: dict[str, Any]) -> dict[str, str]:
 
     bearer_token = raw_hapi.get("bearer_token")
     if bearer_token is not None:
-        if not isinstance(bearer_token, str) or not bearer_token:
-            raise DQMConfigError("'hapi.bearer_token' must be a non-empty string")
-        headers.setdefault("Authorization", f"Bearer {bearer_token}")
+        if not isinstance(bearer_token, str):
+            raise DQMConfigError("'hapi.bearer_token' must be a string")
+        if bearer_token:
+            headers.setdefault("Authorization", f"Bearer {bearer_token}")
     return headers
+
+
+def _expand_env_refs(value: Any) -> Any:
+    if isinstance(value, str):
+        return _ENV_REF_RE.sub(_replace_env_ref, value)
+    if isinstance(value, list):
+        return [_expand_env_refs(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _expand_env_refs(item) for key, item in value.items()}
+    return value
+
+
+def _replace_env_ref(match: re.Match[str]) -> str:
+    name = match.group(1)
+    default = match.group(2)
+    value = os.environ.get(name)
+    if value not in (None, ""):
+        return value
+    if default is not None:
+        return default
+    raise DQMConfigError(
+        f"Environment variable '{name}' is required by HAPI materialization config"
+    )
 
 
 def _parse_retention_policy(raw: dict[str, Any]) -> HapiRetentionPolicy:

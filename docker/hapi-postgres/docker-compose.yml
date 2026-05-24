@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16
+    image: ${POSTGRES_IMAGE:-postgres:16}
     container_name: fhir4ds-hapi-postgres
     environment:
       POSTGRES_DB: hapi
@@ -15,7 +15,7 @@ services:
       retries: 20
 
   hapi:
-    image: hapiproject/hapi:latest
+    image: ${HAPI_IMAGE:-hapiproject/hapi:v8.8.0-1}
     container_name: fhir4ds-hapi
     depends_on:
       postgres:
@@ -35,6 +35,8 @@ services:
     build:
       context: ../..
       dockerfile: docker/hapi-postgres/Dockerfile.worker
+      args:
+        PYTHON_IMAGE: ${FHIR4DS_WORKER_PYTHON_IMAGE:-python:3.11.13-slim}
     container_name: fhir4ds-hapi-worker
     profiles: ["worker"]
     depends_on:

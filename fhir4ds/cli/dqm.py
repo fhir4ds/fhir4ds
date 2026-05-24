@@ -21,12 +21,14 @@ from fhir4ds.dqm.config import (
     load_run_config,
 )
 from fhir4ds.dqm.hapi_materialization import (
+    enqueue_existing_patients,
     install_materialization_schema,
     listen_and_process,
     load_materialization_config,
     materialization_status,
     process_queue_once,
     prune_materialization_history,
+    reset_materialization_queue,
     sync_measure_config,
 )
 from fhir4ds.dqm.types import AuditMode
@@ -124,6 +126,24 @@ def _add_hapi_args(parser: argparse.ArgumentParser) -> None:
     process_parser.add_argument("--limit", type=int, help="Maximum patients to claim")
     process_parser.add_argument("--log-level", default="WARNING", help="Python logging level")
 
+    enqueue_parser = subparsers.add_parser(
+        "enqueue-patients",
+        help="Queue current Patient resources for initial materialization or re-run",
+    )
+    enqueue_parser.add_argument("--config", required=True, help="HAPI materialization config")
+    enqueue_parser.add_argument(
+        "--patient-id",
+        action="append",
+        default=[],
+        help="Specific patient id to enqueue; may be repeated",
+    )
+    enqueue_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Queue all current Patient resources when no --patient-id is supplied",
+    )
+    enqueue_parser.add_argument("--limit", type=int, help="Maximum patients to enqueue")
+
     listen_parser = subparsers.add_parser(
         "listen",
         help="Listen for HAPI patient-change notifications and process continuously",
@@ -150,12 +170,41 @@ def _add_hapi_args(parser: argparse.ArgumentParser) -> None:
         help="Number of recent runs to include",
     )
 
+    reset_parser = subparsers.add_parser(
+        "reset-queue",
+        help="Reset selected patient-change queue rows to pending for retry",
+    )
+    reset_parser.add_argument("--config", required=True, help="HAPI materialization config")
+    reset_parser.add_argument(
+        "--status",
+        action="append",
+        choices=["failed", "processing", "complete"],
+        help="Queue status to reset; may be repeated. Defaults to failed.",
+    )
+    reset_parser.add_argument(
+        "--patient-id",
+        action="append",
+        default=[],
+        help="Specific patient id to reset; may be repeated",
+    )
+    reset_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Reset all rows matching --status when no --patient-id is supplied",
+    )
+    reset_parser.add_argument(
+        "--keep-attempts",
+        action="store_true",
+        help="Preserve queue attempt counters instead of resetting them to zero",
+    )
+
 
 def _run_hapi(args: argparse.Namespace) -> int:
     if args.hapi_command is None:
         print(
             "fhir4ds dqm hapi requires a subcommand: "
-            "install, sync-config, process-queue, listen, prune, or status",
+            "install, sync-config, enqueue-patients, process-queue, listen, prune, "
+            "status, or reset-queue",
             file=sys.stderr,
         )
         return 2
@@ -202,6 +251,20 @@ def _run_hapi(args: argparse.Namespace) -> int:
             f"{metrics_suffix}"
         )
         return 1 if result.errors else 0
+    if args.hapi_command == "enqueue-patients":
+        if not args.patient_id and not args.all:
+            print(
+                "ERROR: enqueue-patients requires --patient-id or --all",
+                file=sys.stderr,
+            )
+            return 2
+        count = enqueue_existing_patients(
+            config,
+            patient_ids=args.patient_id or None,
+            limit=args.limit,
+        )
+        print(f"Queued HAPI patients for materialization: count={count}")
+        return 0
     if args.hapi_command == "listen":
         _configure_logging(args.log_level)
         listen_and_process(config)
@@ -229,6 +292,25 @@ def _run_hapi(args: argparse.Namespace) -> int:
                 indent=2,
                 default=str,
             )
+        )
+        return 0
+    if args.hapi_command == "reset-queue":
+        if not args.patient_id and not args.all:
+            print(
+                "ERROR: reset-queue requires --patient-id or --all",
+                file=sys.stderr,
+            )
+            return 2
+        statuses = args.status or ["failed"]
+        count = reset_materialization_queue(
+            config.postgres_connection_string,
+            statuses=statuses,
+            patient_ids=args.patient_id or None,
+            reset_attempts=not args.keep_attempts,
+        )
+        print(
+            "Reset HAPI materialization queue rows: "
+            f"count={count}, statuses={','.join(statuses)}"
         )
         return 0
 
