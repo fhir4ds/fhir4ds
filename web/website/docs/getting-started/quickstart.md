@@ -70,7 +70,7 @@ fhir4ds dqm run --config dqm-run.json
 ```
 
 See the [Command Line Interface](/docs/user-guide/cli) and
-[DQM production recipes](/docs/user-guide/quality/dqm-recipes) for end-to-end
+[DQM production recipes](/docs/examples/dqm-recipes) for end-to-end
 batch examples.
 
 ## SQL-on-FHIR ViewDefinitions

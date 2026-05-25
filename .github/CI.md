@@ -1,9 +1,3 @@
----
-id: ci
-title: Continuous Integration
-sidebar_label: CI
----
-
 # Continuous Integration
 
 FHIR4DS uses GitHub Actions for automated checks. The workflows are split by

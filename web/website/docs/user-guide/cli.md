@@ -91,7 +91,7 @@ Depending on the output config, each measure directory can include:
 | `definitions.schema.json` | Mapping from output columns to authored CQL define names. |
 
 For full output details, see [Digital Quality Measures](./quality/dqm) and
-[Source-to-DQM Production Recipes](./quality/dqm-recipes).
+[Source-to-DQM Production Recipes](/docs/examples/dqm-recipes).
 
 ## HAPI Materialization
 
@@ -113,7 +113,7 @@ fhir4ds dqm hapi process-queue --config hapi-dqm.yaml --limit 100
 fhir4ds dqm hapi listen --config hapi-dqm.yaml
 ```
 
-See [HAPI DQM Materialization](./quality/hapi-materialization) for table
+See [HAPI FHIR Server Integration](/docs/integrations/hapi-fhir) for table
 layout, trigger behavior, and result persistence details.
 
 ## Audit Modes

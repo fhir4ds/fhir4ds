@@ -1,6 +1,7 @@
 ---
+id: hapi-postgres
 title: Connecting to HAPI FHIR PostgreSQL
-sidebar_label: HAPI PostgreSQL
+sidebar_label: Direct Database Connection
 ---
 
 # Connecting to HAPI FHIR PostgreSQL
@@ -11,9 +12,9 @@ backend in place through DuckDB's PostgreSQL extension.
 This adapter is read-only. It creates the standard `resources` view from HAPI's
 current-resource tables without copying FHIR data into DuckDB.
 
-## Supported v1 Scope
+## Supported Scope
 
-Version 1 supports:
+The integration currently supports:
 
 - Current, non-deleted HAPI resources.
 - PostgreSQL-backed HAPI JPA Server.
@@ -23,7 +24,7 @@ Version 1 supports:
   `fhir4ds dqm hapi install`.
 - `res_encoding = 'JSON'`.
 
-Version 1 deliberately rejects compressed resource storage such as `JSONC` by
+The adapter deliberately rejects compressed resource storage such as `JSONC` by
 default. This prevents partial analysis where compressed resources are silently
 omitted.
 
@@ -136,4 +137,4 @@ historical bodies are outside the v1 incremental scope.
 
 For event-driven DQM materialization with PostgreSQL triggers and
 `LISTEN/NOTIFY`, see
-[HAPI DQM Materialization](/docs/user-guide/quality/hapi-materialization).
+[HAPI FHIR Server Integration](/docs/integrations/hapi-fhir).

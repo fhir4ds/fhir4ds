@@ -1,9 +1,10 @@
 ---
-title: HAPI DQM Materialization
-sidebar_label: HAPI Materialization
+id: hapi-fhir
+title: HAPI FHIR Server Event-Driven Materialization
+sidebar_label: Event-Driven Materialization
 ---
 
-# HAPI DQM Materialization
+# HAPI FHIR Server Event-Driven Materialization
 
 FHIR4DS can keep patient-level DQM results materialized from a HAPI FHIR JPA
 Server PostgreSQL backend.

@@ -14,12 +14,19 @@ Version 0.0.7 focuses on release readiness, SQL safety, audit evidence accuracy,
 
 ### Highlights
 
-- **Version Consistency**: Root package metadata, public `__version__` exports, notebook install snippets, and WASM demo wheel references now target `0.0.7`.
+- **Compiled Measures API**: Introduced `compile_measure()` and `execute_compiled_measure()` in the DQM API. This allows parsing and compiling CQL to SQL once, enabling highly efficient batched execution across patient cohorts.
+- **Artifact Resolvers**: Replaced static file-path dependencies with a pluggable `ArtifactResolver` interface (`FileArtifactResolver` and `HapiArtifactResolver`), enabling dynamic resolution of Measures, CQL libraries, and ValueSets from file systems or remote FHIR servers.
+- **HAPI FHIR Integration**: Added `HapiPostgresSource` for querying HAPI FHIR JPA Server PostgreSQL backends in place, along with comprehensive guides for event-driven DQM materialization.
+
+### Bug Fixes
+
+- **FHIRPath Native Parity**: Massively tightened the behavior of the C++ DuckDB extension to exactly match the Python fallback across arithmetic overflows, collection equality, singleton evaluation, string reflection, and edge-case Boolean precedence.
+- **CQL Type Inference**: Fixed row shapes and nested tuples generated during compiled measure materialization so `Query` and `Return` clauses preserve complex type structure correctly across batch runs.
+- **CQL Optimization**: Ensure degenerate intervals (e.g. `[x, x]`) safely propagate through `StartsSame` and `EndsSame` temporal operators without triggering DuckDB null-handling faults.
+- **CQL Temporal Intervals**: Optimized interval overlap SQL handles null low bounds using CQL interval semantics instead of propagating SQL NULL.
+- **DQM Audit Evidence**: Exclusion-style audit narratives use effective population masks so denominator exceptions and numerator exclusions match final population attribution rules.
 - **Loader SQL Safety**: Custom resource and ValueSet table names are quoted consistently, including SQL keywords such as `select` and `where`.
 - **FHIR JSON Validation**: File, URL, directory, and DQM ValueSet loaders now reject non-object JSON cleanly instead of leaking implementation errors.
-- **DQM Audit Evidence**: Exclusion-style audit narratives use effective population masks so denominator exceptions and numerator exclusions match final population attribution rules.
-- **CQL Temporal Intervals**: Optimized interval overlap SQL handles null low bounds using CQL interval semantics instead of propagating SQL NULL.
-- **Release Artifact Gate**: Native FHIRPath and CQL DuckDB extensions are rebuilt and bundled into the `0.0.7` wheel, and browser WASM side modules are rebuilt with the pinned Emscripten toolchain.
 
 ### Conformance
 

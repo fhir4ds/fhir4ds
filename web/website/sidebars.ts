@@ -22,6 +22,11 @@ const sidebars: SidebarsConfig = {
       items: [
         'user-guide/engine',
         {
+          type: 'doc',
+          id: 'user-guide/duckdb',
+          label: 'Native DuckDB Integration',
+        },
+        {
           type: 'category',
           label: 'Data Sources',
           link: {type: 'doc', id: 'user-guide/data-sources'},
@@ -41,7 +46,6 @@ const sidebars: SidebarsConfig = {
               id: 'user-guide/extraction/fhirpath',
               label: 'FHIRPath',
             },
-            'user-guide/extraction/duckdb',
           ],
         },
         {
@@ -56,27 +60,15 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'category',
-          label: 'Quality Measurement',
+          label: 'Quality & Reporting',
           items: [
             'user-guide/quality/dqm',
-            'user-guide/quality/dqm-recipes',
           ],
         },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Operations',
-      items: [
         {
           type: 'doc',
           id: 'user-guide/cli',
           label: 'Command Line Interface',
-        },
-        {
-          type: 'doc',
-          id: 'user-guide/ci',
-          label: 'Continuous Integration',
         },
       ],
     },
@@ -84,6 +76,14 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Integrations',
       items: [
+        {
+          type: 'category',
+          label: 'HAPI FHIR Server',
+          items: [
+            'integrations/hapi-postgres',
+            'integrations/hapi-fhir',
+          ],
+        },
         {
           type: 'doc',
           id: 'integrations/wasm-engine',
@@ -134,6 +134,7 @@ const sidebars: SidebarsConfig = {
               items: [
                 'api-reference/sources/sources-filesystem',
                 'api-reference/sources/sources-relational',
+                'api-reference/sources/hapi-postgres',
                 'api-reference/sources/sources-existing',
                 'api-reference/sources/sources-csv',
               ],
@@ -146,6 +147,11 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Examples',
       items: [
+        {
+          type: 'doc',
+          id: 'examples/dqm-recipes',
+          label: 'DQM Production Recipes',
+        },
         {
           type: 'doc',
           id: 'examples/cql-playground',

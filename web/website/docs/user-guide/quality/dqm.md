@@ -27,13 +27,13 @@ For production jobs, prefer the CLI batch runner. For notebooks, tests, and
 custom applications, use `MeasureEvaluator` directly.
 
 For source-specific examples, see
-[Source-to-DQM Production Recipes](/docs/user-guide/quality/dqm-recipes). For
+[Source-to-DQM Production Recipes](/docs/examples/dqm-recipes). For
 CLI behavior and exit codes, see the
 [Command Line Interface](/docs/user-guide/cli).
 
 For HAPI FHIR PostgreSQL deployments that need event-driven recalculation and
 persisted patient-level measure results, see
-[HAPI DQM Materialization](/docs/user-guide/quality/hapi-materialization).
+[HAPI FHIR Server Integration](/docs/integrations/hapi-fhir).
 
 ## 2. CLI Batch Runner
 
@@ -297,6 +297,33 @@ report = evaluator.to_measure_report(
 )
 ```
 
+## 8. Artifact Resolvers
+
+Rather than passing raw file paths for `measure_bundle` and `cql_library_path`, FHIR4DS supports pluggable **Artifact Resolvers**. This is crucial for integrating with FHIR servers like HAPI, where Measures and ValueSets are fetched dynamically via canonical URLs. 
+
+For full details, see the [Artifact Resolvers API Reference](/docs/api-reference/dqm/#2-artifact-resolvers).
+
+## 9. Compiled Measures
+
+For production workloads involving thousands of patients, translating CQL to SQL per-patient is inefficient. FHIR4DS introduces the `compile_measure()` API, which allows you to compile the Measure and CQL into a highly optimized DuckDB SQL plan *once*, and execute it repeatedly across patient batches.
+
+```python
+# 1. Compile the measure once
+compiled = evaluator.compile_measure(
+    measure_ref="http://example.org/fhir/Measure/CMS122|2025",
+    artifact_resolver=resolver, # Load from HAPI, file system, etc.
+    patient_scope="target_table",
+)
+
+# 2. Execute repeatedly
+for batch in patient_batches:
+    result = evaluator.execute_compiled_measure(
+        compiled, 
+        patient_ids=batch
+    )
+    # ... process results
+```
+
 See the [DQM API Reference](/docs/api-reference/dqm/) for the full Python and
 batch configuration surface. For CI and benchmark baseline maintenance, see
-[Continuous Integration](/docs/user-guide/ci).
+the repository's `CONTRIBUTING.md` file.

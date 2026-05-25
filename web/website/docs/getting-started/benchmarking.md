@@ -92,5 +92,4 @@ python3 benchmarks/runner/dqm_perf_report.py \
   --output-md benchmarks/output/dqm-performance-report.md
 ```
 
-See [Continuous Integration](/docs/user-guide/ci) for workflow behavior and
-baseline update policy.
+See the repository's `CONTRIBUTING.md` and `.github/CI.md` files for workflow behavior and baseline update policy.

@@ -1,45 +1,28 @@
 ---
 id: dqm
-title: dqm
+title: fhir4ds.dqm
 sidebar_label: dqm
 ---
 
 # `fhir4ds.dqm`
 
-Digital Quality Measure orchestration for FHIR `Measure` resources, CQL
-libraries, audit evidence, batch runs, and FHIR `MeasureReport` output.
+The `fhir4ds.dqm` module provides orchestration for Digital Quality Measures (DQM). It handles parsing FHIR `Measure` resources, compiling their referenced CQL libraries, executing the logic against a DuckDB `resources` view, and generating standards-compliant outputs (like FHIR `MeasureReport` resources).
 
-## Imports
+The module supports both direct programmatic evaluation via `MeasureEvaluator` and configured bulk processing via the Batch Runner.
 
 ```python
-from fhir4ds.dqm import (
-    MeasureEvaluator,
-    CompiledMeasure,
-    CompiledGroup,
-    CompiledMeasureMetrics,
-    AuditEngine,
-    AuditMode,
-    AuditOrStrategy,
-)
-from fhir4ds.dqm.config import (
-    DQMRunConfig,
-    MeasureSpec,
-    SourceSpec,
-    TerminologySpec,
-    AuditSpec,
-    OutputSpec,
-    DefinitionOutputSpec,
-    load_run_config,
-    parse_run_config,
-)
-from fhir4ds.dqm.batch import (
-    run_batch,
-    validate_config,
-    inspect_config,
-)
+from fhir4ds.dqm import MeasureEvaluator, AuditMode, create_artifact_resolver
+from fhir4ds.dqm.batch import run_batch
+from fhir4ds.dqm.config import load_run_config
 ```
 
-## `MeasureEvaluator`
+---
+
+## 1. Core Evaluation API
+
+The core API is built around `MeasureEvaluator`, which executes clinical logic on a DuckDB connection.
+
+### `MeasureEvaluator`
 
 ```python
 MeasureEvaluator(
@@ -55,123 +38,67 @@ MeasureEvaluator(
 | `audit_or_strategy` | `AuditOrStrategy` | Evidence collection strategy for CQL `or` expressions. |
 | `narrative_generator` | `NarrativeGenerator | None` | Optional custom audit narrative generator. |
 
-### `evaluate(...)`
+#### `evaluate(...)`
+
+Evaluates a FHIR `Measure` directly. Best for single-patient tests, notebooks, and dynamic execution.
 
 ```python
 result = evaluator.evaluate(
-    measure_bundle,
-    cql_library_path,
-    parameters=None,
-    audit=False,
-    audit_mode=AuditMode.NONE,
-    filter_to_ip=False,
-    patient_ids=None,
-    include_paths=None,
-    generate_narratives=False,
-    include_supporting_evidence=False,
+    measure_ref="./measures/Measure-CMS124.json",
+    cql_library_path="./cql/CMS124FHIR.cql",
+    parameters={"Measurement Period": ("2025-01-01", "2025-12-31")},
+    audit_mode=AuditMode.POPULATION,
+    patient_ids=["patient-123"],
 )
 ```
 
-Evaluates a FHIR `Measure` against the connection's `resources` view.
-
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `measure_bundle` | `str | Path | dict` | Path to Measure JSON or an already parsed Measure dict. |
-| `cql_library_path` | `str | Path` | Main CQL library file for the Measure. |
+| `measure_ref` | `str | Path | dict` | Path to Measure JSON, canonical URL, or an already parsed Measure dict. |
+| `cql_library_path` | `str | Path | None` | Optional path to the main CQL file (if not resolved dynamically). |
+| `artifact_resolver` | `ArtifactResolver | None` | Custom resolver for loading Measures and ValueSets (see Artifact Resolvers below). |
 | `parameters` | `dict | None` | CQL parameter overrides. Use `{"Measurement Period": (start, end)}` for MeasureReport period inference. |
-| `audit` | `bool` | Backward-compatible shortcut for full audit when `audit_mode` is `none`. |
 | `audit_mode` | `str | AuditMode` | `none`, `population`, or `full`. |
 | `filter_to_ip` | `bool` | Return only rows meeting Initial Population. |
 | `patient_ids` | `list[str] | None` | Restrict evaluation to selected patient ids. |
 | `include_paths` | `list[str] | None` | Directories used to resolve included CQL libraries. |
-| `generate_narratives` | `bool` | Add plain-English audit narratives. Requires audit mode. |
-| `include_supporting_evidence` | `bool` | Add `evidence_*` columns for Measure-authored supporting evidence definitions. |
 
 Returns a `MeasureResult`.
 
-### `compile_measure(...)` and `execute_compiled_measure(...)`
+#### `compile_measure(...)` and `execute_compiled_measure(...)`
+
+For production workloads, `compile_measure` parses the Measure and CQL to generate optimized, reusable DuckDB SQL. You can then execute this compiled plan repeatedly across batches of patients.
 
 ```python
 compiled = evaluator.compile_measure(
-    measure_bundle,
-    cql_library_path,
-    parameters={"Measurement Period": ("2025-01-01", "2025-12-31")},
+    measure_ref="http://example.org/fhir/Measure/CMS122|2025",
+    artifact_resolver=resolver,
     patient_scope="target_table",
-    include_paths=["./cql"],
 )
 
 first = evaluator.execute_compiled_measure(compiled, patient_ids=["p1", "p2"])
 second = evaluator.execute_compiled_measure(compiled, patient_ids=["p3"])
-metrics = evaluator.compiled_measure_metrics()
 ```
-
-`compile_measure()` parses the Measure/CQL and generates reusable SQL.
-`execute_compiled_measure()` runs that SQL. With
-`patient_scope="target_table"`, patient IDs are loaded into the temporary
-`_fhir4ds_target_patients` table at execution time, so changing the patient
-batch does not invalidate the compiled SQL cache.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `patient_scope` | `str` | `"literal"` embeds `patient_ids` in generated SQL. `"target_table"` leaves patient IDs for execution time. |
-| `patient_ids` in `compile_measure` | `list[str] | None` | Allowed only with `patient_scope="literal"` and included in the cache key. |
-| `patient_ids` in `execute_compiled_measure` | `list[str]` | Required with `patient_scope="target_table"`. |
+| `patient_ids` (compile) | `list[str] | None` | Allowed only with `patient_scope="literal"`. Included in the cache key. |
+| `patient_ids` (execute) | `list[str]` | Required with `patient_scope="target_table"`. |
 
-Generated SQL is cached on the `MeasureEvaluator` instance. DuckDB prepared
-statements are created lazily on first execution when supported by the generated
-SQL and are scoped to the same DuckDB connection.
+DuckDB prepared statements are scoped to the connection and created lazily on first execution. 
 
-`compiled_measure_metrics()` returns counters for cache hits/misses, compile
-time, execution time, prepared statement use, and the last execution batch size.
-Runtime-bound CQL parameters and a persistent compiled SQL cache are not part of
-this API yet; parameters that affect generated SQL remain part of the compile
-cache key.
+#### Output Generators
 
-### `summary_report(result)`
+Once a `MeasureResult` is obtained, it can be formatted:
 
-```python
-summary = evaluator.summary_report(result)
-```
+- `evaluator.summary_report(result)`: Returns aggregate counts, performance rate, and stratifiers.
+- `evaluator.to_csv(result, path)`: Writes the result DataFrame to a CSV.
+- `evaluator.to_measure_report(result, report_type="summary", ...)`: Creates a FHIR `MeasureReport` dict (`summary` or `individual`).
 
-Returns aggregate counts, denominator/numerator final counts, performance rate,
-and stratifier summaries when present.
+### `MeasureResult`
 
-### `to_csv(result, path)`
-
-```python
-evaluator.to_csv(result, "./results.csv")
-```
-
-Writes the result DataFrame to CSV. Dict/list cells, including audit structs,
-are serialized as JSON strings.
-
-### `to_measure_report(...)`
-
-```python
-report = evaluator.to_measure_report(
-    result,
-    period_start="2025-01-01",
-    period_end="2025-12-31",
-    status="complete",
-    report_type="summary",
-)
-```
-
-Creates a FHIR `MeasureReport` dict.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `result` | `MeasureResult | DataFrame` | Prefer the `MeasureResult` returned by `evaluate()`. |
-| `period_start` | `str | date | None` | Measurement period start. |
-| `period_end` | `str | date | None` | Measurement period end. |
-| `status` | `str` | FHIR MeasureReport status. Defaults to `complete`. |
-| `report_type` | `str` | `summary`, `individual`, or `subject-list`. |
-
-For individual reports, `result.dataframe` must contain exactly one patient row.
-Individual reports include the DEQM individual MeasureReport profile and a
-`subject.reference`.
-
-## `MeasureResult`
+The raw output of an evaluation.
 
 ```python
 @dataclass
@@ -183,34 +110,88 @@ class MeasureResult:
     pop_map: PopulationMap | None = None
 ```
 
-| Field | Description |
-|-------|-------------|
-| `dataframe` | Patient-level or population-basis evaluation output. |
-| `populations` | Mapping of normalized population column names to CQL expressions. |
-| `parameters` | Parameters used for evaluation. |
-| `measure_url` | Measure library/canonical reference when available. |
-| `pop_map` | Parsed Measure population map used by export methods. |
+---
 
-## Audit Types
+## 2. Artifact Resolvers
+
+Rather than passing hardcoded file paths, the engine uses an `ArtifactResolver` to fetch `Measure`, `Library` (CQL), and `ValueSet` resources.
+
+### `create_artifact_resolver(...)`
+
+A factory function to instantiate built-in resolvers. If an `artifact_resolver` is passed to `evaluate` or `compile_measure`, legacy path arguments (like `cql_library_path` and `include_paths`) are ignored in favor of the resolver's strategy.
+
+#### File Resolver
+
+```python
+from fhir4ds.dqm import create_artifact_resolver
+
+# File-based resolution
+file_resolver = create_artifact_resolver(
+    "files",
+    include_paths=["./cql/includes"],
+    valueset_paths=["./terminology/valuesets"],
+)
+```
+
+`valueset_paths` may point to ValueSet JSON files, directories containing JSON files, or Bundles containing ValueSet resources. A CQL `valueset` declaration can use either `canonical` or `canonical|version`; versioned declarations are matched to the corresponding ValueSet `version`. File-backed ValueSets must contain either an `expansion` element or direct `compose.include.concept` entries.
+
+#### HAPI Resolver
+
+```python
+# HAPI FHIR resolution
+hapi_resolver = create_artifact_resolver(
+    "hapi",
+    hapi_base_url="http://localhost:18080/fhir",
+    hapi_headers={"Authorization": "Bearer token"},
+    hapi_unversioned_valueset_policy="latest",
+)
+```
+
+The HAPI resolver accepts Measure ids, `Measure/<id>` references, and canonical URLs. ValueSets declared in the primary CQL library and transitive includes are resolved from HAPI by canonical URL and optional version.
+
+If a HAPI ValueSet does not already contain loadable terminology, the resolver calls `$expand` using the canonical URL and version. Unversioned references that match multiple ValueSet resources try candidate versions newest-first. Set `hapi_unversioned_valueset_policy="error"` to reject ambiguous unversioned references and require a CQL `version` qualifier.
+
+### `ArtifactResolver` Protocol
+
+The stable extension point for custom implementers is `ArtifactResolver`:
+
+- `resolve_measure(ref)`
+- `resolve_library(ref=None, *, measure=None, measure_source_id=None)`
+- `resolve_include(alias, version=None)`
+- `resolve_valueset(ref)`
+- `resolve_valuesets_for_cql(cql_text)`
+- `fingerprint()`
+
+---
+
+## 3. Audit Configurations
 
 ### `AuditMode`
 
+Controls the depth of evidence collected during evaluation.
+
 | Value | Description |
 |-------|-------------|
-| `AuditMode.NONE` / `"none"` | No audit wrapping. Fastest mode. |
-| `AuditMode.POPULATION` / `"population"` | Captures retrieve/resource-level evidence for population outputs without wrapping every expression. |
-| `AuditMode.FULL` / `"full"` | Wraps expressions with audit macros for expression-level traceability. |
+| `AuditMode.NONE` / `"none"` | No audit wrapping. Fastest mode, returns bare booleans. |
+| `AuditMode.POPULATION` / `"population"` | Captures retrieve/resource-level evidence for population outputs. Best for most production debugging. |
+| `AuditMode.FULL` / `"full"` | Wraps all expressions with audit macros for deep expression-level traceability. Heaviest cost. |
 
 ### `AuditOrStrategy`
 
 | Value | Description |
 |-------|-------------|
-| `AuditOrStrategy.TRUE_BRANCH` | Keep evidence from the branch that made the `or` true. |
+| `AuditOrStrategy.TRUE_BRANCH` | (Default) Keep evidence only from the branch that made the CQL `or` expression true. |
 | `AuditOrStrategy.ALL` | Keep evidence from all `or` branches. |
 
-## Batch Runner
+---
+
+## 4. Batch Runner & Configuration
+
+For pipeline processing, `fhir4ds` provides a declarative batch runner configured via JSON or YAML.
 
 ### `run_batch(config)`
+
+Executes all configured measures and writes the outputs directly to the specified directory.
 
 ```python
 from fhir4ds.dqm.batch import run_batch
@@ -220,77 +201,28 @@ config = load_run_config("dqm-run.json")
 batch_result = run_batch(config)
 ```
 
-Executes all configured measures and writes outputs to
-`config.outputs.directory`.
-
-### `validate_config(config)`
-
-Returns a list of validation errors. An empty list means the config is valid.
-
-### `inspect_config(config)`
-
-Returns a JSON-serializable description of referenced measures, libraries,
-valuesets, output settings, and audit settings.
-
-## Batch Config Dataclasses
+Other batch utilities:
+- `validate_config(config)`: Returns a list of validation errors.
+- `inspect_config(config)`: Returns a JSON-serializable diagnostic description of the planned run.
 
 ### `DQMRunConfig`
 
+The root configuration dataclass loaded from the JSON/YAML file.
+
 ```python
 DQMRunConfig(
-    measures,
-    source,
-    outputs,
-    libraries=[],
-    terminology=TerminologySpec(),
-    parameters={},
-    period_start=None,
-    period_end=None,
-    patient_ids=None,
-    filter_to_ip=False,
-    audit=AuditSpec(),
-    continue_on_error=True,
+    measures: list[MeasureSpec],
+    source: SourceSpec,
+    outputs: OutputSpec,
+    terminology: TerminologySpec = TerminologySpec(),
+    parameters: dict = {},
+    period_start: str | None = None,
+    period_end: str | None = None,
+    audit: AuditSpec = AuditSpec(),
 )
 ```
 
-### `MeasureSpec`
-
-| Field | Description |
-|-------|-------------|
-| `path` | FHIR Measure JSON path. |
-| `cql` | Optional explicit CQL file path. If omitted, the runner resolves from library paths. |
-| `id` | Optional output id override. |
-
-### `SourceSpec`
-
-| Field | Description |
-|-------|-------------|
-| `type` | `filesystem`, `directory`, `ndjson`, or `json`. |
-| `path` | Source path, glob, or cloud URI. |
-| `format` | Filesystem format such as `ndjson`, `json`, or `parquet`. |
-| `hive_partitioning` | Enable Hive partition discovery for filesystem sources. |
-
-### `OutputSpec`
-
-| Field | Description |
-|-------|-------------|
-| `directory` | Output directory. |
-| `formats` | Result formats: `json`, `csv`, `parquet`. |
-| `measure_reports` | `none`, `summary`, `individual`, or `both`. |
-| `definitions` | `DefinitionOutputSpec`. |
-
-### `DefinitionOutputSpec`
-
-| Field | Description |
-|-------|-------------|
-| `mode` | `none`, `all`, or `selected`. |
-| `formats` | Definition output formats: `json`, `csv`, `parquet`. |
-| `include_sde` | Include `SDE*` definitions when `mode` is `all`. |
-| `definitions` | Definition names when `mode` is `selected`. |
-
-## Config File Schema
-
-JSON and YAML config files are accepted by `load_run_config`.
+#### Example Configuration (`dqm-run.json`)
 
 ```json
 {
@@ -301,14 +233,10 @@ JSON and YAML config files are accepted by `load_run_config`.
       "cql": "./cql/CMS124FHIR.cql"
     }
   ],
-  "libraries": {
-    "paths": ["./cql"]
-  },
   "source": {
     "type": "filesystem",
     "path": "./bulk-export/**/*.ndjson",
-    "format": "ndjson",
-    "hive_partitioning": false
+    "format": "ndjson"
   },
   "terminology": {
     "valuesets": ["./valuesets"]
@@ -317,104 +245,36 @@ JSON and YAML config files are accepted by `load_run_config`.
     "start": "2025-01-01",
     "end": "2025-12-31"
   },
-  "parameters": {},
-  "patient_ids": ["patient-1"],
-  "filter_to_ip": false,
   "audit": {
-    "mode": "population",
-    "narratives": false
+    "mode": "population"
   },
   "outputs": {
     "directory": "./dqm-output",
-    "formats": ["json"],
-    "measure_reports": "both",
-    "definitions": {
-      "mode": "selected",
-      "formats": ["json"],
-      "names": ["Initial Population", "Numerator"],
-      "include_sde": false
-    }
-  },
-  "continue_on_error": true
+    "formats": ["json", "parquet"],
+    "measure_reports": "both"
+  }
 }
 ```
 
-## CLI
+---
 
-```bash
-fhir4ds dqm validate --config dqm-run.json
-fhir4ds dqm inspect --config dqm-run.json
-fhir4ds dqm run --config dqm-run.json
-```
+## 5. Standard Outputs
 
-Common `run` options:
-
-| Option | Description |
-|--------|-------------|
-| `--measure` | Measure JSON path. May be repeated. |
-| `--cql` | CQL path matching `--measure`. May be repeated. |
-| `--library-dir` | Directory for included CQL libraries. May be repeated. |
-| `--source` | FHIR source path. |
-| `--source-type` | `filesystem`, `directory`, `ndjson`, or `json`. |
-| `--source-format` | Filesystem source format. |
-| `--valuesets` | ValueSet file or directory. May be repeated. |
-| `--period` | Measurement period as `START:END`. |
-| `--audit-mode` | `none`, `population`, or `full`. |
-| `--narratives` | Generate audit narratives. |
-| `--patient-id` | Restrict to a patient id. May be repeated. |
-| `--filter-to-ip` | Only emit Initial Population rows. |
-| `--format` | Result format: `json`, `csv`, or `parquet`. May be repeated. |
-| `--measure-reports` | `none`, `summary`, `individual`, or `both`. |
-| `--definitions` | `none` or `all`. |
-| `--definition-format` | Definition format. May be repeated. |
-| `--include-sde-definitions` | Include `SDE*` definitions in `--definitions all`. |
-| `--fail-fast` | Stop after the first measure failure. |
-
-## Output Files
-
-For each successful measure, the batch runner can write:
+When executing via `run_batch`, the engine generates the following files in the specified output directory for each Measure:
 
 | File | Description |
 |------|-------------|
-| `results.<format>` | Patient-level population results. |
-| `summary.json` | Aggregate counts, rate, and stratifiers. |
-| `MeasureReport-summary.json` | FHIR summary MeasureReport when enabled. |
-| `individual-reports/<patient>.json` | FHIR individual MeasureReport resources when enabled. |
-| `definitions.<format>` | Machine-readable CQL define outputs when enabled. |
-| `definitions.schema.json` | Mapping from output columns to CQL define names. |
+| `results.<format>` | Patient-level population results (e.g. `initial_population: true`). |
+| `summary.json` | Aggregate counts, overall rate, and stratifiers. |
+| `MeasureReport-summary.json` | FHIR summary MeasureReport (when `measure_reports` is enabled). |
+| `individual-reports/<patient>.json` | FHIR individual MeasureReport resources. |
+| `definitions.<format>` | Machine-readable outputs for specific CQL `define` statements. |
 
-The root output directory also contains `run.json` with batch-level status,
-duration, per-measure outputs, and errors.
+### MeasureReport Extensions
 
-## MeasureReport Extensions
+Generated MeasureReports automatically include several official extensions:
 
-Summary reports include the DEQM performance rate extension:
-
-```text
-http://hl7.org/fhir/us/davinci-deqm/StructureDefinition/performanceRate
-```
-
-Individual reports include:
-
-- DEQM individual MeasureReport profile:
-  `http://hl7.org/fhir/us/davinci-deqm/StructureDefinition/indv-measurereport-deqm`
-- `subject.reference` set to `Patient/<id>`.
-- `MeasureReport.text` narrative generated from population membership.
-- Authored Measure group/population ids when available.
-- R5 backport linkId extensions for authored group/population ids.
-- `cqf-supportingEvidence` extensions for Measure-authored supporting evidence.
-
-Supporting evidence values are serialized as FHIR value types when possible:
-booleans, integers, decimals, strings, references, codings, CodeableConcepts,
-Quantities, Periods, tuples, empty lists, and absent values. Audit trace metadata
-is not serialized into `cqf-supportingEvidence`; if audit output wraps a value as
-`{result, evidence}`, the extension receives only `result`.
-
-## Compliance
-
-The DQM conformance suite currently passes the QI-Core 2025 measure corpus:
-
-| Suite | Status |
-|-------|--------|
-| CMS eCQM QI-Core 2025 | 47/47 measures |
-| Unified spec conformance | 2822/2822 tests |
+- **DEQM Performance Rate**: Added to summary reports.
+- **DEQM Individual Profile**: Added to individual reports alongside `subject.reference`.
+- **`cqf-supportingEvidence`**: Populated with Measure-authored supporting evidence (serialized into native FHIR types).
+- **R5 Backport `linkId`**: Added for authored group/population ids to aid traceability.
