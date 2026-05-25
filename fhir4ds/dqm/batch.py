@@ -460,6 +460,11 @@ def _load_valuesets(conn: Any, paths: list[Path]) -> int:
             data = json.loads(path.read_text())
         except json.JSONDecodeError as exc:
             raise DQMConfigError(f"Invalid ValueSet JSON {path}: {exc}") from exc
+        if not isinstance(data, dict):
+            raise DQMConfigError(
+                f"ValueSet JSON {path} must contain an object resource or Bundle, "
+                f"got {type(data).__name__}"
+            )
         if data.get("resourceType") == "Bundle":
             for entry in data.get("entry", []):
                 resource = entry.get("resource", {}) if isinstance(entry, dict) else {}

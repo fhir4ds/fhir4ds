@@ -24,7 +24,7 @@ from .errors import DQMError, MeasureParseError  # noqa: F401
 from .models import MeasureResult
 from .narrative import NarrativeGenerator
 from .parser import MeasureParser
-from .types import AuditMode, AuditOrStrategy, GroupMap, PopulationMap
+from .types import AuditMode, AuditOrStrategy, AuditPersona, GroupMap, PopulationMap
 
 logger = logging.getLogger(__name__)
 
@@ -1446,24 +1446,76 @@ class MeasureEvaluator:
         noise in downstream narratives and exports.
         """
         for group in pop_map.groups:
+            def _population_mask(col_name: str) -> pd.Series:
+                if col_name not in df.columns:
+                    return pd.Series(False, index=df.index)
+                return df[col_name].apply(
+                    lambda value: bool(value.get("result", False))
+                    if isinstance(value, dict)
+                    else bool(value)
+                )
+
+            population_masks = self._population_masks(df, _population_mask)
+            denom_exception_mask = (
+                population_masks["denominator_after_exclusion"]
+                & ~population_masks["numerator"]
+                & _population_mask("denominator_exception")
+            )
+            population_masks["denominator_exception"] = denom_exception_mask
+            population_masks["denominator_final"] = (
+                population_masks["denominator_after_exclusion"]
+                & ~denom_exception_mask
+            )
+
             for pop in group.populations:
                 col_name = self._col_name(pop.population_code)
                 if col_name not in df.columns:
                     continue
+                effective_mask = None
+                if pop.audit_persona == AuditPersona.EXCLUSION:
+                    available = set(df.columns)
+                    if (
+                        col_name == "denominator_exclusion"
+                        and {"initial_population", "denominator"} <= available
+                    ):
+                        effective_mask = population_masks.get(col_name)
+                    elif (
+                        col_name == "denominator_exception"
+                        and {"initial_population", "denominator", "numerator"} <= available
+                    ):
+                        effective_mask = population_masks.get(col_name)
+                    elif (
+                        col_name == "numerator_exclusion"
+                        and {"initial_population", "denominator", "numerator"} <= available
+                    ):
+                        effective_mask = population_masks.get(col_name)
 
                 def _prune(
                     cell,
+                    idx,
                     persona=pop.audit_persona,
                     code=pop.population_code,
                     column=col_name,
+                    mask=effective_mask,
                 ):
                     if not isinstance(cell, dict):
                         return cell
                     try:
-                        pruned = self._audit_engine.prune_evidence(
-                            {column: cell}, code, persona
+                        effective_result = (
+                            bool(mask.loc[idx])
+                            if persona == AuditPersona.EXCLUSION and mask is not None
+                            else bool(cell.get("result", False))
                         )
-                        return {**cell, "evidence": pruned}
+                        if persona == AuditPersona.EXCLUSION and not effective_result:
+                            pruned = []
+                        else:
+                            pruned = self._audit_engine.prune_evidence(
+                                {column: cell}, code, persona
+                            )
+                        result = {**cell, "evidence": pruned}
+                        if persona == AuditPersona.EXCLUSION:
+                            result["effective_result"] = effective_result
+                        return result
                     except Exception:
                         logger.warning(
                             "Evidence pruning failed for population %s — "
@@ -1472,7 +1524,10 @@ class MeasureEvaluator:
                         )
                         return cell
 
-                df[col_name] = df[col_name].apply(_prune)
+                df[col_name] = pd.Series(
+                    (_prune(cell, idx) for idx, cell in df[col_name].items()),
+                    index=df.index,
+                )
         return df
 
     def _filter_to_initial_population(
@@ -1521,7 +1576,7 @@ class MeasureEvaluator:
         evidence_captured = audit_mode != AuditMode.POPULATION
         if isinstance(val, dict):
             evidence = val.get("evidence", [])
-            is_satisfied = val.get("result", False)
+            is_satisfied = val.get("effective_result", val.get("result", False))
             ev_dicts = [e if isinstance(e, dict) else {} for e in evidence]
             return self._narrative.generate(population_code, ev_dicts, is_satisfied,
                                             evidence_captured=evidence_captured)

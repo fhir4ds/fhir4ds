@@ -126,12 +126,35 @@ leave earlier rows partially committed. Non-strict NDJSON/directory loading may
 skip invalid records with warnings, but strict mode must keep the resources
 table unchanged on failure.
 
+Release 0.0.7 Domain 6 fix (2026-05-24): `FHIRDataLoader` custom resource
+table names and ValueSet code table names may be valid identifiers that are
+also SQL keywords. Store/use the `quote_identifier()` form for all dynamic
+table, temp table, and index SQL references; keep the `select`/`where` keyword
+regression tests when touching loader SQL generation.
+
+Release 0.0.7 Domain 8 fix (2026-05-24): public JSON-loading boundaries must
+validate decoded JSON shape before reading `resourceType`. `FHIRDataLoader`
+`load_file()`/`load_from_url()` raise actionable `TypeError` for list/string/null
+JSON payloads, directory loading catches those as non-FHIR files, and DQM batch
+ValueSet loading raises `DQMConfigError` for non-object ValueSet JSON instead of
+leaking `AttributeError`.
+
 ---
 
 ## Development Workflow
 ...
 - **Benchmarks:** `benchmarks/`
 - **Official Tests:** `tests/data/` (Heavy datasets and submodules)
+
+### Release Version Consistency
+
+Release 0.0.7 Domain 10 fix (2026-05-24): package metadata and public
+subpackage `__version__` constants must move together. Keep
+`pyproject.toml`, `fhir4ds.__version__`, `fhir4ds.cql.__version__`,
+`fhir4ds.dqm.__version__`, `fhir4ds.fhirpath.__version__`,
+`fhir4ds.fhirpath.duckdb.__version__`, `fhir4ds.viewdef.__version__`, and
+notebook install snippets aligned with the release target. Guard this with
+`fhir4ds/tests/test_version.py` and a wheel metadata/import check.
 
 1. Implementation: `fhir4ds/fhirpath/engine/invocations/`
 2. Tests: `fhir4ds/fhirpath/tests/unit/`
@@ -373,6 +396,23 @@ only numerator patient is denominator-excluded, numerator_final is 0; if a
 denominator-exception patient also meets numerator, the exception does not
 remove that patient from denominator_final.
 
+**Release 0.0.7 Domain 4 confirmation (2026-05-24).** The current
+`summary_report()` population mask order matches these FHIR CQM attribution
+rules across synthetic edge cases: denominator exclusions are removed before
+numerator counting, denominator exceptions apply only to denominator/non-
+excluded patients that did not meet numerator, and numerator exclusions apply
+inside numerator only. Keep `test_evaluator.py` population-order tests, DQM
+integration tests, and DQM conformance together when changing this logic.
+
+**Release 0.0.7 Domain 9 fix (2026-05-24).** DQM audit evidence and narratives
+must use the same effective population masks as summary attribution for
+exclusion-style populations. Preserve the raw CQL definition `result`, but add
+and narrate from `effective_result` for denominator exclusions, denominator
+exceptions, and numerator exclusions when the required gating populations are
+present. This prevents denominator exceptions from being narrated as applied
+for numerator-positive patients and numerator exclusions from being narrated as
+applied outside the numerator.
+
 ### ViewDefinition Canonical Constants
 Built-in FHIRPath variables (`%context`, `%resource`, `%rootResource`, `%ucum`, `%rowIndex`)
 are canonically defined in `fhir4ds/viewdef/constants.py:FHIRPATH_BUILTIN_VARIABLES`.
@@ -509,6 +549,16 @@ partial Date/DateTime precision makes the relationship unknown. `Starts`/`Ends`
 same-boundary helpers also return NULL when the required boundary is missing.
 Keep forced Python fallback, native-loaded registration, and no-Python/browser
 C++ direct helper coverage aligned for these paths.
+
+**Fixed in Release 0.0.7 Domain 3 (2026-05-24).** Optimized translated
+temporal `overlaps` SQL must preserve unbounded low-bound semantics. When
+decomposing interval overlap to direct comparisons, coalesce null low bounds
+to the minimum temporal sentinel (`0001-01-01`) just as null high bounds are
+coalesced to the maximum sentinel (`9999-12-31`). Without this, expressions
+such as `Interval[null, @2024-06-01] overlaps
+Interval[@2024-01-01, @2024-12-31]` evaluate to SQL NULL instead of true.
+Keep this covered by translated execution tests and public `intervalOverlaps`
+native-loaded versus forced Python fallback parity checks.
 
 ### CQL String Operator Boundaries
 

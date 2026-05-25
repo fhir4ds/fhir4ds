@@ -80,6 +80,16 @@ cd benchmarks/clinical-reasoning
 - **clinical-reasoning accuracy** = fraction of patients that evaluated without a runtime
   error (execution success rate). 100% CR accuracy only means no exceptions were thrown.
 
+## Release 0.0.7 Domain 7 Verification
+
+Fresh Domain 7 scale checks on 2026-05-24 found no performance cliff:
+`FHIRDataLoader.load_resources()` scaled linearly from 10k to 50k synthetic
+resources, repeated 1k-resource batches showed flat Python heap usage after
+startup, four concurrent in-memory loader connections completed independently,
+and the DQM performance report against `benchmarks/baselines/dqm_2025.json`
+flagged zero regressions. Keep the DQM baseline comparison and ad hoc
+1k/10k/50k loader probe together when changing ingestion or DQM critical paths.
+
 ## License
 
 Apache 2.0

@@ -161,10 +161,25 @@ class IntervalMixin:
         # With NULL end (open-ended interval like active conditions):
         #   left_start < right_end AND COALESCE(left_end, '9999-12-31') >= right_start
 
-        # Handle the end comparison - use COALESCE for NULL handling
-        # Always COALESCE left_end because prevalenceInterval().end can be NULL
-        # for active conditions (no abatement date), and NULL >= X is NULL (false)
+        # Handle unbounded starts/ends.  The interval UDFs treat NULL low/high
+        # bounds as unbounded; keep the optimized temporal SQL equivalent.
         # Use VARCHAR consistently to avoid type mismatches.
+        left_start_coalesced = SQLFunctionCall(
+            name="COALESCE",
+            args=[
+                (left_start if left_start and not isinstance(left_start, SQLNull) else SQLNull()),
+                SQLLiteral(value="0001-01-01"),
+            ]
+        )
+        right_start_coalesced = SQLFunctionCall(
+            name="COALESCE",
+            args=[
+                (right_start if right_start and not isinstance(right_start, SQLNull) else SQLNull()),
+                SQLLiteral(value="0001-01-01"),
+            ]
+        )
+        # Always COALESCE left_end because prevalenceInterval().end can be NULL
+        # for active conditions (no abatement date), and NULL >= X is NULL (false).
         left_end_coalesced = SQLFunctionCall(
             name="COALESCE",
             args=[
@@ -195,7 +210,7 @@ class IntervalMixin:
         # preserves correct temporal ordering for full-precision dates.
         start_comparison = SQLBinaryOp(
             operator=left_op,
-            left=left_start,
+            left=left_start_coalesced,
             right=right_end_coalesced,
         )
 
@@ -203,7 +218,7 @@ class IntervalMixin:
         end_comparison = SQLBinaryOp(
             operator=right_op,
             left=left_end_coalesced,
-            right=right_start,
+            right=right_start_coalesced,
         )
 
         # Combine with AND

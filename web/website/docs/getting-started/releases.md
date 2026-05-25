@@ -7,6 +7,38 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.7
+*May 2026*
+
+Version 0.0.7 focuses on release readiness, SQL safety, audit evidence accuracy, and packaging consistency. It preserves the 100% conformance posture while tightening loader boundaries, DQM population attribution evidence, and native/Python fallback release gates.
+
+### Highlights
+
+- **Version Consistency**: Root package metadata, public `__version__` exports, notebook install snippets, and WASM demo wheel references now target `0.0.7`.
+- **Loader SQL Safety**: Custom resource and ValueSet table names are quoted consistently, including SQL keywords such as `select` and `where`.
+- **FHIR JSON Validation**: File, URL, directory, and DQM ValueSet loaders now reject non-object JSON cleanly instead of leaking implementation errors.
+- **DQM Audit Evidence**: Exclusion-style audit narratives use effective population masks so denominator exceptions and numerator exclusions match final population attribution rules.
+- **CQL Temporal Intervals**: Optimized interval overlap SQL handles null low bounds using CQL interval semantics instead of propagating SQL NULL.
+- **Release Artifact Gate**: Native FHIRPath and CQL DuckDB extensions are rebuilt and bundled into the `0.0.7` wheel, and browser WASM side modules are rebuilt with the pinned Emscripten toolchain.
+
+### Conformance
+
+| Suite | Passed | Total | Rate |
+|-------|-------:|------:|-----:|
+| ViewDefinition v2 | 134 | 134 | 100.0% |
+| FHIRPath R4 | 935 | 935 | 100.0% |
+| CQL | 1,706 | 1,706 | 100.0% |
+| DQM QI-Core 2025 | 47 | 47 | 100.0% |
+| Overall | 2,822 | 2,822 | 100.0% |
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.7
+```
+
+---
+
 ## Version 0.0.6
 *May 2026*
 

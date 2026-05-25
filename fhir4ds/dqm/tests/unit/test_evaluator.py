@@ -118,6 +118,103 @@ def test_evaluator_loads_resolver_valuesets_once():
     assert resolver.calls == 2
 
 
+def _make_exclusion_pop_map() -> PopulationMap:
+    return PopulationMap(
+        measure_id="test-measure",
+        cql_library_ref="http://example.com/Library/Test",
+        groups=[
+            GroupMap(
+                group_id="group-0",
+                population_basis="boolean",
+                populations=[
+                    PopulationEntry(
+                        "initial-population", "group-0", "Initial Population",
+                        AuditPersona.INCLUSION,
+                    ),
+                    PopulationEntry(
+                        "denominator", "group-0", "Denominator",
+                        AuditPersona.INCLUSION,
+                    ),
+                    PopulationEntry(
+                        "denominator-exclusion", "group-0", "Denominator Exclusion",
+                        AuditPersona.EXCLUSION,
+                    ),
+                    PopulationEntry(
+                        "denominator-exception", "group-0", "Denominator Exception",
+                        AuditPersona.EXCLUSION,
+                    ),
+                    PopulationEntry(
+                        "numerator", "group-0", "Numerator",
+                        AuditPersona.NUMERATOR,
+                    ),
+                    PopulationEntry(
+                        "numerator-exclusion", "group-0", "Numerator Exclusion",
+                        AuditPersona.EXCLUSION,
+                    ),
+                ],
+            )
+        ],
+    )
+
+
+def test_audit_narrative_uses_effective_denominator_exception_mask():
+    evaluator = MeasureEvaluator(None)
+    pop_map = _make_exclusion_pop_map()
+    df = pd.DataFrame({
+        "patient_id": ["p1"],
+        "initial_population": [{"result": True, "evidence": []}],
+        "denominator": [{"result": True, "evidence": []}],
+        "denominator_exclusion": [{"result": False, "evidence": []}],
+        "denominator_exception": [{
+            "result": True,
+            "evidence": [{"operator": "exists", "target": "Condition/except"}],
+        }],
+        "numerator": [{"result": True, "evidence": []}],
+        "numerator_exclusion": [{"result": False, "evidence": []}],
+    })
+
+    pruned = evaluator._prune_population_evidence(df, pop_map)
+    cell = pruned.loc[0, "denominator_exception"]
+
+    assert cell["result"] is True
+    assert cell["effective_result"] is False
+    assert cell["evidence"] == []
+
+    enriched = evaluator._add_narratives(pruned, pop_map, AuditMode.FULL)
+    narrative = " ".join(enriched.loc[0, "denominator_exception"]["narrative"])
+    assert "No exception applied" in narrative
+    assert "Exception applied" not in narrative
+
+
+def test_audit_narrative_uses_effective_numerator_exclusion_mask():
+    evaluator = MeasureEvaluator(None)
+    pop_map = _make_exclusion_pop_map()
+    df = pd.DataFrame({
+        "patient_id": ["p1"],
+        "initial_population": [{"result": True, "evidence": []}],
+        "denominator": [{"result": True, "evidence": []}],
+        "denominator_exclusion": [{"result": False, "evidence": []}],
+        "denominator_exception": [{"result": False, "evidence": []}],
+        "numerator": [{"result": False, "evidence": []}],
+        "numerator_exclusion": [{
+            "result": True,
+            "evidence": [{"operator": "exists", "target": "Condition/nex"}],
+        }],
+    })
+
+    pruned = evaluator._prune_population_evidence(df, pop_map)
+    cell = pruned.loc[0, "numerator_exclusion"]
+
+    assert cell["result"] is True
+    assert cell["effective_result"] is False
+    assert cell["evidence"] == []
+
+    enriched = evaluator._add_narratives(pruned, pop_map, AuditMode.FULL)
+    narrative = " ".join(enriched.loc[0, "numerator_exclusion"]["narrative"])
+    assert "Not excluded from numerator" in narrative
+    assert "Excluded from numerator" not in narrative
+
+
 def _make_stratified_measure_result():
     """Helper to build a MeasureResult with simple and composite stratifiers."""
     pop_map = PopulationMap(

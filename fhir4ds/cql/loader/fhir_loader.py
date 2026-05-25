@@ -14,6 +14,8 @@ try:
 except ImportError:
     duckdb = None  # type: ignore[assignment]
 
+from fhir4ds.sources.base import quote_identifier
+
 _logger = logging.getLogger(__name__)
 
 # Per-connection caches. WeakKeyDictionary ensures entries are cleaned up
@@ -144,6 +146,7 @@ class FHIRDataLoader:
                 f"table_name must be a valid SQL identifier, got {table_name!r}"
             )
         self.table_name = table_name
+        self._quoted_table_name = quote_identifier(table_name)
         # Share one mutable cache per DuckDB connection so repeated FHIRDataLoader
         # instances update the same _in_valueset_python closure in-place.
         with _CACHE_LOCK:
@@ -165,8 +168,9 @@ class FHIRDataLoader:
         may legitimately insert rows with the same (id, resourceType)
         but different context (e.g., source_measure scoping).
         """
+        tbl = self._quoted_table_name
         self.con.execute(f"""
-            CREATE TABLE IF NOT EXISTS {self.table_name} (
+            CREATE TABLE IF NOT EXISTS {tbl} (
                 id VARCHAR,
                 resourceType VARCHAR,
                 resource JSON,
@@ -183,7 +187,7 @@ class FHIRDataLoader:
         ending in ``ResourceType/id``, a bare resource id, or a JSON Reference
         object containing any of those reference forms.
         """
-        tbl = self.table_name
+        tbl = self._quoted_table_name
         try:
             self.con.execute(f"""
                 CREATE OR REPLACE MACRO resolve(ref) AS (
@@ -259,11 +263,11 @@ class FHIRDataLoader:
         if resource_id is not None and resource_type is not None:
             # Delete existing resource with same identity, then insert
             self.con.execute(
-                f"DELETE FROM {self.table_name} WHERE id = ? AND resourceType = ?",
+                f"DELETE FROM {self._quoted_table_name} WHERE id = ? AND resourceType = ?",
                 [resource_id, resource_type],
             )
         self.con.execute(
-            f"INSERT INTO {self.table_name} VALUES (?, ?, ?, ?)",
+            f"INSERT INTO {self._quoted_table_name} VALUES (?, ?, ?, ?)",
             [resource_id, resource_type, resource_json, patient_ref],
         )
 
@@ -328,13 +332,13 @@ class FHIRDataLoader:
         dedup_keys = [(rid, rtype) for rid, rtype in seen.keys()]
         if dedup_keys:
             self.con.executemany(
-                f"DELETE FROM {self.table_name} WHERE id = ? AND resourceType = ?",
+                f"DELETE FROM {self._quoted_table_name} WHERE id = ? AND resourceType = ?",
                 dedup_keys,
             )
 
         # Batch insert
         self.con.executemany(
-            f"INSERT INTO {self.table_name} VALUES (?, ?, ?, ?)",
+            f"INSERT INTO {self._quoted_table_name} VALUES (?, ?, ?, ?)",
             final_rows,
         )
         return len(final_rows)
@@ -387,6 +391,11 @@ class FHIRDataLoader:
         """
         path = Path(path) if not isinstance(path, Path) else path
         data = json.loads(path.read_text())
+        if not isinstance(data, dict):
+            raise TypeError(
+                f"FHIR JSON file {path} must contain an object resource or Bundle, "
+                f"got {type(data).__name__}"
+            )
         resource_type = data.get("resourceType")
 
         if resource_type == "Bundle":
@@ -490,7 +499,7 @@ class FHIRDataLoader:
                         total += self.load_ndjson(file_path, strict=False)
                     else:
                         total += self.load_file(file_path)
-                except (json.JSONDecodeError, ValueError, KeyError) as e:
+                except (json.JSONDecodeError, TypeError, ValueError, KeyError) as e:
                     _logger.warning("Skipping non-FHIR file %s: %s", file_path, e)
 
         return total
@@ -517,6 +526,11 @@ class FHIRDataLoader:
         with urllib.request.urlopen(req) as response:
             data = json.loads(response.read().decode())
 
+        if not isinstance(data, dict):
+            raise TypeError(
+                "FHIR server response must contain an object resource or Bundle, "
+                f"got {type(data).__name__}"
+            )
         if data.get("resourceType") == "Bundle":
             return self.load_bundle(data)
         else:
@@ -525,18 +539,18 @@ class FHIRDataLoader:
 
     def clear(self) -> None:
         """Clear all resources from the table."""
-        self.con.execute(f"DELETE FROM {self.table_name}")
+        self.con.execute(f"DELETE FROM {self._quoted_table_name}")
 
     def count(self, resource_type: Optional[str] = None) -> int:
         """Count resources in the table, optionally filtered by type."""
         if resource_type:
             result = self.con.execute(
-                f"SELECT COUNT(*) FROM {self.table_name} WHERE resourceType = ?",
+                f"SELECT COUNT(*) FROM {self._quoted_table_name} WHERE resourceType = ?",
                 [resource_type]
             ).fetchone()
         else:
             result = self.con.execute(
-                f"SELECT COUNT(*) FROM {self.table_name}"
+                f"SELECT COUNT(*) FROM {self._quoted_table_name}"
             ).fetchone()
         return result[0] if result else 0
 
@@ -549,6 +563,7 @@ class FHIRDataLoader:
             raise ValueError(
                 f"table_name must be a valid SQL identifier, got {table_name!r}"
             )
+        quoted_table_name = quote_identifier(table_name)
         """
         Load ValueSet codes into a table for fhirpath_in_valueset UDF.
 
@@ -577,7 +592,7 @@ class FHIRDataLoader:
 
         # Create table if not exists
         self.con.execute(f"""
-            CREATE TABLE IF NOT EXISTS {table_name} (
+            CREATE TABLE IF NOT EXISTS {quoted_table_name} (
                 valueset_url VARCHAR,
                 system VARCHAR,
                 code VARCHAR,
@@ -656,27 +671,29 @@ class FHIRDataLoader:
                     "display": pa.array(displays, type=pa.string()),
                 })
                 temp_name = f"_{table_name}_bulk_valuesets"
+                quoted_temp_name = quote_identifier(temp_name)
                 self.con.register(temp_name, arrow_table)
                 try:
                     self.con.execute(
-                        f"INSERT INTO {table_name} "
+                        f"INSERT INTO {quoted_table_name} "
                         f"SELECT valueset_url, system, code, display "
-                        f"FROM {temp_name}"
+                        f"FROM {quoted_temp_name}"
                     )
                 finally:
                     self.con.unregister(temp_name)
             except ImportError:
                 rows = list(zip(valueset_urls, systems, code_values, displays))
                 self.con.executemany(
-                    f"INSERT INTO {table_name} VALUES (?, ?, ?, ?)",
+                    f"INSERT INTO {quoted_table_name} VALUES (?, ?, ?, ?)",
                     rows,
                 )
 
         # Create index for fast lookups after bulk insert so fresh loads do
         # not maintain the index one row at a time.
+        quoted_index_name = quote_identifier(f"idx_{table_name}_lookup")
         self.con.execute(f"""
-            CREATE INDEX IF NOT EXISTS idx_{table_name}_lookup
-            ON {table_name} (valueset_url, system, code)
+            CREATE INDEX IF NOT EXISTS {quoted_index_name}
+            ON {quoted_table_name} (valueset_url, system, code)
         """)
 
         self._refresh_in_valueset_udf(table_name)
@@ -701,16 +718,17 @@ class FHIRDataLoader:
             raise ValueError(
                 f"table_name must be a valid SQL identifier, got {table_name!r}"
             )
+        quoted_table_name = quote_identifier(table_name)
         if not self.valueset_table_exists(table_name):
             return 0
         if valueset_url:
             result = self.con.execute(
-                f"SELECT COUNT(*) FROM {table_name} WHERE valueset_url = ?",
+                f"SELECT COUNT(*) FROM {quoted_table_name} WHERE valueset_url = ?",
                 [valueset_url]
             ).fetchone()
         else:
             result = self.con.execute(
-                f"SELECT COUNT(*) FROM {table_name}"
+                f"SELECT COUNT(*) FROM {quoted_table_name}"
             ).fetchone()
         return result[0] if result else 0
 
@@ -725,9 +743,10 @@ class FHIRDataLoader:
             raise ValueError(
                 f"table_name must be a valid SQL identifier, got {table_name!r}"
             )
+        quoted_table_name = quote_identifier(table_name)
         if not self.valueset_table_exists(table_name):
             return
-        self.con.execute(f"DELETE FROM {table_name}")
+        self.con.execute(f"DELETE FROM {quoted_table_name}")
         self._refresh_in_valueset_udf(table_name)
 
     def valueset_table_exists(self, table_name: str = "valueset_codes") -> bool:
@@ -758,6 +777,7 @@ class FHIRDataLoader:
         """
         if self._refresh_cpp_in_valueset_cache(table_name):
             return
+        quoted_table_name = quote_identifier(table_name)
 
         try:
             from fhir4ds.cql.duckdb.udf.valueset import createValuesetMembershipUdf
@@ -766,7 +786,7 @@ class FHIRDataLoader:
 
         try:
             rows = self.con.execute(
-                f"SELECT valueset_url, system, code FROM {table_name}"
+                f"SELECT valueset_url, system, code FROM {quoted_table_name}"
             ).fetchall()
         except (duckdb.CatalogException, duckdb.BinderException) if duckdb else () as e:
             _logger.warning("Failed to query valueset table '%s': %s", table_name, e)
@@ -813,6 +833,7 @@ class FHIRDataLoader:
         use_native = os.environ.get("FHIR4DS_USE_CPP_VALUESET_CACHE", "").lower()
         if use_native in ("0", "false", "no", "off"):
             return False
+        quoted_table_name = quote_identifier(table_name)
 
         try:
             self.con.execute("SELECT cql_valueset_cache_clear()").fetchone()
@@ -822,7 +843,7 @@ class FHIRDataLoader:
         try:
             self.con.execute(
                 f"SELECT cql_valueset_cache_add(valueset_url, system, code) "
-                f"FROM {table_name}"
+                f"FROM {quoted_table_name}"
             ).fetchall()
             # Remove stale Python macros from prior refreshes so SQL resolves to
             # the native in_valueset function. Keep the fhirpath_* alias as a macro.
