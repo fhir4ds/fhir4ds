@@ -33,6 +33,7 @@ const sidebars: SidebarsConfig = {
           items: [
             'user-guide/sources/filesystem',
             'user-guide/sources/relational',
+            'user-guide/sources/mongo-fhir-server',
             'user-guide/sources/csv',
             'user-guide/sources/existing',
           ],
@@ -86,6 +87,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'integrations/mongo-fhir-server',
+          label: 'Mongo FHIR Server',
+        },
+        {
+          type: 'doc',
           id: 'integrations/wasm-engine',
           label: 'WASM Engine',
         },
@@ -135,6 +141,7 @@ const sidebars: SidebarsConfig = {
                 'api-reference/sources/sources-filesystem',
                 'api-reference/sources/sources-relational',
                 'api-reference/sources/hapi-postgres',
+                'api-reference/sources/mongo-fhir-server',
                 'api-reference/sources/sources-existing',
                 'api-reference/sources/sources-csv',
               ],

@@ -1,0 +1,45 @@
+services:
+  mongo:
+    image: ${MONGO_IMAGE:-mongo:8.0.15}
+    container_name: fhir4ds-mongo-fhir
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27018:27017"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "--eval",
+          "try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}).ok }",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  seed:
+    image: ${MONGO_IMAGE:-mongo:8.0.15}
+    container_name: fhir4ds-mongo-fhir-seed
+    profiles: ["smoke"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      - ./seed.js:/seed.js:ro
+    command: ["mongosh", "mongodb://mongo:27017/fhir", "/seed.js"]
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: docker/mongo-fhir-server/Dockerfile.worker
+      args:
+        PYTHON_IMAGE: ${FHIR4DS_WORKER_PYTHON_IMAGE:-python:3.11.13-slim}
+    container_name: fhir4ds-mongo-fhir-worker
+    profiles: ["smoke"]
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    environment:
+      FHIR4DS_MONGO_URI: mongodb://mongo:27017
+      FHIR4DS_MONGO_DATABASE: fhir

@@ -443,6 +443,19 @@ class MeasureEvaluator:
             metrics["last_execute_ms"] = round(float(metrics["last_execute_ms"]), 3)
         return metrics
 
+    def invalidate_prepared_statements(self) -> None:
+        """
+        Force cached compiled measures to execute raw SQL on their next run.
+
+        Materialization workers recreate the ``resources`` view for source-level
+        patient pushdown. DuckDB prepared statements may keep a stale view plan,
+        so workers call this after changing the source view.
+        """
+        for compiled in self._compiled_measure_cache.values():
+            for group in compiled.groups:
+                group.prepared = False
+                group.prepared_name = None
+
     def summary_report(self, result: Any) -> dict:
         """Generate a summary report from evaluation results.
 

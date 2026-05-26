@@ -14,6 +14,7 @@ Adapters
 - :class:`FileSystemSource` — Parquet, NDJSON, Iceberg (local or cloud)
 - :class:`PostgresSource` — FHIR JSON stored in Postgres columns
 - :class:`HapiPostgresSource` — HAPI FHIR JPA Server on PostgreSQL
+- :class:`MongoFhirServerSource` — Mongo-backed FHIR servers via DuckDB mongo
 - :class:`CSVSource` — flat CSV files with a user-defined SQL projection
 
 Usage::
@@ -40,6 +41,12 @@ from fhir4ds.sources.csv import CSVSource
 from fhir4ds.sources.existing import ExistingTableSource
 from fhir4ds.sources.filesystem import CloudCredentials, FileSystemSource
 from fhir4ds.sources.hapi_postgres import HapiPostgresSchema, HapiPostgresSource
+from fhir4ds.sources.mongo_fhir import (
+    MongoCollectionStrategy,
+    MongoFhirServerSchema,
+    MongoFhirServerSource,
+    MongoResourceCollection,
+)
 from fhir4ds.sources.relational import PostgresSource, PostgresTableMapping
 
 __all__ = [
@@ -51,6 +58,10 @@ __all__ = [
     "PostgresTableMapping",
     "HapiPostgresSource",
     "HapiPostgresSchema",
+    "MongoFhirServerSource",
+    "MongoFhirServerSchema",
+    "MongoResourceCollection",
+    "MongoCollectionStrategy",
     "ExistingTableSource",
     "CSVSource",
 ]

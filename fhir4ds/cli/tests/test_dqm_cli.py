@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+import fhir4ds.cli.dqm as dqm_cli
 from fhir4ds.cli.main import main
 from fhir4ds.dqm.batch import inspect_config, validate_config
 from fhir4ds.dqm.config import AuditSpec, DQMRunConfig, MeasureSpec, OutputSpec, SourceSpec
@@ -236,3 +238,54 @@ def test_dqm_inspect_reports_measure_metadata(tmp_path):
     assert payload["measures"][0]["id"] == "TestMeasure"
     assert payload["measures"][0]["populations"] == 3
     assert payload["audit"]["mode"] == "population"
+
+
+def test_dqm_hapi_explain_scope_prints_plan(monkeypatch, capsys):
+    config = SimpleNamespace(name="hapi-config")
+    calls = {}
+
+    def fake_load_materialization_config(path):
+        calls["config_path"] = path
+        return config
+
+    def fake_explain_patient_scope_plan(loaded_config, patient_ids, *, analyze=False):
+        calls["config"] = loaded_config
+        calls["patient_ids"] = patient_ids
+        calls["analyze"] = analyze
+        return ["Bitmap Heap Scan on fhir4ds_hapi_current_resources", "  Recheck Cond"]
+
+    monkeypatch.setattr(
+        dqm_cli,
+        "load_materialization_config",
+        fake_load_materialization_config,
+    )
+    monkeypatch.setattr(
+        dqm_cli,
+        "explain_patient_scope_plan",
+        fake_explain_patient_scope_plan,
+    )
+
+    exit_code = main(
+        [
+            "dqm",
+            "hapi",
+            "explain-scope",
+            "--config",
+            "hapi.yaml",
+            "--patient-id",
+            "p2",
+            "--patient-id",
+            "p1",
+            "--analyze",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert calls == {
+        "config_path": "hapi.yaml",
+        "config": config,
+        "patient_ids": ["p2", "p1"],
+        "analyze": True,
+    }
+    assert "Bitmap Heap Scan on fhir4ds_hapi_current_resources" in output

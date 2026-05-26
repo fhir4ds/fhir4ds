@@ -11,6 +11,7 @@ versions.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -27,6 +28,22 @@ _DEFAULT_PATIENT_REFERENCE_PATHS = (
     "$.patient.reference",
     "$.beneficiary.reference",
 )
+
+
+def _normalize_patient_scope(patient_ids: Sequence[str] | None) -> tuple[str, ...] | None:
+    if patient_ids is None:
+        return None
+    if isinstance(patient_ids, str):
+        raise TypeError("patient_ids must be a sequence of strings, not a string")
+    normalized = []
+    for index, patient_id in enumerate(patient_ids):
+        if not isinstance(patient_id, str):
+            raise TypeError(
+                f"patient_ids[{index}] must be a string, got {type(patient_id).__name__}"
+            )
+        if patient_id:
+            normalized.append(patient_id)
+    return tuple(sorted(set(normalized)))
 
 
 @dataclass(frozen=True)
@@ -84,6 +101,7 @@ class HapiPostgresSource:
         self._attachment_name = attachment_name
         self._fail_on_unsupported_storage = fail_on_unsupported_storage
         self._patient_reference_paths = patient_reference_paths
+        self._patient_scope: tuple[str, ...] | None = None
         self._attached = False
         self._con: Any | None = None
 
@@ -120,9 +138,7 @@ class HapiPostgresSource:
                     "Set fail_on_unsupported_storage=False to skip them explicitly."
                 )
 
-        con.execute(
-            f"CREATE OR REPLACE VIEW resources AS {self._current_resources_select()}"
-        )
+        self._create_resources_view(con)
         validate_schema(con, self.__class__.__name__)
 
     def unregister(self, con: Any) -> None:
@@ -150,6 +166,22 @@ class HapiPostgresSource:
         """
         return True
 
+    def set_patient_scope(self, patient_ids: Sequence[str] | None) -> None:
+        """
+        Restrict the mounted ``resources`` view to a batch of patient IDs.
+
+        ``None`` clears the source-level scope. This is intended for
+        materialization workers; ordinary analytical use should leave the source
+        unscoped.
+        """
+        self._patient_scope = _normalize_patient_scope(patient_ids)
+        if self._con is not None and self._attached:
+            self._create_resources_view(self._con)
+
+    def clear_patient_scope(self) -> None:
+        """Clear any materialization-time patient scope."""
+        self.set_patient_scope(None)
+
     def get_changed_patients(self, since: datetime) -> list[str]:
         """
         Return patient IDs for current inline-JSON resources updated after *since*.
@@ -161,11 +193,16 @@ class HapiPostgresSource:
 
         rows = self._con.execute(f"""
             SELECT DISTINCT patient_ref
-            FROM ({self._current_resources_select(include_updated_at=True)}) hapi_resources
+            FROM ({self._current_resources_select(include_updated_at=True, apply_patient_scope=False)}) hapi_resources
             WHERE updated_at > ?
               AND patient_ref IS NOT NULL
         """, [since]).fetchall()
         return sorted({row[0] for row in rows if row[0] is not None})
+
+    def _create_resources_view(self, con: Any) -> None:
+        con.execute(
+            f"CREATE OR REPLACE VIEW resources AS {self._current_resources_select()}"
+        )
 
     def _unsupported_storage_count(self, con: Any) -> int:
         if self._schema.decoded_view:
@@ -189,9 +226,18 @@ class HapiPostgresSource:
         """).fetchone()
         return int(row[0] or 0)
 
-    def _current_resources_select(self, *, include_updated_at: bool = False) -> str:
+    def _current_resources_select(
+        self,
+        *,
+        include_updated_at: bool = False,
+        apply_patient_scope: bool = True,
+    ) -> str:
         if self._schema.decoded_view:
             updated_at_projection = ", updated_at" if include_updated_at else ""
+            where_clause = self._patient_scope_where(
+                "patient_ref",
+                apply_patient_scope=apply_patient_scope,
+            )
             return f"""
                 SELECT
                     id::VARCHAR AS id,
@@ -200,10 +246,18 @@ class HapiPostgresSource:
                     patient_ref::VARCHAR AS patient_ref
                     {updated_at_projection}
                 FROM {self._decoded_view_relation()}
+                {where_clause}
             """
         updated_at_projection = (
             f",\n                r.{self._updated_at()} AS updated_at"
             if include_updated_at
+            else ""
+        )
+        patient_ref_expr = self._patient_ref_expression()
+        scope_condition = self._patient_scope_condition(patient_ref_expr)
+        scope_sql = (
+            f"\n              AND {scope_condition}"
+            if scope_condition and apply_patient_scope
             else ""
         )
         return f"""
@@ -211,7 +265,7 @@ class HapiPostgresSource:
                 r.{self._fhir_id()}::VARCHAR AS id,
                 r.{self._resource_type()}::VARCHAR AS resourceType,
                 v.{self._text_vc()}::JSON AS resource,
-                {self._patient_ref_expression()}::VARCHAR AS patient_ref
+                {patient_ref_expr}::VARCHAR AS patient_ref
                 {updated_at_projection}
             FROM {self._resource_relation()} r
             JOIN {self._version_relation()} v
@@ -220,7 +274,27 @@ class HapiPostgresSource:
             WHERE r.{self._deleted_at()} IS NULL
               AND v.{self._encoding()} = 'JSON'
               AND v.{self._text_vc()} IS NOT NULL
+              {scope_sql}
         """
+
+    def _patient_scope_where(
+        self,
+        column_expr: str,
+        *,
+        apply_patient_scope: bool = True,
+    ) -> str:
+        condition = (
+            self._patient_scope_condition(column_expr) if apply_patient_scope else None
+        )
+        return f"WHERE {condition}" if condition else ""
+
+    def _patient_scope_condition(self, column_expr: str) -> str | None:
+        if self._patient_scope is None:
+            return None
+        if not self._patient_scope:
+            return "1 = 0"
+        values = ", ".join(quote_sql_literal(patient_id) for patient_id in self._patient_scope)
+        return f"{column_expr} IN ({values})"
 
     def _patient_ref_expression(self) -> str:
         resource_type = f"r.{self._resource_type()}"

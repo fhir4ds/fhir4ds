@@ -33,6 +33,12 @@ pip install fhir4ds-v2
 
 # With optional measure evaluation dependencies (numpy, pandas, etc.)
 pip install "fhir4ds-v2[measures]"
+
+# With HAPI PostgreSQL materialization support
+pip install "fhir4ds-v2[hapi]"
+
+# With Mongo materialization support
+pip install "fhir4ds-v2[mongo]"
 ```
 
 ### Unified Connection

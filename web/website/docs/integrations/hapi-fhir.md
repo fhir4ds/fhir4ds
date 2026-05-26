@@ -64,6 +64,8 @@ postgres:
 
 worker:
   batch_size: 100
+  source_patient_pushdown: true
+  source_patient_pushdown_mode: literal
   max_attempts: 3
   retry_backoff_seconds: 60
   processing_timeout_seconds: 900
@@ -135,6 +137,23 @@ claimed patient batch through a temporary target patient table. Patient IDs are
 supplied at execution time, so a new batch does not force SQL regeneration.
 CQL parameters, included libraries, audit mode, and other result-shaping options
 remain part of the compile cache key.
+
+By default, each claimed batch also scopes the source `resources` view to the
+same patient IDs before measure execution. With the installed decoded view, that
+scope is a PostgreSQL `patient_ref` predicate rather than only a downstream
+DuckDB filter. Use the plan helper to verify the database-side plan:
+
+```bash
+fhir4ds dqm hapi explain-scope \
+  --config hapi-dqm.yaml \
+  --patient-id patient-1 \
+  --patient-id patient-2 \
+  --analyze
+```
+
+`explain-scope` requires `postgres.hapi_schema.decoded_view`. Set
+`worker.source_patient_pushdown: false` to disable this scoped source rewrite
+for troubleshooting.
 
 ## Result Storage
 

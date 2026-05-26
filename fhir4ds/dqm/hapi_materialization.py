@@ -94,6 +94,8 @@ class HapiMaterializationConfig:
     processing_timeout_seconds: float = 900.0
     notification_channel: str = NOTIFICATION_CHANNEL
     fail_on_unsupported_storage: bool = True
+    source_patient_pushdown: bool = True
+    source_patient_pushdown_mode: str = "literal"
     hapi_schema: HapiPostgresSchema = field(default_factory=HapiPostgresSchema)
     retention: HapiRetentionPolicy = field(default_factory=HapiRetentionPolicy)
 
@@ -355,6 +357,10 @@ def parse_materialization_config(
         ),
         fail_on_unsupported_storage=bool(
             worker.get("fail_on_unsupported_storage", True)
+        ),
+        source_patient_pushdown=bool(worker.get("source_patient_pushdown", True)),
+        source_patient_pushdown_mode=_parse_source_patient_pushdown_mode(
+            worker.get("source_patient_pushdown_mode", "literal")
         ),
         hapi_schema=_parse_hapi_schema(
             postgres.get("hapi_schema", raw.get("hapi_schema"))
@@ -827,6 +833,49 @@ def enqueue_existing_patients(
             patient_ids=patient_ids,
             limit=limit,
         )
+
+
+def explain_patient_scope_plan(
+    config: HapiMaterializationConfig,
+    patient_ids: list[str] | tuple[str, ...],
+    *,
+    analyze: bool = False,
+) -> list[str]:
+    """
+    Return PostgreSQL EXPLAIN output for decoded-view patient pushdown.
+
+    This inspects the PostgreSQL plan directly. It requires the decoded current
+    resource view used by materialization, because that view exposes
+    ``patient_ref`` as a first-class column.
+    """
+    normalized_patient_ids: list[str] = []
+    for index, patient_id in enumerate(patient_ids):
+        if not isinstance(patient_id, str):
+            raise DQMConfigError(
+                f"patient_ids[{index}] must be a string, got {type(patient_id).__name__}"
+            )
+        if patient_id:
+            normalized_patient_ids.append(patient_id)
+    if not normalized_patient_ids:
+        raise DQMConfigError("At least one patient id is required for EXPLAIN")
+    if not config.hapi_schema.decoded_view:
+        raise DQMConfigError(
+            "HAPI patient-scope EXPLAIN requires hapi_schema.decoded_view"
+        )
+    psycopg = require_psycopg()
+    explain = "EXPLAIN (ANALYZE, BUFFERS)" if analyze else "EXPLAIN"
+    relation = _decoded_view_relation(config.hapi_schema)
+    with psycopg.connect(config.postgres_connection_string) as conn:
+        rows = conn.execute(
+            f"""
+            {explain}
+            SELECT id, "resourceType", patient_ref
+            FROM {relation}
+            WHERE patient_ref = ANY(%s::text[])
+            """,
+            [sorted(set(normalized_patient_ids))],
+        ).fetchall()
+    return [str(row[0]) for row in rows]
 
 
 def load_enabled_measure_config(conn: Any) -> list[HapiMaterializedMeasure]:
@@ -1328,6 +1377,7 @@ def _process_claimed_patients(
     watermark_by_patient = {
         patient.patient_id: patient.input_watermark for patient in patients
     }
+    _apply_source_patient_scope(runtime, config, patient_ids)
     patient_errors: dict[str, str] = {}
 
     metrics: dict[str, Any] = {}
@@ -1376,6 +1426,22 @@ def _process_claimed_patients(
         else:
             mark_patient_complete(pg_conn, patient.patient_id)
     return metrics
+
+
+def _apply_source_patient_scope(
+    runtime: HapiMaterializationRuntime,
+    config: HapiMaterializationConfig,
+    patient_ids: list[str],
+) -> None:
+    if config.source_patient_pushdown:
+        if config.source_patient_pushdown_mode != "literal":
+            raise DQMConfigError(
+                "Only source_patient_pushdown_mode='literal' is currently supported"
+            )
+        runtime.source.set_patient_scope(patient_ids)
+    else:
+        runtime.source.clear_patient_scope()
+    runtime.evaluator.invalidate_prepared_statements()
 
 
 def _evaluate_materialized_measure(
@@ -1822,6 +1888,15 @@ def _parse_retention_policy(raw: dict[str, Any]) -> HapiRetentionPolicy:
         audit_days=_optional_positive_int(raw.get("audit_days"), "retention.audit_days"),
         run_days=_optional_positive_int(raw.get("run_days"), "retention.run_days"),
     )
+
+
+def _parse_source_patient_pushdown_mode(value: Any) -> str:
+    mode = str(value or "literal").lower()
+    if mode not in {"literal"}:
+        raise DQMConfigError(
+            "'worker.source_patient_pushdown_mode' must be 'literal'"
+        )
+    return mode
 
 
 def _optional_positive_int(value: Any, field_name: str) -> int | None:

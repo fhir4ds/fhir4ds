@@ -1,0 +1,45 @@
+# Example Mongo DQM materialization configuration for the local stack.
+
+mongo:
+  connection_string: mongodb://localhost:27018/?directConnection=true
+  database_name: fhir
+  materialization_database: fhir
+  source_schema:
+    database_name: fhir
+    base_version: 4_0_0
+    collection_strategy: per_resource
+    resource_types:
+      - Patient
+      - Observation
+      - MeasureReport
+    include_hidden: false
+
+worker:
+  batch_size: 25
+  source_patient_pushdown: true
+  poll_interval_seconds: 5
+  max_attempts: 3
+  retry_backoff_seconds: 30
+  processing_timeout_seconds: 900
+
+results:
+  persist_audit: false
+  persist_measure_report: true
+  publish_measure_report_to_mongo: true
+
+period:
+  start: "2026-01-01"
+  end: "2026-12-31"
+
+libraries:
+  paths: []
+
+terminology:
+  valuesets: []
+
+measures:
+  # Replace with a real local Measure JSON and matching CQL library path.
+  - id: CMS_EXAMPLE
+    path: ../../path/to/Measure-CMS_EXAMPLE.json
+    cql: ../../path/to/CMS_EXAMPLE.cql
+    version: "2026"

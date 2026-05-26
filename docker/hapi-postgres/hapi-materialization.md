@@ -58,6 +58,14 @@ fhir4ds dqm hapi status \
   --config docker/hapi-postgres/hapi-materialization.example.yaml
 ```
 
+Inspect the PostgreSQL plan used for patient-scoped source reads:
+
+```bash
+fhir4ds dqm hapi explain-scope \
+  --config docker/hapi-postgres/hapi-materialization.example.yaml \
+  --patient-id example-patient
+```
+
 For a staged non-production workflow, see `docs/hapi-pilot-runbook.md`.
 
 ## Artifact Sources
@@ -95,6 +103,29 @@ and a new row is inserted.
 when `persist_measure_report` or `publish_measure_report_to_hapi` is enabled.
 Publishing uses deterministic `PUT /MeasureReport/{id}` resource ids, making
 worker retries idempotent.
+
+## Patient-Scoped Source Reads
+
+Materialization defaults to `worker.source_patient_pushdown: true`. For each
+claimed queue batch, the worker recreates DuckDB's `resources` view with a
+patient filter before executing compiled measure SQL. With the installed HAPI
+decoded view this becomes a PostgreSQL predicate on `patient_ref`, so PostgreSQL
+can plan the scoped read before DuckDB evaluates the measure.
+
+Use `fhir4ds dqm hapi explain-scope` to inspect that PostgreSQL plan directly:
+
+```bash
+fhir4ds dqm hapi explain-scope \
+  --config docker/hapi-postgres/hapi-materialization.example.yaml \
+  --patient-id patient-1 \
+  --patient-id patient-2 \
+  --analyze
+```
+
+`explain-scope` requires `postgres.hapi_schema.decoded_view`, because the helper
+plans against the decoded current-resource view and its `patient_ref` column.
+Set `worker.source_patient_pushdown: false` only when troubleshooting or when a
+custom source layout cannot be scoped safely.
 
 ## Hosted-Artifact Smoke
 

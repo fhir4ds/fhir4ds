@@ -96,6 +96,11 @@ schema = HapiPostgresSchema(
 )
 ```
 
+Materialization workers can temporarily scope this source to a claimed patient
+batch. When `decoded_view` is configured, the generated `resources` view reads
+from the decoded PostgreSQL view with a `patient_ref` predicate, allowing
+PostgreSQL to reduce rows before DuckDB evaluates CQL.
+
 ## Patient Attribution
 
 The adapter maps `patient_ref` as a raw Patient ID:
