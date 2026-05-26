@@ -1,29 +1,34 @@
-"""
-Load test cases from FHIR bundles.
-"""
+"""Load test cases from FHIR bundles."""
+
+from __future__ import annotations
+
 import json
-from pathlib import Path
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .config import MeasureConfig
+
 
 @dataclass
 class TestCase:
     """A single test case with patient data and expected results."""
     patient_id: str
-    resources: List[Dict[str, Any]]  # Patient, Encounter, Observation, etc.
-    expected_results: Dict[str, bool]  # definition_name -> expected value
-    description: Optional[str] = None
-    measurement_period: Optional[Dict[str, str]] = None
+    resources: list[dict[str, Any]]  # Patient, Encounter, Observation, etc.
+    expected_results: dict[str, bool]  # definition_name -> expected value
+    description: str | None = None
+    measurement_period: dict[str, str] | None = None
 
 @dataclass
 class TestSuite:
     """Collection of test cases for a measure."""
     measure_id: str
-    test_cases: List[TestCase]
+    test_cases: list[TestCase]
     total_patients: int
-    measurement_period: Optional[Dict[str, str]] = None
+    measurement_period: dict[str, str] | None = None
 
-def load_test_suite(measure_config: "MeasureConfig") -> TestSuite:
+def load_test_suite(measure_config: MeasureConfig) -> TestSuite:
     """
     Load all test cases for a measure from test bundles.
 
@@ -68,8 +73,8 @@ def load_test_suite(measure_config: "MeasureConfig") -> TestSuite:
 
 def _parse_test_bundle(
     bundle_path: Path,
-    measure_config: "MeasureConfig"
-) -> Optional[TestCase]:
+    measure_config: MeasureConfig,
+) -> TestCase | None:
     """
     Parse a single test bundle file.
 
@@ -148,7 +153,7 @@ def _parse_test_bundle(
         measurement_period=measurement_period,
     )
 
-def _population_code_to_definition(code: str) -> Optional[str]:
+def _population_code_to_definition(code: str) -> str | None:
     """Map FHIR population codes to CQL definition names."""
     mapping = {
         "initial-population": "Initial Population",
@@ -163,8 +168,8 @@ def _population_code_to_definition(code: str) -> Optional[str]:
 
 def _parse_test_directory(
     test_dir: Path,
-    measure_config: "MeasureConfig",
-) -> Optional[TestCase]:
+    measure_config: MeasureConfig,
+) -> TestCase | None:
     """Parse a directory-based test case (2026 format).
 
     Each directory contains individual resource JSON files:
@@ -217,7 +222,7 @@ def _parse_test_directory(
     )
 
 
-def _extract_measurement_period_from_dir(test_dir: Path) -> Optional[Dict[str, str]]:
+def _extract_measurement_period_from_dir(test_dir: Path) -> dict[str, str] | None:
     """Extract measurement period from a directory-based test case."""
     for f in test_dir.glob("MeasureReport-*.json"):
         try:

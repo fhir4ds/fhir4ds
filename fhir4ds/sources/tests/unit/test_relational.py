@@ -18,18 +18,15 @@ pytest.mark.postgres and skipped by default.
 
 from __future__ import annotations
 
-import re
-
 import duckdb
 import pytest
 
 from fhir4ds.sources.base import SchemaValidationError, quote_identifier
 from fhir4ds.sources.relational import (
+    _POSTGRES_ATTACHMENT_NAME,
     PostgresSource,
     PostgresTableMapping,
-    _POSTGRES_ATTACHMENT_NAME,
 )
-
 
 # ---------------------------------------------------------------------------
 # PostgresTableMapping.to_select()
@@ -37,14 +34,14 @@ from fhir4ds.sources.relational import (
 
 class TestPostgresTableMappingToSelect:
     def _mapping(self, **overrides):
-        defaults = dict(
-            table_name="fhir_patients",
-            id_column="patient_id",
-            resource_type="Patient",
-            resource_column="fhir_json",
-            patient_ref_column="patient_id",
-            schema="public",
-        )
+        defaults = {
+            "table_name": "fhir_patients",
+            "id_column": "patient_id",
+            "resource_type": "Patient",
+            "resource_column": "fhir_json",
+            "patient_ref_column": "patient_id",
+            "schema": "public",
+        }
         defaults.update(overrides)
         return PostgresTableMapping(**defaults)
 
@@ -84,9 +81,6 @@ class TestPostgresTableMappingToSelect:
         sql = mapping.to_select("fhir4ds_pg")
         # Single quotes should be doubled for SQL safety, not injected
         assert "O''Brien''s Type" in sql
-        # Should NOT contain unescaped single quotes in the literal value
-        # (strip the outer wrapping quotes from the check)
-        inner = sql.split("'O")[1].split("'")[0] if "'O" in sql else ""
         # Verify no raw injection: the SQL should not contain '; DROP TABLE resources'
         assert "DROP TABLE" not in sql
 

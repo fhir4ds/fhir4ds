@@ -10,9 +10,9 @@ from .types import (
     GroupMap,
     PopulationEntry,
     PopulationMap,
-    SupportingEvidenceDef,
     StratifierComponent,
     StratifierEntry,
+    SupportingEvidenceDef,
 )
 
 _logger = logging.getLogger(__name__)
@@ -100,7 +100,8 @@ class MeasureParser:
 
     def _parse_group(self, group: dict, index: int) -> GroupMap:
         """Parse a single group element from a Measure."""
-        group_id = group.get("id", f"group-{index}")
+        source_group_id = group.get("id")
+        group_id = source_group_id or f"group-{index}"
         pop_basis = self._extract_population_basis(group)
         populations = [
             entry
@@ -116,6 +117,7 @@ class MeasureParser:
         return GroupMap(
             group_id=group_id,
             population_basis=pop_basis,
+            source_group_id=source_group_id,
             populations=populations,
             stratifiers=stratifiers,
         )
@@ -149,6 +151,7 @@ class MeasureParser:
             group_id=group_id,
             cql_expression=cql_expr,
             audit_persona=self.POPULATION_CODES[code],
+            source_population_id=pop.get("id"),
             supporting_evidence=evidence,
         )
 
@@ -237,6 +240,8 @@ class MeasureParser:
             if isinstance(value, dict):
                 expr = value.get("expression", "")
                 name = value.get("name", expr)
+                description = value.get("description")
+                code = self._extract_expression_code(value)
                 if not expr:
                     # Try nested extension for cqfExpression
                     _CQF_EXPRESSION_URL = "http://hl7.org/fhir/StructureDefinition/cqf-expression"
@@ -245,7 +250,29 @@ class MeasureParser:
                             val_expr = sub_ext.get("valueExpression", {})
                             expr = val_expr.get("expression", "")
                             name = val_expr.get("name", expr)
+                            description = val_expr.get("description")
+                            code = self._extract_expression_code(val_expr)
                             break
                 if expr:
-                    evidence.append(SupportingEvidenceDef(name=name, cql_expression=expr))
+                    evidence.append(
+                        SupportingEvidenceDef(
+                            name=name,
+                            cql_expression=expr,
+                            description=description,
+                            code=code,
+                        )
+                    )
         return evidence
+
+    def _extract_expression_code(self, expression: dict) -> dict | None:
+        """Extract optional expression-coding metadata as a CodeableConcept."""
+        if not isinstance(expression, dict):
+            return None
+        for ext in expression.get("extension", []):
+            if ext.get("url") != "http://hl7.org/fhir/StructureDefinition/expression-coding":
+                continue
+            if isinstance(ext.get("valueCodeableConcept"), dict):
+                return ext["valueCodeableConcept"]
+            if isinstance(ext.get("valueCoding"), dict):
+                return {"coding": [ext["valueCoding"]]}
+        return None

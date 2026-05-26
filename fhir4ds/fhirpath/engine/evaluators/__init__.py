@@ -256,7 +256,21 @@ def _unescape_fhirpath_string(value):
         if escaped == "u":
             hex_value = value[i + 2 : i + 6]
             if len(hex_value) == 4 and re.fullmatch(r"[0-9a-fA-F]{4}", hex_value):
-                result.append(chr(int(hex_value, 16)))
+                code_unit = int(hex_value, 16)
+                if (
+                    0xD800 <= code_unit <= 0xDBFF
+                    and i + 12 <= len(value)
+                    and value[i + 6 : i + 8] == r"\u"
+                ):
+                    low_hex = value[i + 8 : i + 12]
+                    if len(low_hex) == 4 and re.fullmatch(r"[0-9a-fA-F]{4}", low_hex):
+                        low_unit = int(low_hex, 16)
+                        if 0xDC00 <= low_unit <= 0xDFFF:
+                            code_point = 0x10000 + ((code_unit - 0xD800) << 10) + (low_unit - 0xDC00)
+                            result.append(chr(code_point))
+                            i += 12
+                            continue
+                result.append(chr(code_unit))
                 i += 6
             else:
                 result.append("u")
@@ -290,6 +304,12 @@ def quantity_literal(ctx, parentData, node):
     else:
         unit = None
 
+    if isinstance(unit, str) and len(unit) >= 2 and unit[0] == "'" and unit[-1] == "'":
+        unit_text = _unescape_fhirpath_string(unit[1:-1])
+        if unit_text == "":
+            raise FHIRPathError("Quantity literal unit must not be empty")
+        unit = f"'{unit_text}'"
+
     return [nodes.FP_Quantity(value, unit)]
 
 
@@ -299,7 +319,7 @@ def date_time_literal(ctx, parentData, node):
     result = nodes.FP_TimeBase.get_match_data(dateStr)
     if result is not None:
         return [result]
-    return []
+    raise FHIRPathError(f"Invalid Date/DateTime literal: {node['text']}")
 
 
 def time_literal(ctx, parentData, node):
@@ -308,7 +328,7 @@ def time_literal(ctx, parentData, node):
     result = nodes.FP_TimeBase.get_match_data(timeStr)
     if result is not None:
         return [result]
-    return []
+    raise FHIRPathError(f"Invalid Time literal: {node['text']}")
 
 
 def create_reduce_member_invocation(model, key):
@@ -571,7 +591,7 @@ def polarity_expression(ctx, parentData, node):
     if len(rtn) != 1:
         # Check if all items are non-numeric (for sort context)
         all_non_numeric = all(not util.is_number(v) for v in rtn)
-        if all_non_numeric and sign == "-":
+        if all_non_numeric and sign == "-" and ctx.get("_sort_expression"):
             from ...engine.invocations.collections import DescendingSortMarker
             return [DescendingSortMarker(rtn)]
         raise FHIRPathError("Unary " + sign + " can only be applied to an individual number.")
@@ -592,12 +612,12 @@ def polarity_expression(ctx, parentData, node):
             raise TypeError(
                 f"Unary {sign} cannot be applied to non-numeric value: {value!r}"
             )
-        # For non-numbers (like strings), return a DescendingSortMarker
-        # This is used in sort() to indicate descending order
-        if sign == "-":
+        # In sort() expressions, non-numeric unary minus marks descending
+        # order. Elsewhere, unary signs are only valid for numeric values.
+        if sign == "-" and ctx.get("_sort_expression"):
             from ...engine.invocations.collections import DescendingSortMarker
             return [DescendingSortMarker(value)]
-        return rtn
+        raise FHIRPathError(f"Unary {sign} cannot be applied to non-numeric value: {value!r}")
 
     if sign == "-":
         rtn[0] = -value

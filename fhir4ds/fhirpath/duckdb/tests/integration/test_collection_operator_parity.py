@@ -61,7 +61,18 @@ def test_collection_operators_match_cpp() -> None:
         for expression in expressions:
             cpp = con.execute(
                 "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_number(?::JSON, ?)",
-                [resource, expression, resource, expression, resource, expression, resource, expression, resource, expression],
+                [
+                    resource,
+                    expression,
+                    resource,
+                    expression,
+                    resource,
+                    expression,
+                    resource,
+                    expression,
+                    resource,
+                    expression,
+                ],
             ).fetchone()
             py = (
                 fhirpath_scalar(resource, expression),
@@ -98,8 +109,12 @@ def test_subsetting_integer_arguments_reject_non_integers_in_both_backends(monke
     cpp = _connection()
     py = _python_fallback_connection(monkeypatch)
     try:
-        assert cpp.execute("SELECT fhirpath(?::JSON, ?)", [resource, "a[1]"]).fetchone() == (["one"],)
-        assert py.execute("SELECT fhirpath(?::JSON, ?)", [resource, "a[1]"]).fetchone() == (["one"],)
+        assert cpp.execute("SELECT fhirpath(?::JSON, ?)", [resource, "a[1]"]).fetchone() == (
+            ["one"],
+        )
+        assert py.execute("SELECT fhirpath(?::JSON, ?)", [resource, "a[1]"]).fetchone() == (
+            ["one"],
+        )
         for expression in invalid_expressions:
             assert cpp.execute(
                 "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?)",
@@ -109,6 +124,80 @@ def test_subsetting_integer_arguments_reject_non_integers_in_both_backends(monke
                 "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?)",
                 [resource, expression, resource, expression],
             ).fetchone() == ([], None), expression
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_subsetting_and_combining_exact_arity_in_both_backends(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "a": ["zero", "one", "two"],
+            "b": ["two", "three"],
+            "ints": [1],
+        }
+    )
+    invalid_expressions = [
+        "a.first(0)",
+        "a.last(0)",
+        "a.single(0)",
+        "a.tail(0)",
+        "a.skip()",
+        "a.take()",
+        "a.skip(1, 2)",
+        "a.take(1, 2)",
+        "a.combine()",
+        "a.union()",
+        "a.intersect()",
+        "a.exclude()",
+        "a.combine(b, ints)",
+        "a.union(b, ints)",
+        "a.intersect(b, ints)",
+        "a.exclude(b, ints)",
+    ]
+
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in invalid_expressions:
+            assert cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone() == ([], None, False), expression
+            assert py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone() == ([], None, False), expression
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_subsetting_empty_count_arguments_are_valid_in_both_backends(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "a": ["zero", "one", "two"],
+        }
+    )
+    expressions = [
+        "a.skip({})",
+        "a.take({})",
+    ]
+
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in expressions:
+            assert cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone() == ([], None, True), expression
+            assert py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone() == ([], None, True), expression
     finally:
         cpp.close()
         py.close()
@@ -139,6 +228,55 @@ def test_membership_singleton_errors_are_resilient_in_public_duckdb_udfs(monkeyp
                 "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
                 [resource, expression, resource, expression, resource, expression],
             ).fetchone() == ([], None, None)
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_membership_literal_union_singleton_errors_in_both_validators(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "arr": [1, 2],
+            "dates": ["2012", "2013"],
+        }
+    )
+    invalid_expressions = [
+        "(1 | 2) in arr",
+        "arr contains (1 | 2)",
+        "(@2012 | @2013) in dates",
+        "dates contains ('2012' | '2013')",
+    ]
+    valid_expressions = [
+        "(1 | 1) in arr",
+        "(1 | 1.0) in arr",
+        "(1 | {}) in arr",
+        "{} in arr",
+        "arr contains (1 | 1)",
+        "arr contains (1 | 1.0)",
+        "arr contains (1 | {})",
+        "arr contains {}",
+    ]
+
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in invalid_expressions:
+            assert cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone() == ([], None, None, False), expression
+            assert py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone() == ([], None, None, False), expression
+        for expression in valid_expressions:
+            assert cpp.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (
+                True,
+            ), expression
+            assert py.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (
+                True,
+            ), expression
     finally:
         cpp.close()
         py.close()
@@ -183,14 +321,20 @@ def test_set_operators_use_numeric_equality_for_json_ints_and_reals(monkeypatch)
     py = _python_fallback_connection(monkeypatch)
     try:
         for expression, expected in expectations.items():
-            assert cpp.execute(
-                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?)",
-                [resource, expression, resource, expression],
-            ).fetchone() == expected
-            assert py.execute(
-                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?)",
-                [resource, expression, resource, expression],
-            ).fetchone() == expected
+            assert (
+                cpp.execute(
+                    "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                    [resource, expression, resource, expression],
+                ).fetchone()
+                == expected
+            )
+            assert (
+                py.execute(
+                    "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                    [resource, expression, resource, expression],
+                ).fetchone()
+                == expected
+            )
     finally:
         cpp.close()
         py.close()
@@ -213,14 +357,20 @@ def test_membership_and_contains_use_temporal_equality_in_both_backends(monkeypa
     py = _python_fallback_connection(monkeypatch)
     try:
         for expression, expected in expectations.items():
-            assert cpp.execute(
-                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
-                [resource, expression, resource, expression, resource, expression],
-            ).fetchone() == expected
-            assert py.execute(
-                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
-                [resource, expression, resource, expression, resource, expression],
-            ).fetchone() == expected
+            assert (
+                cpp.execute(
+                    "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                    [resource, expression, resource, expression, resource, expression],
+                ).fetchone()
+                == expected
+            )
+            assert (
+                py.execute(
+                    "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                    [resource, expression, resource, expression, resource, expression],
+                ).fetchone()
+                == expected
+            )
     finally:
         cpp.close()
         py.close()
@@ -261,14 +411,20 @@ def test_collection_operators_use_quantity_equality_for_fhir_quantity_paths(monk
     py = _python_fallback_connection(monkeypatch)
     try:
         for expression, expected in expectations.items():
-            assert cpp.execute(
-                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
-                [resource, expression, resource, expression, resource, expression],
-            ).fetchone() == expected
-            assert py.execute(
-                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
-                [resource, expression, resource, expression, resource, expression],
-            ).fetchone() == expected
+            assert (
+                cpp.execute(
+                    "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                    [resource, expression, resource, expression, resource, expression],
+                ).fetchone()
+                == expected
+            )
+            assert (
+                py.execute(
+                    "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?)",
+                    [resource, expression, resource, expression, resource, expression],
+                ).fetchone()
+                == expected
+            )
     finally:
         cpp.close()
         py.close()

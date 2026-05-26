@@ -1,8 +1,12 @@
 """Tests for MeasureEvaluator."""
 
-import pytest
-import pandas as pd
+import json
 
+import numpy as np
+import pandas as pd
+import pytest
+
+import fhir4ds
 from fhir4ds.dqm.evaluator import MeasureEvaluator
 from fhir4ds.dqm.models import MeasureResult
 from fhir4ds.dqm.types import (
@@ -13,6 +17,7 @@ from fhir4ds.dqm.types import (
     PopulationMap,
     StratifierComponent,
     StratifierEntry,
+    SupportingEvidenceDef,
 )
 
 
@@ -77,6 +82,137 @@ def _make_measure_result():
         measure_url=pop_map.cql_library_ref,
         pop_map=pop_map,
     )
+
+
+def test_evaluator_loads_resolver_valuesets_once():
+    conn = fhir4ds.create_connection()
+    evaluator = MeasureEvaluator(conn)
+
+    class Resolver:
+        def __init__(self):
+            self.calls = 0
+
+        def resolve_valuesets_for_cql(self, cql_text):
+            self.calls += 1
+            return [
+                {
+                    "resourceType": "ValueSet",
+                    "id": "vs",
+                    "url": "http://example.com/ValueSet/resolved",
+                    "expansion": {
+                        "contains": [{"system": "http://loinc.org", "code": "1234-5"}]
+                    },
+                }
+            ]
+
+    resolver = Resolver()
+
+    evaluator._load_resolved_valuesets(resolver, "library Test")
+    evaluator._load_resolved_valuesets(resolver, "library Test")
+
+    count = conn.execute(
+        "SELECT COUNT(*) FROM valueset_codes WHERE valueset_url = ?",
+        ["http://example.com/ValueSet/resolved"],
+    ).fetchone()[0]
+    assert count == 1
+    assert resolver.calls == 2
+
+
+def _make_exclusion_pop_map() -> PopulationMap:
+    return PopulationMap(
+        measure_id="test-measure",
+        cql_library_ref="http://example.com/Library/Test",
+        groups=[
+            GroupMap(
+                group_id="group-0",
+                population_basis="boolean",
+                populations=[
+                    PopulationEntry(
+                        "initial-population", "group-0", "Initial Population",
+                        AuditPersona.INCLUSION,
+                    ),
+                    PopulationEntry(
+                        "denominator", "group-0", "Denominator",
+                        AuditPersona.INCLUSION,
+                    ),
+                    PopulationEntry(
+                        "denominator-exclusion", "group-0", "Denominator Exclusion",
+                        AuditPersona.EXCLUSION,
+                    ),
+                    PopulationEntry(
+                        "denominator-exception", "group-0", "Denominator Exception",
+                        AuditPersona.EXCLUSION,
+                    ),
+                    PopulationEntry(
+                        "numerator", "group-0", "Numerator",
+                        AuditPersona.NUMERATOR,
+                    ),
+                    PopulationEntry(
+                        "numerator-exclusion", "group-0", "Numerator Exclusion",
+                        AuditPersona.EXCLUSION,
+                    ),
+                ],
+            )
+        ],
+    )
+
+
+def test_audit_narrative_uses_effective_denominator_exception_mask():
+    evaluator = MeasureEvaluator(None)
+    pop_map = _make_exclusion_pop_map()
+    df = pd.DataFrame({
+        "patient_id": ["p1"],
+        "initial_population": [{"result": True, "evidence": []}],
+        "denominator": [{"result": True, "evidence": []}],
+        "denominator_exclusion": [{"result": False, "evidence": []}],
+        "denominator_exception": [{
+            "result": True,
+            "evidence": [{"operator": "exists", "target": "Condition/except"}],
+        }],
+        "numerator": [{"result": True, "evidence": []}],
+        "numerator_exclusion": [{"result": False, "evidence": []}],
+    })
+
+    pruned = evaluator._prune_population_evidence(df, pop_map)
+    cell = pruned.loc[0, "denominator_exception"]
+
+    assert cell["result"] is True
+    assert cell["effective_result"] is False
+    assert cell["evidence"] == []
+
+    enriched = evaluator._add_narratives(pruned, pop_map, AuditMode.FULL)
+    narrative = " ".join(enriched.loc[0, "denominator_exception"]["narrative"])
+    assert "No exception applied" in narrative
+    assert "Exception applied" not in narrative
+
+
+def test_audit_narrative_uses_effective_numerator_exclusion_mask():
+    evaluator = MeasureEvaluator(None)
+    pop_map = _make_exclusion_pop_map()
+    df = pd.DataFrame({
+        "patient_id": ["p1"],
+        "initial_population": [{"result": True, "evidence": []}],
+        "denominator": [{"result": True, "evidence": []}],
+        "denominator_exclusion": [{"result": False, "evidence": []}],
+        "denominator_exception": [{"result": False, "evidence": []}],
+        "numerator": [{"result": False, "evidence": []}],
+        "numerator_exclusion": [{
+            "result": True,
+            "evidence": [{"operator": "exists", "target": "Condition/nex"}],
+        }],
+    })
+
+    pruned = evaluator._prune_population_evidence(df, pop_map)
+    cell = pruned.loc[0, "numerator_exclusion"]
+
+    assert cell["result"] is True
+    assert cell["effective_result"] is False
+    assert cell["evidence"] == []
+
+    enriched = evaluator._add_narratives(pruned, pop_map, AuditMode.FULL)
+    narrative = " ".join(enriched.loc[0, "numerator_exclusion"]["narrative"])
+    assert "Not excluded from numerator" in narrative
+    assert "Excluded from numerator" not in narrative
 
 
 def _make_stratified_measure_result():
@@ -206,6 +342,25 @@ class TestMeasureEvaluatorValidation:
         assert summary["numerator_final"] == 1
         assert summary["performance_rate"] == 0.5  # 1/2
         assert summary["total_patients"] == 4
+
+    def test_summary_report_handles_array_population_values(self):
+        """Collection-valued population cells should not raise truth-value errors."""
+        df = pd.DataFrame(
+            {
+                "patient_id": ["P1", "P2"],
+                "initial_population": [np.array([]), np.array(["enc-1"])],
+                "denominator": [[], ["enc-1"]],
+                "numerator": [[], ["enc-1"]],
+            }
+        )
+        evaluator = MeasureEvaluator(conn=None)
+
+        summary = evaluator.summary_report(df)
+
+        assert summary["initial_population"] == 1
+        assert summary["denominator"] == 1
+        assert summary["numerator"] == 1
+        assert summary["total_patients"] == 2
 
     def test_summary_report_applies_denominator_exclusion_before_numerator(self):
         """Excluded denominator patients must not contribute to numerator rate."""
@@ -362,6 +517,144 @@ class TestToMeasureReport:
         assert "initial-population" in pop_codes
         assert "denominator" in pop_codes
         assert "numerator" in pop_codes
+
+    def test_to_measure_report_preserves_authored_group_id(self):
+        """MeasureReport group should link back to authored Measure.group.id."""
+        evaluator = MeasureEvaluator(conn=None)
+        mr = _make_measure_result()
+        mr.pop_map.groups[0].source_group_id = "primary"
+
+        report = evaluator.to_measure_report(
+            mr, period_start="2024-01-01", period_end="2024-12-31"
+        )
+
+        assert report["group"][0]["id"] == "primary"
+
+    def test_individual_measure_report_includes_supporting_evidence(self):
+        """Individual MeasureReport should serialize authored supporting evidence."""
+        evaluator = MeasureEvaluator(conn=None)
+        mr = _make_measure_result()
+        pop = mr.pop_map.groups[0].populations[1]
+        pop.source_population_id = "denominator"
+        pop.supporting_evidence = [
+            SupportingEvidenceDef(
+                name="QualifyingEncounter",
+                cql_expression="Qualifying Encounter",
+                description="The encounter that qualified the patient.",
+                code={
+                    "coding": [
+                        {
+                            "system": "http://example.org/evidence",
+                            "code": "qualifying-encounter",
+                        }
+                    ]
+                },
+            )
+        ]
+        mr.dataframe = pd.DataFrame(
+            {
+                "patient_id": ["P1"],
+                "initial_population": [True],
+                "denominator": [True],
+                "numerator": [False],
+                "evidence_QualifyingEncounter": [
+                    {"resourceType": "Encounter", "id": "enc-1"}
+                ],
+            }
+        )
+
+        report = evaluator.to_measure_report(
+            mr,
+            period_start="2024-01-01",
+            period_end="2024-12-31",
+            report_type="individual",
+        )
+
+        assert report["subject"]["reference"] == "Patient/P1"
+        assert report["meta"]["profile"] == [
+            "http://hl7.org/fhir/us/davinci-deqm/StructureDefinition/indv-measurereport-deqm"
+        ]
+        denominator = next(
+            population
+            for population in report["group"][0]["population"]
+            if population["code"]["coding"][0]["code"] == "denominator"
+        )
+        support = next(
+            ext
+            for ext in denominator["extension"]
+            if ext["url"] == "http://hl7.org/fhir/StructureDefinition/cqf-supportingEvidence"
+        )
+        assert {"url": "name", "valueCode": "QualifyingEncounter"} in support["extension"]
+        assert {
+            "url": "value",
+            "valueReference": {"reference": "Encounter/enc-1"},
+        } in support["extension"]
+
+    def test_individual_measure_report_unwraps_audit_supporting_evidence(self):
+        """Supporting evidence should not serialize internal audit trace fields."""
+        evaluator = MeasureEvaluator(conn=None)
+        mr = _make_measure_result()
+        pop = mr.pop_map.groups[0].populations[1]
+        pop.supporting_evidence = [
+            SupportingEvidenceDef(
+                name="HasBirthDate",
+                cql_expression="Has Birth Date",
+            )
+        ]
+        mr.dataframe = pd.DataFrame(
+            {
+                "patient_id": ["P1"],
+                "initial_population": [True],
+                "denominator": [True],
+                "numerator": [False],
+                "evidence_HasBirthDate": [
+                    {
+                        "result": True,
+                        "evidence": [
+                            {
+                                "target": "Patient/P1",
+                                "attribute": "birthDate",
+                                "trace": ["Has Birth Date"],
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+        report = evaluator.to_measure_report(
+            mr,
+            period_start="2024-01-01",
+            period_end="2024-12-31",
+            report_type="individual",
+        )
+
+        denominator = next(
+            population
+            for population in report["group"][0]["population"]
+            if population["code"]["coding"][0]["code"] == "denominator"
+        )
+        support = next(
+            ext
+            for ext in denominator["extension"]
+            if ext["url"] == "http://hl7.org/fhir/StructureDefinition/cqf-supportingEvidence"
+        )
+        assert {"url": "value", "valueBoolean": True} in support["extension"]
+        assert "trace" not in json.dumps(support)
+
+    def test_individual_measure_report_requires_one_patient(self):
+        """Individual MeasureReport should not silently summarize multiple patients."""
+        evaluator = MeasureEvaluator(conn=None)
+        mr = _make_measure_result()
+
+        from fhir4ds.dqm.errors import DQMError
+        with pytest.raises(DQMError, match="exactly one patient"):
+            evaluator.to_measure_report(
+                mr,
+                period_start="2024-01-01",
+                period_end="2024-12-31",
+                report_type="individual",
+            )
 
     def test_to_measure_report_legacy_dataframe(self):
         """to_measure_report should still work with a plain DataFrame (legacy)."""

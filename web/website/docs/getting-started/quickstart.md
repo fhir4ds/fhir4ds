@@ -62,6 +62,17 @@ result = fhir4ds.evaluate_measure(
 print(result.df())
 ```
 
+For production DQM batch runs that start from FHIR `Measure` resources and write
+FHIR `MeasureReport` output, use the CLI:
+
+```bash
+fhir4ds dqm run --config dqm-run.json
+```
+
+See the [Command Line Interface](/docs/user-guide/cli) and
+[DQM production recipes](/docs/examples/dqm-recipes) for end-to-end
+batch examples.
+
 ## SQL-on-FHIR ViewDefinitions
 
 Flatten complex FHIR structures into standard tabular data:

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fhir4ds-v2"
-version = "0.0.6"
+version = "0.0.7"
 description = "FHIR for Data Science — unified package for FHIRPath, CQL, and SQL-on-FHIR analytics"
 readme = "README.md"
 license = {text = "AGPL-3.0-only"}
@@ -32,12 +32,17 @@ dependencies = [
     "pyarrow>=14.0.0",
     "orjson>=3.9.0",
     "pint>=0.21.0",
+    "PyYAML>=6.0",
     "numpy",
 ]
 
 [project.optional-dependencies]
 measures = [
     "pandas",
+]
+hapi = [
+    "pandas",
+    "psycopg[binary]>=3.1",
 ]
 dev = [
     "pytest>=7.0.0",
@@ -51,6 +56,9 @@ Homepage = "https://fhir4ds.com"
 Documentation = "https://fhir4ds.com/docs/getting-started/installation"
 Repository = "https://github.com/fhir4ds/fhir4ds"
 Issues = "https://github.com/fhir4ds/fhir4ds/issues"
+
+[project.scripts]
+fhir4ds = "fhir4ds.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["fhir4ds"]
@@ -98,6 +106,8 @@ ignore_missing_imports = true
 [tool.ruff]
 target-version = "py310"
 line-length = 100
+
+[tool.ruff.lint]
 select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
@@ -112,7 +122,7 @@ ignore = [
     "B008",  # function call in default argument
 ]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["fhir4ds"]
 
 [tool.black]

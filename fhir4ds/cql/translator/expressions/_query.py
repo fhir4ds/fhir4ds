@@ -1315,6 +1315,13 @@ class QueryMixin:
             self.context.let_variables[let_name] = let_expr_sql
             return
 
+        if (
+            getattr(self.context, "_building_function_promotion_cte", False)
+            and self._references_foreign_table_alias(let_expr_sql, alias)
+        ):
+            self.context.let_variables[let_name] = let_expr_sql
+            return
+
         # Fix outer-scope references in let_expr_sql.
         # Inside the CTE body, only {alias} is available as a table alias.
         # Expressions translated in the outer query scope may reference:
@@ -1368,6 +1375,35 @@ class QueryMixin:
         lookup = self._make_let_cte_lookup(let_cte_name, alias, match_resource=_has_resource)
         self.context.let_variables[let_name] = lookup
 
+    @staticmethod
+    def _references_foreign_table_alias(node: SQLExpression, allowed_alias: str) -> bool:
+        """Detect aliases that would be out of scope in a promoted let CTE."""
+        allowed = {allowed_alias.lower(), "_pt"}
+        stack = [node]
+        seen = set()
+        while stack:
+            current = stack.pop()
+            if current is None:
+                continue
+            current_id = id(current)
+            if current_id in seen:
+                continue
+            seen.add(current_id)
+            if isinstance(current, SQLQualifiedIdentifier):
+                if current.parts:
+                    alias = current.parts[0].lower()
+                    if alias not in allowed and not alias.startswith("_lt_"):
+                        return True
+                continue
+            if isinstance(current, (list, tuple)):
+                stack.extend(current)
+                continue
+            if not hasattr(current, "__dataclass_fields__"):
+                continue
+            for field_name in current.__dataclass_fields__:
+                stack.append(getattr(current, field_name, None))
+        return False
+
     def _try_set_op_source(self, src_expr, alias, node, usage):
         """Handle Query sources that are set operations (intersect/union/except).
 
@@ -1395,13 +1431,66 @@ class QueryMixin:
         if op_lower not in ('intersect', 'union', 'except'):
             return None
 
+        def _definition_has_resource_rows(name: str, visited: set[str] | None = None) -> bool:
+            """Return whether a definition is resource-row shaped, including forward refs."""
+            if visited is None:
+                visited = set()
+            if name in visited:
+                return False
+            visited.add(name)
+
+            meta = self.context.definition_meta.get(name)
+            if meta is not None:
+                return meta.has_resource and meta.shape == RowShape.RESOURCE_ROWS
+
+            ast_defs = getattr(self.context, "_definition_cql_asts", {})
+            cql_ast = ast_defs.get(name)
+            if cql_ast is None:
+                expr_defs = getattr(self.context, "expression_definitions", {})
+                cql_ast = expr_defs.get(name)
+                if hasattr(cql_ast, "expression"):
+                    cql_ast = cql_ast.expression
+            if cql_ast is None:
+                return False
+
+            def _expr_has_resource_rows(expr) -> bool:
+                if isinstance(expr, Retrieve):
+                    return True
+                if isinstance(expr, Identifier):
+                    return _definition_has_resource_rows(expr.name, visited)
+                if isinstance(expr, Property) and isinstance(expr.source, Identifier):
+                    prefixed = f"{expr.source.name}.{expr.path}"
+                    return _definition_has_resource_rows(prefixed, visited)
+                if isinstance(expr, QuerySource):
+                    return _expr_has_resource_rows(expr.expression)
+                if isinstance(expr, Query):
+                    if expr.return_clause is not None:
+                        ret_expr = getattr(expr.return_clause, "expression", expr.return_clause)
+                        sources = expr.source if isinstance(expr.source, list) else [expr.source]
+                        if isinstance(ret_expr, Identifier):
+                            for source in sources:
+                                if isinstance(source, QuerySource) and source.alias == ret_expr.name:
+                                    return _expr_has_resource_rows(source.expression)
+                        return False
+                    source = expr.source[0] if isinstance(expr.source, list) and expr.source else expr.source
+                    return _expr_has_resource_rows(source)
+                if isinstance(expr, BinaryExpression):
+                    nested_op = getattr(expr, "operator", "")
+                    if isinstance(nested_op, str) and nested_op.lower() in ("intersect", "union", "except"):
+                        return (
+                            _expr_has_resource_rows(expr.left)
+                            or _expr_has_resource_rows(expr.right)
+                        )
+                return False
+
+            return _expr_has_resource_rows(cql_ast)
+
         def _build_operand(expr_node):
             """Build a SELECT patient_id, resource FROM "CTE" subquery for a set operand."""
             if isinstance(expr_node, Identifier):
                 name = expr_node.name
                 if hasattr(self.context, '_definition_names') and name in self.context._definition_names:
-                    meta = self.context.definition_meta.get(name)
-                    if meta and meta.has_resource and meta.shape == RowShape.RESOURCE_ROWS:
+                    if _definition_has_resource_rows(name):
                         return SQLSubquery(query=SQLSelect(
                             columns=[
                                 SQLIdentifier(name="patient_id"),
@@ -3200,6 +3289,7 @@ class QueryMixin:
                     self.context.push_scope()
                     _saved_ra = self.context.resource_alias
                     _multi_return_sql = None
+                    _multi_return_alias_is_let = False
                     try:
                         for _sa, _, _scn, _ in _sec_infos:
                             self.context.add_alias(
@@ -3237,6 +3327,7 @@ class QueryMixin:
                         elif _multi_return_alias is not None and _multi_return_alias in self.context.let_variables:
                             # Return references a LET variable — use its translated SQL directly
                             _multi_return_sql = self.context.let_variables[_multi_return_alias]
+                            _multi_return_alias_is_let = True
                     finally:
                         self.context.resource_alias = _saved_ra
                         self.context.pop_scope()
@@ -3277,13 +3368,16 @@ class QueryMixin:
 
                     if _multi_return_sql is not None or _multi_return_alias is not None:
                         # Computed or alias return: CROSS JOIN all sources and project the return expression
-                        # Build: SELECT primary.patient_id, <return_expr> AS resource
+                        # Build: SELECT primary.patient_id, <return_expr> AS resource|value
                         #        FROM primary CROSS JOIN sec1 CROSS JOIN sec2 ...
                         #        WHERE conditions
-                        # Always use 'resource' as the column alias to maintain
-                        # consistency in UNIONs and downstream references.
-                        # The shape inference handles whether the value is treated
-                        # as JSON or scalar in the final SELECT.
+                        # Preserve the source column kind for alias returns so
+                        # scalar set/query results stay addressable as `value`.
+                        _multi_return_output_alias = "resource"
+                        if _multi_return_alias_is_let:
+                            _multi_return_output_alias = "value"
+                        elif _multi_return_ast is not None and not isinstance(_multi_return_ast, TupleExpression):
+                            _multi_return_output_alias = "value"
                         if _multi_return_sql is None:
                             # Alias return (e.g., `return GlucoseTest`): project that alias's correct column
                             # Determine if the alias's CTE uses 'resource' or 'value' column
@@ -3298,6 +3392,7 @@ class QueryMixin:
                                         _ret_col = self._get_definition_value_column(_scn)
                                         break
                             _multi_return_sql = SQLQualifiedIdentifier(parts=[_multi_return_alias, _ret_col])
+                            _multi_return_output_alias = _ret_col
 
                         _prim_from = source_expr.from_clause if isinstance(source_expr, SQLSelect) else (
                             SQLAlias(expr=source_expr, alias=alias) if alias else source_expr
@@ -3322,7 +3417,10 @@ class QueryMixin:
                             _full_cond = _prim_where
 
                         _columns = [
-                            SQLAlias(expr=SQLCast(expression=_multi_return_sql, target_type="VARCHAR"), alias="resource"),
+                            SQLAlias(
+                                expr=SQLCast(expression=_multi_return_sql, target_type="VARCHAR"),
+                                alias=_multi_return_output_alias,
+                            ),
                         ]
                         if not _all_list_sources:
                             _columns.insert(0, SQLQualifiedIdentifier(parts=[_outer_alias, "patient_id"]))
@@ -3562,13 +3660,15 @@ class QueryMixin:
                 self.context._alias_resource_types[alias] = alias_rt
 
             if not _already_registered:
-                # Don't store SQLUnion as a raw string - it will cause issues in scalar contexts
-                # Instead, mark it so property access can handle it specially
-                if isinstance(source_expr, SQLUnion):
-                    # For SQLUnion, we need to handle property access differently
-                    # Store a marker that indicates this is a union
-                    # Property access will need to apply fhirpath to each operand and COALESCE
-                    self.context.add_alias(alias, sql_expr="__UNION__", union_expr=source_expr)
+                # Query sources that are set operations become FROM aliases
+                # below. Register the AST here; once wrapped, table_alias will
+                # let property access target <alias>.resource directly.
+                if isinstance(source_expr, (SQLUnion, SQLIntersect, SQLExcept)):
+                    self.context.add_alias(
+                        alias,
+                        ast_expr=source_expr,
+                        cte_name=_alias_cte_name,
+                    )
                 elif isinstance(source_expr, SQLCase):
                     # Check if the SQLCase contains a SQLUnion in its THEN clauses
                     # If so, we need special handling - use type checking, NOT to_sql()
@@ -3740,7 +3840,12 @@ class QueryMixin:
                         alias=alias
                     )
                 )
-                self.context.add_alias(alias, table_alias=alias, cte_name=provisional_cte_name or alias)
+                self.context.add_alias(
+                    alias,
+                    table_alias=alias,
+                    cte_name=provisional_cte_name,
+                    ast_expr=source_expr,
+                )
             elif contains_placeholder(source_expr):
                 # Source contains unresolved placeholders. Extract the inner placeholder(s)
                 # and use them directly as FROM sources so Phase 3 can resolve them to CTE names.

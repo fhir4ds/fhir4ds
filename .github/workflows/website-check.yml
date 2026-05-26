@@ -1,0 +1,49 @@
+name: Website Check
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - "web/website/**"
+      - "docs/**"
+      - ".github/workflows/website-check.yml"
+  push:
+    branches: [dev]
+    paths:
+      - "web/website/**"
+      - "docs/**"
+      - ".github/workflows/website-check.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build website
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/website/package-lock.json
+
+      - name: Install website dependencies
+        working-directory: web/website
+        run: npm ci
+
+      - name: Build website
+        working-directory: web/website
+        run: npm run build
+        env:
+          NODE_ENV: production

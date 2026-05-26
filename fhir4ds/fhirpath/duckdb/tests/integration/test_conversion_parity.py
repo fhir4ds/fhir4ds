@@ -9,6 +9,7 @@ import duckdb
 from fhir4ds.fhirpath.duckdb import register_fhirpath
 from fhir4ds.fhirpath.duckdb.udf import (
     fhirpath_bool_udf,
+    fhirpath_is_valid_udf,
     fhirpath_json_udf,
     fhirpath_number_udf,
     fhirpath_scalar,
@@ -57,6 +58,117 @@ def test_decimal_string_does_not_convert_to_integer() -> None:
             assert cpp == expected
     finally:
         con.close()
+
+
+def test_boolean_and_integer_converts_reject_arguments(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "strTrue": "true",
+            "strInt": "1",
+        }
+    )
+    expressions = [
+        "'true'.convertsToBoolean(2)",
+        "'1'.convertsToInteger(2)",
+        "convertsToBoolean(strTrue)",
+        "convertsToInteger(strInt)",
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression in expressions:
+            params = [resource, expression, resource, expression, expression]
+            query = """
+                SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)
+            """
+            assert con.execute(query, params).fetchone() == ([], None, False)
+            assert fallback.execute(query, params).fetchone() == ([], None, False)
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_fp06_iif_and_conversion_signature_edges_match_python_fallback() -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "strYes": "yes",
+            "strInt": "1",
+        }
+    )
+    invalid_expressions = [
+        "iif(true)",
+        "iif(true, 'yes', 'no', 'extra')",
+        "iif(1|2, 'yes', 'no')",
+        "true.toBoolean(1)",
+        "'1'.toInteger(2)",
+        "strYes.convertsToBoolean(1)",
+        "'1'.convertsToInteger(2)",
+        "(true|false).toBoolean()",
+        "(1|2).toInteger()",
+        "(true|false).convertsToBoolean()",
+        "(1|2).convertsToInteger()",
+    ]
+    valid_lazy_expressions = {
+        "iif(true, 'safe', (1|2).toInteger())": (["safe"], '["safe"]', True),
+        "iif(false, (1|2).toInteger(), 'safe')": (["safe"], '["safe"]', True),
+        "iif({}, 'yes', 'no')": (["no"], '["no"]', True),
+    }
+
+    con = _connection()
+    try:
+        for expression in invalid_expressions:
+            cpp = con.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone()
+            py = (
+                fhirpath_scalar(resource, expression),
+                fhirpath_json_udf(resource, expression),
+                fhirpath_is_valid_udf(expression),
+            )
+            assert cpp == py == ([], None, False), expression
+
+        for expression, expected in valid_lazy_expressions.items():
+            cpp = con.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone()
+            py = (
+                fhirpath_scalar(resource, expression),
+                fhirpath_json_udf(resource, expression),
+                fhirpath_is_valid_udf(expression),
+            )
+            assert cpp == py == expected, expression
+    finally:
+        con.close()
+
+
+def test_fp06_explorer_iif_conversion_edges_match_forced_fallback(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Patient", "id": "p"})
+    cases = {
+        "iif('1'.convertsToInteger(), 'T', 'F')": (["T"], '["T"]', True),
+        "iif('+1'.convertsToInteger(), '+1'.toInteger(), 'bad')": (["1"], "[1]", True),
+        "-1.convertsToInteger()": ([], None, False),
+        "(-1).convertsToInteger()": (["true"], "[true]", True),
+        "('b'|'a').sort(-$this)": (["b", "a"], '["b","a"]', True),
+    }
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases.items():
+            params = [resource, expression, resource, expression, expression]
+            query = "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)"
+            assert con.execute(query, params).fetchone() == expected
+            assert fallback.execute(query, params).fetchone() == expected
+    finally:
+        con.close()
+        fallback.close()
 
 
 def test_date_datetime_and_decimal_conversion_match_cpp() -> None:
@@ -210,12 +322,12 @@ def test_date_datetime_conversions_reject_invalid_native_coercions(monkeypatch) 
     cases = {
         "yearInt.toDate()": ([], None, None, None, None, None),
         "yearInt.toDateTime()": ([], None, None, None, None, None),
-        "yearInt.convertsToDate()": (["false"], "false", "[false]", False, None, "false"),
-        "yearInt.convertsToDateTime()": (["false"], "false", "[false]", False, None, "false"),
+        "yearInt.convertsToDate()": (["false"], "false", "[false]", False, None, None),
+        "yearInt.convertsToDateTime()": (["false"], "false", "[false]", False, None, None),
         "badDtHour.toDate()": ([], None, None, None, None, None),
-        "badDtHour.convertsToDate()": (["false"], "false", "[false]", False, None, "false"),
+        "badDtHour.convertsToDate()": (["false"], "false", "[false]", False, None, None),
         "badDtText.toDate()": ([], None, None, None, None, None),
-        "badDtText.convertsToDate()": (["false"], "false", "[false]", False, None, "false"),
+        "badDtText.convertsToDate()": (["false"], "false", "[false]", False, None, None),
     }
 
     con = _connection()
@@ -259,6 +371,112 @@ def test_date_datetime_conversions_reject_invalid_native_coercions(monkeypatch) 
             ).fetchone()
             assert cpp == py
             assert cpp == expected
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_fp07_converters_reject_arguments_in_native_and_fallback(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "decimalInt": "42",
+            "validDate": "2015-02-04",
+            "validDateTime": "2015-02-04T14:34:28",
+        }
+    )
+    expressions = [
+        "'1'.toDecimal(2)",
+        "'2015'.toDate(2)",
+        "'2015'.toDateTime(2)",
+        "'1'.convertsToDecimal(2)",
+        "'2015'.convertsToDate(2)",
+        "'2015'.convertsToDateTime(2)",
+        "convertsToDecimal(decimalInt)",
+        "convertsToDate(validDate)",
+        "convertsToDateTime(validDateTime)",
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression in expressions:
+            query = "SELECT fhirpath(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)"
+            params = [resource, expression, resource, expression, expression]
+            assert con.execute(query, params).fetchone() == ([], None, False)
+            assert fallback.execute(query, params).fetchone() == ([], None, False)
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_fp07_temporal_literal_conversions_match_native_and_fallback(monkeypatch) -> None:
+    cases = {
+        "@2015.toDate()": (["2015"], "2015", "2015", None, True),
+        "@2015-02-04.toDateTime()": (["2015-02-04T"], "2015-02-04T", "2015-02-04", "2015-02-04T", True),
+        "@2015-02-04T14.toDate()": (["2015-02-04"], "2015-02-04", "2015-02-04", None, True),
+        "@2015-02-04T14.toDateTime()": (["2015-02-04T14"], "2015-02-04T14", "2015-02-04", "2015-02-04T14", True),
+    }
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases.items():
+            query = """
+                SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?),
+                       fhirpath_date(?::JSON, ?), fhirpath_timestamp(?::JSON, ?),
+                       fhirpath_is_valid(?)
+            """
+            params = [
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                expression,
+            ]
+            assert con.execute(query, params).fetchone() == expected
+            assert fallback.execute(query, params).fetchone() == expected
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_fp07_decimal_rejects_temporal_and_multi_item_edges(monkeypatch) -> None:
+    cases = {
+        "@2015.toDecimal()": ([], None, None, None, True),
+        "@2015.convertsToDecimal()": (["false"], "false", "[false]", False, True),
+        "(1|2).toDecimal()": ([], None, None, None, False),
+    }
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases.items():
+            query = """
+                SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?),
+                       fhirpath_json(?::JSON, ?), fhirpath_bool(?::JSON, ?),
+                       fhirpath_is_valid(?)
+            """
+            params = [
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                RESOURCE,
+                expression,
+                expression,
+            ]
+            assert con.execute(query, params).fetchone() == expected
+            assert fallback.execute(query, params).fetchone() == expected
     finally:
         con.close()
         fallback.close()
@@ -394,13 +612,13 @@ def test_bool_wrapper_rejects_string_conversion_numeric_text(monkeypatch) -> Non
 def test_quantity_string_parser_edges_match_python_fallback(monkeypatch) -> None:
     resource = json.dumps({"resourceType": "Observation", "id": "o"})
     cases = {
-        "'1 wk'.convertsToQuantity()": (["false"], "false", "[false]", False, "false"),
+        "'1 wk'.convertsToQuantity()": (["false"], "false", "[false]", False, None),
         "'1 wk'.toQuantity()": ([], None, None, None, None),
-        "' 1'.convertsToQuantity()": (["false"], "false", "[false]", False, "false"),
+        "' 1'.convertsToQuantity()": (["false"], "false", "[false]", False, None),
         "' 1'.toQuantity()": ([], None, None, None, None),
-        r"'1 \'mg'.convertsToQuantity()": (["false"], "false", "[false]", False, "false"),
+        r"'1 \'mg'.convertsToQuantity()": (["false"], "false", "[false]", False, None),
         r"'1 \'mg'.toQuantity()": ([], None, None, None, None),
-        r"'1 \'\''.convertsToQuantity()": (["false"], "false", "[false]", False, "false"),
+        r"'1 \'\''.convertsToQuantity()": (["false"], "false", "[false]", False, None),
         r"'1 \'\''.toQuantity()": ([], None, None, None, None),
     }
 
@@ -427,11 +645,11 @@ def test_quantity_string_parser_edges_match_python_fallback(monkeypatch) -> None
 def test_quantity_conversion_unit_argument_matches_python_fallback(monkeypatch) -> None:
     resource = json.dumps({"resourceType": "Observation", "id": "o"})
     cases = {
-        "1.convertsToQuantity('kg')": (["false"], False, "[false]", "false"),
-        "1.convertsToQuantity('1')": (["true"], True, "[true]", "true"),
-        r"'1 \'kg\''.convertsToQuantity('kg')": (["true"], True, "[true]", "true"),
-        r"'1 \'kg\''.convertsToQuantity('g')": (["true"], True, "[true]", "true"),
-        r"'1 \'kg\''.convertsToQuantity('s')": (["false"], False, "[false]", "false"),
+        "1.convertsToQuantity('kg')": (["false"], False, "[false]", None),
+        "1.convertsToQuantity('1')": (["true"], True, "[true]", None),
+        r"'1 \'kg\''.convertsToQuantity('kg')": (["true"], True, "[true]", None),
+        r"'1 \'kg\''.convertsToQuantity('g')": (["true"], True, "[true]", None),
+        r"'1 \'kg\''.convertsToQuantity('s')": (["false"], False, "[false]", None),
         r"'1 \'kg\''.toQuantity('g')": (["1000 'g'"], None, '[{"value":1000,"unit":"g"}]', "1000 'g'"),
     }
 
@@ -450,6 +668,155 @@ def test_quantity_conversion_unit_argument_matches_python_fallback(monkeypatch) 
             ).fetchone()
             assert cpp == py
             assert cpp == expected
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_resource_quantity_conversion_surfaces_match_python_fallback(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "valueQuantity": {
+                "value": 5,
+                "unit": "mg",
+                "system": "http://unitsofmeasure.org",
+                "code": "mg",
+            },
+            "invalidQuantity": {
+                "value": "abc",
+                "unit": "mg",
+                "system": "http://unitsofmeasure.org",
+                "code": "mg",
+            },
+        }
+    )
+    cases = {
+        "value.toQuantity()": (["5 'mg'"], "5 'mg'", None, "5 'mg'", True),
+        "value.convertsToQuantity()": (["true"], "true", True, None, True),
+        "value.toQuantity('g')": (["0.005 'g'"], "0.005 'g'", None, "0.005 'g'", True),
+        "value.convertsToQuantity('g')": (["true"], "true", True, None, True),
+        "value.toString()": (["5 'mg'"], "5 'mg'", None, None, True),
+        "value.convertsToString()": (["true"], "true", True, None, True),
+        "invalidQuantity.toQuantity()": ([], None, None, None, True),
+        "invalidQuantity.convertsToQuantity()": (["false"], "false", False, None, True),
+    }
+    query = """
+        SELECT
+          fhirpath(?::JSON, ?),
+          fhirpath_text(?::JSON, ?),
+          fhirpath_bool(?::JSON, ?),
+          fhirpath_quantity(?::JSON, ?),
+          fhirpath_is_valid(?)
+    """
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression, expected in cases.items():
+            params = [
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                expression,
+            ]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py
+            assert cpp == expected
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_fp08_conversion_signatures_and_singleton_errors_match_fallback(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "s": "abc",
+            "time_min": "14:30",
+        }
+    )
+    valid_expressions = [
+        "s.toString()",
+        "time_min.toTime()",
+        "1.toQuantity('1')",
+        "1.convertsToQuantity('1')",
+        "s.convertsToString()",
+        "time_min.convertsToTime()",
+    ]
+    invalid_expressions = [
+        "s.toString(1)",
+        "time_min.toTime(1)",
+        "1.toQuantity('1','g')",
+        "1.convertsToQuantity('1','g')",
+        "1.toQuantity(1)",
+        "1.convertsToQuantity(1)",
+        "1.toQuantity(('1'|'g'))",
+        "1.convertsToQuantity(('1'|'g'))",
+        "s.convertsToString(1)",
+        "time_min.convertsToTime(1)",
+        "convertsToString(s)",
+        "convertsToTime(time_min)",
+        "(1|2).toString()",
+        "(1|2).convertsToQuantity()",
+    ]
+    query = """
+        SELECT
+          fhirpath(?::JSON, ?),
+          fhirpath_text(?::JSON, ?),
+          fhirpath_json(?::JSON, ?),
+          fhirpath_bool(?::JSON, ?),
+          fhirpath_quantity(?::JSON, ?),
+          fhirpath_is_valid(?)
+    """
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = _connection()
+    try:
+        for expression in valid_expressions:
+            params = [
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                expression,
+            ]
+            cpp = con.execute(query, params).fetchone()
+            py = fallback.execute(query, params).fetchone()
+            assert cpp == py
+            assert cpp[-1] is True
+
+        for expression in invalid_expressions:
+            params = [
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                expression,
+            ]
+            expected = ([], None, None, None, None, False)
+            assert con.execute(query, params).fetchone() == expected
+            assert fallback.execute(query, params).fetchone() == expected
     finally:
         con.close()
         fallback.close()

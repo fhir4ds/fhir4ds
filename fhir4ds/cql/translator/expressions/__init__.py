@@ -376,10 +376,18 @@ class ExpressionTranslator(
         if cql_ast is not None:
             from ...parser.ast_nodes import (
                 Query as CQLQuery, FunctionRef, Retrieve, Identifier as CQLIdentifier,
-                BinaryExpression as CQLBinaryExpr,
+                BinaryExpression as CQLBinaryExpr, QuerySource, Property, TupleExpression,
             )
             # Direct Query with return clause
             if isinstance(cql_ast, CQLQuery) and cql_ast.return_clause is not None:
+                ret_expr = getattr(cql_ast.return_clause, "expression", cql_ast.return_clause)
+                if isinstance(ret_expr, CQLIdentifier):
+                    sources = cql_ast.source if isinstance(cql_ast.source, list) else [cql_ast.source]
+                    for source in sources:
+                        if isinstance(source, QuerySource) and source.alias == ret_expr.name:
+                            return self._trace_source_column(name, set(_visited) - {name})
+                if isinstance(ret_expr, TupleExpression):
+                    return "resource"
                 return "value"
             # FunctionRef (First/Last) wrapping a Query with return clause
             if isinstance(cql_ast, FunctionRef):
@@ -390,6 +398,14 @@ class ExpressionTranslator(
                         outer_q = args[0]
                         # Direct return clause on the query
                         if outer_q.return_clause is not None:
+                            ret_expr = getattr(outer_q.return_clause, "expression", outer_q.return_clause)
+                            if isinstance(ret_expr, CQLIdentifier):
+                                sources = outer_q.source if isinstance(outer_q.source, list) else [outer_q.source]
+                                for source in sources:
+                                    if isinstance(source, QuerySource) and source.alias == ret_expr.name:
+                                        return self._trace_source_column(name, set(_visited) - {name})
+                            if isinstance(ret_expr, TupleExpression):
+                                return "resource"
                             return "value"
                         # Return clause on the inner query (source of outer)
                         inner_src = outer_q.source
@@ -411,7 +427,39 @@ class ExpressionTranslator(
             if isinstance(cql_ast, CQLBinaryExpr):
                 op = getattr(cql_ast, 'operator', '').lower()
                 if op in ('union', 'intersect', 'except'):
-                    return "resource"
+                    def _expr_value_column(expr) -> str:
+                        if isinstance(expr, CQLIdentifier):
+                            return self._get_definition_value_column(expr.name, _visited)
+                        if isinstance(expr, Retrieve):
+                            return "resource"
+                        if isinstance(expr, Property) and isinstance(expr.source, CQLIdentifier):
+                            return self._get_definition_value_column(
+                                f"{expr.source.name}.{expr.path}", _visited
+                            )
+                        if isinstance(expr, CQLQuery):
+                            if expr.return_clause is not None:
+                                ret_expr = getattr(expr.return_clause, "expression", expr.return_clause)
+                                if isinstance(ret_expr, CQLIdentifier):
+                                    sources = expr.source if isinstance(expr.source, list) else [expr.source]
+                                    for source in sources:
+                                        if isinstance(source, QuerySource) and source.alias == ret_expr.name:
+                                            return _expr_value_column(source.expression)
+                                return "value"
+                            source = expr.source[0] if isinstance(expr.source, list) and expr.source else expr.source
+                            if isinstance(source, QuerySource):
+                                return _expr_value_column(source.expression)
+                            return _expr_value_column(source)
+                        if isinstance(expr, CQLBinaryExpr):
+                            nested_op = getattr(expr, 'operator', '').lower()
+                            if nested_op in ('union', 'intersect', 'except'):
+                                left_col = _expr_value_column(expr.left)
+                                right_col = _expr_value_column(expr.right)
+                                return "resource" if "resource" in (left_col, right_col) else "value"
+                        return "value"
+
+                    left_col = _expr_value_column(cql_ast.left)
+                    right_col = _expr_value_column(cql_ast.right)
+                    return "resource" if "resource" in (left_col, right_col) else "value"
             # Non-retrieve expressions (scalars, booleans) use value column
             if not isinstance(cql_ast, (Retrieve, CQLQuery)):
                 return "value"
@@ -439,7 +487,7 @@ class ExpressionTranslator(
 
         from ...parser.ast_nodes import (
             Query as CQLQuery, Retrieve, Identifier as CQLIdentifier,
-            QuerySource, Property, QualifiedIdentifier, BinaryExpression,
+            QuerySource, Property, QualifiedIdentifier, BinaryExpression, TupleExpression,
         )
 
         # Check CQL AST
@@ -465,11 +513,58 @@ class ExpressionTranslator(
                 return "resource"
             return self._trace_source_column(cql_ast.name, _visited)
 
-        # Union/intersect/except → resource if either side is resource
+        def _trace_expr_column(expr) -> str:
+            if isinstance(expr, Retrieve):
+                return "resource"
+            if isinstance(expr, CQLIdentifier):
+                ref_meta = self.context.definition_meta.get(expr.name)
+                if ref_meta and ref_meta.has_resource:
+                    return "resource"
+                return self._trace_source_column(expr.name, _visited)
+            if isinstance(expr, Property) and isinstance(expr.source, CQLIdentifier):
+                prefixed = f"{expr.source.name}.{expr.path}"
+                ref_meta = self.context.definition_meta.get(prefixed)
+                if ref_meta and ref_meta.has_resource:
+                    return "resource"
+                return self._trace_source_column(prefixed, _visited)
+            if isinstance(expr, QualifiedIdentifier) and expr.parts:
+                prefixed = ".".join(expr.parts)
+                ref_meta = self.context.definition_meta.get(prefixed)
+                if ref_meta and ref_meta.has_resource:
+                    return "resource"
+                return self._trace_source_column(prefixed, _visited)
+            if isinstance(expr, CQLQuery):
+                if expr.return_clause is not None:
+                    ret_expr = getattr(expr.return_clause, "expression", expr.return_clause)
+                    if isinstance(ret_expr, CQLIdentifier):
+                        sources = expr.source if isinstance(expr.source, list) else [expr.source]
+                        for source in sources:
+                            if isinstance(source, QuerySource) and source.alias == ret_expr.name:
+                                return _trace_expr_column(source.expression)
+                    if isinstance(ret_expr, TupleExpression):
+                        return "resource"
+                    return "value"
+                src = expr.source
+                if isinstance(src, list):
+                    src = src[0] if src else None
+                if isinstance(src, QuerySource):
+                    src = src.expression
+                return _trace_expr_column(src) if src is not None else "value"
+            if isinstance(expr, BinaryExpression):
+                nested_op = getattr(expr, 'operator', '').lower()
+                if nested_op in ('union', 'intersect', 'except'):
+                    left_col = _trace_expr_column(expr.left)
+                    right_col = _trace_expr_column(expr.right)
+                    return "resource" if "resource" in (left_col, right_col) else "value"
+            return "value"
+
+        # Union/intersect/except → recurse so scalar-return query unions stay values.
         if isinstance(cql_ast, BinaryExpression):
             op = getattr(cql_ast, 'operator', '').lower()
             if op in ('union', 'intersect', 'except'):
-                return "resource"
+                left_col = _trace_expr_column(cql_ast.left)
+                right_col = _trace_expr_column(cql_ast.right)
+                return "resource" if "resource" in (left_col, right_col) else "value"
 
         # Query without return clause → trace source
         if isinstance(cql_ast, CQLQuery) and cql_ast.return_clause is None:

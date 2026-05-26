@@ -155,6 +155,52 @@ class FP_Quantity(FP_Type):
         "millisecond",
         "milliseconds",
     ]
+    _calendar_duration_units = {
+        "year",
+        "years",
+        "month",
+        "months",
+        "week",
+        "weeks",
+        "day",
+        "days",
+        "hour",
+        "hours",
+        "minute",
+        "minutes",
+        "second",
+        "seconds",
+        "millisecond",
+        "milliseconds",
+    }
+    _ucum_duration_units = {
+        "'a'",
+        "'mo'",
+        "'wk'",
+        "'d'",
+        "'h'",
+        "'min'",
+        "'s'",
+        "'ms'",
+        "a",
+        "mo",
+        "wk",
+        "d",
+        "h",
+        "min",
+        "s",
+        "ms",
+    }
+    _second_or_millisecond_duration_units = {
+        "second",
+        "seconds",
+        "millisecond",
+        "milliseconds",
+        "'s'",
+        "'ms'",
+        "s",
+        "ms",
+    }
 
     _arithmetic_duration_units = {
         "years": "year",
@@ -419,7 +465,8 @@ class FP_Quantity(FP_Type):
         if isinstance(other, (int, float, Decimal)):
             if self.value == 0:
                 return []
-            return FP_Quantity(other / self.value, f"1/{self.unit}")
+            bare_unit = FP_Quantity._strip_unit_quotes(self.unit)
+            return FP_Quantity(other / self.value, f"'1/{bare_unit}'")
         return NotImplemented
 
     def deep_equal(self, other):
@@ -472,8 +519,8 @@ class FP_Quantity(FP_Type):
         from_g_mg_magnitude = FP_Quantity._g_mg_conversion_factor.get(fromUnit)
         to_g_mg_magnitude = FP_Quantity._g_mg_conversion_factor.get(toUnit)
         if from_g_mg_magnitude and to_g_mg_magnitude:
-            result = (from_g_mg_magnitude * Decimal(str(value)) / to_g_mg_magnitude).quantize(
-                Decimal("1."), rounding=ROUND_HALF_UP
+            result = FP_Quantity._normalize_quantity_value(
+                from_g_mg_magnitude * Decimal(str(value)) / to_g_mg_magnitude
             )
             return FP_Quantity(result, toUnit)
         return None
@@ -496,6 +543,17 @@ class FP_Quantity(FP_Type):
         Returns None if the quantities cannot be compared (incompatible units).
         """
         if not isinstance(other, FP_Quantity):
+            return None
+
+        mixed_calendar_ucum = (
+            self.unit in self._calendar_duration_units and other.unit in self._ucum_duration_units
+        ) or (
+            self.unit in self._ucum_duration_units and other.unit in self._calendar_duration_units
+        )
+        if mixed_calendar_ucum and not (
+            self.unit in self._second_or_millisecond_duration_units
+            and other.unit in self._second_or_millisecond_duration_units
+        ):
             return None
 
         # Handle years and months comparison
@@ -698,7 +756,8 @@ class FP_TimeBase(FP_Type):
         # definitive results where the spec requires uncertainty (empty).
         this_has_tz = len(thisDateTimeList) > 7 and thisDateTimeList[7] is not None
         other_has_tz = len(otherDateTimeList) > 7 and otherDateTimeList[7] is not None
-        if this_has_tz != other_has_tz:
+        timezone_mismatch = this_has_tz != other_has_tz
+        if timezone_mismatch:
             # Strip timezone from whichever has it so normalization is a no-op
             if this_has_tz:
                 thisDateTimeList = thisDateTimeList[:7] + [None]
@@ -729,6 +788,16 @@ class FP_TimeBase(FP_Type):
                 if normalized_thisdt_list[i] < normalized_otherdt_list[i]:
                     return -1
             return None
+
+        if timezone_mismatch:
+            for left, right in zip(normalized_thisdt_list, normalized_otherdt_list, strict=True):
+                if left is None or right is None:
+                    return None
+                if left < right:
+                    return -1
+                if left > right:
+                    return 1
+            return 0
 
         thisDateTimeInt = self._getDateTimeInt()
         otherDateTimeInt = otherDateTime._getDateTimeInt()
@@ -763,13 +832,14 @@ class FP_TimeBase(FP_Type):
         return math.floor(value / divisor) if value >= 0 else math.ceil(value / divisor)
 
     def plus(self, time_quantity):
-        value = int(time_quantity.value)
+        raw_value = Decimal(str(time_quantity.value))
+        value = int(raw_value)
         time_unit = FP_Quantity._arithmetic_duration_units.get(time_quantity.unit)
         if time_unit is None:
             valid_units = ", ".join(FP_Quantity._arithmetic_duration_units.keys())
             raise ValueError(
                 f"For date/time arithmetic, the unit of the quantity must be one of the following time-based units: {valid_units}"
-            )
+        )
         dt_list = self._getMatchAsList()
         if isinstance(self, FP_DateTime):
             return self._plus_datetime(value, time_unit, dt_list)
@@ -814,7 +884,12 @@ class FP_TimeBase(FP_Type):
                     **{target + "s": trunc(value, divs[(time_unit, target)])}
                 )
             elif precision >= 6:
-                result = date_obj + timedelta(**{time_unit + "s": value})
+                if time_unit == "second":
+                    result = date_obj + timedelta(seconds=value)
+                elif time_unit == "millisecond":
+                    result = date_obj + timedelta(milliseconds=value)
+                else:
+                    result = date_obj + timedelta(minutes=value)
             else:
                 result = date_obj
         else:
@@ -895,8 +970,7 @@ class FP_TimeBase(FP_Type):
             elif time_unit == "minute":
                 result = date_obj + relativedelta(minutes=value)
             elif time_unit == "second":
-                milliseconds = float(str(time_quantity).split()[0]) * 1000
-                result = date_obj + relativedelta(microseconds=milliseconds * 1000)
+                result = date_obj + relativedelta(seconds=value)
             elif time_unit == "millisecond":
                 result = date_obj + relativedelta(microseconds=value * 1000)
             else:
@@ -952,12 +1026,14 @@ class FP_Date(FP_TimeBase):
             return None
 
         # Validate semantic ranges (FHIRPath §2.3: date must be valid)
+        year_int = int(m.group("year"))
+        if not (1 <= year_int <= 9999):
+            return None
         month = m.group("month")
         day = m.group("day")
         if month is not None and not (1 <= int(month) <= 12):
             return None
         if day is not None:
-            year_int = int(m.group("year"))
             month_int = int(month) if month else 1
             max_day = calendar.monthrange(year_int, month_int)[1]
             if not (1 <= int(day) <= max_day):
@@ -1181,6 +1257,9 @@ class FP_DateTime(FP_TimeBase):
             return None
 
         # Validate semantic ranges
+        year_int = int(m.group("year"))
+        if not (1 <= year_int <= 9999):
+            return None
         month = m.group("month")
         day = m.group("day")
         hour = m.group("hour")
@@ -1190,7 +1269,6 @@ class FP_DateTime(FP_TimeBase):
         if month is not None and not (1 <= int(month) <= 12):
             return None
         if day is not None:
-            year_int = int(m.group("year"))
             month_int = int(month) if month else 1
             max_day = calendar.monthrange(year_int, month_int)[1]
             if not (1 <= int(day) <= max_day):
@@ -1490,10 +1568,18 @@ class ResourceNode:
         if cls:
             data = FP_TimeBase.check_string(cls, data) or data
         if isinstance(data, abc.Mapping) and data.get("system") == "http://unitsofmeasure.org":
-            data = FP_Quantity(
-                data["value"],
-                FP_Quantity.timeUnitsToUCUM.get(data["code"], "'" + data["code"] + "'"),
-            )
+            value = data.get("value")
+            code = data.get("code") or data.get("unit")
+            if value is not None and not isinstance(value, bool) and isinstance(code, str) and code:
+                try:
+                    value = Decimal(str(value))
+                except Exception:
+                    return data
+                if value.is_finite():
+                    data = FP_Quantity(
+                        value,
+                        FP_Quantity.timeUnitsToUCUM.get(code, "'" + code + "'"),
+                    )
         return data
 
 
@@ -1589,6 +1675,9 @@ class TypeInfo:
 
         self_name = TypeInfo._normalize_type_name(self.namespace, self.name)
         other_name = TypeInfo._normalize_type_name(other.namespace, other.name)
+
+        if other_name == "Any":
+            return True
 
         # Per FHIRPath conformance tests (testType12, testType14):
         # FHIR types and System types are distinct for is() checks.

@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import re
+import time
 import warnings
+from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
+from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -13,14 +18,68 @@ import duckdb
 import numpy as np
 import pandas as pd
 
+from .artifacts import ArtifactResolver, LibraryArtifact, create_artifact_resolver
 from .audit import AuditEngine
 from .errors import DQMError, MeasureParseError  # noqa: F401
 from .models import MeasureResult
 from .narrative import NarrativeGenerator
 from .parser import MeasureParser
-from .types import AuditMode, AuditOrStrategy, GroupMap, PopulationMap
+from .types import AuditMode, AuditOrStrategy, AuditPersona, GroupMap, PopulationMap
 
 logger = logging.getLogger(__name__)
+
+
+_TARGET_PATIENT_TABLE = "_fhir4ds_target_patients"
+_CQL_INCLUDE_RE = re.compile(
+    r"^\s*include\s+([A-Za-z][A-Za-z0-9_.]*)\b"
+    r"(?:\s+version\s+'([^']+)')?",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+@dataclass
+class CompiledGroup:
+    """Reusable SQL artifact for one Measure group."""
+
+    group: GroupMap
+    sql: str
+    audit_mode: AuditMode
+    prepared_name: str | None = None
+    prepared: bool = False
+
+
+@dataclass
+class CompiledMeasure:
+    """Reusable SQL artifacts for a parsed FHIR Measure."""
+
+    groups: list[CompiledGroup]
+    pop_map: PopulationMap
+    populations: dict[str, Any]
+    parameters: dict[str, Any]
+    measure_url: str | None
+    audit_mode: AuditMode
+    filter_to_ip: bool
+    patient_scope: str
+    generate_narratives: bool
+    cache_key: str
+
+
+@dataclass
+class CompiledMeasureMetrics:
+    """Worker-local counters for compiled Measure reuse and execution."""
+
+    cache_hits: int = 0
+    cache_misses: int = 0
+    compile_count: int = 0
+    compile_ms: float = 0.0
+    execute_count: int = 0
+    execute_ms: float = 0.0
+    prepared_count: int = 0
+    prepared_fallback_count: int = 0
+    last_cache_key: str | None = None
+    last_compile_ms: float | None = None
+    last_execute_ms: float | None = None
+    last_patient_count: int | None = None
 
 
 class MeasureEvaluator:
@@ -48,18 +107,25 @@ class MeasureEvaluator:
         self._cached_fhir_schema: Any = None
         self._cached_profile_registry: Any = None
         self._cached_model_config: Any = None
+        self._compiled_measure_cache: dict[str, CompiledMeasure] = {}
+        self._compiled_measure_metrics = CompiledMeasureMetrics()
+        self._loaded_terminology_keys: set[str] = set()
 
     def evaluate(
         self,
-        measure_bundle: str | Path | dict,
-        cql_library_path: str | Path,
+        measure_bundle: str | Path | dict | None = None,
+        cql_library_path: str | Path | dict | None = None,
         parameters: dict | None = None,
         audit: bool = False,
         audit_mode: str | AuditMode = AuditMode.NONE,
         filter_to_ip: bool = False,
         patient_ids: list[str] | None = None,
         include_paths: list[str] | None = None,
+        valueset_paths: list[str | Path] | None = None,
         generate_narratives: bool = False,
+        include_supporting_evidence: bool = False,
+        artifact_resolver: ArtifactResolver | None = None,
+        measure_ref: str | Path | dict | None = None,
     ) -> MeasureResult:
         """Evaluate a FHIR Measure against the resources table.
 
@@ -81,9 +147,15 @@ class MeasureEvaluator:
                 the Initial Population criteria.
             patient_ids: Optional patient ID filter.
             include_paths: Paths to directories containing included CQL libraries.
+            valueset_paths: Optional ValueSet JSON files or directories. When
+                supplied without an explicit artifact resolver, these are used
+                by the default file resolver to load CQL-declared terminology.
             generate_narratives: If True (requires audit), enriches each
                    audit struct in-place with a ``narrative`` field containing
                    a plain-English explanation.  No separate columns are added.
+            include_supporting_evidence: If True, include Measure-authored
+                   supporting evidence definitions as ``evidence_*`` output
+                   columns for downstream individual MeasureReport generation.
 
         Returns:
             MeasureResult containing the DataFrame, population map, and parameters.
@@ -103,17 +175,21 @@ class MeasureEvaluator:
         if generate_narratives and effective_mode == AuditMode.NONE:
             raise ValueError("Narratives require audit=True")
 
-        measure_dict = self._load_measure(measure_bundle)
+        resolver, measure_artifact, library_artifact = self._resolve_artifacts(
+            measure_bundle=measure_bundle,
+            cql_library_path=cql_library_path,
+            include_paths=include_paths,
+            valueset_paths=valueset_paths,
+            artifact_resolver=artifact_resolver,
+            measure_ref=measure_ref,
+        )
+        measure_dict = measure_artifact.resource
         pop_map = self._parser.parse(measure_dict)
         self._last_pop_map = pop_map
         self._last_parameters = parameters or {}
 
-        cql_path = Path(cql_library_path)
-        if not cql_path.exists():
-            raise FileNotFoundError(f"CQL library not found: {cql_library_path}")
-
         try:
-            from fhir4ds.cql import parse_cql, CQLToSQLTranslator
+            from fhir4ds.cql import CQLToSQLTranslator, parse_cql
         except ImportError as e:
             raise DQMError(f"cql-py is required: {e}") from e
 
@@ -123,11 +199,12 @@ class MeasureEvaluator:
             df = self._evaluate_group(
                 group=group,
                 pop_map=pop_map,
-                cql_path=cql_path,
+                library_artifact=library_artifact,
+                artifact_resolver=resolver,
                 parameters=parameters or {},
                 patient_ids=patient_ids,
                 audit_mode=effective_mode,
-                include_paths=include_paths,
+                include_supporting_evidence=include_supporting_evidence,
                 parse_cql=parse_cql,
                 translator_cls=CQLToSQLTranslator,
             )
@@ -165,6 +242,207 @@ class MeasureEvaluator:
             pop_map=pop_map,
         )
 
+    def compile_measure(
+        self,
+        measure_bundle: str | Path | dict | None = None,
+        cql_library_path: str | Path | dict | None = None,
+        parameters: dict | None = None,
+        audit: bool = False,
+        audit_mode: str | AuditMode = AuditMode.NONE,
+        filter_to_ip: bool = False,
+        patient_ids: list[str] | None = None,
+        patient_scope: str = "literal",
+        include_paths: list[str] | None = None,
+        valueset_paths: list[str | Path] | None = None,
+        generate_narratives: bool = False,
+        include_supporting_evidence: bool = False,
+        artifact_resolver: ArtifactResolver | None = None,
+        measure_ref: str | Path | dict | None = None,
+    ) -> CompiledMeasure:
+        """Compile a Measure to reusable SQL without executing it."""
+        effective_mode = AuditMode(audit_mode)
+        if effective_mode == AuditMode.NONE and audit:
+            effective_mode = AuditMode.FULL
+        if generate_narratives and effective_mode == AuditMode.NONE:
+            raise ValueError("Narratives require audit=True")
+        if patient_scope not in {"literal", "target_table"}:
+            raise ValueError(
+                "patient_scope must be one of 'literal' or 'target_table', "
+                f"got {patient_scope!r}"
+            )
+        if patient_scope == "target_table" and patient_ids is not None:
+            raise ValueError(
+                "patient_ids must be supplied to execute_compiled_measure() "
+                "when patient_scope='target_table'"
+            )
+
+        resolver, measure_artifact, library_artifact = self._resolve_artifacts(
+            measure_bundle=measure_bundle,
+            cql_library_path=cql_library_path,
+            include_paths=include_paths,
+            valueset_paths=valueset_paths,
+            artifact_resolver=artifact_resolver,
+            measure_ref=measure_ref,
+        )
+        measure_dict = measure_artifact.resource
+        pop_map = self._parser.parse(measure_dict)
+        self._last_pop_map = pop_map
+        self._last_parameters = parameters or {}
+
+        cache_key = self._compiled_measure_cache_key(
+            measure_dict=measure_dict,
+            measure_source_id=measure_artifact.source_id,
+            library_artifact=library_artifact,
+            artifact_resolver=resolver,
+            parameters=parameters or {},
+            audit_mode=effective_mode,
+            filter_to_ip=filter_to_ip,
+            patient_ids=patient_ids,
+            patient_scope=patient_scope,
+            generate_narratives=generate_narratives,
+            include_supporting_evidence=include_supporting_evidence,
+        )
+        self._compiled_measure_metrics.last_cache_key = cache_key
+        cached = self._compiled_measure_cache.get(cache_key)
+        if cached is not None:
+            self._compiled_measure_metrics.cache_hits += 1
+            return cached
+        self._compiled_measure_metrics.cache_misses += 1
+
+        try:
+            from fhir4ds.cql import CQLToSQLTranslator, parse_cql
+        except ImportError as e:
+            raise DQMError(f"cql-py is required: {e}") from e
+
+        compile_started = time.perf_counter()
+        library = parse_cql(library_artifact.text)
+
+        groups = [
+            self._compile_group(
+                group=group,
+                pop_map=pop_map,
+                library=library,
+                library_artifact=library_artifact,
+                artifact_resolver=resolver,
+                parameters=parameters or {},
+                patient_ids=patient_ids,
+                patient_scope=patient_scope,
+                audit_mode=effective_mode,
+                include_supporting_evidence=include_supporting_evidence,
+                parse_cql=parse_cql,
+                translator_cls=CQLToSQLTranslator,
+                cache_key=cache_key,
+                group_index=index,
+            )
+            for index, group in enumerate(pop_map.groups)
+        ]
+        populations = {
+            self._col_name(p.population_code): p.cql_expression
+            for g in pop_map.groups
+            for p in g.populations
+        }
+        compiled = CompiledMeasure(
+            groups=groups,
+            pop_map=pop_map,
+            populations=populations,
+            parameters=parameters or {},
+            measure_url=pop_map.cql_library_ref,
+            audit_mode=effective_mode,
+            filter_to_ip=filter_to_ip,
+            patient_scope=patient_scope,
+            generate_narratives=generate_narratives,
+            cache_key=cache_key,
+        )
+        self._compiled_measure_cache[cache_key] = compiled
+        compile_ms = (time.perf_counter() - compile_started) * 1000
+        self._compiled_measure_metrics.compile_count += 1
+        self._compiled_measure_metrics.compile_ms += compile_ms
+        self._compiled_measure_metrics.last_compile_ms = compile_ms
+        return compiled
+
+    def execute_compiled_measure(
+        self,
+        compiled: CompiledMeasure,
+        patient_ids: list[str] | None = None,
+    ) -> MeasureResult:
+        """Execute a previously compiled Measure."""
+        if compiled.patient_scope == "target_table":
+            if patient_ids is None:
+                raise ValueError(
+                    "patient_ids are required when executing a compiled measure "
+                    "with patient_scope='target_table'"
+                )
+            self._populate_target_patient_table(patient_ids)
+        elif patient_ids is not None:
+            raise ValueError(
+                "patient_ids cannot override a compiled measure that used "
+                "literal patient scoping"
+            )
+
+        execute_started = time.perf_counter()
+        group_dfs: list[pd.DataFrame] = []
+        try:
+            for compiled_group in compiled.groups:
+                try:
+                    df = self._execute_compiled_group(compiled_group)
+                except Exception as exc:
+                    raise DQMError(
+                        f"Evaluation failed for group '{compiled_group.group.group_id}': {exc}"
+                    ) from exc
+                if compiled.filter_to_ip:
+                    df = self._filter_to_initial_population(df, compiled.audit_mode)
+                df["_group_id"] = compiled_group.group.group_id
+                group_dfs.append(df)
+        finally:
+            self._clear_cql_variables()
+
+        if not group_dfs:
+            raise DQMError(f"Measure '{compiled.pop_map.measure_id}' produced no results")
+
+        if compiled.audit_mode != AuditMode.NONE:
+            for i, gdf in enumerate(group_dfs):
+                group_dfs[i] = self._prune_population_evidence(gdf, compiled.pop_map)
+
+        if len(group_dfs) == 1:
+            result_df = group_dfs[0].drop(columns=["_group_id"])
+        else:
+            result_df = pd.concat(group_dfs, ignore_index=True)
+
+        if compiled.generate_narratives and compiled.audit_mode != AuditMode.NONE:
+            result_df = self._add_narratives(
+                result_df,
+                compiled.pop_map,
+                compiled.audit_mode,
+            )
+
+        self._last_pop_map = compiled.pop_map
+        self._last_parameters = compiled.parameters
+        execute_ms = (time.perf_counter() - execute_started) * 1000
+        self._compiled_measure_metrics.execute_count += 1
+        self._compiled_measure_metrics.execute_ms += execute_ms
+        self._compiled_measure_metrics.last_execute_ms = execute_ms
+        self._compiled_measure_metrics.last_patient_count = (
+            len(patient_ids) if patient_ids is not None else None
+        )
+        return MeasureResult(
+            dataframe=result_df,
+            populations=compiled.populations,
+            parameters=compiled.parameters,
+            measure_url=compiled.measure_url,
+            pop_map=compiled.pop_map,
+        )
+
+    def compiled_measure_metrics(self) -> dict[str, Any]:
+        """Return compile/execute counters for this evaluator instance."""
+        metrics = asdict(self._compiled_measure_metrics)
+        metrics["compile_ms"] = round(float(metrics["compile_ms"]), 3)
+        metrics["execute_ms"] = round(float(metrics["execute_ms"]), 3)
+        if metrics["last_compile_ms"] is not None:
+            metrics["last_compile_ms"] = round(float(metrics["last_compile_ms"]), 3)
+        if metrics["last_execute_ms"] is not None:
+            metrics["last_execute_ms"] = round(float(metrics["last_execute_ms"]), 3)
+        return metrics
+
     def summary_report(self, result: Any) -> dict:
         """Generate a summary report from evaluation results.
 
@@ -197,8 +475,13 @@ class MeasureEvaluator:
                         value = value.get("result", False)
                     if value is None:
                         return False
+                    if isinstance(value, np.ndarray):
+                        return value.size > 0
+                    if isinstance(value, (list, tuple, set)):
+                        return len(value) > 0
                     try:
-                        if pd.isna(value):
+                        missing = pd.isna(value)
+                        if isinstance(missing, (bool, np.bool_)) and missing:
                             return False
                     except (TypeError, ValueError):
                         pass
@@ -334,9 +617,10 @@ class MeasureEvaluator:
                 if not all(col in frame.columns for col in component_cols):
                     summaries.append(base)
                     continue
+                columns = tuple(component_cols)
                 keys = frame.apply(
-                    lambda row: tuple(
-                        self._stratifier_value(row[col]) for col in component_cols
+                    lambda row, columns=columns: tuple(
+                        self._stratifier_value(row[col]) for col in columns
                     ),
                     axis=1,
                 )
@@ -349,7 +633,7 @@ class MeasureEvaluator:
                             "value": value,
                             "text": self._stratum_value_text(value),
                         }
-                        for component, value in zip(stratifier.components, key)
+                        for component, value in zip(stratifier.components, key, strict=True)
                     ]
                     base["strata"].append(
                         {
@@ -507,6 +791,8 @@ class MeasureEvaluator:
 
         if pop_map is None:
             raise DQMError("No evaluation has been run yet. Call evaluate() first.")
+        if report_type == "individual":
+            self._validate_individual_report_frame(df)
 
         summary_input: Any = result if isinstance(result, MeasureResult) else df
         summary = self.summary_report(summary_input)
@@ -538,7 +824,7 @@ class MeasureEvaluator:
                     continue
                 if isinstance(count, float):
                     count = int(count)
-                populations.append({
+                population_report = {
                     "code": {
                         "coding": [{
                             "system": "http://terminology.hl7.org/CodeSystem/measure-population",
@@ -546,8 +832,25 @@ class MeasureEvaluator:
                         }]
                     },
                     "count": count,
-                })
+                }
+                if pop.source_population_id:
+                    population_report["id"] = pop.source_population_id
+                    population_report["extension"] = [{
+                        "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-MeasureReport.group.population.linkId",
+                        "valueString": pop.source_population_id,
+                    }]
+                if report_type == "individual":
+                    support = self._supporting_evidence_extensions(df, pop)
+                    if support:
+                        population_report.setdefault("extension", []).extend(support)
+                populations.append(population_report)
             group_report: dict[str, Any] = {"population": populations}
+            if group.source_group_id:
+                group_report["id"] = group.source_group_id
+                group_report["extension"] = [{
+                    "url": "http://hl7.org/fhir/5.0/StructureDefinition/extension-MeasureReport.group.linkId",
+                    "valueString": group.source_group_id,
+                }]
             stratifier_summaries = group_summary.get("stratifiers", [])
             if stratifier_summaries:
                 group_report["stratifier"] = [
@@ -566,6 +869,17 @@ class MeasureEvaluator:
             "group": groups,
         }
 
+        if report_type == "individual":
+            report["meta"] = {
+                "profile": [
+                    "http://hl7.org/fhir/us/davinci-deqm/StructureDefinition/indv-measurereport-deqm"
+                ]
+            }
+            patient_id = self._single_patient_id(df)
+            if patient_id:
+                report["subject"] = {"reference": f"Patient/{patient_id}"}
+            report["text"] = self._individual_report_text(report, patient_id)
+
         if report_type == "summary":
             report["extension"] = [{
                 "url": "http://hl7.org/fhir/us/davinci-deqm/StructureDefinition/performanceRate",
@@ -573,6 +887,163 @@ class MeasureEvaluator:
             }]
 
         return report
+
+    def _validate_individual_report_frame(self, df: pd.DataFrame) -> None:
+        if "patient_id" not in df.columns:
+            raise DQMError("Individual MeasureReport requires a patient_id column.")
+        patient_ids = df["patient_id"].dropna().astype(str).unique()
+        if len(patient_ids) != 1:
+            raise DQMError(
+                "Individual MeasureReport requires exactly one patient row; "
+                f"found {len(patient_ids)} patients."
+            )
+
+    def _single_patient_id(self, df: pd.DataFrame) -> str | None:
+        if "patient_id" not in df.columns:
+            return None
+        patient_ids = df["patient_id"].dropna().astype(str).unique()
+        return patient_ids[0] if len(patient_ids) == 1 else None
+
+    def _supporting_evidence_extensions(
+        self, df: pd.DataFrame, pop: Any,
+    ) -> list[dict[str, Any]]:
+        if not pop.supporting_evidence or len(df) != 1:
+            return []
+        row = df.iloc[0]
+        extensions: list[dict[str, Any]] = []
+        for ev in pop.supporting_evidence:
+            col_name = f"evidence_{self._col_name(ev.name)}"
+            if col_name not in df.columns:
+                continue
+            extension_children: list[dict[str, Any]] = [
+                {"url": "name", "valueCode": ev.name}
+            ]
+            if ev.description:
+                extension_children.append({"url": "description", "valueString": ev.description})
+            if ev.code:
+                extension_children.append({"url": "code", "valueCodeableConcept": ev.code})
+            extension_children.extend(self._supporting_evidence_value_extensions(row[col_name]))
+            extensions.append({
+                "url": "http://hl7.org/fhir/StructureDefinition/cqf-supportingEvidence",
+                "extension": extension_children,
+            })
+        return extensions
+
+    def _supporting_evidence_value_extensions(self, value: Any) -> list[dict[str, Any]]:
+        value = self._normalize_evidence_value(value)
+        if self._is_null_like(value):
+            return [{
+                "url": "value",
+                "extension": [
+                    {
+                        "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                        "valueCode": "unknown",
+                    },
+                    {
+                        "url": "http://hl7.org/fhir/StructureDefinition/cqf-cqlType",
+                        "valueString": "System.Any",
+                    },
+                ],
+            }]
+        if isinstance(value, (list, tuple, np.ndarray)):
+            if len(value) == 0:
+                return [{
+                    "url": "value",
+                    "extension": [
+                        {
+                            "url": "http://hl7.org/fhir/StructureDefinition/cqf-isEmptyList",
+                            "valueBoolean": True,
+                        },
+                        {
+                            "url": "http://hl7.org/fhir/StructureDefinition/cqf-cqlType",
+                            "valueString": "List<System.Any>",
+                        },
+                    ],
+                }]
+            result: list[dict[str, Any]] = []
+            for item in value:
+                result.extend(self._supporting_evidence_value_extensions(item))
+            return result
+        return [self._supporting_evidence_single_value(value)]
+
+    def _supporting_evidence_single_value(self, value: Any) -> dict[str, Any]:
+        value = self._normalize_evidence_value(value)
+        if isinstance(value, bool):
+            return {"url": "value", "valueBoolean": value}
+        if isinstance(value, int) and not isinstance(value, bool):
+            return {"url": "value", "valueInteger": value}
+        if isinstance(value, float):
+            return {"url": "value", "valueDecimal": value}
+        if isinstance(value, dict):
+            fhir_value = self._dict_to_fhir_value(value)
+            if fhir_value:
+                return {"url": "value", **fhir_value}
+            return {
+                "url": "value",
+                "extension": [
+                    self._tuple_field_extension(key, val)
+                    for key, val in value.items()
+                ],
+            }
+        return {"url": "value", "valueString": str(value)}
+
+    def _dict_to_fhir_value(self, value: dict[str, Any]) -> dict[str, Any] | None:
+        resource_type = value.get("resourceType")
+        resource_id = value.get("id")
+        if resource_type and resource_id:
+            return {"valueReference": {"reference": f"{resource_type}/{resource_id}"}}
+        if "reference" in value and isinstance(value["reference"], str):
+            return {"valueReference": {"reference": value["reference"]}}
+        if "coding" in value or ("text" in value and any(k in value for k in ("coding", "code"))):
+            return {"valueCodeableConcept": value}
+        if "system" in value and "code" in value:
+            return {"valueCoding": value}
+        if "value" in value and any(k in value for k in ("unit", "code", "system")):
+            return {"valueQuantity": value}
+        if "start" in value or "end" in value:
+            return {"valuePeriod": value}
+        return None
+
+    def _tuple_field_extension(self, key: str, value: Any) -> dict[str, Any]:
+        child = self._supporting_evidence_single_value(value)
+        child["url"] = key if key else "field"
+        return child
+
+    def _normalize_evidence_value(self, value: Any) -> Any:
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, dict) and "result" in value and "evidence" in value:
+            return value.get("result")
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith(("{", "[")):
+                try:
+                    return self._normalize_evidence_value(json.loads(stripped))
+                except json.JSONDecodeError:
+                    return value
+        return value
+
+    def _is_null_like(self, value: Any) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, float) and np.isnan(value):
+            return True
+        return bool(pd.isna(value)) if not isinstance(value, (dict, list, tuple, np.ndarray)) else False
+
+    def _individual_report_text(
+        self, report: dict[str, Any], patient_id: str | None,
+    ) -> dict[str, str]:
+        subject = escape(patient_id or "unknown")
+        parts = [f"Measure report for Patient/{subject}."]
+        for group in report.get("group", []):
+            for pop in group.get("population", []):
+                code = pop.get("code", {}).get("coding", [{}])[0].get("code", "population")
+                count = pop.get("count", 0)
+                parts.append(f"{escape(code)}: {'met' if count else 'not met'}.")
+        return {
+            "status": "generated",
+            "div": f"<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>{' '.join(parts)}</p></div>",
+        }
 
     def _measure_report_stratifier(
         self, stratifier_summary: dict[str, Any], group: GroupMap
@@ -642,22 +1113,196 @@ class MeasureEvaluator:
                 f"Invalid JSON in measure file '{measure_bundle}': {e}"
             ) from e
 
+    def _resolve_artifacts(
+        self,
+        *,
+        measure_bundle: str | Path | dict | None,
+        cql_library_path: str | Path | dict | None,
+        include_paths: list[str] | None,
+        valueset_paths: list[str | Path] | None,
+        artifact_resolver: ArtifactResolver | None,
+        measure_ref: str | Path | dict | None,
+    ) -> tuple[ArtifactResolver, Any, LibraryArtifact]:
+        resolver: ArtifactResolver = artifact_resolver or create_artifact_resolver(
+            "files",
+            include_paths=include_paths,
+            valueset_paths=valueset_paths,
+        )
+        resolved_measure_ref = measure_ref if measure_ref is not None else measure_bundle
+        if resolved_measure_ref is None:
+            raise ValueError("measure_bundle or measure_ref is required")
+        measure_artifact = resolver.resolve_measure(resolved_measure_ref)
+        library_artifact = resolver.resolve_library(
+            cql_library_path,
+            measure=measure_artifact.resource,
+            measure_source_id=measure_artifact.source_id,
+        )
+        self._prime_resolved_includes(resolver, library_artifact.text)
+        self._load_resolved_valuesets(resolver, library_artifact.text)
+        return resolver, measure_artifact, library_artifact
+
+    def _load_resolved_valuesets(
+        self,
+        artifact_resolver: ArtifactResolver,
+        cql_text: str,
+    ) -> None:
+        if self.conn is None:
+            return
+        valuesets = artifact_resolver.resolve_valuesets_for_cql(cql_text)
+        if not valuesets:
+            return
+        key_payload = [
+            {
+                "url": valueset.get("url"),
+                "version": valueset.get("version"),
+                "id": valueset.get("id"),
+                "hash": hashlib.sha256(
+                    json.dumps(valueset, sort_keys=True, default=str).encode()
+                ).hexdigest(),
+            }
+            for valueset in valuesets
+        ]
+        key = hashlib.sha256(
+            json.dumps(key_payload, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        if key in self._loaded_terminology_keys:
+            return
+        try:
+            from fhir4ds.cql.loader import FHIRDataLoader
+            FHIRDataLoader(self.conn, create_table=False).load_valuesets(valuesets)
+        except Exception as exc:
+            raise DQMError(f"Failed to load resolved ValueSets: {exc}") from exc
+        self._loaded_terminology_keys.add(key)
+
+    def _prime_resolved_includes(
+        self,
+        artifact_resolver: ArtifactResolver,
+        cql_text: str,
+        seen: set[str] | None = None,
+    ) -> None:
+        """Resolve transitive includes before cache-key fingerprinting."""
+        seen = seen or set()
+        for alias, version in _CQL_INCLUDE_RE.findall(cql_text):
+            key = f"{alias}|{version}" if version else alias
+            if key in seen:
+                continue
+            seen.add(key)
+            artifact = artifact_resolver.resolve_include(alias, version=version or None)
+            if artifact is not None:
+                self._prime_resolved_includes(
+                    artifact_resolver,
+                    artifact.text,
+                    seen,
+                )
+
+    def _compiled_measure_cache_key(
+        self,
+        *,
+        measure_dict: dict,
+        measure_source_id: str,
+        library_artifact: LibraryArtifact,
+        artifact_resolver: ArtifactResolver,
+        parameters: dict,
+        audit_mode: AuditMode,
+        filter_to_ip: bool,
+        patient_ids: list[str] | None,
+        patient_scope: str,
+        generate_narratives: bool,
+        include_supporting_evidence: bool,
+    ) -> str:
+        """Hash static inputs that affect generated measure SQL or result shape."""
+        payload = {
+            "measure": measure_dict,
+            "measure_source_id": measure_source_id,
+            "library_source_id": library_artifact.source_id,
+            "library_hash": library_artifact.content_hash,
+            "artifact_fingerprint": artifact_resolver.fingerprint(),
+            "parameters": parameters,
+            "audit_mode": audit_mode.value,
+            "filter_to_ip": filter_to_ip,
+            "patient_scope": patient_scope,
+            "patient_ids": patient_ids if patient_scope == "literal" else None,
+            "generate_narratives": generate_narratives,
+            "include_supporting_evidence": include_supporting_evidence,
+            "audit_or_strategy": self._audit_or_strategy.value,
+        }
+        text = json.dumps(payload, sort_keys=True, default=str)
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
     def _evaluate_group(
         self,
         group: GroupMap,
         pop_map: PopulationMap,
-        cql_path: Path,
+        library_artifact: LibraryArtifact,
+        artifact_resolver: ArtifactResolver,
         parameters: dict,
         patient_ids: list[str] | None,
         audit_mode: AuditMode,
-        include_paths: list[str] | None,
+        include_supporting_evidence: bool,
         parse_cql: Any,
         translator_cls: Any,
     ) -> pd.DataFrame:
         """Evaluate a single group from a FHIR Measure. Always returns DataFrame."""
-        cql_text = cql_path.read_text()
-        library = parse_cql(cql_text)
+        library = parse_cql(library_artifact.text)
+        compiled_group = self._compile_group(
+            group=group,
+            pop_map=pop_map,
+            library=library,
+            library_artifact=library_artifact,
+            artifact_resolver=artifact_resolver,
+            parameters=parameters,
+            patient_ids=patient_ids,
+            patient_scope="literal",
+            audit_mode=audit_mode,
+            include_supporting_evidence=include_supporting_evidence,
+            parse_cql=parse_cql,
+            translator_cls=translator_cls,
+            cache_key="literal",
+            group_index=0,
+        )
+        try:
+            return self._execute_compiled_group(compiled_group)
+        except (DQMError, KeyboardInterrupt):
+            raise
+        except (duckdb.Error, ValueError, FileNotFoundError, RuntimeError,
+                SyntaxError, TypeError) as e:
+            raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
+        except Exception as e:
+            # Import actual exception classes instead of string-matching type names
+            from fhir4ds.cql.errors import ParseError, TranslationError
+            if isinstance(e, (ParseError, TranslationError)):
+                raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
+            raise
+        finally:
+            # Clear per-evaluation state to prevent memory accumulation
+            self._clear_cql_variables()
 
+    def _clear_cql_variables(self) -> None:
+        """Clear CQL variable UDF state when the optional UDF module is loaded."""
+        try:
+            from fhir4ds.cql.duckdb.udf.variable import clear_variables
+            clear_variables(self.conn)
+        except ImportError:
+            pass
+
+    def _compile_group(
+        self,
+        group: GroupMap,
+        pop_map: PopulationMap,
+        library: Any,
+        library_artifact: LibraryArtifact,
+        artifact_resolver: ArtifactResolver,
+        parameters: dict,
+        patient_ids: list[str] | None,
+        patient_scope: str,
+        audit_mode: AuditMode,
+        include_supporting_evidence: bool,
+        parse_cql: Any,
+        translator_cls: Any,
+        cache_key: str,
+        group_index: int,
+    ) -> CompiledGroup:
+        """Compile one FHIR Measure group to SQL."""
         translator = translator_cls(connection=self.conn)
 
         # Reuse cached registries to avoid ~1.5MB allocation per call
@@ -681,10 +1326,10 @@ class MeasureEvaluator:
             if self._audit_or_strategy == AuditOrStrategy.ALL:
                 translator.context.set_audit_or_strategy("all")
 
-        # Default include path: the directory containing the CQL file, so that
-        # sibling CQL libraries (Status, QICoreCommon, etc.) are auto-discovered.
-        effective_include_paths = list(include_paths) if include_paths else [cql_path.parent]
-        translator.set_library_loader(self._make_library_loader(effective_include_paths, parse_cql))
+        del library_artifact
+        translator.set_library_loader(
+            self._make_library_loader(artifact_resolver, parse_cql)
+        )
 
         output_columns = {
             self._col_name(p.population_code): p.cql_expression
@@ -698,7 +1343,7 @@ class MeasureEvaluator:
                     self._stratifier_component_col(strat_index, comp_index)
                 ] = component.cql_expression
 
-        if audit_mode != AuditMode.NONE:
+        if audit_mode != AuditMode.NONE or include_supporting_evidence:
             for pop in group.populations:
                 for ev in pop.supporting_evidence:
                     output_columns[f"evidence_{self._col_name(ev.name)}"] = ev.cql_expression
@@ -709,47 +1354,87 @@ class MeasureEvaluator:
                 output_columns=output_columns,
                 parameters=parameters,
                 patient_ids=patient_ids,
+                patient_scope=patient_scope,
             )
-            # Audit-mode SQL generates deeply nested audit_and/audit_or expressions;
-            # raise the limit to avoid DuckDB's default 1000-node cap.
-            self.conn.execute("SET max_expression_depth TO 10000")
-            df = self.conn.execute(sql).df()
-
-            # Full audit mode may produce Cartesian-product row explosion
-            # (N^K rows per patient) because retrieve CTEs are LEFT JOINed
-            # to capture per-resource evidence.  Deduplicate to one row per
-            # patient by keeping the first occurrence — evidence items across
-            # duplicate rows are identical per patient since the audit macros
-            # (audit_and / audit_or) already merge evidence lists.
-            if audit_mode == AuditMode.FULL and "patient_id" in df.columns:
-                pre_dedup = len(df)
-                df = df.drop_duplicates(subset=["patient_id"], keep="first")
-                if len(df) < pre_dedup:
-                    logger.debug(
-                        "Audit dedup: %d → %d rows (removed %d Cartesian duplicates)",
-                        pre_dedup, len(df), pre_dedup - len(df),
-                    )
-                df = df.reset_index(drop=True)
-
-            return df
         except (DQMError, KeyboardInterrupt):
             raise
         except (duckdb.Error, ValueError, FileNotFoundError, RuntimeError,
                 SyntaxError, TypeError) as e:
-            raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
+            raise DQMError(f"Compilation failed for group '{group.group_id}': {e}") from e
         except Exception as e:
             # Import actual exception classes instead of string-matching type names
             from fhir4ds.cql.errors import ParseError, TranslationError
             if isinstance(e, (ParseError, TranslationError)):
-                raise DQMError(f"Evaluation failed for group '{group.group_id}': {e}") from e
+                raise DQMError(f"Compilation failed for group '{group.group_id}': {e}") from e
             raise
-        finally:
-            # Clear per-evaluation state to prevent memory accumulation
-            try:
-                from fhir4ds.cql.duckdb.udf.variable import clear_variables
-                clear_variables(self.conn)
-            except ImportError:
-                pass
+        prepared_name = (
+            "fhir4ds_compiled_"
+            f"{hashlib.sha256(f'{cache_key}:{group_index}'.encode()).hexdigest()[:24]}"
+        )
+        return CompiledGroup(
+            group=group,
+            sql=sql,
+            audit_mode=audit_mode,
+            prepared_name=prepared_name,
+        )
+
+    def _execute_compiled_group(self, compiled_group: CompiledGroup) -> pd.DataFrame:
+        """Execute one compiled group, preparing SQL on first use when possible."""
+        # Audit-mode SQL generates deeply nested audit_and/audit_or expressions;
+        # raise the limit to avoid DuckDB's default 1000-node cap.
+        self.conn.execute("SET max_expression_depth TO 10000")
+        df = self._execute_prepared_or_sql(compiled_group).df()
+
+        # Full audit mode may produce Cartesian-product row explosion
+        # (N^K rows per patient) because retrieve CTEs are LEFT JOINed
+        # to capture per-resource evidence.  Deduplicate to one row per
+        # patient by keeping the first occurrence — evidence items across
+        # duplicate rows are identical per patient since the audit macros
+        # (audit_and / audit_or) already merge evidence lists.
+        if compiled_group.audit_mode == AuditMode.FULL and "patient_id" in df.columns:
+            pre_dedup = len(df)
+            df = df.drop_duplicates(subset=["patient_id"], keep="first")
+            if len(df) < pre_dedup:
+                logger.debug(
+                    "Audit dedup: %d → %d rows (removed %d Cartesian duplicates)",
+                    pre_dedup, len(df), pre_dedup - len(df),
+                )
+            df = df.reset_index(drop=True)
+        return df
+
+    def _execute_prepared_or_sql(self, compiled_group: CompiledGroup) -> Any:
+        """Use a DuckDB prepared statement when supported, falling back to raw SQL."""
+        if compiled_group.prepared_name:
+            if not compiled_group.prepared:
+                try:
+                    self.conn.execute(
+                        f"PREPARE {compiled_group.prepared_name} AS {compiled_group.sql}"
+                    )
+                    compiled_group.prepared = True
+                    self._compiled_measure_metrics.prepared_count += 1
+                except duckdb.Error:
+                    logger.debug(
+                        "DuckDB PREPARE failed for compiled measure; falling back",
+                        exc_info=True,
+                    )
+                    compiled_group.prepared_name = None
+                    self._compiled_measure_metrics.prepared_fallback_count += 1
+            if compiled_group.prepared_name and compiled_group.prepared:
+                return self.conn.execute(f"EXECUTE {compiled_group.prepared_name}")
+        return self.conn.execute(compiled_group.sql)
+
+    def _populate_target_patient_table(self, patient_ids: list[str]) -> None:
+        """Refresh the temporary patient-scope table used by compiled SQL."""
+        self.conn.execute(
+            f"CREATE TEMP TABLE IF NOT EXISTS {_TARGET_PATIENT_TABLE} "
+            "(patient_id VARCHAR)"
+        )
+        self.conn.execute(f"DELETE FROM {_TARGET_PATIENT_TABLE}")
+        if patient_ids:
+            self.conn.executemany(
+                f"INSERT INTO {_TARGET_PATIENT_TABLE} VALUES (?)",
+                [(patient_id,) for patient_id in patient_ids],
+            )
 
     def _prune_population_evidence(
         self, df: pd.DataFrame, pop_map: PopulationMap,
@@ -761,24 +1446,76 @@ class MeasureEvaluator:
         noise in downstream narratives and exports.
         """
         for group in pop_map.groups:
+            def _population_mask(col_name: str) -> pd.Series:
+                if col_name not in df.columns:
+                    return pd.Series(False, index=df.index)
+                return df[col_name].apply(
+                    lambda value: bool(value.get("result", False))
+                    if isinstance(value, dict)
+                    else bool(value)
+                )
+
+            population_masks = self._population_masks(df, _population_mask)
+            denom_exception_mask = (
+                population_masks["denominator_after_exclusion"]
+                & ~population_masks["numerator"]
+                & _population_mask("denominator_exception")
+            )
+            population_masks["denominator_exception"] = denom_exception_mask
+            population_masks["denominator_final"] = (
+                population_masks["denominator_after_exclusion"]
+                & ~denom_exception_mask
+            )
+
             for pop in group.populations:
                 col_name = self._col_name(pop.population_code)
                 if col_name not in df.columns:
                     continue
+                effective_mask = None
+                if pop.audit_persona == AuditPersona.EXCLUSION:
+                    available = set(df.columns)
+                    if (
+                        col_name == "denominator_exclusion"
+                        and {"initial_population", "denominator"} <= available
+                    ):
+                        effective_mask = population_masks.get(col_name)
+                    elif (
+                        col_name == "denominator_exception"
+                        and {"initial_population", "denominator", "numerator"} <= available
+                    ):
+                        effective_mask = population_masks.get(col_name)
+                    elif (
+                        col_name == "numerator_exclusion"
+                        and {"initial_population", "denominator", "numerator"} <= available
+                    ):
+                        effective_mask = population_masks.get(col_name)
 
                 def _prune(
                     cell,
+                    idx,
                     persona=pop.audit_persona,
                     code=pop.population_code,
                     column=col_name,
+                    mask=effective_mask,
                 ):
                     if not isinstance(cell, dict):
                         return cell
                     try:
-                        pruned = self._audit_engine.prune_evidence(
-                            {column: cell}, code, persona
+                        effective_result = (
+                            bool(mask.loc[idx])
+                            if persona == AuditPersona.EXCLUSION and mask is not None
+                            else bool(cell.get("result", False))
                         )
-                        return {**cell, "evidence": pruned}
+                        if persona == AuditPersona.EXCLUSION and not effective_result:
+                            pruned = []
+                        else:
+                            pruned = self._audit_engine.prune_evidence(
+                                {column: cell}, code, persona
+                            )
+                        result = {**cell, "evidence": pruned}
+                        if persona == AuditPersona.EXCLUSION:
+                            result["effective_result"] = effective_result
+                        return result
                     except Exception:
                         logger.warning(
                             "Evidence pruning failed for population %s — "
@@ -787,7 +1524,10 @@ class MeasureEvaluator:
                         )
                         return cell
 
-                df[col_name] = df[col_name].apply(_prune)
+                df[col_name] = pd.Series(
+                    (_prune(cell, idx) for idx, cell in df[col_name].items()),
+                    index=df.index,
+                )
         return df
 
     def _filter_to_initial_population(
@@ -836,36 +1576,30 @@ class MeasureEvaluator:
         evidence_captured = audit_mode != AuditMode.POPULATION
         if isinstance(val, dict):
             evidence = val.get("evidence", [])
-            is_satisfied = val.get("result", False)
+            is_satisfied = val.get("effective_result", val.get("result", False))
             ev_dicts = [e if isinstance(e, dict) else {} for e in evidence]
             return self._narrative.generate(population_code, ev_dicts, is_satisfied,
                                             evidence_captured=evidence_captured)
         return self._narrative.generate(population_code, [], bool(val),
                                         evidence_captured=evidence_captured)
 
-    def _make_library_loader(self, include_paths: list[str], parse_cql: Any):
+    def _make_library_loader(self, artifact_resolver: ArtifactResolver, parse_cql: Any):
         """Create a library loader function for included CQL libraries.
 
         Raises DQMError if a library file is found but fails to parse,
         since silent fallback would produce incorrect measure results.
         """
         def loader(alias: str):
-            # Resolve canonical URLs to simple filenames.
-            # e.g. "hl7.fhir.uv.cql.FHIRHelpers" → "FHIRHelpers"
-            resolved_alias = alias.rsplit(".", 1)[-1] if "." in alias else alias
-            for search_alias in dict.fromkeys([alias, resolved_alias]):
-                for path in include_paths:
-                    base = Path(path)
-                    # Try exact name first, then versioned filenames (e.g. FHIRHelpers-4.4.000.cql)
-                    candidates = [base / f"{search_alias}.cql"] + sorted(base.glob(f"{search_alias}-*.cql"))
-                    for lib_file in candidates:
-                        if lib_file.exists():
-                            try:
-                                return parse_cql(lib_file.read_text())
-                            except (SyntaxError, ValueError, KeyError) as e:
-                                raise DQMError(
-                                    f"Failed to parse included library '{lib_file}': {e}"
-                                ) from e
+            artifact = artifact_resolver.resolve_include(alias)
+            if artifact is None:
+                return None
+            try:
+                return parse_cql(artifact.text)
+            except (SyntaxError, ValueError, KeyError) as e:
+                label = artifact.name or artifact.source_id
+                raise DQMError(
+                    f"Failed to parse included library '{label}': {e}"
+                ) from e
             return None
         return loader
 

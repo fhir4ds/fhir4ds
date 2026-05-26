@@ -13,6 +13,7 @@ Adapters
 - :class:`ExistingTableSource` — wraps an already-loaded DuckDB table/view
 - :class:`FileSystemSource` — Parquet, NDJSON, Iceberg (local or cloud)
 - :class:`PostgresSource` — FHIR JSON stored in Postgres columns
+- :class:`HapiPostgresSource` — HAPI FHIR JPA Server on PostgreSQL
 - :class:`CSVSource` — flat CSV files with a user-defined SQL projection
 
 Usage::
@@ -38,6 +39,7 @@ from fhir4ds.sources.base import SchemaValidationError, SourceAdapter
 from fhir4ds.sources.csv import CSVSource
 from fhir4ds.sources.existing import ExistingTableSource
 from fhir4ds.sources.filesystem import CloudCredentials, FileSystemSource
+from fhir4ds.sources.hapi_postgres import HapiPostgresSchema, HapiPostgresSource
 from fhir4ds.sources.relational import PostgresSource, PostgresTableMapping
 
 __all__ = [
@@ -47,6 +49,8 @@ __all__ = [
     "CloudCredentials",
     "PostgresSource",
     "PostgresTableMapping",
+    "HapiPostgresSource",
+    "HapiPostgresSchema",
     "ExistingTableSource",
     "CSVSource",
 ]

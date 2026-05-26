@@ -1,0 +1,84 @@
+# External non-production HAPI pilot config.
+#
+# Required environment:
+#   FHIR4DS_HAPI_POSTGRES_URL=postgresql://user:password@host:5432/hapi
+#   FHIR4DS_HAPI_BASE_URL=https://hapi.example/fhir
+#
+# Optional environment:
+#   FHIR4DS_HAPI_BEARER_TOKEN=...
+#   FHIR4DS_ARTIFACT_DIR=/artifacts
+
+postgres:
+  connection_string: ${FHIR4DS_HAPI_POSTGRES_URL}
+  hapi_schema:
+    schema: public
+    resource_table: hfj_resource
+    version_table: hfj_res_ver
+    resource_pk_column: res_id
+    version_resource_fk_column: res_id
+    resource_type_column: res_type
+    fhir_id_column: fhir_id
+    current_version_column: res_ver
+    version_number_column: res_ver
+    updated_at_column: res_updated
+    deleted_at_column: res_deleted_at
+    encoding_column: res_encoding
+    text_vc_column: res_text_vc
+    text_lob_column: res_text
+    decoded_view: fhir4ds_hapi_current_resources
+
+hapi:
+  base_url: ${FHIR4DS_HAPI_BASE_URL}
+  bearer_token: ${FHIR4DS_HAPI_BEARER_TOKEN:-}
+  timeout_seconds: 30
+  valueset_version_policy: latest
+  headers: {}
+
+artifacts:
+  # Use "files" for mounted Measure/CQL/ValueSet artifacts.
+  # Use "hapi" when Measure, Library, and ValueSet resources are hosted in HAPI.
+  source: files
+
+period:
+  start: "2026-01-01"
+  end: "2026-12-31"
+
+worker:
+  batch_size: 100
+  poll_interval_seconds: 30
+  max_attempts: 3
+  retry_backoff_seconds: 60
+  processing_timeout_seconds: 900
+  notification_channel: fhir4ds_patient_changed
+  fail_on_unsupported_storage: true
+
+retention:
+  inactive_result_days: 365
+  audit_days: 180
+  run_days: 365
+
+defaults:
+  audit_mode: population
+  narratives: false
+  filter_to_ip: false
+
+results:
+  persist_audit: true
+  persist_measure_report: true
+  publish_measure_report_to_hapi: false
+
+libraries:
+  paths:
+    - ${FHIR4DS_ARTIFACT_DIR:-/artifacts}/libraries
+
+terminology:
+  valuesets:
+    - ${FHIR4DS_ARTIFACT_DIR:-/artifacts}/valuesets
+
+measures:
+  - id: ExampleMeasure
+    enabled: false
+    path: ${FHIR4DS_ARTIFACT_DIR:-/artifacts}/measures/Measure-ExampleMeasure.json
+    cql: ${FHIR4DS_ARTIFACT_DIR:-/artifacts}/libraries/ExampleMeasure.cql
+    version: "2026"
+    tags: ["pilot"]

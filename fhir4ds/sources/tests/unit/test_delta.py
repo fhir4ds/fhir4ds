@@ -22,19 +22,17 @@ from __future__ import annotations
 
 import os
 import tempfile
-import time
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import duckdb
 import pytest
 
+from fhir4ds.dqm.reactive import ReactiveEvaluator
 from fhir4ds.sources.csv import CSVSource
 from fhir4ds.sources.existing import ExistingTableSource
 from fhir4ds.sources.filesystem import FileSystemSource
 from fhir4ds.sources.relational import PostgresSource, PostgresTableMapping
-from fhir4ds.dqm.reactive import ReactiveEvaluator
-
 
 # ---------------------------------------------------------------------------
 # Helpers

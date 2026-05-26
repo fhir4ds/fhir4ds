@@ -1,5 +1,5 @@
 from collections import abc
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import json
 from ...engine import util as util
 from ...engine import nodes as nodes
@@ -69,11 +69,16 @@ def equality(ctx, x, y):
             return None
         return l_value == r_value
 
+    if isinstance(a, (abc.Mapping, list)) and isinstance(b, (abc.Mapping, list)):
+        return _complex_equality(ctx, a, b)
+
     # FHIRPath §6.1.1: equality between incompatible types returns empty.
     # Only implicit conversions are allowed; Integer↔String is explicit.
     # Unwrap ResourceNode wrappers to get the actual data types.
     a_raw = util.get_data(a) if hasattr(a, 'data') else a
     b_raw = util.get_data(b) if hasattr(b, 'data') else b
+    if isinstance(a_raw, (abc.Mapping, list)) and isinstance(b_raw, (abc.Mapping, list)):
+        return _complex_equality(ctx, a_raw, b_raw)
     a_type = type(a_raw)
     b_type = type(b_raw)
     if a_type != b_type:
@@ -85,6 +90,40 @@ def equality(ctx, x, y):
             return None  # incompatible types → empty
 
     return a == b
+
+
+def _complex_equality(ctx, a, b):
+    a_quantity = util.parse_value(a)
+    b_quantity = util.parse_value(b)
+    if isinstance(a_quantity, nodes.FP_Quantity) and isinstance(b_quantity, nodes.FP_Quantity):
+        return equality(ctx, [a_quantity], [b_quantity])
+
+    if isinstance(a, abc.Mapping) and isinstance(b, abc.Mapping):
+        if a.keys() != b.keys():
+            return False
+        for key in a:
+            result = _complex_equality(ctx, a[key], b[key])
+            if result is None:
+                return None
+            if result is False:
+                return False
+        return True
+
+    if isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            return False
+        for left, right in zip(a, b, strict=True):
+            result = _complex_equality(ctx, left, right)
+            if result is None:
+                return None
+            if result is False:
+                return False
+        return True
+
+    if isinstance(a, (abc.Mapping, list)) or isinstance(b, (abc.Mapping, list)):
+        return None
+
+    return equality(ctx, [a], [b])
 
 
 def normalize_string(s):
@@ -99,13 +138,13 @@ def decimal_places(a):
 
 def round_to_decimal_places(a, n):
     rounding_format = Decimal("10") ** -n
-    return Decimal(a).quantize(rounding_format)
+    return Decimal(str(a)).quantize(rounding_format, rounding=ROUND_HALF_UP)
 
 
 def is_equivalent(a, b):
     precision = min(decimal_places(a), decimal_places(b))
     if precision == 0:
-        return round(a) == round(b)
+        return round_to_decimal_places(a, 0) == round_to_decimal_places(b, 0)
     else:
         return round_to_decimal_places(a, precision) == round_to_decimal_places(b, precision)
 
@@ -180,18 +219,40 @@ def equivalence(ctx, x, y):
     if isinstance(a, (abc.Mapping, list)) and isinstance(b, (abc.Mapping, list)):
 
         def deep_equal(a, b):
+            a_quantity = util.parse_value(a)
+            b_quantity = util.parse_value(b)
+            if isinstance(a_quantity, nodes.FP_Quantity) and isinstance(b_quantity, nodes.FP_Quantity):
+                return equivalence(ctx, [a_quantity], [b_quantity]) is True
+
             if isinstance(a, abc.Mapping) and isinstance(b, abc.Mapping):
                 if a.keys() != b.keys():
                     return False
                 return all(deep_equal(a[key], b[key]) for key in a)
             elif isinstance(a, list) and isinstance(b, list):
-                return len(a) == len(b) and all(
-                    deep_equal(x, y) for x, y in zip(sorted(a), sorted(b), strict=True)
-                )
+                if len(a) != len(b):
+                    return False
+                matched = [False] * len(b)
+                for left in a:
+                    found = False
+                    for idx, right in enumerate(b):
+                        if matched[idx]:
+                            continue
+                        if deep_equal(left, right):
+                            matched[idx] = True
+                            found = True
+                            break
+                    if not found:
+                        return False
+                return True
             elif isinstance(a, str) and isinstance(b, str):
                 return normalize_string(a) == normalize_string(b)
-            elif isinstance(a, (int, float)) and isinstance(b, (int, float)):
-                return abs(a - b) < 0.5
+            elif (
+                isinstance(a, (int, float, Decimal))
+                and isinstance(b, (int, float, Decimal))
+                and not isinstance(a, bool)
+                and not isinstance(b, bool)
+            ):
+                return is_equivalent(a, b)
             else:
                 return a == b
 
@@ -237,9 +298,13 @@ def datetime_equality(ctx, x, y):
         return None
     if type(datetime_x) not in DATETIME_NODES_LIST:
         v_x = util.get_data(datetime_x)
+        if not isinstance(v_x, str):
+            return None
         datetime_x = nodes.FP_TimeBase.get_match_data(v_x)
     if type(datetime_y) not in DATETIME_NODES_LIST:
         v_y = util.get_data(datetime_y)
+        if not isinstance(v_y, str):
+            return None
         datetime_y = nodes.FP_TimeBase.get_match_data(v_y)
     if datetime_x is None or datetime_y is None:
         return None
@@ -377,18 +442,35 @@ def typecheck(a, b):
     return [a, b]
 
 
+def _is_time_domain_mismatch(a, b):
+    return (
+        isinstance(a, nodes.FP_TimeBase)
+        and isinstance(b, nodes.FP_TimeBase)
+        and isinstance(a, nodes.FP_Time) != isinstance(b, nodes.FP_Time)
+    )
+
+
 def _compare(ctx, a, b, fp_check, py_op):
     """Shared comparison logic for lt, gt, lte, gte."""
     if len(a) == 0 or len(b) == 0:
         return []
     if len(a) > 1 or len(b) > 1:
-        return []
+        raise FHIRPathError("Comparison operators require singleton operands")
     if a[0] is None or b[0] is None:
         return []
 
     vals = typecheck(a, b)
     a0 = vals[0]
     b0 = vals[1]
+
+    if isinstance(a0, bool) and isinstance(b0, bool):
+        raise FHIRPathError("Comparison operators are not defined for Boolean operands")
+
+    # FHIRPath Section 6.2 defines ordering within Date, DateTime, or Time
+    # domains. Time-only values are not implicitly convertible to calendar
+    # Date/DateTime values.
+    if _is_time_domain_mismatch(a0, b0):
+        return None
 
     if isinstance(a0, nodes.FP_Type):
         try:

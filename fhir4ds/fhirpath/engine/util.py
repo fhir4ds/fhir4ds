@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import json
 import logging
 from collections import OrderedDict
@@ -34,14 +34,15 @@ def get_data(value):
 def parse_value(value):
     def parse_complex_value(v):
         num_value, unit = v.get("value"), v.get("code") or v.get("unit")
-        # Convert string values to Decimal for proper numeric comparison
-        if isinstance(num_value, str):
-            try:
-                num_value = Decimal(num_value)
-            except Exception as e:
-                _logger.warning("Failed to convert Quantity string value '%s' to Decimal: %s", num_value, e)
-                pass
-        return FP_Quantity(num_value, f"'{unit}'") if num_value is not None and unit else None
+        if num_value is None or isinstance(num_value, bool) or not isinstance(unit, str) or not unit:
+            return None
+        try:
+            num_value = Decimal(str(num_value))
+        except (InvalidOperation, ValueError):
+            return None
+        if not num_value.is_finite():
+            return None
+        return FP_Quantity(num_value, f"'{unit}'")
 
     # Handle ResourceNode with type info
     if getattr(value, "get_type_info", lambda: None)() and value.get_type_info().name == "Quantity":

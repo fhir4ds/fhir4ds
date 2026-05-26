@@ -8,10 +8,9 @@ files on local disk or cloud object storage (S3, Azure Blob, GCS).
 from __future__ import annotations
 
 import warnings
-from typing import Any, Optional
+from typing import Any
 
 from fhir4ds.sources.base import quote_identifier, quote_sql_literal, validate_schema
-
 
 _CLOUD_PREFIXES = ("s3://", "az://", "abfs://", "gs://", "gcs://")
 
@@ -73,7 +72,7 @@ class CloudCredentials:
     def __init__(
         self,
         provider: str,
-        secret_name: Optional[str] = None,
+        secret_name: str | None = None,
         **kwargs: Any,
     ) -> None:
         self.provider = provider.upper()
@@ -159,7 +158,7 @@ class FileSystemSource:
         self,
         path_pattern: str,
         format: str = "parquet",
-        credentials: Optional[CloudCredentials] = None,
+        credentials: CloudCredentials | None = None,
         hive_partitioning: bool = False,
     ) -> None:
         fmt = format.lower()
@@ -173,7 +172,7 @@ class FileSystemSource:
         self._credentials = credentials
         self._hive_partitioning = hive_partitioning
         # Stored during register() for incremental delta scanning
-        self._con: Optional[Any] = None
+        self._con: Any | None = None
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -338,7 +337,7 @@ class FileSystemSource:
         """
         return self._format in ("parquet", "ndjson", "json")
 
-    def get_changed_patients(self, since: "datetime") -> list[str]:  # type: ignore[name-defined]  # noqa: F821
+    def get_changed_patients(self, since: datetime) -> list[str]:  # type: ignore[name-defined]  # noqa: F821
         """
         Returns patients whose source files have been modified since *since*
         by scanning file modification timestamps.

@@ -1,8 +1,22 @@
 """dqm — Digital Quality Measure Orchestrator & Audit Engine."""
 
+from .artifacts import (
+    ArtifactResolver,
+    FileArtifactResolver,
+    HapiArtifactResolver,
+    LibraryArtifact,
+    MeasureArtifact,
+    ValueSetRef,
+    create_artifact_resolver,
+)
 from .audit import AuditEngine
 from .errors import DQMError, MeasureParseError
-from .evaluator import MeasureEvaluator
+from .evaluator import (
+    CompiledGroup,
+    CompiledMeasure,
+    CompiledMeasureMetrics,
+    MeasureEvaluator,
+)
 from .models import MeasureResult
 from .narrative import NarrativeGenerator
 from .parser import MeasureParser
@@ -17,7 +31,7 @@ from .types import (
     SupportingEvidenceDef,
 )
 
-__version__ = "0.0.6"
+__version__ = "0.0.7"
 
 __all__ = [
     "__version__",
@@ -25,9 +39,17 @@ __all__ = [
     "AuditMode",
     "AuditOrStrategy",
     "AuditPersona",
+    "ArtifactResolver",
     "DQMError",
+    "CompiledGroup",
+    "CompiledMeasure",
+    "CompiledMeasureMetrics",
+    "FileArtifactResolver",
     "GroupMap",
+    "HapiArtifactResolver",
+    "LibraryArtifact",
     "MeasureEvaluator",
+    "MeasureArtifact",
     "MeasureParseError",
     "MeasureParser",
     "MeasureResult",
@@ -36,4 +58,6 @@ __all__ = [
     "PopulationMap",
     "ReactiveEvaluator",
     "SupportingEvidenceDef",
+    "ValueSetRef",
+    "create_artifact_resolver",
 ]

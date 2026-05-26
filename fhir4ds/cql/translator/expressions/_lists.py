@@ -513,8 +513,13 @@ class ListsMixin:
             qualified_func = CQLFunctionRef(name=f"{library_alias}.{func_name}", arguments=expr.arguments)
             return self._translate_function_ref(qualified_func, boolean_context=boolean_context)
 
-        source = self.translate(expr.source, boolean_context=False)
         method = expr.method
+        source_usage = (
+            ExprUsage.LIST
+            if method.lower() in {"first", "last", "singletonfrom", "count", "distinct", "where", "select"}
+            else ExprUsage.SCALAR
+        )
+        source = self.translate(expr.source, usage=source_usage)
         args = [self.translate(arg, boolean_context=False) for arg in expr.arguments]
 
         # Handle common method invocations
@@ -649,16 +654,23 @@ class ListsMixin:
                 return SQLBinaryOp(operator="=", left=id_expr, right=last_segment)
             return SQLLiteral(value=True)
 
-        # Try FluentFunctionTranslator FIRST for functions with dedicated AST builders
-        # (prevalenceInterval, status filters, etc.) — these produce optimized SQL
-        # that avoids problematic CQL constructs like type-checking.
-        fluent_translator = self.context.fluent_translator
-
         # Get resource_type - first try to extract from source expression (AST),
         # then fall back to context (set during query translation)
         resource_type = self._infer_resource_type(expr.source)
         if resource_type is None:
             resource_type = getattr(self.context, 'resource_type', None)
+
+        # If the pre-scan built a function CTE for this source/function pair,
+        # use it before the fluent SQL inliner expands the full body.
+        if self.context.promoted_functions:
+            _promoted = self._try_promoted_function_lookup(method, expr.source)
+            if _promoted is not None:
+                return _promoted
+
+        # Try FluentFunctionTranslator for functions with dedicated AST builders
+        # (prevalenceInterval, status filters, etc.) and CQL-defined fluent
+        # functions that are not promoted above.
+        fluent_translator = self.context.fluent_translator
 
         # Check if this is a known fluent function with a dedicated AST builder
         if fluent_translator.is_fluent_function(method, resource_type, self.context):
@@ -672,12 +684,6 @@ class ListsMixin:
                 )
             except NotImplementedError:
                 pass  # No AST builder — fall through to inliner
-
-        # Check if this function call should use a promoted CTE lookup
-        if self.context.promoted_functions:
-            _promoted = self._try_promoted_function_lookup(method, expr.source)
-            if _promoted is not None:
-                return _promoted
 
         # Expand-then-translate: try shared FunctionInliner (CQL AST -> CQL AST)
         inliner = self.context.function_inliner

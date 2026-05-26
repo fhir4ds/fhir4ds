@@ -13,13 +13,12 @@ Acceptance criteria:
 
 from __future__ import annotations
 
-import pytest
 import duckdb
+import pytest
 
+import fhir4ds
 from fhir4ds.sources.base import SchemaValidationError
 from fhir4ds.sources.existing import ExistingTableSource
-import fhir4ds
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -169,7 +168,7 @@ class TestExistingTableSourceCustomName:
         source.register(con)
         source.unregister(con)
 
-        with pytest.raises(Exception):
+        with pytest.raises(duckdb.CatalogException):
             con.execute("SELECT * FROM resources").fetchall()
 
     def test_unregister_resets_created_view_flag(self):
@@ -234,7 +233,7 @@ class TestApiUniformity:
         fhir4ds.attach(con, source)
         fhir4ds.detach(con, source)
         # After detach, the view should be gone
-        with pytest.raises(Exception):
+        with pytest.raises(duckdb.CatalogException):
             con.execute("SELECT * FROM resources").fetchall()
 
     def test_fhirdataloader_workflow_unaffected(self):

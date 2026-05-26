@@ -33,6 +33,8 @@ class SupportingEvidenceDef:
 
     name: str
     cql_expression: str
+    description: str | None = None
+    code: dict | None = None
 
 
 @dataclass
@@ -62,6 +64,7 @@ class PopulationEntry:
     group_id: str
     cql_expression: str
     audit_persona: AuditPersona
+    source_population_id: str | None = None
     supporting_evidence: list[SupportingEvidenceDef] = field(default_factory=list)
 
 
@@ -71,6 +74,7 @@ class GroupMap:
 
     group_id: str
     population_basis: str  # "boolean" or resource type like "Encounter"
+    source_group_id: str | None = None
     populations: list[PopulationEntry] = field(default_factory=list)
     stratifiers: list[StratifierEntry] = field(default_factory=list)
 

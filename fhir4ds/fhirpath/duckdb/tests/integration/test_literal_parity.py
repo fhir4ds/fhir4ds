@@ -102,6 +102,28 @@ def test_unicode_hex_letter_string_escapes_match_spec() -> None:
         con.close()
 
 
+def test_unicode_surrogate_pair_string_escapes_match_spec_and_backends() -> None:
+    expression = r"'\uD834\uDD1E'"
+    expected = "\U0001D11E"
+    expected_row = ([expected], expected, json.dumps([expected], ensure_ascii=False, separators=(",", ":")), True)
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        cpp_row = cpp.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+            [RESOURCE, expression, RESOURCE, expression, RESOURCE, expression, expression],
+        ).fetchone()
+        py_row = py.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+            [RESOURCE, expression, RESOURCE, expression, RESOURCE, expression, expression],
+        ).fetchone()
+        assert cpp_row == py_row == expected_row
+    finally:
+        cpp.close()
+        py.close()
+
+
 def test_double_backslash_string_escapes_match_spec_and_backends() -> None:
     cases = {
         r"'\\p'": r"\p",
@@ -110,8 +132,8 @@ def test_double_backslash_string_escapes_match_spec_and_backends() -> None:
         r"'abc\'": "abc",
     }
 
-    cpp = _connection()
     py = _python_fallback_connection()
+    cpp = _connection()
     try:
         for expression, expected in cases.items():
             expected_row = ([expected], expected, json.dumps([expected], separators=(",", ":")))
@@ -129,9 +151,258 @@ def test_double_backslash_string_escapes_match_spec_and_backends() -> None:
         py.close()
 
 
+def test_no_whitespace_quoted_quantity_literals_match_spec_and_backends() -> None:
+    expression = "10'mg'"
+    expected_row = (["10 'mg'"], "10 'mg'", '[{"value":10,"unit":"mg"}]', "10 'mg'", True)
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        cpp_row = cpp.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_quantity(?::JSON, ?), fhirpath_is_valid(?)",
+            [RESOURCE, expression, RESOURCE, expression, RESOURCE, expression, RESOURCE, expression, expression],
+        ).fetchone()
+        py_row = py.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_quantity(?::JSON, ?), fhirpath_is_valid(?)",
+            [RESOURCE, expression, RESOURCE, expression, RESOURCE, expression, RESOURCE, expression, expression],
+        ).fetchone()
+        assert cpp_row == py_row == expected_row
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_quantity_literal_unit_escapes_and_empty_units_match_spec_and_backends() -> None:
+    valid_expression = r"10'\u006Dg'"
+    valid_expected = (["10 'mg'"], "10 'mg'", '[{"value":10,"unit":"mg"}]', "10 'mg'", True)
+    invalid_expression = "1 ''"
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        cpp_row = cpp.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_quantity(?::JSON, ?), fhirpath_is_valid(?)",
+            [
+                RESOURCE,
+                valid_expression,
+                RESOURCE,
+                valid_expression,
+                RESOURCE,
+                valid_expression,
+                RESOURCE,
+                valid_expression,
+                valid_expression,
+            ],
+        ).fetchone()
+        py_row = py.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_quantity(?::JSON, ?), fhirpath_is_valid(?)",
+            [
+                RESOURCE,
+                valid_expression,
+                RESOURCE,
+                valid_expression,
+                RESOURCE,
+                valid_expression,
+                RESOURCE,
+                valid_expression,
+                valid_expression,
+            ],
+        ).fetchone()
+        assert cpp_row == py_row == valid_expected
+
+        cpp_invalid = cpp.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_quantity(?::JSON, ?), fhirpath_is_valid(?)",
+            [
+                RESOURCE,
+                invalid_expression,
+                RESOURCE,
+                invalid_expression,
+                RESOURCE,
+                invalid_expression,
+                RESOURCE,
+                invalid_expression,
+                invalid_expression,
+            ],
+        ).fetchone()
+        py_invalid = py.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_quantity(?::JSON, ?), fhirpath_is_valid(?)",
+            [
+                RESOURCE,
+                invalid_expression,
+                RESOURCE,
+                invalid_expression,
+                RESOURCE,
+                invalid_expression,
+                RESOURCE,
+                invalid_expression,
+                invalid_expression,
+            ],
+        ).fetchone()
+        assert cpp_invalid == py_invalid == ([], None, None, None, False)
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_type_specific_literal_wrappers_reject_wrong_literal_types() -> None:
+    wrong_type_cases = [
+        "true",
+        "false",
+        r"'text'",
+        r"'\uD834\uDD1E'",
+        "45",
+        "0.1",
+        "@2014",
+        "@T14:34",
+    ]
+    typed_cases = {
+        "@2014T": ("2014T", None),
+        "@2014-01-25T14:34:28+09:00": ("2014-01-25T14:34:28+09:00", None),
+        "10 'mg'": (None, "10 'mg'"),
+        "4 days": (None, "4 days"),
+    }
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        for expression in wrong_type_cases:
+            cpp_row = cpp.execute(
+                "SELECT fhirpath_timestamp(?::JSON, ?), fhirpath_quantity(?::JSON, ?)",
+                [RESOURCE, expression, RESOURCE, expression],
+            ).fetchone()
+            py_row = py.execute(
+                "SELECT fhirpath_timestamp(?::JSON, ?), fhirpath_quantity(?::JSON, ?)",
+                [RESOURCE, expression, RESOURCE, expression],
+            ).fetchone()
+            assert cpp_row == py_row == (None, None)
+
+        for expression, expected in typed_cases.items():
+            cpp_row = cpp.execute(
+                "SELECT fhirpath_timestamp(?::JSON, ?), fhirpath_quantity(?::JSON, ?)",
+                [RESOURCE, expression, RESOURCE, expression],
+            ).fetchone()
+            py_row = py.execute(
+                "SELECT fhirpath_timestamp(?::JSON, ?), fhirpath_quantity(?::JSON, ?)",
+                [RESOURCE, expression, RESOURCE, expression],
+            ).fetchone()
+            assert cpp_row == py_row == expected
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_year_zero_temporal_literals_are_invalid_in_both_backends() -> None:
+    expressions = [
+        "@0000",
+        "@0000-01",
+        "@0000-01-01",
+        "@0000T",
+        "@0000-01-01T00:00",
+    ]
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        for expression in expressions:
+            cpp_row = cpp.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_date(?::JSON, ?), fhirpath_timestamp(?::JSON, ?), fhirpath_is_valid(?)",
+                [
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    expression,
+                ],
+            ).fetchone()
+            py_row = py.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_date(?::JSON, ?), fhirpath_timestamp(?::JSON, ?), fhirpath_is_valid(?)",
+                [
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    RESOURCE,
+                    expression,
+                    expression,
+                ],
+            ).fetchone()
+            assert cpp_row == py_row == ([], None, None, None, None, False)
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_invalid_timezone_suffixed_date_literals_are_invalid_in_both_backends() -> None:
+    expressions = ["@2014Z", "@2014-01Z", "@2014-01-25Z", "@2014TZ"]
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        for expression in expressions:
+            assert cpp.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (False,)
+            assert py.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (False,)
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_integer_literal_range_matches_spec_and_backends() -> None:
+    valid_cases = {
+        "2147483647": ["2147483647"],
+        "(-2147483648)": ["-2147483648"],
+    }
+    invalid_cases = ["2147483648", "(-2147483649)", "9223372036854775808"]
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        for expression, expected in valid_cases.items():
+            assert cpp.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (True,)
+            assert py.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (True,)
+            assert cpp.execute("SELECT fhirpath(?::JSON, ?)", [RESOURCE, expression]).fetchone() == (expected,)
+            assert py.execute("SELECT fhirpath(?::JSON, ?)", [RESOURCE, expression]).fetchone() == (expected,)
+
+        for expression in invalid_cases:
+            assert cpp.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (False,)
+            assert py.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (False,)
+    finally:
+        cpp.close()
+        py.close()
+
+
+def test_pathological_mixed_literal_chain_matches_backends() -> None:
+    expression = "(true | false | 'x' | 1 | 1.0 | @2014 | @T14 | @2014T | 1 'mg').select($this.toString()).count()"
+    expected = (["8"], "8", "[8]", 8.0, True)
+
+    py = _python_fallback_connection()
+    cpp = _connection()
+    try:
+        cpp_row = cpp.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_number(?::JSON, ?), fhirpath_is_valid(?)",
+            [RESOURCE, expression, RESOURCE, expression, RESOURCE, expression, RESOURCE, expression, expression],
+        ).fetchone()
+        py_row = py.execute(
+            "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_number(?::JSON, ?), fhirpath_is_valid(?)",
+            [RESOURCE, expression, RESOURCE, expression, RESOURCE, expression, RESOURCE, expression, expression],
+        ).fetchone()
+        assert cpp_row == py_row == expected
+    finally:
+        cpp.close()
+        py.close()
+
+
 def test_datetime_integer_and_quantity_literals_match_python_fallback() -> None:
     expressions = [
-        "2147483648",
         "@2015T",
         "@2015-02T",
         "@2015-02-04T",
@@ -186,8 +457,8 @@ def test_partial_datetime_timezone_offsets_match_python_fallback() -> None:
         "@2014-01-25T14:30+99:99": ([], None, None),
     }
 
-    cpp = _connection()
     py = _python_fallback_connection()
+    cpp = _connection()
     try:
         for expression, expected in cases.items():
             cpp_row = cpp.execute(
@@ -207,8 +478,8 @@ def test_partial_datetime_timezone_offsets_match_python_fallback() -> None:
 def test_malformed_temporal_literal_shapes_are_invalid_in_both_backends() -> None:
     expressions = ["@2014-1", "@2014-01-2", "@2014-01-25T14+09", "@T14:3"]
 
-    cpp = _connection()
     py = _python_fallback_connection()
+    cpp = _connection()
     try:
         for expression in expressions:
             cpp_result = cpp.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone()

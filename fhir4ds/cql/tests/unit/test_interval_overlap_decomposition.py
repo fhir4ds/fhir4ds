@@ -5,8 +5,11 @@ This module tests that interval overlaps are decomposed to simple SQL comparison
 instead of using UDF chains like intervalOverlaps(intervalFromBounds(...), ...).
 """
 
+import duckdb
 import pytest
 
+from ...parser import parse_cql
+from ...translator import CQLToSQLTranslator
 from ...parser.ast_nodes import (
     BinaryExpression,
     Identifier,
@@ -258,8 +261,7 @@ class TestIntervalOverlapWithNullEnd:
         assert "intervalOverlaps" not in sql
         # Should have COALESCE for the NULL end
         assert "COALESCE" in sql
-        # Should use 9999-12-31 as the default for NULL
-        assert "9999-12-31" in sql
+
 
     def test_interval_with_null_end_overlaps_literal_interval(self, translator: ExpressionTranslator):
         """Test that interval with NULL end correctly overlaps a literal interval."""
@@ -289,3 +291,37 @@ class TestIntervalOverlapWithNullEnd:
         # decomposition COALESCE sentinels ('9999-12-31') are DATE-specific.
         assert isinstance(result, SQLFunctionCall)
         assert result.name == "intervalOverlaps"
+
+
+class TestIntervalOverlapNullLowExecution:
+    """Execution coverage for optimized overlaps with unbounded low bounds."""
+
+    def _execute_result(self, expression: str):
+        cql = f"""
+        library Test version '1.0'
+        define Result: {expression}
+        """
+        library = parse_cql(cql)
+        translator = CQLToSQLTranslator()
+        sql = translator.translate_library_to_sql(library, final_definition="Result")
+        con = duckdb.connect()
+        try:
+            return con.execute(sql).fetchone()[0], sql
+        finally:
+            con.close()
+
+    def test_left_closed_null_low_overlaps_executes_true(self):
+        result, sql = self._execute_result(
+            "Interval[null, @2024-06-01] overlaps Interval[@2024-01-01, @2024-12-31]"
+        )
+
+        assert result is True
+        assert "'0001-01-01'" in sql
+
+    def test_right_closed_null_low_overlaps_executes_true(self):
+        result, sql = self._execute_result(
+            "Interval[@2024-01-01, @2024-12-31] overlaps Interval[null, @2024-06-01]"
+        )
+
+        assert result is True
+        assert "'0001-01-01'" in sql

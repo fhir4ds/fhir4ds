@@ -23,7 +23,13 @@ from typing import TYPE_CHECKING
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from .evaluator import FHIRPathEvaluator, _strip_comments_for_precheck
+from .evaluator import (
+    FHIRPathEvaluator,
+    _has_invalid_timezone_literal,
+    _has_out_of_range_integer_literal,
+    _is_unary_minus_context,
+    _strip_comments_for_precheck,
+)
 from .errors import FHIRPathError, FHIRPathSyntaxError
 
 if TYPE_CHECKING:
@@ -97,6 +103,7 @@ def _parse_json(resource: str) -> dict:
 def _json_default(obj: object) -> object:
     """JSON serialization fallback for types not natively supported."""
     from decimal import Decimal
+
     if isinstance(obj, Decimal):
         return float(obj)
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
@@ -216,6 +223,14 @@ def _get_compiled_evaluator(expression: str) -> FHIRPathEvaluator:
         raise FHIRPathSyntaxError(
             f"Invalid FHIRPath expression: rejected by pattern check: '{expression}'"
         )
+    if _has_invalid_timezone_literal(stripped):
+        raise FHIRPathSyntaxError(
+            f"Invalid FHIRPath expression: invalid timezone placement in '{expression}'"
+        )
+    if _has_out_of_range_integer_literal(stripped):
+        raise FHIRPathSyntaxError(
+            f"Invalid FHIRPath expression: integer literal out of range in '{expression}'"
+        )
     # Reject unbalanced parentheses and brackets
     if not _has_balanced_delimiters(stripped):
         raise FHIRPathSyntaxError(
@@ -229,53 +244,190 @@ def _get_compiled_evaluator(expression: str) -> FHIRPathEvaluator:
 
 
 # Known FHIRPath functions per FHIRPath §5 + FHIR extensions
-_KNOWN_FHIRPATH_FUNCTIONS = frozenset({
-    # Existence (§5.1)
-    'empty', 'exists', 'all', 'allTrue', 'anyTrue', 'allFalse', 'anyFalse',
-    'subsetOf', 'supersetOf', 'count', 'distinct', 'isDistinct',
-    # Filtering and projection (§5.2)
-    'where', 'select', 'repeat', 'ofType',
-    # Subsetting (§5.3)
-    'single', 'first', 'last', 'tail', 'skip', 'take', 'intersect', 'exclude',
-    # Combining (§5.4)
-    'union', 'combine',
-    # Conversion (§5.5)
-    'iif', 'toBoolean', 'convertsToBoolean', 'toInteger', 'convertsToInteger',
-    'toDate', 'convertsToDate', 'toDateTime', 'convertsToDateTime',
-    'toDecimal', 'convertsToDecimal', 'toString', 'convertsToString',
-    'toQuantity', 'convertsToQuantity', 'toTime', 'convertsToTime',
-    # String functions (§5.7)
-    'indexOf', 'substring', 'startsWith', 'endsWith', 'contains', 'upper',
-    'lower', 'replace', 'matches', 'replaceMatches', 'length', 'toChars',
-    'trim', 'split', 'join', 'encode', 'decode',
-    # Math (§5.8)
-    'abs', 'ceiling', 'exp', 'floor', 'ln', 'log', 'power', 'round',
-    'sqrt', 'truncate',
-    # Tree navigation (§5.9)
-    'children', 'descendants',
-    # Utility (§5.10)
-    'trace', 'now', 'timeOfDay', 'today', 'defineVariable',
-    # Types (§5.11/§6)
-    'is', 'as', 'type',
-    # Aggregate (§5.12)
-    'aggregate',
-    # STU/date-time helpers implemented by native/public surfaces
-    'lowBoundary', 'highBoundary', 'precision', 'yearOf', 'monthOf', 'dayOf',
-    'hourOf', 'minuteOf', 'secondOf', 'millisecondOf', 'timezoneOffsetOf',
-    'escape', 'unescape', 'matchesFull', 'comparable', 'coalesce',
-    'repeatAll', 'sort',
-    # FHIR-specific
-    'resolve', 'extension', 'hasValue', 'getValue', 'getResourceKey',
-    'getReferenceKey', 'memberOf',
-    'htmlChecks', 'htmlChecks2', 'conformsTo', 'elementDefinition', 'slice',
-    'checkModifiers', 'hasTemplateIdOf', 'create', 'withExtension',
-    'withProperty', 'empty_collection',
-    # Boolean
-    'not',
-})
+_KNOWN_FHIRPATH_FUNCTIONS = frozenset(
+    {
+        # Existence (§5.1)
+        "empty",
+        "exists",
+        "all",
+        "allTrue",
+        "anyTrue",
+        "allFalse",
+        "anyFalse",
+        "subsetOf",
+        "supersetOf",
+        "count",
+        "distinct",
+        "isDistinct",
+        # Filtering and projection (§5.2)
+        "where",
+        "select",
+        "repeat",
+        "ofType",
+        # Subsetting (§5.3)
+        "single",
+        "first",
+        "last",
+        "tail",
+        "skip",
+        "take",
+        "intersect",
+        "exclude",
+        # Combining (§5.4)
+        "union",
+        "combine",
+        # Conversion (§5.5)
+        "iif",
+        "toBoolean",
+        "convertsToBoolean",
+        "toInteger",
+        "convertsToInteger",
+        "toDate",
+        "convertsToDate",
+        "toDateTime",
+        "convertsToDateTime",
+        "toDecimal",
+        "convertsToDecimal",
+        "toString",
+        "convertsToString",
+        "toQuantity",
+        "convertsToQuantity",
+        "toTime",
+        "convertsToTime",
+        # String functions (§5.7)
+        "indexOf",
+        "substring",
+        "startsWith",
+        "endsWith",
+        "contains",
+        "upper",
+        "lower",
+        "replace",
+        "matches",
+        "replaceMatches",
+        "length",
+        "toChars",
+        "trim",
+        "split",
+        "join",
+        "encode",
+        "decode",
+        # Math (§5.8)
+        "abs",
+        "ceiling",
+        "exp",
+        "floor",
+        "ln",
+        "log",
+        "power",
+        "round",
+        "sqrt",
+        "truncate",
+        # Tree navigation (§5.9)
+        "children",
+        "descendants",
+        # Utility (§5.10)
+        "trace",
+        "now",
+        "timeOfDay",
+        "today",
+        "defineVariable",
+        # Types (§5.11/§6)
+        "is",
+        "as",
+        "type",
+        # Aggregate (§5.12)
+        "aggregate",
+        # STU/date-time helpers implemented by native/public surfaces
+        "lowBoundary",
+        "highBoundary",
+        "precision",
+        "yearOf",
+        "monthOf",
+        "dayOf",
+        "hourOf",
+        "minuteOf",
+        "secondOf",
+        "millisecondOf",
+        "timezoneOffsetOf",
+        "escape",
+        "unescape",
+        "matchesFull",
+        "comparable",
+        "coalesce",
+        "repeatAll",
+        "sort",
+        # FHIR-specific
+        "resolve",
+        "extension",
+        "hasValue",
+        "getValue",
+        "getResourceKey",
+        "getReferenceKey",
+        "memberOf",
+        "htmlChecks",
+        "htmlChecks2",
+        "conformsTo",
+        "elementDefinition",
+        "slice",
+        "checkModifiers",
+        "hasTemplateIdOf",
+        "create",
+        "withExtension",
+        "withProperty",
+        "empty_collection",
+        # Boolean
+        "not",
+    }
+)
 
 # Pattern to extract function names from FHIRPath expressions
-_FHIRPATH_FUNC_RE = re.compile(r'\.?([a-zA-Z_]\w*)\s*\(')
+_FHIRPATH_FUNC_RE = re.compile(r"\.?([a-zA-Z_]\w*)\s*\(")
+_FHIRPATH_OPERATOR_KEYWORDS = frozenset(
+    {"and", "or", "xor", "implies", "in", "contains", "is", "as"}
+)
+_FHIRPATH_STRING_SEARCH_ARITY = {
+    "indexOf": (1, 1),
+    "substring": (1, 2),
+    "startsWith": (1, 1),
+    "endsWith": (1, 1),
+    "contains": (1, 1),
+    "upper": (0, 0),
+    "lower": (0, 0),
+    "replace": (2, 2),
+    "matches": (1, 1),
+    "replaceMatches": (2, 2),
+    "length": (0, 0),
+    "toChars": (0, 0),
+}
+_FHIRPATH_STRING_ARG_TYPES = {
+    "indexOf": ("String",),
+    "substring": ("Integer", "Integer"),
+    "startsWith": ("String",),
+    "endsWith": ("String",),
+    "contains": ("String",),
+    "replace": ("String", "String"),
+    "matches": ("String",),
+    "replaceMatches": ("String", "String"),
+}
+_FHIRPATH_REGEX_ARG_INDEXES = {"matches": (0,), "replaceMatches": (0,)}
+_FHIRPATH_MATH_ARITY = {
+    "abs": (0, 0),
+    "ceiling": (0, 0),
+    "exp": (0, 0),
+    "floor": (0, 0),
+    "ln": (0, 0),
+    "log": (1, 1),
+    "power": (1, 1),
+    "round": (0, 1),
+    "sqrt": (0, 0),
+    "truncate": (0, 0),
+}
+_FHIRPATH_MATH_ARG_TYPES = {
+    "log": ("Number",),
+    "power": ("Number",),
+    "round": ("Integer",),
+}
 
 
 def _function_scan_text(expression: str) -> str:
@@ -290,8 +442,13 @@ def _function_scan_text(expression: str) -> str:
 def _unknown_function_names(expression: str) -> list[str]:
     """Return lower-case-style unknown function calls in an expression."""
     unknown: list[str] = []
-    for match in _FHIRPATH_FUNC_RE.finditer(_function_scan_text(expression)):
+    scan_text = _function_scan_text(expression)
+    for match in _FHIRPATH_FUNC_RE.finditer(scan_text):
         func_name = match.group(1)
+        if func_name in _FHIRPATH_OPERATOR_KEYWORDS:
+            prefix = scan_text[: match.start()].rstrip()
+            if prefix and not prefix.endswith("."):
+                continue
         if func_name not in _KNOWN_FHIRPATH_FUNCTIONS:
             # Skip common non-function patterns such as resource type names and
             # constructor-like clinical/FHIR type helpers.
@@ -301,19 +458,677 @@ def _unknown_function_names(expression: str) -> list[str]:
     return unknown
 
 
+def _argument_count_at_call(scan_text: str, open_paren: int) -> int | None:
+    args = _arguments_at_call(scan_text, open_paren)
+    return None if args is None else len(args)
+
+
+def _arguments_at_call(scan_text: str, open_paren: int) -> list[str] | None:
+    depth = 0
+    args: list[str] = []
+    token_seen = False
+    start = open_paren + 1
+    i = open_paren + 1
+    while i < len(scan_text):
+        ch = scan_text[i]
+        if ch == "(":
+            depth += 1
+            token_seen = True
+        elif ch == ")":
+            if depth == 0:
+                if not token_seen and not args:
+                    return []
+                args.append(scan_text[start:i].strip())
+                return args
+            depth -= 1
+        elif ch == "," and depth == 0:
+            args.append(scan_text[start:i].strip())
+            start = i + 1
+            token_seen = False
+        elif not ch.isspace():
+            token_seen = True
+        i += 1
+    return None
+
+
+def _has_invalid_string_search_arity(expression: str) -> bool:
+    scan_text = _function_scan_text(expression)
+    for match in _FHIRPATH_FUNC_RE.finditer(scan_text):
+        func_name = match.group(1)
+        if func_name not in _FHIRPATH_STRING_SEARCH_ARITY:
+            continue
+        is_method_call = match.group(0).startswith(".")
+        if func_name in _FHIRPATH_OPERATOR_KEYWORDS and not is_method_call:
+            prefix = scan_text[: match.start()].rstrip()
+            if prefix and not prefix.endswith("."):
+                continue
+        arg_count = _argument_count_at_call(scan_text, match.end() - 1)
+        if arg_count is None:
+            return True
+        min_args, max_args = _FHIRPATH_STRING_SEARCH_ARITY[func_name]
+        if arg_count < min_args or arg_count > max_args:
+            return True
+    return False
+
+
+def _has_invalid_math_arity(expression: str) -> bool:
+    scan_text = _function_scan_text(expression)
+    for match in _FHIRPATH_FUNC_RE.finditer(scan_text):
+        func_name = match.group(1)
+        if func_name not in _FHIRPATH_MATH_ARITY:
+            continue
+        arg_count = _argument_count_at_call(scan_text, match.end() - 1)
+        if arg_count is None:
+            return True
+        min_args, max_args = _FHIRPATH_MATH_ARITY[func_name]
+        if arg_count < min_args or arg_count > max_args:
+            return True
+    return False
+
+
+_INTEGER_LITERAL_RE = re.compile(r"[+-]?[0-9]+")
+_DECIMAL_LITERAL_RE = re.compile(r"[+-]?(?:[0-9]+\.[0-9]+|[0-9]+\.|[0-9]*\.[0-9]+)")
+
+
+def _is_empty_collection_arg(arg: str) -> bool:
+    return arg.strip() == "{}"
+
+
+def _is_string_literal_arg(arg: str) -> bool:
+    return arg.strip() == "S"
+
+
+def _is_obvious_non_string_literal_arg(arg: str) -> bool:
+    stripped = arg.strip()
+    return (
+        stripped in {"true", "false"}
+        or _INTEGER_LITERAL_RE.fullmatch(stripped) is not None
+        or _DECIMAL_LITERAL_RE.fullmatch(stripped) is not None
+        or stripped == "D"
+    )
+
+
+def _is_obvious_non_integer_literal_arg(arg: str) -> bool:
+    stripped = arg.strip()
+    return (
+        _is_string_literal_arg(stripped)
+        or stripped in {"true", "false"}
+        or _DECIMAL_LITERAL_RE.fullmatch(stripped) is not None
+        or stripped == "D"
+    )
+
+
+def _is_obvious_literal_union_arg(arg: str) -> bool:
+    compact = re.sub(r"\s+", "", arg.strip())
+    return (
+        re.fullmatch(r"\(?[SDtruefals0-9+.\-]+(?:\|[SDtruefals0-9+.\-]+)+\)?", compact) is not None
+    )
+
+
+def _function_scan_text_preserve_positions(expression: str) -> str:
+    """Mask non-code spans while preserving indexes into the original string."""
+    chars = list(expression)
+    i = 0
+    while i < len(chars):
+        ch = chars[i]
+        next_ch = chars[i + 1] if i + 1 < len(chars) else ""
+        if ch == "/" and next_ch == "/":
+            j = i
+            while j < len(chars) and chars[j] not in "\r\n":
+                chars[j] = " "
+                j += 1
+            i = j
+            continue
+        if ch == "/" and next_ch == "*":
+            j = i
+            while j < len(chars):
+                end = chars[j] == "*" and j + 1 < len(chars) and chars[j + 1] == "/"
+                chars[j] = " "
+                if end:
+                    chars[j + 1] = " "
+                    j += 2
+                    break
+                j += 1
+            i = j
+            continue
+        if ch in {"'", "`"}:
+            quote = ch
+            chars[i] = " "
+            i += 1
+            while i < len(chars):
+                current = chars[i]
+                chars[i] = " "
+                if current == "\\" and i + 1 < len(chars):
+                    chars[i + 1] = " "
+                    i += 2
+                    continue
+                i += 1
+                if current == quote:
+                    break
+            continue
+        i += 1
+    return "".join(chars)
+
+
+def _split_call_args_original(expression: str, open_paren: int) -> list[str] | None:
+    args: list[str] = []
+    token_seen = False
+    start = open_paren + 1
+    depth_paren = 0
+    depth_brace = 0
+    depth_bracket = 0
+    i = open_paren + 1
+    while i < len(expression):
+        ch = expression[i]
+        if ch in {"'", "`"}:
+            quote = ch
+            token_seen = True
+            i += 1
+            while i < len(expression):
+                current = expression[i]
+                if current == "\\" and i + 1 < len(expression):
+                    i += 2
+                    continue
+                i += 1
+                if current == quote:
+                    break
+            continue
+        if ch == "(":
+            depth_paren += 1
+            token_seen = True
+        elif ch == ")":
+            if depth_paren == 0 and depth_brace == 0 and depth_bracket == 0:
+                if not token_seen and not args:
+                    return []
+                args.append(expression[start:i].strip())
+                return args
+            depth_paren -= 1
+        elif ch == "{":
+            depth_brace += 1
+            token_seen = True
+        elif ch == "}":
+            depth_brace -= 1
+        elif ch == "[":
+            depth_bracket += 1
+            token_seen = True
+        elif ch == "]":
+            depth_bracket -= 1
+        elif ch == "," and depth_paren == 0 and depth_brace == 0 and depth_bracket == 0:
+            args.append(expression[start:i].strip())
+            start = i + 1
+            token_seen = False
+        elif not ch.isspace():
+            token_seen = True
+        i += 1
+    return None
+
+
+def _has_wrapping_parens(text: str) -> bool:
+    if not (text.startswith("(") and text.endswith(")")):
+        return False
+    depth = 0
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch in {"'", "`"}:
+            quote = ch
+            i += 1
+            while i < len(text):
+                current = text[i]
+                if current == "\\" and i + 1 < len(text):
+                    i += 2
+                    continue
+                i += 1
+                if current == quote:
+                    break
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0 and i != len(text) - 1:
+                return False
+        i += 1
+    return depth == 0
+
+
+def _strip_wrapping_parens(text: str) -> str:
+    stripped = text.strip()
+    while _has_wrapping_parens(stripped):
+        stripped = stripped[1:-1].strip()
+    return stripped
+
+
+def _split_top_level_union(text: str) -> list[str] | None:
+    stripped = _strip_wrapping_parens(text)
+    parts: list[str] = []
+    start = 0
+    depth_paren = 0
+    depth_brace = 0
+    depth_bracket = 0
+    i = 0
+    while i < len(stripped):
+        ch = stripped[i]
+        if ch in {"'", "`"}:
+            quote = ch
+            i += 1
+            while i < len(stripped):
+                current = stripped[i]
+                if current == "\\" and i + 1 < len(stripped):
+                    i += 2
+                    continue
+                i += 1
+                if current == quote:
+                    break
+            continue
+        if ch == "(":
+            depth_paren += 1
+        elif ch == ")":
+            depth_paren -= 1
+        elif ch == "{":
+            depth_brace += 1
+        elif ch == "}":
+            depth_brace -= 1
+        elif ch == "[":
+            depth_bracket += 1
+        elif ch == "]":
+            depth_bracket -= 1
+        elif ch == "|" and depth_paren == 0 and depth_brace == 0 and depth_bracket == 0:
+            parts.append(stripped[start:i].strip())
+            start = i + 1
+        i += 1
+    if not parts:
+        return None
+    parts.append(stripped[start:].strip())
+    return parts
+
+
+def _simple_literal_signature(text: str) -> tuple[str, object] | None:
+    stripped = _strip_wrapping_parens(text)
+    if stripped == "{}":
+        return ("Empty", None)
+    if re.fullmatch(r"'(?:\\.|[^\\'])*'", stripped):
+        try:
+            from ..engine.evaluators import _unescape_fhirpath_string
+
+            return ("String", _unescape_fhirpath_string(stripped[1:-1]))
+        except Exception:
+            return ("String", stripped)
+    if stripped in {"true", "false"}:
+        return ("Boolean", stripped == "true")
+    if _INTEGER_LITERAL_RE.fullmatch(stripped):
+        return ("Integer", int(stripped))
+    if _DECIMAL_LITERAL_RE.fullmatch(stripped):
+        return ("Decimal", Decimal(stripped))
+    if stripped.startswith("@"):
+        return ("Temporal", stripped)
+    return None
+
+
+def _literal_union_seen_key(signature: tuple[str, object]) -> tuple[str, object]:
+    if signature[0] in {"Integer", "Decimal"}:
+        return ("Number", Decimal(signature[1]))
+    return signature
+
+
+def _literal_union_effective_items(arg: str) -> list[tuple[str, object]] | None:
+    parts = _split_top_level_union(arg)
+    if parts is None:
+        return None
+    effective: list[tuple[str, object]] = []
+    seen: set[tuple[str, object]] = set()
+    for part in parts:
+        signature = _simple_literal_signature(part)
+        if signature is None:
+            return None
+        if signature[0] == "Empty":
+            continue
+        seen_key = _literal_union_seen_key(signature)
+        if seen_key not in seen:
+            seen.add(seen_key)
+            effective.append(signature)
+    return effective
+
+
+def _is_keyword_at(scan_text: str, index: int, keyword: str) -> bool:
+    end = index + len(keyword)
+    if scan_text[index:end] != keyword:
+        return False
+    previous = scan_text[index - 1] if index > 0 else ""
+    following = scan_text[end] if end < len(scan_text) else ""
+    return not (previous.isalnum() or previous == "_") and not (
+        following.isalnum() or following == "_"
+    )
+
+
+def _split_top_level_keyword_segments(text: str, keywords: tuple[str, ...]) -> list[str] | None:
+    scan_text = _function_scan_text_preserve_positions(text)
+    sorted_keywords = sorted(keywords, key=len, reverse=True)
+    parts: list[str] = []
+    start = 0
+    depth_paren = 0
+    depth_brace = 0
+    depth_bracket = 0
+    i = 0
+    while i < len(scan_text):
+        ch = scan_text[i]
+        if depth_paren == 0 and depth_brace == 0 and depth_bracket == 0:
+            matched_keyword = None
+            for keyword in sorted_keywords:
+                if _is_keyword_at(scan_text, i, keyword):
+                    matched_keyword = keyword
+                    break
+            if matched_keyword is not None:
+                parts.append(text[start:i].strip())
+                i += len(matched_keyword)
+                start = i
+                continue
+        if ch == "(":
+            depth_paren += 1
+        elif ch == ")":
+            depth_paren -= 1
+        elif ch == "{":
+            depth_brace += 1
+        elif ch == "}":
+            depth_brace -= 1
+        elif ch == "[":
+            depth_bracket += 1
+        elif ch == "]":
+            depth_bracket -= 1
+        i += 1
+    if not parts:
+        return None
+    parts.append(text[start:].strip())
+    return parts
+
+
+def _iter_top_level_membership_operators(text: str) -> list[tuple[str, int, int]]:
+    scan_text = _function_scan_text_preserve_positions(text)
+    operators: list[tuple[str, int, int]] = []
+    depth_paren = 0
+    depth_brace = 0
+    depth_bracket = 0
+    i = 0
+    while i < len(scan_text):
+        ch = scan_text[i]
+        if depth_paren == 0 and depth_brace == 0 and depth_bracket == 0:
+            matched_operator = False
+            for operator in ("contains", "in"):
+                if not _is_keyword_at(scan_text, i, operator):
+                    continue
+                previous_nonspace = text[:i].rstrip()[-1:] if text[:i].rstrip() else ""
+                if previous_nonspace == ".":
+                    continue
+                operators.append((operator, i, i + len(operator)))
+                i += len(operator)
+                matched_operator = True
+                break
+            if matched_operator:
+                continue
+        if ch == "(":
+            depth_paren += 1
+        elif ch == ")":
+            depth_paren -= 1
+        elif ch == "{":
+            depth_brace += 1
+        elif ch == "}":
+            depth_brace -= 1
+        elif ch == "[":
+            depth_bracket += 1
+        elif ch == "]":
+            depth_bracket -= 1
+        i += 1
+    return operators
+
+
+def _literal_union_has_multiple_effective_items(arg: str) -> bool:
+    effective = _literal_union_effective_items(arg)
+    return effective is not None and len(effective) > 1
+
+
+def _has_invalid_membership_literal_unions(expression: str) -> bool:
+    stripped = _strip_wrapping_parens(expression.strip())
+    if not stripped:
+        return False
+
+    logical_parts = _split_top_level_keyword_segments(stripped, ("implies", "and", "or", "xor"))
+    if logical_parts is not None:
+        return any(_has_invalid_membership_literal_unions(part) for part in logical_parts)
+
+    for operator, start, end in _iter_top_level_membership_operators(stripped):
+        left = stripped[:start].strip()
+        right = stripped[end:].strip()
+        if operator == "in" and _literal_union_has_multiple_effective_items(left):
+            return True
+        if operator == "contains" and _literal_union_has_multiple_effective_items(right):
+            return True
+        if _has_invalid_membership_literal_unions(left) or _has_invalid_membership_literal_unions(
+            right
+        ):
+            return True
+
+    return False
+
+
+def _iter_top_level_math_operators(text: str) -> list[tuple[str, int, int]]:
+    scan_text = _function_scan_text_preserve_positions(text)
+    operators: list[tuple[str, int, int]] = []
+    depth_paren = 0
+    depth_brace = 0
+    depth_bracket = 0
+    i = 0
+    while i < len(scan_text):
+        ch = scan_text[i]
+        if depth_paren == 0 and depth_brace == 0 and depth_bracket == 0:
+            if ch in {"*", "/", "&"}:
+                operators.append((ch, i, i + 1))
+                i += 1
+                continue
+            if ch in {"+", "-"}:
+                if not _is_unary_minus_context(scan_text, i):
+                    operators.append((ch, i, i + 1))
+                    i += 1
+                    continue
+            matched_keyword = False
+            for operator in ("div", "mod"):
+                if _is_keyword_at(scan_text, i, operator):
+                    operators.append((operator, i, i + len(operator)))
+                    i += len(operator)
+                    matched_keyword = True
+                    break
+            if matched_keyword:
+                continue
+        if ch == "(":
+            depth_paren += 1
+        elif ch == ")":
+            depth_paren -= 1
+        elif ch == "{":
+            depth_brace += 1
+        elif ch == "}":
+            depth_brace -= 1
+        elif ch == "[":
+            depth_bracket += 1
+        elif ch == "]":
+            depth_bracket -= 1
+        i += 1
+    return operators
+
+
+def _has_invalid_math_literal_operands(expression: str) -> bool:
+    stripped = _strip_wrapping_parens(expression.strip())
+    if not stripped:
+        return False
+
+    logical_parts = _split_top_level_keyword_segments(stripped, ("implies", "and", "or", "xor"))
+    if logical_parts is not None:
+        return any(_has_invalid_math_literal_operands(part) for part in logical_parts)
+
+    operators = _iter_top_level_math_operators(stripped)
+    if not operators:
+        return False
+    for _operator, start, end in operators:
+        left = stripped[:start].strip()
+        right = stripped[end:].strip()
+        if _literal_union_has_multiple_effective_items(left):
+            return True
+        if _literal_union_has_multiple_effective_items(right):
+            return True
+        if _has_invalid_math_literal_operands(left) or _has_invalid_math_literal_operands(right):
+            return True
+    return False
+
+
+def _has_invalid_string_search_literal_unions(expression: str) -> bool:
+    scan_text = _function_scan_text_preserve_positions(expression)
+    for match in _FHIRPATH_FUNC_RE.finditer(scan_text):
+        func_name = match.group(1)
+        expected_types = _FHIRPATH_STRING_ARG_TYPES.get(func_name)
+        if expected_types is None:
+            continue
+        is_method_call = match.group(0).startswith(".")
+        if func_name in _FHIRPATH_OPERATOR_KEYWORDS and not is_method_call:
+            prefix = scan_text[: match.start()].rstrip()
+            if prefix and not prefix.endswith("."):
+                continue
+        args = _split_call_args_original(expression, match.end() - 1)
+        if args is None:
+            return True
+        for index, expected_type in enumerate(expected_types):
+            if index >= len(args):
+                continue
+            effective = _literal_union_effective_items(args[index])
+            if effective is None:
+                continue
+            if len(effective) == 0:
+                continue
+            if len(effective) > 1 or effective[0][0] != expected_type:
+                return True
+    return False
+
+
+def _has_invalid_math_literal_unions(expression: str) -> bool:
+    scan_text = _function_scan_text_preserve_positions(expression)
+    for match in _FHIRPATH_FUNC_RE.finditer(scan_text):
+        func_name = match.group(1)
+        expected_types = _FHIRPATH_MATH_ARG_TYPES.get(func_name)
+        if expected_types is None:
+            continue
+        args = _split_call_args_original(expression, match.end() - 1)
+        if args is None:
+            return True
+        for index, expected_type in enumerate(expected_types):
+            if index >= len(args):
+                continue
+            effective = _literal_union_effective_items(args[index])
+            if effective is None:
+                signature = _simple_literal_signature(args[index])
+                if signature is None:
+                    continue
+                effective = [] if signature[0] == "Empty" else [signature]
+            if len(effective) == 0:
+                continue
+            if len(effective) > 1:
+                return True
+            actual_type = effective[0][0]
+            if expected_type == "Number" and actual_type not in {"Integer", "Decimal"}:
+                return True
+            if expected_type == "Integer" and actual_type != "Integer":
+                return True
+            if func_name == "round" and expected_type == "Integer" and int(effective[0][1]) < 0:
+                return True
+    return False
+
+
+def _has_invalid_string_search_literal_args(expression: str) -> bool:
+    scan_text = _function_scan_text(expression)
+    for match in _FHIRPATH_FUNC_RE.finditer(scan_text):
+        func_name = match.group(1)
+        expected_types = _FHIRPATH_STRING_ARG_TYPES.get(func_name)
+        if expected_types is None:
+            continue
+        is_method_call = match.group(0).startswith(".")
+        if func_name in _FHIRPATH_OPERATOR_KEYWORDS and not is_method_call:
+            prefix = scan_text[: match.start()].rstrip()
+            if prefix and not prefix.endswith("."):
+                continue
+        args = _arguments_at_call(scan_text, match.end() - 1)
+        if args is None:
+            return True
+        for index, expected_type in enumerate(expected_types):
+            if index >= len(args) or _is_empty_collection_arg(args[index]):
+                continue
+            if expected_type == "Integer" and _is_obvious_non_integer_literal_arg(args[index]):
+                return True
+            if expected_type == "String" and _is_obvious_non_string_literal_arg(args[index]):
+                return True
+    return False
+
+
+def _has_invalid_math_literal_args(expression: str) -> bool:
+    scan_text = _function_scan_text(expression)
+    for match in _FHIRPATH_FUNC_RE.finditer(scan_text):
+        func_name = match.group(1)
+        expected_types = _FHIRPATH_MATH_ARG_TYPES.get(func_name)
+        if expected_types is None:
+            continue
+        args = _arguments_at_call(scan_text, match.end() - 1)
+        if args is None:
+            return True
+        for index, expected_type in enumerate(expected_types):
+            if index >= len(args) or _is_empty_collection_arg(args[index]):
+                continue
+            if expected_type == "Integer" and _is_obvious_non_integer_literal_arg(args[index]):
+                return True
+            if expected_type == "Number":
+                stripped_arg = args[index].strip()
+                if (
+                    _is_string_literal_arg(stripped_arg)
+                    or stripped_arg in {"true", "false"}
+                    or stripped_arg == "D"
+                ):
+                    return True
+    return False
+
+
+def _has_invalid_string_regex_literals(expression: str) -> bool:
+    scan_text = _function_scan_text_preserve_positions(expression)
+    for match in _FHIRPATH_FUNC_RE.finditer(scan_text):
+        func_name = match.group(1)
+        regex_indexes = _FHIRPATH_REGEX_ARG_INDEXES.get(func_name)
+        if regex_indexes is None:
+            continue
+        args = _split_call_args_original(expression, match.end() - 1)
+        if args is None:
+            return True
+        for index in regex_indexes:
+            if index >= len(args):
+                continue
+            signature = _simple_literal_signature(args[index])
+            if signature is None or signature[0] != "String":
+                continue
+            try:
+                from ..engine.invocations.strings import _compile_regex
+
+                _compile_regex(str(signature[1]))
+            except FHIRPathError:
+                return True
+    return False
+
+
 def _warn_unknown_functions(expression: str) -> None:
     """Log warnings for unrecognized function names in a FHIRPath expression."""
     for func_name in _unknown_function_names(expression):
         _logger.warning(
             "FHIRPath expression contains unknown function '%s' — "
             "possible typo (will return empty/NULL): %s",
-            func_name, expression,
+            func_name,
+            expression,
         )
 
 
 # Lazily cached choice type lookup table: base_name -> list of suffixed field names
 _choice_type_lookup: dict[str, list[str]] | None = None
-_choice_type_lock = __import__('threading').Lock()
+_choice_type_lock = __import__("threading").Lock()
 
 
 def _get_choice_type_lookup() -> dict[str, list[str]]:
@@ -325,6 +1140,7 @@ def _get_choice_type_lookup() -> dict[str, list[str]]:
                 lookup = {}
                 try:
                     from .fhir_types_generated import CHOICE_TYPES
+
                     for _path, field_names in CHOICE_TYPES.items():
                         # Extract base name (e.g., "Observation.value" -> "value")
                         base = _path.split(".")[-1] if "." in _path else _path
@@ -358,19 +1174,52 @@ def _resolve_choice_type(resource_dict: dict, expression: str) -> list:
 def _resolve_choice_oftype(resource_dict: dict, expression: str) -> list:
     """Resolve simple choice-type ofType() expressions missed by fhirpathpy."""
     match = re.fullmatch(r"\s*([A-Za-z_]\w*)\.ofType\(\s*([A-Za-z_]\w*)\s*\)\s*", expression)
-    if not match:
+    if match:
+        base_name, type_name = match.groups()
+        field_names = _get_choice_type_lookup().get(base_name)
+        if not field_names:
+            return []
+        target_field = f"{base_name}{type_name[0].upper()}{type_name[1:]}"
+        if target_field not in field_names:
+            return []
+        val = resource_dict.get(target_field)
+        if val is None:
+            return []
+        return [val]
+
+    trailing_match = re.fullmatch(
+        r"\s*(?P<source>.+)\.ofType\(\s*(?P<type>`?[A-Za-z_]\w*`?(?:\.`?[A-Za-z_]\w*`?)*)\s*\)\s*",
+        expression,
+    )
+    if not trailing_match:
         return []
-    base_name, type_name = match.groups()
-    field_names = _get_choice_type_lookup().get(base_name)
-    if not field_names:
+
+    source_expression = trailing_match.group("source").strip()
+    if not source_expression:
         return []
-    target_field = f"{base_name}{type_name[0].upper()}{type_name[1:]}"
-    if target_field not in field_names:
+
+    try:
+        type_text = trailing_match.group("type")
+        if type_text.replace("`", "").startswith("System."):
+            return []
+        from ..engine import type_specifier
+        from ..engine.invocations import filtering as filtering_invocations
+
+        source_items = _evaluate_raw_items(resource_dict, source_expression)
+        if not source_items:
+            return []
+        requested_type = type_specifier({}, [], {"text": type_text})
+        return filtering_invocations.of_type_fn({}, source_items, requested_type)
+    except (
+        FHIRPathError,
+        NotImplementedError,
+        ValueError,
+        TypeError,
+        KeyError,
+        AttributeError,
+        IndexError,
+    ):
         return []
-    val = resource_dict.get(target_field)
-    if val is None:
-        return []
-    return [val]
 
 
 _CHOICE_ASSERTION_METHOD_RE = re.compile(
@@ -379,31 +1228,135 @@ _CHOICE_ASSERTION_METHOD_RE = re.compile(
     re.IGNORECASE,
 )
 _CHOICE_ASSERTION_INFIX_RE = re.compile(
-    r"^\s*(?P<path>[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s+"
-    r"(?P<op>is|as)\s+(?P<type>`?[\w.]+`?)\s*$",
+    r"^\s*(?P<path>[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s+" r"(?P<op>is|as)\s+(?P<type>`?[\w.]+`?)\s*$",
     re.IGNORECASE,
 )
 
 _KNOWN_FUNCTION_NAMES = frozenset(
     {
-        "abs", "aggregate", "all", "allFalse", "allTrue", "anyFalse", "anyTrue", "as",
-        "ceiling", "checkModifiers", "children", "coalesce", "combine", "comparable",
-        "conformsTo", "contains", "convertsToBoolean", "convertsToDate", "convertsToDateTime",
-        "convertsToDecimal", "convertsToInteger", "convertsToQuantity", "convertsToString",
-        "convertsToTime", "count", "dayOf", "decode", "defineVariable", "descendants",
-        "distinct", "elementDefinition", "empty", "empty_collection", "encode", "endsWith", "escape", "exclude",
-        "exists", "exp", "first", "floor", "getValue", "hasTemplateIdOf", "hasValue",
-        "highBoundary", "hourOf", "htmlChecks", "htmlChecks2", "iif", "indexOf", "intersect",
-        "is", "isDistinct", "join", "last", "length", "ln", "log", "lowBoundary", "lower",
-        "matches", "matchesFull", "memberOf", "millisecondOf", "minuteOf", "monthOf", "not", "now",
-        "ofType", "power", "precision", "repeat", "repeatAll", "replace", "replaceMatches", "resolve",
-        "round", "secondOf", "select", "single", "skip", "sort", "split", "sqrt", "startsWith",
-        "slice", "subsetOf", "substring", "supersetOf", "tail", "take", "timeOfDay", "timezoneOffsetOf",
-        "toBoolean", "toChars", "toDate", "toDateTime", "toDecimal", "toInteger", "toQuantity",
-        "toString", "toTime", "today", "trace", "trim", "truncate", "type", "unescape", "union",
-        "upper", "where", "yearOf",
-        "Address", "CodeableConcept", "Coding", "ContactPoint", "Extension", "HumanName",
-        "Identifier", "Quantity", "create", "withExtension", "withProperty",
+        "abs",
+        "aggregate",
+        "all",
+        "allFalse",
+        "allTrue",
+        "anyFalse",
+        "anyTrue",
+        "as",
+        "ceiling",
+        "checkModifiers",
+        "children",
+        "coalesce",
+        "combine",
+        "comparable",
+        "conformsTo",
+        "contains",
+        "convertsToBoolean",
+        "convertsToDate",
+        "convertsToDateTime",
+        "convertsToDecimal",
+        "convertsToInteger",
+        "convertsToQuantity",
+        "convertsToString",
+        "convertsToTime",
+        "count",
+        "dayOf",
+        "decode",
+        "defineVariable",
+        "descendants",
+        "distinct",
+        "elementDefinition",
+        "empty",
+        "empty_collection",
+        "encode",
+        "endsWith",
+        "escape",
+        "exclude",
+        "exists",
+        "exp",
+        "first",
+        "floor",
+        "getValue",
+        "hasTemplateIdOf",
+        "hasValue",
+        "highBoundary",
+        "hourOf",
+        "htmlChecks",
+        "htmlChecks2",
+        "iif",
+        "indexOf",
+        "intersect",
+        "is",
+        "isDistinct",
+        "join",
+        "last",
+        "length",
+        "ln",
+        "log",
+        "lowBoundary",
+        "lower",
+        "matches",
+        "matchesFull",
+        "memberOf",
+        "millisecondOf",
+        "minuteOf",
+        "monthOf",
+        "not",
+        "now",
+        "ofType",
+        "power",
+        "precision",
+        "repeat",
+        "repeatAll",
+        "replace",
+        "replaceMatches",
+        "resolve",
+        "round",
+        "secondOf",
+        "select",
+        "single",
+        "skip",
+        "sort",
+        "split",
+        "sqrt",
+        "startsWith",
+        "slice",
+        "subsetOf",
+        "substring",
+        "supersetOf",
+        "tail",
+        "take",
+        "timeOfDay",
+        "timezoneOffsetOf",
+        "toBoolean",
+        "toChars",
+        "toDate",
+        "toDateTime",
+        "toDecimal",
+        "toInteger",
+        "toQuantity",
+        "toString",
+        "toTime",
+        "today",
+        "trace",
+        "trim",
+        "truncate",
+        "type",
+        "unescape",
+        "union",
+        "upper",
+        "where",
+        "yearOf",
+        "Address",
+        "CodeableConcept",
+        "Coding",
+        "ContactPoint",
+        "Extension",
+        "HumanName",
+        "Identifier",
+        "Quantity",
+        "create",
+        "withExtension",
+        "withProperty",
     }
 )
 
@@ -442,7 +1395,9 @@ def _choice_type_suffix(type_name: str) -> str | None:
 
 def _resolve_choice_type_assertion(resource_dict: dict, expression: str) -> list | None:
     """Resolve simple choice-type ``is``/``as`` expressions missed by fallback evaluation."""
-    match = _CHOICE_ASSERTION_METHOD_RE.fullmatch(expression) or _CHOICE_ASSERTION_INFIX_RE.fullmatch(expression)
+    match = _CHOICE_ASSERTION_METHOD_RE.fullmatch(
+        expression
+    ) or _CHOICE_ASSERTION_INFIX_RE.fullmatch(expression)
     if not match:
         return None
 
@@ -640,7 +1595,9 @@ def fhirpath_udf_typed(
             _logger.warning(
                 "Arrow type cast from %s to %s failed: %s. "
                 "Returning results with original type.",
-                results.type, return_type, e,
+                results.type,
+                return_type,
+                e,
             )
 
     return results
@@ -698,7 +1655,8 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         else:
             _logger.warning(
                 "fhirpath_scalar: unexpected resource type %s for expression '%s' — returning empty",
-                type(resource).__name__, expression,
+                type(resource).__name__,
+                expression,
             )
             return []
 
@@ -745,6 +1703,7 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
                 if isinstance(item, (dict, list)):
                     return _json_serialize(item)
                 return str(item)
+
             return [_to_str(item) for item in result]
         if isinstance(result, (dict, list)):
             return [_json_serialize(result)]
@@ -753,7 +1712,8 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
     except orjson.JSONDecodeError:
         # Invalid JSON — data-dependent error. In scalar context, return empty.
         _logger.warning(
-            "fhirpath_scalar: invalid JSON resource for expression '%s'", expression,
+            "fhirpath_scalar: invalid JSON resource for expression '%s'",
+            expression,
         )
         if _STRICT_MODE:
             raise
@@ -769,7 +1729,7 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
     except NotImplementedError:
         # Unimplemented functions should be visible to users
         raise
-    except (ValueError, TypeError, KeyError, AttributeError, IndexError) as e:
+    except (ValueError, TypeError, KeyError, AttributeError, IndexError, OverflowError) as e:
         _logger.warning("FHIRPath scalar evaluation failed for '%s': %s", expression, e)
         if _STRICT_MODE:
             raise
@@ -777,22 +1737,21 @@ def fhirpath_scalar(resource: str | None, expression: str | None) -> list[object
         return []
 
 
-
 _INVALID_EXPR_PATTERNS = re.compile(
-    r'(?:'
-    r'\.\s*$'           # trailing dot
-    r'|\.\.'            # double dot
-    r'|\(\s*$'          # unclosed paren at end
-    r'|^\s*[+*/|&]'    # leading operator
-    r'|^\s*@\d{5}'      # Date year must be exactly four digits
-    r'|^\s*@\d{4}-\d(?:\D|$)'  # Month must be two digits when separator is present
-    r'|^\s*@\d{4}-\d{2}-\d(?:\D|$)'  # Day must be two digits when present
-    r'|^\s*@T\d{2}:\d{2}\.\d'  # Fractional Time requires seconds component
-    r'|^\s*\d+(?:\.\d+)?\s+(?!years?\b|months?\b|weeks?\b|days?\b|hours?\b|minutes?\b|seconds?\b|milliseconds?\b)[A-Za-z_]\w*\s*$'
-    r'|^\s*\d+\.\d+\.\d+'  # Ambiguous numeric/member-access tokenization
-    r'|\$\$'            # invalid $$ prefix
-    r'|\$(?!this\b|total\b|index\b|that\b)[a-zA-Z]'  # $ not followed by valid env variable
-    r')'
+    r"(?:"
+    r"\.\s*$"  # trailing dot
+    r"|\.\."  # double dot
+    r"|\(\s*$"  # unclosed paren at end
+    r"|^\s*[*\/|&]"  # leading binary operator
+    r"|^\s*@\d{5}"  # Date year must be exactly four digits
+    r"|^\s*@\d{4}-\d(?:\D|$)"  # Month must be two digits when separator is present
+    r"|^\s*@\d{4}-\d{2}-\d(?:\D|$)"  # Day must be two digits when present
+    r"|^\s*@T\d{2}:\d{2}\.\d"  # Fractional Time requires seconds component
+    r"|^\s*\d+(?:\.\d+)?\s+(?!years?\b|months?\b|weeks?\b|days?\b|hours?\b|minutes?\b|seconds?\b|milliseconds?\b)[A-Za-z_]\w*\s*$"
+    r"|^\s*\d+\.\d+\.\d+"  # Ambiguous numeric/member-access tokenization
+    r"|\$\$"  # invalid $$ prefix
+    r"|\$(?!this\b|total\b|index\b|that\b)[a-zA-Z]"  # $ not followed by valid env variable
+    r")"
 )
 
 
@@ -868,7 +1827,29 @@ def fhirpath_is_valid_udf(expression: str | None) -> bool:
     precheck_text = _strip_comments_for_precheck(stripped)
     if _INVALID_EXPR_PATTERNS.search(precheck_text):
         return False
+    if _has_invalid_timezone_literal(stripped):
+        return False
+    if _has_out_of_range_integer_literal(stripped):
+        return False
     if not _has_balanced_delimiters(stripped):
+        return False
+    if _has_invalid_math_arity(stripped):
+        return False
+    if _has_invalid_math_literal_args(stripped):
+        return False
+    if _has_invalid_math_literal_unions(stripped):
+        return False
+    if _has_invalid_math_literal_operands(stripped):
+        return False
+    if _has_invalid_string_search_arity(stripped):
+        return False
+    if _has_invalid_string_search_literal_args(stripped):
+        return False
+    if _has_invalid_string_search_literal_unions(stripped):
+        return False
+    if _has_invalid_membership_literal_unions(stripped):
+        return False
+    if _has_invalid_string_regex_literals(stripped):
         return False
     if _unknown_function_names(stripped):
         return False
@@ -893,7 +1874,7 @@ def _not_implemented_function_name(exc: NotImplementedError) -> str | None:
     message = str(exc)
     for prefix in ("Not implemented: ", "Not implemented "):
         if message.startswith(prefix):
-            return message[len(prefix):].strip()
+            return message[len(prefix) :].strip()
     return None
 
 
@@ -910,10 +1891,7 @@ def _is_valid_empty_result_error(exc: FHIRPathError) -> bool:
     message = str(exc)
     if message.startswith("Type of ") and "InequalityExpression" in message:
         return True
-    if (
-        message.startswith("Cannot [")
-        and "fhir4ds.fhirpath.engine.nodes.FP_" not in message
-    ):
+    if message.startswith("Cannot [") and "fhir4ds.fhirpath.engine.nodes.FP_" not in message:
         return True
     if message.startswith("Expected number or quantity, got: "):
         return True
@@ -1073,7 +2051,7 @@ def fhirpath_bool_udf(resource: str | None, expression: str | None) -> bool | No
     except (NotImplementedError, FHIRPathError):
         # Unimplemented functions return NULL in boolean context (used by ViewDef)
         return None
-    except (ValueError, TypeError, KeyError, AttributeError, IndexError) as e:
+    except (ValueError, TypeError, KeyError, AttributeError, IndexError, OverflowError) as e:
         _logger.warning("FHIRPath boolean evaluation failed for '%s': %s", expression, e)
         if _STRICT_MODE:
             raise
@@ -1089,7 +2067,8 @@ def fhirpath_bool_udf(resource: str | None, expression: str | None) -> bool | No
         if low not in _VALID_BOOL_STRINGS:
             _logger.warning(
                 "Unexpected boolean string '%s' for expression '%s'; returning NULL",
-                val, expression,
+                val,
+                expression,
             )
             return None
         return low == "true"
@@ -1098,12 +2077,14 @@ def fhirpath_bool_udf(resource: str | None, expression: str | None) -> bool | No
             return bool(val)
         _logger.warning(
             "Unexpected numeric boolean value %r for expression '%s'; returning NULL",
-            val, expression,
+            val,
+            expression,
         )
         return None
     _logger.warning(
         "Unexpected type %s for boolean expression '%s'; returning NULL",
-        type(val).__name__, expression,
+        type(val).__name__,
+        expression,
     )
     return None
 
@@ -1153,7 +2134,7 @@ def fhirpath_number_udf(resource: str | None, expression: str | None) -> float |
         raise
     except (NotImplementedError, FHIRPathError):
         return None
-    except (orjson.JSONDecodeError, ValueError, TypeError, KeyError, AttributeError, IndexError):
+    except (orjson.JSONDecodeError, ValueError, TypeError, KeyError, AttributeError, IndexError, OverflowError):
         if _STRICT_MODE:
             raise
         return None
@@ -1163,6 +2144,7 @@ def fhirpath_number_udf(resource: str | None, expression: str | None) -> float |
         return None
     value = result[0] if isinstance(result, list) else result
     from ..engine.nodes import FP_Quantity
+
     if isinstance(value, FP_Quantity):
         return float(value.value)
     if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
@@ -1221,6 +2203,7 @@ def fhirpath_json_udf(resource: str | None, expression: str | None) -> str | Non
         # FHIRPath nodes need special handling; primitives pass through.
         def _to_native(item):
             from ..engine.nodes import FP_TimeBase, FP_Quantity
+
             if item is None:
                 return None
             if isinstance(item, bool):
@@ -1296,14 +2279,35 @@ def fhirpath_timestamp_udf(resource: str | None, expression: str | None) -> str 
     if resource is None or expression is None:
         return None
     try:
-        result = fhirpath_scalar(resource, expression)
-        if result:
-            # Return first value as string
-            val = result[0] if isinstance(result, list) else result
-            return str(val) if val is not None else None
+        result_items = _evaluate_raw_items(resource, expression)
+    except FHIRPathSyntaxError:
+        raise
+    except (
+        NotImplementedError,
+        FHIRPathError,
+        orjson.JSONDecodeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        AttributeError,
+        IndexError,
+        OverflowError,
+    ):
+        if _STRICT_MODE:
+            raise
         return None
-    except NotImplementedError:
+
+    if not result_items:
         return None
+
+    from ..engine.nodes import FP_DateTime
+
+    val = result_items[0]
+    if isinstance(val, FP_DateTime):
+        return str(val)
+    if isinstance(val, str) and FP_DateTime(val) is not None:
+        return val
+    return None
 
 
 def fhirpath_quantity_udf(resource: str | None, expression: str | None) -> str | None:
@@ -1322,23 +2326,76 @@ def fhirpath_quantity_udf(resource: str | None, expression: str | None) -> str |
     if resource is None or expression is None:
         return None
     try:
-        result = fhirpath_scalar(resource, expression)
-        if result:
-            val = result[0] if isinstance(result, list) else result
-            return str(val) if val is not None else None
-        return None
+        result_items = _evaluate_raw_items(resource, expression)
+    except FHIRPathSyntaxError:
+        raise
     except NotImplementedError:
         return None
-    except (ValueError, TypeError, KeyError, AttributeError, IndexError) as e:
+    except (
+        FHIRPathError,
+        orjson.JSONDecodeError,
+        ValueError,
+        TypeError,
+        KeyError,
+        AttributeError,
+        IndexError,
+        OverflowError,
+    ) as e:
         _logger.warning("FHIRPath quantity evaluation failed for '%s': %s", expression, e)
         if _STRICT_MODE:
             raise
         return None
 
+    if not result_items:
+        return None
+
+    from ..engine.nodes import FP_Quantity
+
+    val = result_items[0]
+    if isinstance(val, FP_Quantity):
+        return str(val)
+    if isinstance(val, dict) and "value" in val and ("code" in val or "unit" in val):
+        return _json_serialize(val)
+    return None
+
+
+def _evaluate_raw_items(resource: str | dict | None, expression: str | None) -> list[object]:
+    """Evaluate FHIRPath without scalar stringification for typed wrappers."""
+    if resource is None or expression is None:
+        return []
+    if isinstance(resource, str):
+        resource_dict = _parse_json(resource)
+    elif isinstance(resource, dict):
+        resource_dict = resource
+    else:
+        return []
+
+    temporal_result = _evaluate_literal_temporal_arithmetic(expression)
+    if temporal_result is not None:
+        result: object = temporal_result
+    else:
+        evaluator = _get_compiled_evaluator(expression)
+        result = evaluator.evaluate(resource_dict)
+
+        choice_assertion = _resolve_choice_type_assertion(resource_dict, expression)
+        if choice_assertion is not None:
+            result = choice_assertion
+        if not result and isinstance(resource_dict, dict):
+            result = _resolve_choice_type(resource_dict, expression)
+        if not result and isinstance(resource_dict, dict):
+            result = _resolve_choice_oftype(resource_dict, expression)
+
+    if result is None:
+        return []
+    if isinstance(result, list):
+        return result
+    return [result]
+
 
 # ---------------------------------------------------------------------------
 # fhirpath_repeat: recursive traversal for SQL-on-FHIR v2 ``repeat``
 # ---------------------------------------------------------------------------
+
 
 def _repeat_json_serialize(obj: object) -> str:
     """Serialize repeated nodes, falling back for deeply nested structures."""

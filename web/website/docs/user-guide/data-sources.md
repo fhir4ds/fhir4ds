@@ -82,11 +82,12 @@ fhir4ds.attach(con, csv_source)
 | Quick analysis of Parquet/NDJSON files | `FileSystemSource` — zero setup, mount and query |
 | S3/Azure/GCS data lake | `FileSystemSource` with `CloudCredentials` |
 | FHIR JSON stored in PostgreSQL | `PostgresSource` with `PostgresTableMapping` |
+| HAPI FHIR JPA Server on PostgreSQL | `HapiPostgresSource` |
 | Flat CSV files that need FHIR JSON construction | `CSVSource` with a projection SQL |
 | Already loaded data via `FHIRDataLoader` | `ExistingTableSource` for adapter API uniformity |
 | Already loaded data, no adapter API needed | Use `FHIRDataLoader` directly — no adapter required |
 
-:::tip 
+:::tip
 
 Source Adapters vs FHIRDataLoader
 Source adapters are the **preferred pattern** for enterprise use cases — they provide a uniform API, schema validation at registration time, and dynamic attach/detach. `FHIRDataLoader` remains fully supported and is simpler for quick, script-based workflows.
@@ -120,6 +121,15 @@ Connects directly to a PostgreSQL database where FHIR resources are stored as JS
 
 :::
 
+### HAPI PostgreSQL (`HapiPostgresSource`)
+Connects directly to a HAPI FHIR JPA Server PostgreSQL backend and projects
+current resources from HAPI's resource/version tables.
+
+*   **Best for:** Read-only analytics against a HAPI database or read replica.
+*   **Scope:** Current resources with `res_encoding = 'JSON'`; inline
+    `res_text_vc` by default, plus `res_text` large-object JSON when using the
+    installed decoded view.
+
 ### CSV Files (`CSVSource`)
 Maps flat CSV files to the FHIR schema using a user-defined SQL projection.
 
@@ -142,7 +152,7 @@ con = fhir4ds.create_connection(
 )
 ```
 
-:::info 
+:::info
 
 "Failing Fast" vs "Data Resiliency"
 

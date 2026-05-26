@@ -179,12 +179,12 @@ class TestGap9AgeInYearsAt:
         assert "CalculateAgeInYearsAt" in sql
 
     def test_age_in_years_uses_patient_demographics_birth_date(self, translator):
-        """AC: Birthday-aware helper is fed the demographics birth-date source."""
+        """AC: Birthday-aware helper is fed the current-patient birth-date source."""
         as_of_date = SQLRaw(raw_sql="DATE '2026-01-01'")
         result = translator._translate_age_at_function("AgeInYearsAt", [as_of_date])
         sql = result.to_sql()
-        assert "_patient_demographics" in sql
-        assert "_pd.birth_date" in sql
+        assert "_patient_demographics" not in sql
+        assert "_pt.birth_date" in sql
         assert "DATE '2026-01-01'" in sql
 
     def test_age_in_months_routes_to_helper(self, translator):

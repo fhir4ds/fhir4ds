@@ -24,6 +24,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 from .collection import FHIRPathCollection, EMPTY, EmptyCollectionSentinel, wrap_as_collection
+from .errors import FHIRPathError
 
 if TYPE_CHECKING:
     pass
@@ -231,24 +232,17 @@ def _get_boolean_value(collection: FHIRPathCollection) -> Optional[bool]:
         collection: Input collection.
 
     Returns:
-        Boolean value, or None if empty or not a boolean singleton.
+        Boolean value, or None if empty.
     """
     if collection.is_empty:
         return None
     if not collection.is_singleton:
-        # Multi-element collections are not valid for boolean operations
-        return None
+        raise FHIRPathError("Cannot convert a collection with multiple items to a boolean")
 
     val = collection.singleton_value
     if isinstance(val, bool):
         return val
-    if isinstance(val, str):
-        if val.lower() == "true":
-            return True
-        if val.lower() == "false":
-            return False
-    # Non-boolean value
-    return None
+    return True
 
 
 # =============================================================================

@@ -7,6 +7,45 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.7
+*May 2026*
+
+Version 0.0.7 focuses on release readiness, SQL safety, audit evidence accuracy, and packaging consistency. It preserves the 100% conformance posture while tightening loader boundaries, DQM population attribution evidence, and native/Python fallback release gates.
+
+### Highlights
+
+- **Compiled Measures API**: Introduced `compile_measure()` and `execute_compiled_measure()` in the DQM API. This allows parsing and compiling CQL to SQL once, enabling highly efficient batched execution across patient cohorts.
+- **Artifact Resolvers**: Replaced static file-path dependencies with a pluggable `ArtifactResolver` interface (`FileArtifactResolver` and `HapiArtifactResolver`), enabling dynamic resolution of Measures, CQL libraries, and ValueSets from file systems or remote FHIR servers.
+- **HAPI FHIR Integration**: Added `HapiPostgresSource` for querying HAPI FHIR JPA Server PostgreSQL backends in place, along with comprehensive guides for event-driven DQM materialization.
+
+### Bug Fixes
+
+- **FHIRPath Native Parity**: Massively tightened the behavior of the C++ DuckDB extension to exactly match the Python fallback across arithmetic overflows, collection equality, singleton evaluation, string reflection, and edge-case Boolean precedence.
+- **CQL Type Inference**: Fixed row shapes and nested tuples generated during compiled measure materialization so `Query` and `Return` clauses preserve complex type structure correctly across batch runs.
+- **CQL Optimization**: Ensure degenerate intervals (e.g. `[x, x]`) safely propagate through `StartsSame` and `EndsSame` temporal operators without triggering DuckDB null-handling faults.
+- **CQL Temporal Intervals**: Optimized interval overlap SQL handles null low bounds using CQL interval semantics instead of propagating SQL NULL.
+- **DQM Audit Evidence**: Exclusion-style audit narratives use effective population masks so denominator exceptions and numerator exclusions match final population attribution rules.
+- **Loader SQL Safety**: Custom resource and ValueSet table names are quoted consistently, including SQL keywords such as `select` and `where`.
+- **FHIR JSON Validation**: File, URL, directory, and DQM ValueSet loaders now reject non-object JSON cleanly instead of leaking implementation errors.
+
+### Conformance
+
+| Suite | Passed | Total | Rate |
+|-------|-------:|------:|-----:|
+| ViewDefinition v2 | 134 | 134 | 100.0% |
+| FHIRPath R4 | 935 | 935 | 100.0% |
+| CQL | 1,706 | 1,706 | 100.0% |
+| DQM QI-Core 2025 | 47 | 47 | 100.0% |
+| Overall | 2,822 | 2,822 | 100.0% |
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.7
+```
+
+---
+
 ## Version 0.0.6
 *May 2026*
 

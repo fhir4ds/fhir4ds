@@ -165,6 +165,8 @@ def test_multi_item_datetime_equality_uses_singleton_temporal_semantics(monkeypa
         "(@2017-11-05T01:30:00.0-04:00 | @2012) = (@2017-11-05T00:30:00.0-05:00 | @2012)": True,
         "(@2012-01-01T10:30:31.0 | @2012) = (@2012-01-01T10:30:31 | @2012)": True,
         "(@2012-01-01T10:30:31.1 | @2012) = (@2012-01-01T10:30:31 | @2012)": False,
+        "(@2012 | @2013) = (@2012-01 | @2013)": None,
+        "(@2012 | @2013) != (@2012-01 | @2013)": None,
     }
 
     native = _connection()
@@ -230,6 +232,8 @@ def test_complex_equivalence_recurses_through_child_equivalence(monkeypatch) -> 
             "objB": {"family": "smith", "given": [" alpha beta "]},
             "arrA": [{"family": "SMITH"}, {"family": "Jones"}],
             "arrB": [{"family": "jones"}, {"family": "smith"}],
+            "nestedA": {"coding": [{"code": "A"}, {"code": "B"}]},
+            "nestedB": {"coding": [{"code": "b"}, {"code": "a"}]},
         }
     )
     expressions = {
@@ -237,6 +241,163 @@ def test_complex_equivalence_recurses_through_child_equivalence(monkeypatch) -> 
         "objA !~ objB": False,
         "arrA ~ arrB": True,
         "arrA !~ arrB": False,
+        "nestedA ~ nestedB": True,
+        "nestedA !~ nestedB": False,
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in expressions.items():
+            cpp = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp == py
+            assert cpp[1] is expected
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_resource_quantity_multi_item_equivalence_uses_quantity_semantics(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "component": [
+                {"valueQuantity": {"value": 1, "unit": "cm", "code": "cm"}},
+                {"valueQuantity": {"value": 2, "unit": "cm", "code": "cm"}},
+            ],
+            "referenceRange": [
+                {
+                    "high": {"value": 0.02, "unit": "m", "code": "m"},
+                },
+                {
+                    "high": {"value": 10, "unit": "mm", "code": "mm"},
+                },
+            ],
+        }
+    )
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in {
+            "component.value ~ referenceRange.high": True,
+            "component.value !~ referenceRange.high": False,
+            "component.value = referenceRange.high": False,
+            "(1 'cm' | 2 'cm') = (1 'g' | 2 'cm')": None,
+            "(1 'cm' | 2 'cm') != (1 'g' | 2 'cm')": None,
+        }.items():
+            cpp = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                [resource, expression, resource, expression, resource, expression],
+            ).fetchone()
+            assert cpp == py
+            assert cpp[1] is expected
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_decimal_equivalence_uses_half_up_tie_rounding(monkeypatch) -> None:
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in {
+            "1.25 ~ 1.2": False,
+            "1.24 ~ 1.2": True,
+            "(-1.25) ~ (-1.2)": False,
+            "(-1.24) ~ (-1.2)": True,
+        }.items():
+            cpp = native.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                ["{}", expression, "{}", expression, "{}", expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_bool(?::JSON, ?), fhirpath_json(?::JSON, ?)",
+                ["{}", expression, "{}", expression, "{}", expression],
+            ).fetchone()
+            assert cpp == py
+            assert cpp[1] is expected
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_complex_equality_recurses_into_decimal_and_quantity_children(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "decObjA": {"value": 1.24},
+            "decObjB": {"value": 1.2},
+            "decObjTieA": {"value": 1.25},
+            "decObjTieB": {"value": 1.2},
+            "rangeA": {
+                "high": {
+                    "value": 1,
+                    "unit": "cm",
+                    "code": "cm",
+                    "system": "http://unitsofmeasure.org",
+                }
+            },
+            "rangeB": {
+                "high": {
+                    "value": 10,
+                    "unit": "mm",
+                    "code": "mm",
+                    "system": "http://unitsofmeasure.org",
+                }
+            },
+            "rangeBad": {
+                "high": {
+                    "value": 1,
+                    "unit": "g",
+                    "code": "g",
+                    "system": "http://unitsofmeasure.org",
+                }
+            },
+            "nestedA": {
+                "coding": [{"code": "Alpha  Beta", "rank": 1.24}, {"code": "Z", "rank": 2}],
+                "dose": {
+                    "value": 1,
+                    "unit": "cm",
+                    "code": "cm",
+                    "system": "http://unitsofmeasure.org",
+                },
+            },
+            "nestedB": {
+                "dose": {
+                    "value": 10,
+                    "unit": "mm",
+                    "code": "mm",
+                    "system": "http://unitsofmeasure.org",
+                },
+                "coding": [{"rank": 2.0, "code": "z"}, {"rank": 1.2, "code": "alpha beta"}],
+            },
+        }
+    )
+    expressions = {
+        "decObjA ~ decObjB": True,
+        "decObjTieA ~ decObjTieB": False,
+        "rangeA = rangeB": True,
+        "rangeA != rangeB": False,
+        "rangeA ~ rangeB": True,
+        "rangeA !~ rangeB": False,
+        "rangeA = rangeBad": None,
+        "rangeA != rangeBad": None,
+        "rangeA ~ rangeBad": False,
+        "rangeA !~ rangeBad": True,
+        "nestedA ~ nestedB": True,
+        "nestedA !~ nestedB": False,
     }
 
     native = _connection()

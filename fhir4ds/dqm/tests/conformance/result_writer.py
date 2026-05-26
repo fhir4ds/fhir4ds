@@ -4,7 +4,7 @@ Write results to files (CSV, SQL, JSON).
 import csv
 import json
 from pathlib import Path
-from typing import Dict, List, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .runner import MeasureResult
@@ -15,7 +15,7 @@ def write_results(
     measure_result: "MeasureResult",
     output_dir: Path,
     sql_format: str = "raw",
-) -> Dict[str, Path]:
+) -> dict[str, Path]:
     """
     Write all outputs for a measure.
 

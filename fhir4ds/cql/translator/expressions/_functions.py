@@ -2154,22 +2154,25 @@ class FunctionsMixin:
         if args:
             birth_date = args[0]
         else:
-            # Use demographics CTE for birthDate access (mirrors _translate_age_at_function)
+            # Use the current Patient columns folded into _patients.
             self.context._needs_demographics = True
             _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
-            birth_date = SQLSubquery(query=SQLSelect(
-                columns=[SQLQualifiedIdentifier(parts=["_pd", "birth_date"])],
-                from_clause=SQLAlias(
-                    expr=SQLIdentifier(name="_patient_demographics"),
-                    alias="_pd",
-                ),
-                where=SQLBinaryOp(
-                    operator="=",
-                    left=SQLQualifiedIdentifier(parts=["_pd", "patient_id"]),
-                    right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
-                ),
-                limit=1,
-            ))
+            if _outer_pid == "_pt":
+                birth_date = SQLQualifiedIdentifier(parts=["_pt", "birth_date"])
+            else:
+                birth_date = SQLSubquery(query=SQLSelect(
+                    columns=[SQLQualifiedIdentifier(parts=["_pd", "birth_date"])],
+                    from_clause=SQLAlias(
+                        expr=SQLIdentifier(name="_patients"),
+                        alias="_pd",
+                    ),
+                    where=SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["_pd", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+                    ),
+                    limit=1,
+                ))
 
         if name_lower in ("ageinhours", "ageinminutes", "ageinseconds"):
             current_reference: SQLExpression = SQLRaw(
@@ -2195,9 +2198,8 @@ class FunctionsMixin:
         - AgeInMonthsAt(patient_resource, as_of_date)
         - AgeInDaysAt(patient_resource, as_of_date)
 
-        When _patient_demographics CTE is available in population mode,
-        this function uses birthday-aware age calculation by joining to
-        the demographics CTE instead of correlated subqueries.
+        In population mode this function uses birthday-aware age calculation
+        from current Patient columns folded into the _patients CTE.
         """
         # Map function names to UDF names (proper casing)
         udf_name_map = {
@@ -2215,8 +2217,8 @@ class FunctionsMixin:
         # Args should be (patient_resource, as_of_date)
         # If only one arg provided, assume it's the as_of_date and use current resource
         if len(args) == 1:
-            # Use demographics CTE for birthday-aware age calculation.
-            # Always flag that demographics CTE is needed.
+            # Use current Patient columns folded into _patients for birthday-aware
+            # age calculation.
             self.context._needs_demographics = True
             calc_udf_map = {
                 "ageinyearsat": "CalculateAgeInYearsAt",
@@ -2230,19 +2232,22 @@ class FunctionsMixin:
             calc_udf_name = calc_udf_map.get(name.lower(), "CalculateAgeInYearsAt")
 
             _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
-            birth_date = SQLSubquery(query=SQLSelect(
-                columns=[SQLQualifiedIdentifier(parts=["_pd", "birth_date"])],
-                from_clause=SQLAlias(
-                    expr=SQLIdentifier(name="_patient_demographics"),
-                    alias="_pd",
-                ),
-                where=SQLBinaryOp(
-                    operator="=",
-                    left=SQLQualifiedIdentifier(parts=["_pd", "patient_id"]),
-                    right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
-                ),
-                limit=1,
-            ))
+            if _outer_pid == "_pt":
+                birth_date = SQLQualifiedIdentifier(parts=["_pt", "birth_date"])
+            else:
+                birth_date = SQLSubquery(query=SQLSelect(
+                    columns=[SQLQualifiedIdentifier(parts=["_pd", "birth_date"])],
+                    from_clause=SQLAlias(
+                        expr=SQLIdentifier(name="_patients"),
+                        alias="_pd",
+                    ),
+                    where=SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["_pd", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+                    ),
+                    limit=1,
+                ))
             return SQLFunctionCall(
                 name=calc_udf_name,
                 args=[

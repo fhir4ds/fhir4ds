@@ -81,6 +81,134 @@ def _strip_comments_for_precheck(expression: str) -> str:
     return "".join(result)
 
 
+_FHIRPATH_TIME_QUANTITY_UNITS = frozenset({
+    "year", "years",
+    "month", "months",
+    "week", "weeks",
+    "day", "days",
+    "hour", "hours",
+    "minute", "minutes",
+    "second", "seconds",
+    "millisecond", "milliseconds",
+})
+
+
+def _skip_quoted_for_precheck(expression: str, start: int, quote: str) -> int:
+    i = start + 1
+    while i < len(expression):
+        if expression[i] == "\\" and i + 1 < len(expression):
+            i += 2
+            continue
+        if expression[i] == quote:
+            return i + 1
+        i += 1
+    return i
+
+
+def _scan_temporal_token(expression: str, start: int) -> tuple[str, int]:
+    i = start + 1
+    while i < len(expression) and expression[i] in "0123456789T:.-+Z":
+        i += 1
+    return expression[start:i], i
+
+
+def _has_invalid_timezone_literal(expression: str) -> bool:
+    """Return true for Date/partial-DateTime literals with illegal TZ suffixes."""
+    text = _strip_comments_for_precheck(expression)
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == "'":
+            i = _skip_quoted_for_precheck(text, i, "'")
+            continue
+        if ch == "`":
+            i = _skip_quoted_for_precheck(text, i, "`")
+            continue
+        if ch == "@":
+            token, i = _scan_temporal_token(text, i)
+            if re.fullmatch(r"@\d{4}(?:-\d{2}(?:-\d{2})?)?Z", token):
+                return True
+            if re.fullmatch(r"@\d{4}(?:-\d{2}(?:-\d{2})?)?T(?:Z|[+-]\d{2}:\d{2})", token):
+                return True
+            continue
+        i += 1
+    return False
+
+
+def _is_unary_minus_context(expression: str, minus_pos: int) -> bool:
+    j = minus_pos - 1
+    while j >= 0 and expression[j].isspace():
+        j -= 1
+    if j < 0:
+        return True
+    if expression[j] in "([{,+-*/|&=<>":
+        return True
+    if expression[j].isalpha():
+        end = j + 1
+        while j >= 0 and expression[j].isalpha():
+            j -= 1
+        return expression[j + 1:end] in {"and", "or", "xor", "implies", "in", "contains", "is", "as"}
+    return False
+
+
+def _has_out_of_range_integer_literal(expression: str) -> bool:
+    """Return true if a non-Quantity Integer literal exceeds FHIRPath range."""
+    text = _strip_comments_for_precheck(expression)
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == "'":
+            i = _skip_quoted_for_precheck(text, i, "'")
+            continue
+        if ch == "`":
+            i = _skip_quoted_for_precheck(text, i, "`")
+            continue
+        if ch == "@":
+            _token, i = _scan_temporal_token(text, i)
+            continue
+        if not ch.isdigit():
+            i += 1
+            continue
+        if i > 0 and (text[i - 1].isalnum() or text[i - 1] in "_."):
+            i += 1
+            continue
+
+        start = i
+        while i < len(text) and text[i].isdigit():
+            i += 1
+
+        if i < len(text) and text[i] == "." and i + 1 < len(text) and text[i + 1].isdigit():
+            i += 1
+            while i < len(text) and text[i].isdigit():
+                i += 1
+            continue
+
+        lookahead = i
+        while lookahead < len(text) and text[lookahead].isspace():
+            lookahead += 1
+        if lookahead < len(text) and text[lookahead] == "'":
+            continue
+        unit_end = lookahead
+        while unit_end < len(text) and (text[unit_end].isalpha() or text[unit_end] == "_"):
+            unit_end += 1
+        if unit_end > lookahead and text[lookahead:unit_end] in _FHIRPATH_TIME_QUANTITY_UNITS:
+            continue
+
+        value = int(text[start:i])
+        minus_pos = start - 1
+        while minus_pos >= 0 and text[minus_pos].isspace():
+            minus_pos -= 1
+        unary_min = (
+            minus_pos >= 0
+            and text[minus_pos] == "-"
+            and _is_unary_minus_context(text, minus_pos)
+            and value == 2147483648
+        )
+        if value > 2147483647 and not unary_min:
+            return True
+    return False
+
+
 class FHIRPathEvaluator:
     """
     FHIRPath expression evaluator.
@@ -185,19 +313,58 @@ class FHIRPathEvaluator:
 
     # Pattern matching numeric literals directly followed by non-unit names.
     # Valid: "1month", "123.convertsToInteger()"; invalid: "123abc".
-    _TIME_QUANTITY_UNITS = frozenset({
-        "year", "years",
-        "month", "months",
-        "week", "weeks",
-        "day", "days",
-        "hour", "hours",
-        "minute", "minutes",
-        "second", "seconds",
-        "millisecond", "milliseconds",
-    })
+    _TIME_QUANTITY_UNITS = _FHIRPATH_TIME_QUANTITY_UNITS
+    _NO_WS_QUOTED_QUANTITY_RE = re.compile(
+        r"(?<![a-zA-Z0-9_.])(\d+(?:\.\d+)?)'(?:\\.|[^\\'])*'"
+    )
     _INVALID_TOKEN_RE = re.compile(
         r'(?<![a-zA-Z_.])(\d+(?:\.\d+)?)([a-zA-Z_]\w*)'
     )
+
+    @classmethod
+    def _normalize_no_ws_quoted_quantities(cls, expression: str) -> str:
+        """Insert parser-friendly whitespace before quoted Quantity units only."""
+        result: list[str] = []
+        i = 0
+        while i < len(expression):
+            ch = expression[i]
+
+            if ch in ("'", "`"):
+                end = _skip_quoted_for_precheck(expression, i, ch)
+                result.append(expression[i:end])
+                i = end
+                continue
+
+            if ch == "/" and i + 1 < len(expression) and expression[i + 1] == "/":
+                end = i + 2
+                while end < len(expression) and expression[end] not in "\r\n":
+                    end += 1
+                result.append(expression[i:end])
+                i = end
+                continue
+
+            if ch == "/" and i + 1 < len(expression) and expression[i + 1] == "*":
+                end = i + 2
+                while end < len(expression):
+                    if expression[end] == "*" and end + 1 < len(expression) and expression[end + 1] == "/":
+                        end += 2
+                        break
+                    end += 1
+                result.append(expression[i:end])
+                i = end
+                continue
+
+            match = cls._NO_WS_QUOTED_QUANTITY_RE.match(expression, i)
+            if match:
+                text = match.group(0)
+                result.append(f"{match.group(1)} {text[len(match.group(1)):]}")
+                i = match.end()
+                continue
+
+            result.append(ch)
+            i += 1
+
+        return "".join(result)
 
     # FHIRPath §3 — Reject structurally malformed path expressions that the
     # underlying parser may silently accept.
@@ -206,7 +373,7 @@ class FHIRPathEvaluator:
         r'\.\s*$'        # trailing dot (e.g. "Patient.")
         r'|\.\.'         # consecutive dots (e.g. "Patient..name")
         r'|\(\s*$'       # unclosed paren at end
-        r'|^\s*[+*/|&]'  # leading binary operator
+        r'|^\s*[*\/|&]'  # leading binary operator
         r')'
     )
 
@@ -232,9 +399,18 @@ class FHIRPathEvaluator:
         # followed by a non-unit identifier (e.g., "123abc"), which indicates
         # garbage after a valid prefix that many parsers silently accept.
         stripped = expression.strip()
+        if _has_invalid_timezone_literal(stripped):
+            raise FHIRPathSyntaxError(
+                f"Invalid FHIRPath expression: invalid timezone placement in '{expression}'"
+            )
+        if _has_out_of_range_integer_literal(stripped):
+            raise FHIRPathSyntaxError(
+                f"Invalid FHIRPath expression: integer literal out of range in '{expression}'"
+            )
         # Strip string literals and delimited identifiers before checking (they
         # can contain escaped token-looking text such as `omega\u03A9`).
         no_strings = _strip_comments_for_precheck(stripped)
+        no_strings = self._NO_WS_QUOTED_QUANTITY_RE.sub(r"\1 Q", no_strings)
         no_strings = re.sub(r"'(?:\\.|[^\\'])*'", 'S', no_strings)
         no_strings = re.sub(r"`(?:\\.|[^\\`])*`", 'I', no_strings)
         # Strip Date/Time literals before checking
@@ -258,27 +434,28 @@ class FHIRPathEvaluator:
                 f"Invalid FHIRPath expression: '{expression}'"
             )
 
-        self._expression = expression
+        normalized_expression = self._normalize_no_ws_quoted_quantities(expression)
+        self._expression = normalized_expression
 
         # Check if expression requires built-in evaluator
         # These expressions cannot be parsed by fhirpathpy
-        if self._requires_builtin_evaluator(expression):
+        if self._requires_builtin_evaluator(normalized_expression):
             # Store expression for built-in evaluation
-            self._compiled_expression = expression
+            self._compiled_expression = normalized_expression
             return
 
         try:
             # Use fhirpath-py's compilation if available
             if self._fhirpath_module is not None:
                 if hasattr(self._fhirpath_module, 'compile'):
-                    self._compiled_expression = self._fhirpath_module.compile(expression)
+                    self._compiled_expression = self._fhirpath_module.compile(normalized_expression)
                 elif hasattr(self._fhirpath_module, 'FHIRPath'):
-                    self._compiled_expression = self._fhirpath_module.FHIRPath(expression)
+                    self._compiled_expression = self._fhirpath_module.FHIRPath(normalized_expression)
                 else:
-                    self._compiled_expression = expression
+                    self._compiled_expression = normalized_expression
             else:
                 # Fallback: store expression for later parsing
-                self._compiled_expression = expression
+                self._compiled_expression = normalized_expression
         except (ValueError, TypeError, KeyError, AttributeError, NotImplementedError) as e:
             _logger.warning("Failed to compile FHIRPath expression '%s': %s", expression, e)
             raise FHIRPathSyntaxError(f"Failed to compile expression: {expression}") from e

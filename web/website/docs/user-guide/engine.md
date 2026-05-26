@@ -71,7 +71,7 @@ FHIR4DS is organized into several functional pillars. Use the guides below to di
 The `fhirpath` module provides a high-performance C++ DuckDB extension for executing expressions directly against FHIR JSON columns.
 
 - **Learn more**: [FHIRPath Guide](./extraction/fhirpath)
-- **Database integration**: [Native DuckDB Integration](./extraction/duckdb)
+- **Database integration**: [Native DuckDB Integration](./duckdb)
 </details>
 
 <details>
@@ -97,7 +97,14 @@ The `cql` module translates Clinical Quality Language into optimized DuckDB SQL 
 The `dqm` (Digital Quality Measures) module manages the full lifecycle of evaluation, from loading CMS bundles to generating auditable evidence.
 
 - **Workflow & Audit**: [DQM Orchestration](./quality/dqm)
+- **Production Recipes**: [Source-to-DQM Production Recipes](/docs/examples/dqm-recipes)
 </details>
+
+## 5. Operations
+
+For repeatable batch runs and project automation, use the operations guides:
+
+- **CLI**: [Command Line Interface](./cli)
 
 ---
 

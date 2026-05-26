@@ -263,6 +263,23 @@ def test_load_file_bundle(loader, tmp_path):
     assert loader.count("Patient") == 2
 
 
+@pytest.mark.parametrize(
+    ("payload", "type_name"),
+    [
+        ([], "list"),
+        ("not an object", "str"),
+        (None, "NoneType"),
+    ],
+)
+def test_load_file_rejects_non_object_json(loader, tmp_path, payload, type_name):
+    """Valid JSON that is not a FHIR object should raise an actionable error."""
+    resource_file = tmp_path / "not-object.json"
+    resource_file.write_text(json.dumps(payload))
+
+    with pytest.raises(TypeError, match=rf"object resource or Bundle.*{type_name}"):
+        loader.load_file(resource_file)
+
+
 def test_load_directory(loader, tmp_path):
     """Test loading all files from a directory."""
     # Create multiple files
@@ -283,6 +300,17 @@ def test_load_directory(loader, tmp_path):
     assert count == 4
     assert loader.count("Patient") == 2
     assert loader.count("Observation") == 2
+
+
+def test_load_directory_skips_non_object_json(loader, tmp_path):
+    """Directory loading should skip non-FHIR JSON shapes without crashing."""
+    (tmp_path / "patient.json").write_text(json.dumps({
+        "resourceType": "Patient", "id": "p1"
+    }))
+    (tmp_path / "array.json").write_text(json.dumps([]))
+
+    assert loader.load_directory(tmp_path) == 1
+    assert loader.count("Patient") == 1
 
 
 def test_load_directory_recursive(loader, tmp_path):
@@ -480,6 +508,50 @@ def test_custom_table_name(duckdb_con):
     assert result[0] == 1
 
 
+def test_custom_resource_table_name_sql_keyword_is_quoted(duckdb_con):
+    """SQL keyword table names should work through the loader API."""
+    loader = FHIRDataLoader(duckdb_con, table_name="select")
+    loader.load_resource({"resourceType": "Patient", "id": "p1", "gender": "female"})
+
+    assert loader.count("Patient") == 1
+    assert duckdb_con.execute('SELECT COUNT(*) FROM "select"').fetchone() == (1,)
+
+    resolved = duckdb_con.execute(
+        "SELECT json_extract_string(resolve(?), '$.id')",
+        ["Patient/p1"],
+    ).fetchone()
+    assert resolved == ("p1",)
+
+    loader.clear()
+    assert loader.count() == 0
+
+
+def test_custom_valueset_table_name_sql_keyword_is_quoted(duckdb_con):
+    """ValueSet code table names use identifier quoting consistently."""
+    loader = FHIRDataLoader(duckdb_con)
+    valuesets = [
+        ResolvedValueSet(
+            url="http://example.org/ValueSet/Keyword",
+            source_path=Path("."),
+            codes=[{"system": "http://loinc.org", "code": "1234-5", "display": "A"}],
+        )
+    ]
+
+    assert loader.load_valuesets(valuesets, table_name="where") == 1
+    assert loader.count_valueset_codes(table_name="where") == 1
+    assert (
+        loader.count_valueset_codes(
+            "http://example.org/ValueSet/Keyword",
+            table_name="where",
+        )
+        == 1
+    )
+    assert duckdb_con.execute('SELECT COUNT(*) FROM "where"').fetchone() == (1,)
+
+    loader.clear_valuesets(table_name="where")
+    assert loader.count_valueset_codes(table_name="where") == 0
+
+
 def test_no_auto_create_table(duckdb_con):
     """Test that table is not created when create_table=False."""
     loader = FHIRDataLoader(duckdb_con, create_table=False)
@@ -530,6 +602,23 @@ def test_load_from_url_rejects_file_scheme(loader):
 def test_load_from_url_rejects_non_http_scheme(loader):
     with pytest.raises(ValueError, match="Unsupported URL scheme"):
         loader.load_from_url("ftp://example.org/patient.json")
+
+
+def test_load_from_url_rejects_non_object_json(loader, monkeypatch):
+    import urllib.request
+
+    class MockResponse:
+        def read(self):
+            return json.dumps([]).encode()
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: MockResponse())
+
+    with pytest.raises(TypeError, match="object resource or Bundle.*list"):
+        loader.load_from_url("http://example.org/fhir")
 
 
 def test_resource_json_stored_correctly(loader, duckdb_con):

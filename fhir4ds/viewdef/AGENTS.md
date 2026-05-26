@@ -1,6 +1,14 @@
 # ViewDefinition Agent Notes
 
 ## Known Fragile Areas
+- Release 0.0.7 Domain 5 verified clean (2026-05-24): Fresh
+  ViewDefinition domain testing found no new issues across `forEachOrNull`,
+  nested select/unionAll, root/select `where`, constants, type columns, and
+  column collision guards. `ViewDefinition.from_dict()` currently delegates to
+  `parse_view_definition()`, and legacy join helpers validate and quote
+  aliases/resource table names. Keep full unit/integration/spec-compliance
+  coverage, conformance `run_viewdef.py`, and native-vs-forced-fallback
+  execution probes together when changing these paths.
 - SOF-VD-12 EXPLORER verified clean (2026-05-20): Boundary probes for
   combined Shareable+Tabular `meta.profile` declarations with version suffixes,
   unsupported profile URL aliases, top-level unsupported `mapping` input,

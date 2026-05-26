@@ -35,7 +35,7 @@ BUNDLE = json.dumps(
         "resourceType": "Bundle",
         "entry": [
             {"resource": {"resourceType": "Patient", "id": "p1"}},
-            {"resource": {"resourceType": "Observation", "id": "o1"}},
+            {"resource": {"resourceType": "Observation", "id": "o1", "valueInteger": 7}},
         ],
     }
 )
@@ -108,6 +108,59 @@ def test_oftype_matches_fhir_supertypes_in_native_and_fallback(monkeypatch: pyte
         for expression, expected in cases.items():
             assert _json_result(native, BUNDLE, expression) == expected
             assert _json_result(fallback, BUNDLE, expression) == expected
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_oftype_missing_type_argument_invalid_in_native_and_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    expression = "entry.resource.ofType()"
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        assert native.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (False,)
+        assert fallback.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (False,)
+        assert _json_result(native, BUNDLE, expression) == ([], None)
+        assert _json_result(fallback, BUNDLE, expression) == ([], None)
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_filter_projection_invalid_arity_matches_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    expressions = [
+        "Patient.where()",
+        "entry.where()",
+        "entry.where(true, false).resource.id",
+        "entry.select()",
+        "entry.select(resource, fullUrl).count()",
+        "entry.repeat()",
+        "Patient.ofType('Patient').id",
+    ]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in expressions:
+            assert native.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (False,)
+            assert fallback.execute("SELECT fhirpath_is_valid(?)", [expression]).fetchone() == (False,)
+            assert _json_result(native, BUNDLE, expression) == ([], None)
+            assert _json_result(fallback, BUNDLE, expression) == ([], None)
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_nested_choice_oftype_matches_native_and_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    expression = "entry.resource.ofType(Observation).value.ofType(Integer)"
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        expected = (["7"], "[7]")
+        assert _json_result(native, BUNDLE, expression) == expected
+        assert _json_result(fallback, BUNDLE, expression) == expected
     finally:
         native.close()
         fallback.close()

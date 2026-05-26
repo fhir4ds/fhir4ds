@@ -1,9 +1,8 @@
 """Tests for NarrativeGenerator and AuditEngine."""
 
-import pytest
 
-from fhir4ds.dqm.narrative import NarrativeGenerator
 from fhir4ds.dqm.audit import AuditEngine
+from fhir4ds.dqm.narrative import NarrativeGenerator
 from fhir4ds.dqm.types import AuditPersona
 
 

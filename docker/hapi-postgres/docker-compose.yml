@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16}
+    container_name: fhir4ds-hapi-postgres
+    environment:
+      POSTGRES_DB: hapi
+      POSTGRES_USER: hapi
+      POSTGRES_PASSWORD: hapi
+    ports:
+      - "15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hapi -d hapi"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  hapi:
+    image: ${HAPI_IMAGE:-hapiproject/hapi:v8.8.0-1}
+    container_name: fhir4ds-hapi
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/hapi
+      SPRING_DATASOURCE_USERNAME: hapi
+      SPRING_DATASOURCE_PASSWORD: hapi
+      SPRING_DATASOURCE_DRIVERCLASSNAME: org.postgresql.Driver
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
+      HAPI_FHIR_VERSION: R4
+      HAPI_FHIR_FHIR_VERSION: R4
+    ports:
+      - "18080:8080"
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: docker/hapi-postgres/Dockerfile.worker
+      args:
+        PYTHON_IMAGE: ${FHIR4DS_WORKER_PYTHON_IMAGE:-python:3.11.13-slim}
+    container_name: fhir4ds-hapi-worker
+    profiles: ["worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      hapi:
+        condition: service_started
+    volumes:
+      - ../..:/workspace:ro
+      - ./hapi-materialization.compose.yaml:/config/hapi-materialization.yaml:ro
+    command: ["listen", "--config", "/config/hapi-materialization.yaml"]

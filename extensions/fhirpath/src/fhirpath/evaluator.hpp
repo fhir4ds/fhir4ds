@@ -173,7 +173,8 @@ private:
 	FPCollection fn_repeat(const ASTNode &projection, const FPCollection &input, yyjson_doc *doc);
 	FPCollection fn_distinct(const FPCollection &input);
 	FPCollection fn_trace(const FPCollection &input);
-	FPCollection fn_aggregate(const ASTNode &node, const FPCollection &input, yyjson_doc *doc);
+	FPCollection fn_aggregate(const ASTNode &node, const FPCollection &input, yyjson_doc *doc,
+	                          const FPCollection *outer_input = nullptr);
 	FPCollection fn_combine(const FPCollection &input, const FPCollection &other);
 	FPCollection fn_union(const FPCollection &left, const FPCollection &right);
 	FPCollection fn_intersect(const FPCollection &input, const FPCollection &other);

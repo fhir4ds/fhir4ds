@@ -144,6 +144,8 @@ def test_type_specifier_errors_match_python_fallback(monkeypatch) -> None:
         "1.is(NoSuchType)",
         "1 as NoSuchType",
         "1.as(NoSuchType)",
+        "missing.ofType(NoSuchType)",
+        "Patient.gender.ofType(string1)",
         "arr is Integer",
         "arr.is(Integer)",
         "arr as Integer",
@@ -206,6 +208,137 @@ def test_official_r4_system_qualified_fhir_type_remains_non_matching(monkeypatch
                 fallback, resource, expression
             )
             assert fhirpath_is_valid_udf(expression) is True
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_system_any_is_root_type_for_is_and_as(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "pat-1",
+            "active": True,
+            "name": [{"family": "Smith"}],
+        }
+    )
+    expressions = [
+        "1 is System.Any",
+        "1.is(System.Any)",
+        "1.as(System.Any).exists()",
+        "true is System.Any",
+        "'abc' is System.Any",
+        "@2015 is System.Any",
+        "5 'mg' is System.Any",
+        "Patient is System.Any",
+        "Patient.as(System.Any).exists()",
+        "active is System.Any",
+        "active.as(System.Any).exists()",
+        "name.first() is System.Any",
+        "name.first().as(System.Any).exists()",
+    ]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in expressions:
+            assert _surfaces(native, resource, expression) == _surfaces(
+                fallback, resource, expression
+            )
+            assert native.execute(
+                "SELECT fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, expression],
+            ).fetchone() == (True, True)
+            assert fallback.execute(
+                "SELECT fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, expression],
+            ).fetchone() == (True, True)
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_choice_primitive_as_capitalized_type_chains_match_native(monkeypatch) -> None:
+    resource = json.dumps({"resourceType": "Observation", "valueInteger": 5})
+    expressions = [
+        "value.as(Integer).exists()",
+        "(value as Integer).exists()",
+        "valueInteger.as(Integer).exists()",
+        "(valueInteger as Integer).exists()",
+    ]
+    explicit_system_controls = [
+        "value.as(System.Integer).exists()",
+        "valueInteger.as(System.Integer).exists()",
+    ]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in expressions:
+            assert _surfaces(native, resource, expression) == _surfaces(
+                fallback, resource, expression
+            )
+            assert native.execute(
+                "SELECT fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, expression],
+            ).fetchone() == (True, True)
+            assert fallback.execute(
+                "SELECT fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, expression],
+            ).fetchone() == (True, True)
+
+        for expression in explicit_system_controls:
+            assert _surfaces(native, resource, expression) == _surfaces(
+                fallback, resource, expression
+            )
+            assert native.execute(
+                "SELECT fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, expression],
+            ).fetchone() == (False, True)
+            assert fallback.execute(
+                "SELECT fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, expression],
+            ).fetchone() == (False, True)
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_oftype_any_and_nested_choice_primitives_match_native(monkeypatch) -> None:
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "arr": [1, "a", True],
+            "component": [
+                {"valueInteger": 5},
+                {"valueString": "five"},
+                {"valueQuantity": {"value": 10, "unit": "mg", "code": "mg"}},
+            ],
+        }
+    )
+    expressions = {
+        "arr.ofType(Any).count() = 3": True,
+        "arr.ofType(System.Any).count() = 3": True,
+        "component.value.ofType(Integer).count() = 1": True,
+        "component.value.ofType(String).count() = 1": True,
+        "component.value.ofType(Quantity).count() = 1": True,
+    }
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected_bool in expressions.items():
+            assert _surfaces(native, resource, expression) == _surfaces(
+                fallback, resource, expression
+            )
+            assert native.execute(
+                "SELECT fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, expression],
+            ).fetchone() == (expected_bool, True)
+            assert fallback.execute(
+                "SELECT fhirpath_bool(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, expression],
+            ).fetchone() == (expected_bool, True)
     finally:
         native.close()
         fallback.close()

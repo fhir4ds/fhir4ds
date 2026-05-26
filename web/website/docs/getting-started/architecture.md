@@ -73,7 +73,7 @@ The `fhir4ds` package serves as the primary interface, orchestrating the underly
 
 Technical Deep Dives
 
-- For details on the C++ DuckDB extensions, see [Native DuckDB Integration](/docs/user-guide/extraction/duckdb).
+- For details on the C++ DuckDB extensions, see [Native DuckDB Integration](/docs/user-guide/duckdb).
 - For details on the translation pipeline, see [Clinical Quality Language (CQL)](/docs/user-guide/analytics/cql).
 - For details on explainable AI and auditing, see [Digital Quality Measures (DQM)](/docs/user-guide/quality/dqm).
 

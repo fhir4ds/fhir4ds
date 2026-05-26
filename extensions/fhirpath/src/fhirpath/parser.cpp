@@ -14,6 +14,14 @@ static bool isTimeUnitKeyword(TokenType t) {
 	       t == TokenType::Millisecond || t == TokenType::Milliseconds;
 }
 
+static int64_t parseIntegerLiteralToken(const Token &tok) {
+	int64_t value = std::stoll(tok.text);
+	if (value > 2147483648LL) {
+		throw std::runtime_error("Integer literal out of range at position " + std::to_string(tok.position));
+	}
+	return value;
+}
+
 ASTNodePtr Parser::parse(const std::string &expression) {
 	Lexer lexer(expression);
 	tokens_ = lexer.tokenize();
@@ -116,10 +124,10 @@ ASTNodePtr Parser::parseOrExpression() {
 
 // andExpression: membershipExpression ('and' membershipExpression)*
 ASTNodePtr Parser::parseAndExpression() {
-	auto left = parseTypeExpression();
+	auto left = parseMembershipExpression();
 	while (check(TokenType::And)) {
 		advance();
-		auto right = parseTypeExpression();
+		auto right = parseMembershipExpression();
 		auto node = std::make_shared<ASTNode>();
 		node->type = NodeType::BinaryOp;
 		node->op = "and";
@@ -162,7 +170,7 @@ ASTNodePtr Parser::parseInequalityExpression() {
 	return left;
 }
 
-// equalityExpression: typeExpression (('=' | '!=' | '~' | '!~') typeExpression)*
+// equalityExpression: unionExpression (('=' | '!=' | '~' | '!~') unionExpression)*
 ASTNodePtr Parser::parseEqualityExpression() {
 	auto left = parseUnionExpression();
 	while (check(TokenType::Equals) || check(TokenType::NotEquals)) {
@@ -178,9 +186,24 @@ ASTNodePtr Parser::parseEqualityExpression() {
 	return left;
 }
 
-// typeExpression: unionExpression ('is' | 'as') typeSpecifier
+// unionExpression: typeExpression ('|' typeExpression)*
+ASTNodePtr Parser::parseUnionExpression() {
+	auto left = parseTypeExpression();
+	while (check(TokenType::Pipe)) {
+		advance();
+		auto right = parseTypeExpression();
+		auto node = std::make_shared<ASTNode>();
+		node->type = NodeType::UnionOp;
+		node->op = "|";
+		node->children = {left, right};
+		left = node;
+	}
+	return left;
+}
+
+// typeExpression: additiveExpression ('is' | 'as') typeSpecifier
 ASTNodePtr Parser::parseTypeExpression() {
-	auto left = parseMembershipExpression();
+	auto left = parseAdditiveExpression();
 	if (check(TokenType::Is) || check(TokenType::As)) {
 		std::string op = current().text;
 		advance();
@@ -199,21 +222,6 @@ ASTNodePtr Parser::parseTypeExpression() {
 		node->name = type_name;
 		node->children = {left};
 		return node;
-	}
-	return left;
-}
-
-// unionExpression: additiveExpression ('|' additiveExpression)*
-ASTNodePtr Parser::parseUnionExpression() {
-	auto left = parseAdditiveExpression();
-	while (check(TokenType::Pipe)) {
-		advance();
-		auto right = parseAdditiveExpression();
-		auto node = std::make_shared<ASTNode>();
-		node->type = NodeType::UnionOp;
-		node->op = "|";
-		node->children = {left, right};
-		left = node;
 	}
 	return left;
 }
@@ -273,8 +281,7 @@ ASTNodePtr Parser::parseInvocationExpression() {
 		if (check(TokenType::Dot)) {
 			advance();
 			if (check(TokenType::Identifier) || check(TokenType::Contains) || check(TokenType::As) ||
-			    check(TokenType::Is) || check(TokenType::Not) || check(TokenType::In) ||
-			    check(TokenType::Div) || check(TokenType::Mod)) {
+			    check(TokenType::Is) || check(TokenType::Not) || check(TokenType::In)) {
 				std::string name = current().text;
 				size_t name_pos = current().position;
 				advance();
@@ -416,7 +423,7 @@ ASTNodePtr Parser::parsePrimaryExpression() {
 	// Identifier (member access from root, or type name)
 	// Also allow keywords that can appear as identifiers/field names
 	if (check(TokenType::Identifier) || check(TokenType::Contains) || check(TokenType::In) ||
-	    check(TokenType::As) || check(TokenType::Is) || check(TokenType::Div) || check(TokenType::Mod)) {
+	    check(TokenType::As) || check(TokenType::Is) || check(TokenType::Not)) {
 		std::string name = current().text;
 		advance();
 
@@ -464,19 +471,21 @@ ASTNodePtr Parser::parseLiteral() {
 
 	switch (tok.type) {
 	case TokenType::Integer: {
-		node->type = NodeType::IntegerLiteral;
-		node->value = static_cast<int64_t>(std::stoll(tok.text));
 		// Check for quantity: integer followed by string literal or time unit keyword
 		if (check(TokenType::String)) {
 			node->type = NodeType::QuantityLiteral;
 			std::string unit = current().text;
 			advance();
-			node->value = QuantityValue {static_cast<double>(std::stoll(tok.text)), unit};
+			node->value = QuantityValue {std::stod(tok.text), unit};
 		} else if (isTimeUnitKeyword(current().type)) {
 			node->type = NodeType::QuantityLiteral;
 			std::string unit = current().text;
 			advance();
-			node->value = QuantityValue {static_cast<double>(std::stoll(tok.text)), unit};
+			node->value = QuantityValue {std::stod(tok.text), unit};
+		} else {
+			node->type = NodeType::IntegerLiteral;
+			node->value = parseIntegerLiteralToken(tok);
+			node->value.string_val = tok.text;
 		}
 		break;
 	}

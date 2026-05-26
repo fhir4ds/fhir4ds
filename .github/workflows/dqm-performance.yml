@@ -1,0 +1,66 @@
+name: DQM Performance Report
+
+on:
+  schedule:
+    - cron: "0 10 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dqm-performance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  dqm-performance:
+    name: DQM timing report
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout DQM conformance fixtures
+        run: git submodule update --init tests/data/ecqm-content-qicore-2025
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,measures]"
+
+      - name: Run DQM conformance timing suite
+        run: python3 conformance/scripts/run_dqm.py
+
+      - name: Generate DQM performance comparison
+        run: >
+          python3 benchmarks/runner/dqm_perf_report.py
+          --current conformance/reports/dqm_report.json
+          --baseline benchmarks/baselines/dqm_2025.json
+          --output-json benchmarks/output/dqm-performance-report.json
+          --output-md benchmarks/output/dqm-performance-report.md
+
+      - name: Add performance report to job summary
+        if: always()
+        run: |
+          if [ -f benchmarks/output/dqm-performance-report.md ]; then
+            cat benchmarks/output/dqm-performance-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload DQM timing reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dqm-performance-report
+          path: |
+            conformance/reports/dqm_report.json
+            benchmarks/output/dqm-performance-report.json
+            benchmarks/output/dqm-performance-report.md
+          if-no-files-found: warn

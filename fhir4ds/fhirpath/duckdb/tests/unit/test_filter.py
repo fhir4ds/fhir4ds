@@ -468,6 +468,13 @@ class TestBooleanAnd:
         result = boolean_and(left, right)
         assert result.is_empty
 
+    def test_and_non_boolean_singleton_truthy(self) -> None:
+        """Test singleton non-Boolean values evaluate as true."""
+        left = FHIRPathCollection(["male"])
+        right = FHIRPathCollection([True])
+        result = boolean_and(left, right)
+        assert result.to_list() == [True]
+
 
 class TestBooleanOr:
     """Tests for the OR operator."""
@@ -514,6 +521,13 @@ class TestBooleanOr:
         result = boolean_or(left, right)
         assert result.is_empty
 
+    def test_or_non_boolean_singleton_truthy(self) -> None:
+        """Test singleton non-Boolean values evaluate as true."""
+        left = FHIRPathCollection(["false"])
+        right = FHIRPathCollection([False])
+        result = boolean_or(left, right)
+        assert result.to_list() == [True]
+
 
 class TestBooleanXor:
     """Tests for the XOR operator."""
@@ -552,6 +566,13 @@ class TestBooleanXor:
         right = FHIRPathCollection([True])
         result = boolean_xor(left, right)
         assert result.is_empty
+
+    def test_xor_non_boolean_singleton_truthy(self) -> None:
+        """Test singleton non-Boolean values evaluate as true."""
+        left = FHIRPathCollection([5])
+        right = FHIRPathCollection([False])
+        result = boolean_xor(left, right)
+        assert result.to_list() == [True]
 
 
 class TestBooleanImplies:
@@ -599,6 +620,13 @@ class TestBooleanImplies:
         result = boolean_implies(left, right)
         assert result.to_list() == [True]
 
+    def test_implies_non_boolean_singleton_truthy(self) -> None:
+        """Test singleton non-Boolean values evaluate as true."""
+        left = FHIRPathCollection([{"code": "A"}])
+        right = FHIRPathCollection([False])
+        result = boolean_implies(left, right)
+        assert result.to_list() == [False]
+
 
 class TestBooleanNot:
     """Tests for the NOT operator."""
@@ -620,6 +648,18 @@ class TestBooleanNot:
         col = FHIRPathCollection([])
         result = boolean_not(col)
         assert result.is_empty
+
+    def test_not_non_boolean_singleton_truthy(self) -> None:
+        """Test singleton non-Boolean values evaluate as true."""
+        col = FHIRPathCollection(["false"])
+        result = boolean_not(col)
+        assert result.to_list() == [False]
+
+    def test_not_multi_item_raises(self) -> None:
+        """Test multi-item Boolean input signals a singleton error."""
+        col = FHIRPathCollection([True, False])
+        with pytest.raises(FHIRPathError, match="multiple items"):
+            boolean_not(col)
 
 
 # =============================================================================

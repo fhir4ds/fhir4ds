@@ -10,17 +10,16 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
 import duckdb
+import pytest
 
+import fhir4ds
 from fhir4ds.sources.base import (
     SchemaValidationError,
     SourceAdapter,
     quote_identifier,
     validate_schema,
 )
-import fhir4ds
-
 
 # ---------------------------------------------------------------------------
 # Helpers

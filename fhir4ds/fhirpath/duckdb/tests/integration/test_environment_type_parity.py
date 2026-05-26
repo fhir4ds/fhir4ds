@@ -142,6 +142,44 @@ def test_environment_variable_edges_match_cpp(monkeypatch) -> None:
         fallback.close()
 
 
+def test_external_constants_allow_hidden_tokens_after_percent(monkeypatch) -> None:
+    """FHIRPath formal grammar hides whitespace/comments after '%'."""
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    cases = {
+        "% 'ucum'": (["http://unitsofmeasure.org"], "http://unitsofmeasure.org", True),
+        "%\t'ucum'": (["http://unitsofmeasure.org"], "http://unitsofmeasure.org", True),
+        "%/*grammar*/'ucum'": (["http://unitsofmeasure.org"], "http://unitsofmeasure.org", True),
+        "%//grammar\n'ucum'": (["http://unitsofmeasure.org"], "http://unitsofmeasure.org", True),
+        "%\r\nloinc": (["http://loinc.org"], "http://loinc.org", True),
+        "%\n`context`.id": (["p1"], "p1", True),
+        "% `vs-administrative-gender`": (
+            ["http://hl7.org/fhir/ValueSet/administrative-gender"],
+            "http://hl7.org/fhir/ValueSet/administrative-gender",
+            True,
+        ),
+        "% 'unknown'": ([], None, False),
+    }
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = duckdb.connect(config={"allow_unsigned_extensions": True})
+    assert register_fhirpath(fallback) is False
+    try:
+        for expression, expected in cases.items():
+            cpp = con.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert cpp == py == expected, expression
+    finally:
+        con.close()
+        fallback.close()
+
+
 def test_define_variable_scope_matches_cpp(monkeypatch) -> None:
     resource = json.dumps(
         {
@@ -288,12 +326,16 @@ def test_uri_reference_and_media_type_shapes_match_cpp(monkeypatch) -> None:
                 "resourceType": "Questionnaire",
                 "url": "http://example.org/q",
                 "version": "2026-05",
+                "subjectType": ["Patient"],
             },
             [
                 "Questionnaire.url.type().name",
                 "Questionnaire.url.is(uri)",
                 "Questionnaire.url.is(string)",
                 "Questionnaire.version.type().name",
+                "Questionnaire.subjectType.type().name",
+                "Questionnaire.subjectType.is(code)",
+                "Questionnaire.subjectType.is(string)",
             ],
         ),
         (
@@ -375,6 +417,10 @@ def test_uri_reference_and_media_type_shapes_match_cpp(monkeypatch) -> None:
             "SELECT fhirpath_text(?::JSON, 'DocumentReference.content.attachment.contentType.type().name')",
             [json.dumps(resources_and_expressions[2][0])],
         ).fetchone() == ("code",)
+        assert con.execute(
+            "SELECT fhirpath_text(?::JSON, 'Questionnaire.subjectType.type().name')",
+            [json.dumps(resources_and_expressions[0][0])],
+        ).fetchone() == ("code",)
     finally:
         con.close()
         fallback.close()
@@ -415,6 +461,67 @@ def test_quantity_value_type_reflection_matches_cpp(monkeypatch) -> None:
                 [resource, expression, resource, expression],
             ).fetchone()
             assert cpp == py == (["decimal"], "decimal"), expression
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_type_reflection_rejects_arguments_in_cpp_and_fallback(monkeypatch) -> None:
+    """FHIRPath N1 §10.2 reflection defines type() with no arguments."""
+    resource = json.dumps({"resourceType": "Patient", "id": "p1"})
+    expressions = [
+        "type(false)",
+        "type(false, true)",
+        "1.type(false)",
+        "1.type(false, true)",
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = duckdb.connect(config={"allow_unsigned_extensions": True})
+    assert register_fhirpath(fallback) is False
+    try:
+        for expression in expressions:
+            cpp = con.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert cpp == py == ([], None, None, False), expression
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_define_variable_rejects_invalid_call_shapes_in_cpp_and_fallback(monkeypatch) -> None:
+    """FHIRPath §9 environment variables require a valid defineVariable name."""
+    resource = json.dumps({"resourceType": "Patient", "id": "p1", "active": True})
+    expressions = [
+        "defineVariable()",
+        "defineVariable(1)",
+        "defineVariable(true, id)",
+        "defineVariable({}, id)",
+        "defineVariable('x', id, active)",
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = duckdb.connect(config={"allow_unsigned_extensions": True})
+    assert register_fhirpath(fallback) is False
+    try:
+        for expression in expressions:
+            cpp = con.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            py = fallback.execute(
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), fhirpath_json(?::JSON, ?), fhirpath_is_valid(?)",
+                [resource, expression, resource, expression, resource, expression, expression],
+            ).fetchone()
+            assert cpp == py == ([], None, None, False), expression
     finally:
         con.close()
         fallback.close()

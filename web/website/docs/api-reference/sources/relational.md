@@ -8,8 +8,11 @@ sidebar_label: PostgresSource
 
 `fhir4ds.sources.PostgresSource` — SourceAdapter for FHIR resources stored as JSON columns in a PostgreSQL database.
 
-:::caution Scope Boundary
+:::warning
+
+Scope Boundary
 This adapter requires that source tables **already contain FHIR resource JSON** in a designated column. It does **not** construct FHIR JSON from arbitrary relational schemas — that mapping problem is out of scope for this release.
+
 :::
 
 ## Class Signature

@@ -15,7 +15,7 @@ FHIR4DS represents a paradigm shift in clinical quality measurement and populati
 |--------|-----------------|
 | **Execution Speed** | **~3.9ms mean** (~1.9ms median) per patient across the 2025 QI-Core benchmark suite |
 | **Throughput Advantage** | **~137× faster** than traditional JVM engines on shared successful measures |
-| **Standards Compliance** | **100%** across CQL (1,706), FHIRPath (935), and SQL-on-FHIR v2 (134)  |
+| **Standards Compliance** | **100%** across CQL (1,706), FHIRPath (935), SQL-on-FHIR v2 (134), and DQM (47) |
 | **Auditability** | Full per-expression evidence narratives |
 | **Infrastructure** | **Zero-server** — runs in notebooks or browser (WASM) |
 | **Scale** | Vectorized execution handles 100k+ patients with ease |
@@ -64,6 +64,7 @@ FHIR4DS is built for production healthcare environments where accuracy is non-ne
 - **CQL Spec Compliance**: 100% compliance across 1,706 tests.
 - **FHIRPath Spec Compliance**: 100% compliance across 935 tests.
 - **SQL-on-FHIR v2 Compliance**: 100% compliance across 134 tests.
+- **DQM QI-Core 2025 Compliance**: 47/47 CMS eCQMs pass.
 - **Clinical Accuracy**: Tested against 47 official 2025 QI-Core CMS eCQMs. All 47 achieve 100% pass rate (4 measures have known upstream test data issues that affect all conformant engines equally).
 
 ---

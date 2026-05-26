@@ -418,6 +418,18 @@ class CoreMixin:
         # Check if this is a known alias with a stored SQL expression
         if self.context.is_alias(name):
             symbol = self.context.lookup_symbol(name)
+            table_alias = getattr(symbol, "table_alias", None) if symbol else None
+            if table_alias and usage == ExprUsage.SCALAR:
+                cte_name = getattr(symbol, "cte_name", None)
+                col = "resource"
+                if cte_name:
+                    meta = self.context.definition_meta.get(cte_name)
+                    if meta and not meta.has_resource:
+                        col = meta.value_column or "value"
+                    elif meta is None:
+                        col = self._get_definition_value_column(cte_name)
+                return SQLQualifiedIdentifier(parts=[table_alias, col])
+
             # Check for union_expr marker (stored for SQLUnion or SQLCase with SQLUnion)
             union_expr = getattr(symbol, 'union_expr', None) if symbol else None
             if union_expr is not None:
@@ -686,19 +698,21 @@ class CoreMixin:
 
         # Check if this is Patient context reference
         if name == "Patient":
-            # In population context, use correlated subquery to get patient resource.
-            # Always flag that demographics CTE is needed so it gets created.
+            # Flag that the _patients CTE needs current-patient resource columns.
             self.context._needs_demographics = True
             # Determine the outer patient_id reference for correlation.
             outer_alias = self.context.resource_alias
             if outer_alias:
                 outer_pid = SQLQualifiedIdentifier(parts=[outer_alias, "patient_id"])
             else:
-                outer_pid = SQLQualifiedIdentifier(parts=["_pt", "patient_id"])
+                outer_alias = "_pt"
+                outer_pid = SQLQualifiedIdentifier(parts=[outer_alias, "patient_id"])
+            if outer_alias == "_pt":
+                return SQLQualifiedIdentifier(parts=["_pt", "patient_resource"])
             return SQLSubquery(query=SQLSelect(
-                columns=[SQLQualifiedIdentifier(parts=["_pd", "resource"])],
+                columns=[SQLQualifiedIdentifier(parts=["_pd", "patient_resource"])],
                 from_clause=SQLAlias(
-                    expr=SQLIdentifier(name="_patient_demographics", quoted=False),
+                    expr=SQLIdentifier(name="_patients", quoted=False),
                     alias="_pd"
                 ),
                 where=SQLBinaryOp(

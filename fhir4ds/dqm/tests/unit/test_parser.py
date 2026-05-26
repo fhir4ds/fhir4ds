@@ -2,12 +2,12 @@
 
 import json
 import logging
-import pytest
 from pathlib import Path
 
-from fhir4ds.dqm.parser import MeasureParser
-from fhir4ds.dqm.errors import MeasureParseError
+import pytest
 
+from fhir4ds.dqm.errors import MeasureParseError
+from fhir4ds.dqm.parser import MeasureParser
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 TESTS_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "tests"
@@ -64,6 +64,54 @@ class TestMeasureParserBasic:
         assert len(pop_map.groups[0].populations) == 1
         assert pop_map.groups[0].populations[0].cql_expression == "Initial Population"
         assert pop_map.groups[0].populations[0].population_code == "initial-population"
+
+    def test_parse_supporting_evidence_metadata(self):
+        measure = {
+            "resourceType": "Measure",
+            "id": "test-measure",
+            "library": ["http://example.com/Library/TestLib"],
+            "group": [
+                {
+                    "population": [
+                        {
+                            "id": "denominator",
+                            "extension": [
+                                {
+                                    "url": "http://hl7.org/fhir/StructureDefinition/cqf-supportingEvidenceDefinition",
+                                    "valueExpression": {
+                                        "extension": [
+                                            {
+                                                "url": "http://hl7.org/fhir/StructureDefinition/expression-coding",
+                                                "valueCoding": {
+                                                    "system": "http://example.org/evidence",
+                                                    "code": "qualifying",
+                                                },
+                                            }
+                                        ],
+                                        "name": "QualifyingEncounter",
+                                        "description": "The qualifying encounter.",
+                                        "language": "text/cql-identifier",
+                                        "expression": "Qualifying Encounter",
+                                    },
+                                }
+                            ],
+                            "code": {"coding": [{"code": "denominator"}]},
+                            "criteria": {"expression": "Denominator"},
+                        }
+                    ]
+                }
+            ],
+        }
+
+        pop_map = MeasureParser().parse(measure)
+
+        pop = pop_map.groups[0].populations[0]
+        assert pop.source_population_id == "denominator"
+        assert pop.supporting_evidence[0].name == "QualifyingEncounter"
+        assert pop.supporting_evidence[0].description == "The qualifying encounter."
+        assert pop.supporting_evidence[0].code == {
+            "coding": [{"system": "http://example.org/evidence", "code": "qualifying"}]
+        }
 
     def test_parse_multi_group_measure(self):
         measure = {
