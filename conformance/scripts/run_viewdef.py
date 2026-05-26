@@ -11,19 +11,20 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, List, Dict, Tuple
+from typing import Any
 
 import duckdb
 import jsonschema
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 # Ensure we can import fhir4ds
 sys.path.insert(0, os.getcwd())
 
 from conformance_log import log_run
+
 from fhir4ds.fhirpath.duckdb import register_fhirpath
-from fhir4ds.viewdef import parse_view_definition, SQLGenerator
+from fhir4ds.viewdef import SQLGenerator, parse_view_definition
 from fhir4ds.viewdef.errors import SQLOnFHIRError, ValidationError
 from fhir4ds.viewdef.parser import ParseError
 
@@ -98,7 +99,7 @@ def _add_resource_type_filter(sql: str, resource_type: str) -> str:
             adapted_branches.append(branch + f"\nWHERE {type_filter}")
     return "\nUNION ALL\n".join(adapted_branches)
 
-def run_test(con, generator, test, resources) -> Tuple[bool, str]:
+def run_test(con, generator, test, resources) -> tuple[bool, str]:
     view = test.get("view", {})
     expected = test.get("expect")
     expect_error = test.get("expectError", False)
@@ -122,7 +123,7 @@ def run_test(con, generator, test, resources) -> Tuple[bool, str]:
         if isinstance(resource_type, str) and resource_type:
             sql = _add_resource_type_filter(sql, resource_type)
         elif isinstance(resource_type, list) and resource_type:
-             # For multi-resource union, the filter is more complex, 
+             # For multi-resource union, the filter is more complex,
              # but the generator already handles the union logic.
              # We just need to replace the table name.
              pass
@@ -150,7 +151,7 @@ def run_test(con, generator, test, resources) -> Tuple[bool, str]:
                     val = None
                 elif hasattr(val, 'item'):
                     val = val.item()
-                
+
                 if isinstance(val, str):
                     try:
                         parsed = json.loads(val)
@@ -172,9 +173,11 @@ def run_test(con, generator, test, resources) -> Tuple[bool, str]:
         expected_sorted = sorted(expected_normalized, key=sort_key)
 
         if len(actual_sorted) != len(expected_sorted):
-             return False, f"Row count mismatch: got {len(actual_sorted)}, expected {len(expected_sorted)}"
+            return False, f"Row count mismatch: got {len(actual_sorted)}, expected {len(expected_sorted)}"
 
-        for i, (actual_row, expected_row) in enumerate(zip(actual_sorted, expected_sorted)):
+        for i, (actual_row, expected_row) in enumerate(
+            zip(actual_sorted, expected_sorted, strict=True)
+        ):
             for key in expected_row:
                 if key not in actual_row:
                     return False, f"Missing column '{key}' in row {i}"
@@ -210,24 +213,24 @@ def main():
         with open(filepath) as f:
             data = json.load(f)
             resources = data.get("resources", [])
-            
+
             file_results = []
             for i, test in enumerate(data.get("tests", [])):
                 test_title = test.get("title", f"test_{i}")
                 passed, reason = run_test(con, generator, test, resources)
-                
+
                 result_obj = {
                     "name": test_title,
                     "result": {"passed": passed},
                 }
                 if not passed:
                     result_obj["result"]["error"] = reason
-                
+
                 file_results.append(result_obj)
                 total_tests += 1
                 if passed:
                     passed_tests += 1
-            
+
             report[filename] = { "tests": file_results }
             print(f"  {filename}: {sum(1 for t in file_results if t['result']['passed'])}/{len(file_results)} passed")
 

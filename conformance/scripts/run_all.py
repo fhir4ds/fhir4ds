@@ -16,7 +16,7 @@ from pathlib import Path
 warnings.simplefilter("ignore", UserWarning)
 
 sys.path.insert(0, str(Path(__file__).parent))
-from conformance_log import log_run, _collect_stats
+from conformance_log import _collect_stats  # noqa: E402
 
 # Configuration
 SCRIPTS = [
@@ -43,16 +43,16 @@ def get_summary(report_path):
     try:
         with open(report_path) as f:
             data = json.load(f)
-        
+
         total = 0
         passed = 0
-        
+
         for file_data in data.values():
             for test in file_data.get("tests", []):
                 total += 1
                 if test.get("result", {}).get("passed"):
                     passed += 1
-        
+
         rate = (passed / total * 100) if total > 0 else 0
         return passed, total, rate
     except Exception as e:
@@ -72,7 +72,7 @@ def main():
     print("\n" + "=" * 60)
     print(f"{'Specification':<25} | {'Passed':<8} | {'Total':<8} | {'Rate':<8}")
     print("-" * 60)
-    
+
     grand_total = 0
     grand_passed = 0
 

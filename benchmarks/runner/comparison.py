@@ -1,10 +1,9 @@
-"""
-Compare results between cql-py and reference implementation.
-"""
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field
-from pathlib import Path
+"""Compare results between cql-py and reference implementation."""
+
 import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -22,7 +21,7 @@ class DefineDiscrepancy:
 class PatientDiscrepancy:
     """Discrepancies for a single patient."""
     patient_id: str
-    defines: List[DefineDiscrepancy]
+    defines: list[DefineDiscrepancy]
 
     @property
     def define_count(self) -> int:
@@ -43,7 +42,7 @@ class DefineAccuracy:
 class ComparisonReport:
     """Complete comparison report between cql-py and reference."""
     measure_id: str
-    measurement_period: Dict[str, str]
+    measurement_period: dict[str, str]
 
     # Patient counts
     cql_py_patients: int
@@ -57,10 +56,10 @@ class ComparisonReport:
     mismatched_patients: int
 
     # Per-define accuracy
-    define_accuracy: List[DefineAccuracy]
+    define_accuracy: list[DefineAccuracy]
 
     # Detailed discrepancies
-    discrepancies: List[PatientDiscrepancy]
+    discrepancies: list[PatientDiscrepancy]
 
     # Performance
     cql_py_total_ms: float
@@ -68,7 +67,7 @@ class ComparisonReport:
     speedup_factor: float  # cql-py / reference (< 1 means cql-py is faster)
 
     # Reference errors
-    reference_errors: List[Dict[str, Any]]
+    reference_errors: list[dict[str, Any]]
 
     @property
     def cql_py_faster(self) -> bool:
@@ -76,11 +75,11 @@ class ComparisonReport:
 
 
 def compare_results(
-    cql_py_results: List[Dict[str, Any]],
-    reference_result: "ReferenceResult",
-    measure_config: "MeasureConfig",
-    measurement_period: Dict[str, str],
-    cql_py_timings: Dict[str, float]
+    cql_py_results: list[dict[str, Any]],
+    reference_result: Any,
+    measure_config: Any,
+    measurement_period: dict[str, str],
+    cql_py_timings: dict[str, float],
 ) -> ComparisonReport:
     """
     Compare results from cql-py and reference implementation.
@@ -113,7 +112,7 @@ def compare_results(
 
     # Compare each patient
     discrepancies = []
-    define_matches: Dict[str, Dict[str, int]] = {}  # define_name -> {match, total}
+    define_matches: dict[str, dict[str, int]] = {}  # define_name -> {match, total}
 
     for define_name in all_defines:
         define_matches[define_name] = {"match": 0, "total": 0}
@@ -205,8 +204,8 @@ def compare_results(
 
 
 def _collect_all_defines(
-    cql_py_results: List[Dict[str, Any]],
-    reference_results: List["PatientResult"]
+    cql_py_results: list[dict[str, Any]],
+    reference_results: list[Any],
 ) -> set:
     """Collect define names that exist in cql-py results (these are what we compare against reference)."""
     defines = set()
@@ -233,7 +232,7 @@ def _results_equal(cql_py_val: Any, ref_val: Any) -> bool:
         cql_py_val = None
     if isinstance(ref_val, float) and math.isnan(ref_val):
         ref_val = None
-    
+
     # Both None/missing
     if cql_py_val is None and ref_val is None:
         return True
@@ -288,7 +287,7 @@ def _results_equal(cql_py_val: Any, ref_val: Any) -> bool:
         # For same-type lists or empty lists, compare normally
         if len(cql_py_val) != len(ref_val):
             return False
-        return all(_results_equal(a, b) for a, b in zip(cql_py_val, ref_val))
+        return all(_results_equal(a, b) for a, b in zip(cql_py_val, ref_val, strict=True))
 
     # Both dicts (complex types like Quantity, Interval, Code)
     if isinstance(cql_py_val, dict) and isinstance(ref_val, dict):
@@ -298,7 +297,7 @@ def _results_equal(cql_py_val: Any, ref_val: Any) -> bool:
     return str(cql_py_val) == str(ref_val)
 
 
-def _compare_complex_types(cql_py_val: Dict, ref_val: Dict) -> bool:
+def _compare_complex_types(cql_py_val: dict, ref_val: dict) -> bool:
     """Compare complex CQL types represented as dicts."""
     # Quantity comparison
     if "value" in cql_py_val and "unit" in cql_py_val:

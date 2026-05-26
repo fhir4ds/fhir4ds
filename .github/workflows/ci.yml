@@ -51,6 +51,8 @@ jobs:
           fhir4ds/cli
           fhir4ds/dqm
           fhir4ds/sources
+          benchmarks/runner
+          conformance/scripts
           --output-format=github
 
       - name: Pytest
@@ -66,7 +68,6 @@ jobs:
     name: Python 3.11 compatibility
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    continue-on-error: true
 
     steps:
       - name: Checkout

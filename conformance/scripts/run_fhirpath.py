@@ -8,7 +8,6 @@ Usage:
 """
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -72,7 +71,6 @@ def run_test(con, test_case):
             sql = f"SELECT fhirpath_predicate('{escaped_resource}', '{escaped_expr}')"
         else:
             sql = f"SELECT fhirpath('{escaped_resource}', '{escaped_expr}')"
-        import signal
         import threading
 
         query_result = [None]
@@ -148,7 +146,7 @@ def run_test(con, test_case):
         if len(expected_normalized) != len(actual_normalized):
             return False, f"Expected {len(expected_normalized)} values {expected_normalized}, got {len(actual_normalized)} values {actual_normalized}"
 
-        for i, (e, a) in enumerate(zip(expected_normalized, actual_normalized)):
+        for i, (e, a) in enumerate(zip(expected_normalized, actual_normalized, strict=True)):
             # Flexible numeric comparison
             try:
                 e_float = float(e)
@@ -196,10 +194,9 @@ def main():
     total_passed = 0
     total_failed = 0
     total_skipped = 0
-    total_error = 0
     failures_by_category = {}
 
-    print(f"Running FHIRPath conformance tests against C++ extension")
+    print("Running FHIRPath conformance tests against C++ extension")
     print(f"Extension: {args.fhirpath_ext}")
     print(f"Test groups: {len(groups_to_run)}")
     print("=" * 80)

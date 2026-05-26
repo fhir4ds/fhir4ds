@@ -141,8 +141,8 @@ def generate_report(comparison: dict, suite_label: str) -> str:
     agg = comparison["aggregate"]
     if agg:
         lines += [
-            f"| Metric | Value |",
-            f"|--------|-------|",
+            "| Metric | Value |",
+            "|--------|-------|",
             f"| Mean overhead ratio | {agg['mean']}x |",
             f"| Median overhead ratio | {agg['median']}x |",
             f"| P95 overhead ratio | {agg['p95']}x |",

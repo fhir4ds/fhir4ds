@@ -64,3 +64,4 @@ jobs:
             benchmarks/output/dqm-performance-report.json
             benchmarks/output/dqm-performance-report.md
           if-no-files-found: warn
+          retention-days: 30
