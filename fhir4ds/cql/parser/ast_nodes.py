@@ -241,7 +241,7 @@ class Quantity(Expression):
         unit: The unit string (e.g., 'year', 'years', 'day', 'days').
     """
 
-    value: float
+    value: Any
     unit: str
 
 
@@ -477,6 +477,7 @@ class BinaryExpression(Expression):
     operator: str
     left: Expression
     right: Expression
+    strict: bool = False
 
 
 @dataclass
@@ -1016,6 +1017,7 @@ class ValueSetDefinition(ASTNode):
     id: str
     version: Optional[str] = None
     codesystem: Optional[str] = None
+    codesystems: List[str] = field(default_factory=list)
 
 
 @dataclass

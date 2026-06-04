@@ -87,6 +87,17 @@ DuckDB UDFs. If generated browser SQL needs helper functions such as
 `fhirpath_repeat`, implement and test them in the C++ extension or change the
 generator so the browser path uses only C++ UDFs and SQL macros.
 
+SQL-on-FHIR runner parity also depends on primitive metadata surviving native
+evaluation. JSON numeric children must carry both their numeric value and raw
+number text (`1.0` scale matters for `precision()`, `lowBoundary()`, and
+`highBoundary()`), FHIR `date`/`dateTime`/`time` strings must coerce by
+field/choice metadata before boundary functions, and root-level
+`where(criteria)` must dispatch through the same filter implementation as
+chained `.where(criteria)`. This was fixed by the SOF-VD-11 SKEPTIC fresh
+rerun on 2026-06-01; keep `test_environment_type_parity.py`,
+ViewDefinition runner regressions, and native/fallback official spec_tests
+aligned after evaluator changes.
+
 `fhirpath_repeat` is a public SQL-on-FHIR compatibility surface. Repeat paths
 are FHIRPath expressions, not simple key chains; native C++ must stay aligned
 with the Python fallback for recursive expression evaluation, duplicate-node

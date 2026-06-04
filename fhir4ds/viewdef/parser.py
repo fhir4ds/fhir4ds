@@ -16,18 +16,22 @@ from .types import (
     Join,
     JoinType,
     ViewDefinition,
+    validate_canonical_array,
     validate_column_fields,
+    validate_constant_fields,
+    validate_fhir_version_array,
     validate_optional_boolean,
     validate_optional_fhirpath_string,
     validate_optional_uri_string,
     validate_repeat_paths,
+    validate_resource_type,
     validate_root_metadata_fields,
     validate_sql_name,
     validate_supported_view_profiles,
     validate_where_conditions,
 )
 from .errors import ParseError
-from .metadata import FHIR_VERSION_CODES, KNOWN_FHIR_RESOURCE_TYPES
+from .metadata import KNOWN_FHIR_RESOURCE_TYPES
 
 
 def _parse_optional_sql_name(data: Dict[str, Any], field_name: str) -> str | None:
@@ -39,6 +43,17 @@ def _parse_optional_sql_name(data: Dict[str, Any], field_name: str) -> str | Non
         return validate_sql_name(value, f"ViewDefinition.{field_name}")
     except ValueError as exc:
         raise ParseError(str(exc)) from exc
+
+
+def _parse_optional_root_metadata(data: Dict[str, Any], field_name: str) -> Any:
+    """Return optional root metadata while rejecting present JSON null."""
+    if field_name not in data:
+        return None
+    value = data[field_name]
+    if value is None:
+        raise ParseError(f"ViewDefinition.{field_name} must not be null when present")
+    return value
+
 
 def _parse_string_array(data: Dict[str, Any], field_name: str) -> List[str]:
     """Parse an optional 0..* string field from a ViewDefinition object."""
@@ -59,13 +74,40 @@ def _parse_string_array(data: Dict[str, Any], field_name: str) -> List[str]:
     return list(raw)
 
 
+def _parse_optional_fhirpath_string(
+    data: Dict[str, Any],
+    field_name: str,
+    label: str,
+) -> str | None:
+    """Parse an optional 0..1 FHIRPath string from official JSON input."""
+    if field_name not in data:
+        return None
+    if data[field_name] is None:
+        raise ParseError(f"{label} must be a non-empty string")
+    try:
+        return validate_optional_fhirpath_string(data[field_name], label)
+    except ValueError as exc:
+        raise ParseError(str(exc)) from exc
+
+
+def _parse_canonical_array(data: Dict[str, Any], field_name: str) -> List[str]:
+    """Parse an optional 0..* canonical field from a ViewDefinition object."""
+    if field_name not in data:
+        return []
+    try:
+        return validate_canonical_array(
+            data[field_name],
+            f"ViewDefinition.{field_name}",
+        )
+    except ValueError as exc:
+        raise ParseError(str(exc)) from exc
+
+
 def _validate_fhir_versions(values: List[str]) -> None:
-    for value in values:
-        if value not in FHIR_VERSION_CODES:
-            raise ParseError(
-                f"ViewDefinition 'fhirVersion' value {value!r} is not in the "
-                "required FHIRVersion binding"
-            )
+    try:
+        validate_fhir_version_array(values, "ViewDefinition.fhirVersion")
+    except ValueError as exc:
+        raise ParseError(str(exc)) from exc
 
 
 def _parse_column(col_data: Dict[str, Any]) -> Column:
@@ -83,9 +125,12 @@ def _parse_column(col_data: Dict[str, Any]) -> Column:
             f"{type(col_data).__name__}: {col_data!r}"
         )
 
-    raw_tag = col_data.get("tag", col_data.get("tags", []))
-    if "tag" in col_data and "tags" in col_data:
-        raise ParseError("Column must not specify both 'tag' and 'tags'")
+    if "tags" in col_data:
+        raise ParseError(
+            "Unsupported field 'tags'. SQL-on-FHIR ViewDefinition uses "
+            "the singular 'tag' array for column metadata."
+        )
+    raw_tag = col_data.get("tag", [])
     if raw_tag is None or not isinstance(raw_tag, list):
         raise ParseError(
             f"Column 'tag' must be an array of JSON objects, got {type(raw_tag).__name__}"
@@ -98,6 +143,8 @@ def _parse_column(col_data: Dict[str, Any]) -> Column:
             raise ParseError(f"Invalid column tag at index {idx}: {exc}") from exc
 
     try:
+        if "description" in col_data and col_data["description"] is None:
+            raise ValueError("Column.description must be a markdown string")
         path, name, description = validate_column_fields(
             col_data.get('path'),
             col_data.get('name'),
@@ -162,7 +209,11 @@ def _parse_select(select_data: Dict[str, Any]) -> Select:
             f"{type(select_data).__name__}: {select_data!r}"
         )
 
-    def _parse_object_array(field_name: str) -> List[Dict[str, Any]]:
+    def _parse_object_array(
+        field_name: str,
+        *,
+        require_non_empty: bool = False,
+    ) -> List[Dict[str, Any]]:
         if field_name not in select_data:
             return []
         raw = select_data[field_name]
@@ -170,6 +221,10 @@ def _parse_select(select_data: Dict[str, Any]) -> Select:
             raise ParseError(
                 f"Select '{field_name}' must be an array of JSON objects, "
                 f"got {type(raw).__name__}"
+            )
+        if require_non_empty and not raw:
+            raise ParseError(
+                f"Select '{field_name}' must contain at least one JSON object when present"
             )
         for idx, item in enumerate(raw):
             if not isinstance(item, dict):
@@ -191,19 +246,21 @@ def _parse_select(select_data: Dict[str, Any]) -> Select:
 
     # Parse unionAll
     union_all = []
-    for u in _parse_object_array('unionAll'):
+    for u in _parse_object_array('unionAll', require_non_empty=True):
         union_all.append(_parse_select(u))
 
     # Parse where conditions
     where = _parse_where(select_data.get('where', []))
 
     try:
-        for_each = validate_optional_fhirpath_string(
-            select_data.get('forEach'),
+        for_each = _parse_optional_fhirpath_string(
+            select_data,
+            'forEach',
             "Select.forEach",
         )
-        for_each_or_null = validate_optional_fhirpath_string(
-            select_data.get('forEachOrNull'),
+        for_each_or_null = _parse_optional_fhirpath_string(
+            select_data,
+            'forEachOrNull',
             "Select.forEachOrNull",
         )
         repeat = (
@@ -374,14 +431,14 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
             title,
             description,
         ) = validate_root_metadata_fields(
-            resourceType=data.get("resourceType"),
-            id=data.get("id"),
-            meta=data.get("meta"),
-            url=data.get("url"),
-            version=data.get("version"),
-            status=data.get("status"),
-            title=data.get("title"),
-            description=data.get("description"),
+            resourceType=_parse_optional_root_metadata(data, "resourceType"),
+            id=_parse_optional_root_metadata(data, "id"),
+            meta=_parse_optional_root_metadata(data, "meta"),
+            url=_parse_optional_root_metadata(data, "url"),
+            version=_parse_optional_root_metadata(data, "version"),
+            status=_parse_optional_root_metadata(data, "status"),
+            title=_parse_optional_root_metadata(data, "title"),
+            description=_parse_optional_root_metadata(data, "description"),
         )
     except ValueError as exc:
         raise ParseError(str(exc)) from exc
@@ -392,16 +449,12 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
         raise ParseError("ViewDefinition missing required 'resource' field")
 
     # ViewDefinition.resource is 1..1 code, bound to FHIR ResourceType.
-    if not isinstance(resource, str):
-        raise ParseError(
-            f"'resource' must be a string FHIR ResourceType code, got {type(resource).__name__}"
-        )
-    if resource not in KNOWN_FHIR_RESOURCE_TYPES:
-        raise ParseError(
-            f"ViewDefinition resource {resource!r} is not in the required ResourceType binding"
-        )
+    try:
+        resource = validate_resource_type(resource, "ViewDefinition.resource")
+    except ValueError as exc:
+        raise ParseError(str(exc)) from exc
 
-    profile = _parse_string_array(data, "profile")
+    profile = _parse_canonical_array(data, "profile")
     fhir_version = _parse_string_array(data, "fhirVersion")
     _validate_fhir_versions(fhir_version)
 
@@ -426,16 +479,28 @@ def parse_view_definition(json_str_or_dict) -> ViewDefinition:
             )
         selects.append(_parse_select(sel))
 
-    # Parse constants (spec uses 'constant' singular, also accept 'constants')
+    # Parse constants. SQL-on-FHIR uses the singular JSON field `constant`.
     constants = []
+    if 'constants' in data:
+        raise ParseError(
+            "Unsupported field 'constants'. SQL-on-FHIR ViewDefinition uses "
+            "the singular 'constant' array."
+        )
     if 'constant' in data:
         const_raw = data['constant']
     else:
-        const_raw = data.get('constants', [])
+        const_raw = []
     if isinstance(const_raw, list):
+        constant_names = set()
         for const in const_raw:
             if isinstance(const, dict):
-                constants.append(_parse_constant(const))
+                parsed_constant = _parse_constant(const)
+                if parsed_constant.name in constant_names:
+                    raise ParseError(
+                        f"Duplicate constant name: {parsed_constant.name}"
+                    )
+                constant_names.add(parsed_constant.name)
+                constants.append(parsed_constant)
             else:
                 raise ParseError(
                     f"Each constant must be a JSON object, got {type(const).__name__}: {const!r}"
@@ -503,12 +568,48 @@ def validate_view_definition(vd: ViewDefinition) -> List[str]:
     """
     warnings = []
 
+    def _warn_from_validator(func, *args, **kwargs) -> None:
+        try:
+            func(*args, **kwargs)
+        except ValueError as exc:
+            warnings.append(str(exc))
+
+    _warn_from_validator(
+        validate_root_metadata_fields,
+        resourceType=vd.resourceType,
+        id=vd.id,
+        meta=vd.meta,
+        url=vd.url,
+        version=vd.version,
+        status=vd.status,
+        title=vd.title,
+        description=vd.description,
+    )
+
+    if vd.name is not None:
+        _warn_from_validator(validate_sql_name, vd.name, "ViewDefinition.name")
+
+    if vd.profile or not isinstance(vd.profile, list):
+        _warn_from_validator(validate_canonical_array, vd.profile, "ViewDefinition.profile")
+
+    if vd.fhirVersion or not isinstance(vd.fhirVersion, list):
+        _warn_from_validator(
+            validate_fhir_version_array,
+            vd.fhirVersion,
+            "ViewDefinition.fhirVersion",
+        )
+
     # Check required fields
     if not vd.resource:
         warnings.append("Missing required field: resource")
+    else:
+        _warn_from_validator(validate_resource_type, vd.resource, "ViewDefinition.resource")
 
     if not vd.select:
         warnings.append("Missing required field: select")
+    elif not isinstance(vd.select, list):
+        warnings.append("ViewDefinition.select must be an array of Select objects")
+        return warnings
 
     # Check column name uniqueness at top level
     all_names = collect_column_names(vd.select)
@@ -524,20 +625,32 @@ def validate_view_definition(vd: ViewDefinition) -> List[str]:
 
     # Validate nested structures
     warnings.extend(_validate_selects(vd.select, "select"))
+    if _select_tree_is_profile_checkable(vd.select):
+        _warn_from_validator(validate_supported_view_profiles, vd)
 
     # Validate constants
     const_names = set()
     for const in vd.constants:
+        if not isinstance(const, Constant):
+            warnings.append("ViewDefinition.constant items must be Constant objects")
+            continue
         if const.name in const_names:
             warnings.append(f"Duplicate constant name: {const.name}")
         const_names.add(const.name)
 
-        if const.value is None:
-            warnings.append(f"Constant '{const.name}' has no value")
+        _warn_from_validator(
+            validate_constant_fields,
+            const.name,
+            const.value,
+            const.value_type,
+        )
 
     # Validate joins
     join_names = set()
     for join in vd.joins:
+        if not isinstance(join, Join):
+            warnings.append("ViewDefinition.joins items must be Join objects")
+            continue
         if join.name in join_names:
             warnings.append(f"Duplicate join name: {join.name}")
         join_names.add(join.name)
@@ -549,6 +662,24 @@ def validate_view_definition(vd: ViewDefinition) -> List[str]:
             warnings.append(f"Join '{join.name}' has invalid type: {join.type}")
 
     return warnings
+
+
+def _select_tree_is_profile_checkable(selects: List[Select]) -> bool:
+    """Return True when select/column objects are safe for profile validation."""
+    if not isinstance(selects, list):
+        return False
+    for sel in selects:
+        if not isinstance(sel, Select):
+            return False
+        if not isinstance(sel.column, list):
+            return False
+        if any(not isinstance(col, Column) for col in sel.column):
+            return False
+        if not _select_tree_is_profile_checkable(sel.select):
+            return False
+        if not _select_tree_is_profile_checkable(sel.unionAll):
+            return False
+    return True
 
 
 def _validate_selects(selects: List[Select], path: str) -> List[str]:
@@ -565,6 +696,29 @@ def _validate_selects(selects: List[Select], path: str) -> List[str]:
 
     for i, sel in enumerate(selects):
         current_path = f"{path}[{i}]"
+        if not isinstance(sel, Select):
+            warnings.append(f"{current_path}: Must be a Select object")
+            continue
+
+        try:
+            validate_optional_fhirpath_string(
+                sel.forEach,
+                f"{current_path}.forEach",
+            )
+        except ValueError as exc:
+            warnings.append(str(exc))
+        try:
+            validate_optional_fhirpath_string(
+                sel.forEachOrNull,
+                f"{current_path}.forEachOrNull",
+            )
+        except ValueError as exc:
+            warnings.append(str(exc))
+        if sel.repeat is not None:
+            try:
+                validate_repeat_paths(sel.repeat, f"{current_path}.repeat")
+            except ValueError as exc:
+                warnings.append(str(exc))
 
         # Check iterator mutual exclusion per SQL-on-FHIR sql-expressions constraint.
         active_iterators = []
@@ -588,10 +742,17 @@ def _validate_selects(selects: List[Select], path: str) -> List[str]:
         # Validate columns
         for j, col in enumerate(sel.column):
             col_path = f"{current_path}.column[{j}]"
+            if not isinstance(col, Column):
+                warnings.append(f"{col_path}: Must be a Column object")
+                continue
             if not col.path:
                 warnings.append(f"{col_path}: Missing 'path'")
             if not col.name:
                 warnings.append(f"{col_path}: Missing 'name'")
+            try:
+                validate_column_fields(col.path, col.name, col.description)
+            except ValueError as exc:
+                warnings.append(str(exc))
 
         # Recursively validate nested selects
         if sel.select:

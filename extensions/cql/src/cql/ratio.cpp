@@ -101,7 +101,9 @@ Optional<double> ratio_numerator_value(const std::string &ratio_json) {
 	if (!doc) {
 		return NullOpt<double>();
 	}
-	auto result = get_component_value(get_ratio_component(doc, "numerator"));
+	auto component = get_ratio_component(doc, "numerator");
+	auto quantity = get_component_quantity(component);
+	auto result = quantity.has_value() ? Optional<double>(quantity->value) : NullOpt<double>();
 	yyjson_doc_free(doc);
 	return result;
 }
@@ -111,7 +113,9 @@ Optional<double> ratio_denominator_value(const std::string &ratio_json) {
 	if (!doc) {
 		return NullOpt<double>();
 	}
-	auto result = get_component_value(get_ratio_component(doc, "denominator"));
+	auto component = get_ratio_component(doc, "denominator");
+	auto quantity = get_component_quantity(component);
+	auto result = quantity.has_value() ? Optional<double>(quantity->value) : NullOpt<double>();
 	yyjson_doc_free(doc);
 	return result;
 }
@@ -121,14 +125,14 @@ Optional<double> ratio_value(const std::string &ratio_json) {
 	if (!doc) {
 		return NullOpt<double>();
 	}
-	auto num = get_component_value(get_ratio_component(doc, "numerator"));
-	auto denom = get_component_value(get_ratio_component(doc, "denominator"));
+	auto num = get_component_quantity(get_ratio_component(doc, "numerator"));
+	auto denom = get_component_quantity(get_ratio_component(doc, "denominator"));
 	yyjson_doc_free(doc);
 
-	if (!num.has_value() || !denom.has_value() || denom.value() == 0.0) {
+	if (!num.has_value() || !denom.has_value() || denom->value == 0.0) {
 		return NullOpt<double>();
 	}
-	return num.value() / denom.value();
+	return num->value / denom->value;
 }
 
 Optional<std::string> ratio_numerator_unit(const std::string &ratio_json) {
@@ -136,7 +140,9 @@ Optional<std::string> ratio_numerator_unit(const std::string &ratio_json) {
 	if (!doc) {
 		return NullOpt<std::string>();
 	}
-	auto result = get_component_unit(get_ratio_component(doc, "numerator"));
+	auto component = get_ratio_component(doc, "numerator");
+	auto quantity = get_component_quantity(component);
+	auto result = quantity.has_value() ? get_component_unit(component) : NullOpt<std::string>();
 	yyjson_doc_free(doc);
 	return result;
 }
@@ -146,7 +152,9 @@ Optional<std::string> ratio_denominator_unit(const std::string &ratio_json) {
 	if (!doc) {
 		return NullOpt<std::string>();
 	}
-	auto result = get_component_unit(get_ratio_component(doc, "denominator"));
+	auto component = get_ratio_component(doc, "denominator");
+	auto quantity = get_component_quantity(component);
+	auto result = quantity.has_value() ? get_component_unit(component) : NullOpt<std::string>();
 	yyjson_doc_free(doc);
 	return result;
 }

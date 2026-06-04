@@ -563,7 +563,7 @@ static Optional<BoundValue> successor_bound(const BoundValue &value) {
 		result.qty_numeric = Optional<double>(*value.qty_numeric + 1e-8);
 		{
 			std::ostringstream oss;
-			oss << "{\"value\":" << *result.qty_numeric << ",\"unit\":\""
+			oss << "{\"value\":" << format_decimal_value(*result.qty_numeric) << ",\"unit\":\""
 			    << escapeJsonString(value.qty_unit) << "\"}";
 			result.raw_str = oss.str();
 		}
@@ -609,7 +609,7 @@ static Optional<BoundValue> predecessor_bound(const BoundValue &value) {
 		result.qty_numeric = Optional<double>(*value.qty_numeric - 1e-8);
 		{
 			std::ostringstream oss;
-			oss << "{\"value\":" << *result.qty_numeric << ",\"unit\":\""
+			oss << "{\"value\":" << format_decimal_value(*result.qty_numeric) << ",\"unit\":\""
 			    << escapeJsonString(value.qty_unit) << "\"}";
 			result.raw_str = oss.str();
 		}

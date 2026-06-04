@@ -87,6 +87,8 @@ def test_cql_interval_part3_translated_sql_matches_cpp_registration() -> None:
         "ProperIncludesUnitPoint": (False,),
         "ProperIncludedIn": (True,),
         "ProperIncludedInUncertain": (None,),
+        "ProperIncludedInTypedNull": (None,),
+        "ProperIncludedInNullBounds": (True,),
         "ProperIncludedStartPoint": (False,),
         "ProperIncludedEndPoint": (False,),
         "ProperIncludedUnitPoint": (False,),
@@ -98,6 +100,16 @@ def test_cql_interval_part3_translated_sql_matches_cpp_registration() -> None:
         "SameBeforeUncertain": (None,),
         "SizeCheck": ("5",),
         "StartCheck": ("2024-01-01",),
+        "StartClosedNullInteger": ("-2147483648",),
+        "EndClosedNullInteger": ("2147483647",),
+        "StartClosedNullDecimal": ("-99999999999999999999.99999999",),
+        "EndClosedNullDecimal": ("99999999999999999999.99999999",),
+        "StartOpenNullInteger": (None,),
+        "EndOpenNullInteger": (None,),
+        "StartClosedNullDate": ("0001-01-01",),
+        "EndClosedNullDate": ("9999-12-31",),
+        "StartClosedNullTime": ("T00:00:00.000",),
+        "EndClosedNullTime": ("T23:59:59.999",),
         "StartsOpenEffective": (True,),
         "StartsLongerFalse": (False,),
         "StartsPrecision": (True,),
@@ -154,6 +166,56 @@ def test_cql_interval_part3_direct_udf_surface_matches_cpp_registration() -> Non
         ),
         ("SELECT intervalWidth(?)", [numeric], ("4",)),
         (
+            "SELECT intervalStart(intervalFromBounds('__null__', '5', true, true))",
+            [],
+            ("-2147483648",),
+        ),
+        (
+            "SELECT intervalEnd(intervalFromBounds('5', '__null__', true, true))",
+            [],
+            ("2147483647",),
+        ),
+        (
+            "SELECT intervalStart(intervalFromBounds('__null__', '5.0', true, true))",
+            [],
+            ("-99999999999999999999.99999999",),
+        ),
+        (
+            "SELECT intervalEnd(intervalFromBounds('5.0', '__null__', true, true))",
+            [],
+            ("99999999999999999999.99999999",),
+        ),
+        (
+            "SELECT intervalStart(intervalFromBounds('__null__', '5', false, true))",
+            [],
+            (None,),
+        ),
+        (
+            "SELECT intervalEnd(intervalFromBounds('5', '__null__', true, false))",
+            [],
+            (None,),
+        ),
+        (
+            "SELECT intervalStart(intervalFromBounds('__null__', '2024-01-01', true, true))",
+            [],
+            ("0001-01-01",),
+        ),
+        (
+            "SELECT intervalEnd(intervalFromBounds('2024-01-01', '__null__', true, true))",
+            [],
+            ("9999-12-31",),
+        ),
+        (
+            "SELECT intervalStart(intervalFromBounds('__null__', 'T12', true, true))",
+            [],
+            ("T00:00:00.000",),
+        ),
+        (
+            "SELECT intervalEnd(intervalFromBounds('T12', '__null__', true, true))",
+            [],
+            ("T23:59:59.999",),
+        ),
+        (
             "SELECT intervalWidth(intervalFromBounds('4', '9', false, true))",
             [],
             ("4",),
@@ -176,6 +238,11 @@ def test_cql_interval_part3_direct_udf_surface_matches_cpp_registration() -> Non
         ),
         ("SELECT intervalProperlyIncludes(?, ?)", [outer, inner], (True,)),
         ("SELECT intervalProperlyIncludedIn(?, ?)", [inner, outer], (True,)),
+        (
+            "SELECT intervalProperlyIncludedIn(?, CAST(NULL AS VARCHAR))",
+            [numeric],
+            (None,),
+        ),
         ("SELECT intervalStartsSame(?, ?)", [starts, outer], (True,)),
         (
             "SELECT intervalStartsSame(intervalFromBounds('0', '5', false, true), intervalFromBounds('1', '5', true, true))",
@@ -261,6 +328,34 @@ def test_cql_interval_part3_direct_udf_surface_matches_cpp_registration() -> Non
             [],
             ("g",),
         ),
+        (
+            "SELECT expand([intervalFromBounds('1', '3', true, true)], "
+            "'{\"value\":\"bad\",\"unit\":\"1\"}')",
+            [],
+            (None,),
+        ),
+        (
+            "SELECT expand([intervalUnion(intervalFromBounds('1', '2', true, true), "
+            "intervalFromBounds('3', '4', true, true))], "
+            "'{\"value\":\"bad\",\"unit\":\"1\"}')",
+            [],
+            (None,),
+        ),
+        (
+            "SELECT expand_points(intervalFromBounds('1', '3', true, true), "
+            "'{\"value\":\"bad\",\"unit\":\"1\"}')",
+            [],
+            (None,),
+        ),
+        (
+            "SELECT expand([intervalFromBounds('1', '3', true, true)], CAST(NULL AS VARCHAR))",
+            [],
+            (
+                '[{"low":1,"high":1,"lowClosed":true,"highClosed":true},'
+                '{"low":2,"high":2,"lowClosed":true,"highClosed":true},'
+                '{"low":3,"high":3,"lowClosed":true,"highClosed":true}]',
+            ),
+        ),
     ]
 
     py = _python_only_connection()
@@ -290,6 +385,8 @@ define ProperIncludesEndPoint: Interval[1, 5] properly includes 5
 define ProperIncludesUnitPoint: Interval[1, 1] properly includes 1
 define ProperIncludedIn: Interval[@2024-01-05, @2024-01-10] properly included in day of Interval[@2024-01-01, @2024-01-31]
 define ProperIncludedInUncertain: Interval[@2024-01-01, @2024-01-01] properly included in day of Interval[@2024, @2024]
+define ProperIncludedInTypedNull: Interval[1, 5] properly included in (null as Interval<Integer>)
+define ProperIncludedInNullBounds: Interval[1, 5] properly included in Interval[null, null]
 define ProperIncludedStartPoint: 1 properly included in Interval[1, 5]
 define ProperIncludedEndPoint: 5 properly included in Interval[1, 5]
 define ProperIncludedUnitPoint: 1 properly included in Interval[1, 1]
@@ -301,6 +398,16 @@ define SameBefore: Interval[@2024-01-01, @2024-01-31] same or before day of Inte
 define SameBeforeUncertain: Interval[@2024, @2024] same or before day of Interval[@2024-01-01, @2024-01-01]
 define SizeCheck: Size(Interval[1, 5])
 define StartCheck: start of Interval[@2024-01-01, @2024-01-31]
+define StartClosedNullInteger: start of Interval[null as Integer, 5]
+define EndClosedNullInteger: end of Interval[5, null as Integer]
+define StartClosedNullDecimal: start of Interval[null as Decimal, 5.0]
+define EndClosedNullDecimal: end of Interval[5.0, null as Decimal]
+define StartOpenNullInteger: start of Interval(null as Integer, 5]
+define EndOpenNullInteger: end of Interval[5, null as Integer)
+define StartClosedNullDate: start of Interval[null as Date, @2024-01-01]
+define EndClosedNullDate: end of Interval[@2024-01-01, null as Date]
+define StartClosedNullTime: start of Interval[null as Time, @T12]
+define EndClosedNullTime: end of Interval[@T12, null as Time]
 define StartsOpenEffective: Interval(0, 5] starts Interval[1, 5]
 define StartsLongerFalse: Interval[1, 10] starts Interval[1, 5]
 define StartsPrecision: Interval[@2024-01-01, @2024-01-10] starts day of Interval[@2024-01-01, @2024-01-31]

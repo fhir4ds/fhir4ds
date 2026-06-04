@@ -18,6 +18,7 @@ from .logical import registerLogicalMacros
 from .conversion import registerConversionMacros
 from .list import registerListMacros
 from .audit import register_audit_macros
+from .valueset import registerValuesetMacros
 
 if TYPE_CHECKING:
     import duckdb
@@ -31,6 +32,7 @@ __all__ = [
     "registerLogicalMacros",
     "registerConversionMacros",
     "registerListMacros",
+    "registerValuesetMacros",
     "register_audit_macros",
 ]
 
@@ -59,6 +61,7 @@ def register_all_macros(con: "duckdb.DuckDBPyConnection") -> None:
     registerDateTimeMacros(con)
     registerLogicalMacros(con)
     registerConversionMacros(con)
+    registerValuesetMacros(con)
     registerListMacros(con)
     registerAggregateMacros(con)
     register_audit_macros(con)

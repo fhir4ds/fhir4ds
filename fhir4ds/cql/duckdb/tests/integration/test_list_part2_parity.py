@@ -7,6 +7,7 @@ import pytest
 
 from fhir4ds.cql.duckdb import register
 from fhir4ds.cql.duckdb.extension import _register_python_supplements
+from fhir4ds.cql.errors import TranslationError
 from fhir4ds.cql.parser import parse_expression
 from fhir4ds.cql.parser.ast_nodes import BinaryExpression, FunctionRef, UnaryExpression
 from fhir4ds.cql.translator import translate_cql
@@ -95,6 +96,8 @@ def test_cql_list_part2_direct_surface_matches_cpp_registration() -> None:
     cases = [
         ("SELECT Last([1, 2, 3])", (3,)),
         ("SELECT COALESCE(array_length([1, 2, 3]), 0)", (3,)),
+        ("SELECT Length(NULL::INTEGER[])", (0,)),
+        ("SELECT Length(NULL::VARCHAR)", (None,)),
         ("SELECT Skip([1, 2, 3], 1)", ([2, 3],)),
         ("SELECT Skip([1, 2, 3], 0)", ([1, 2, 3],)),
         ("SELECT Skip([1, 2, 3], NULL)", ([1, 2, 3],)),
@@ -117,10 +120,34 @@ def test_cql_list_part2_direct_surface_matches_cpp_registration() -> None:
         for con in (py, cpp, no_py):
             with pytest.raises(duckdb.InvalidInputException):
                 con.execute("SELECT SingletonFrom(['one', 'two'])").fetchone()
+            for sql in [
+                "SELECT Skip([1, 2, 3], 1.5)",
+                "SELECT Take([1, 2, 3], 1.5)",
+                "SELECT Take([1, 2, 3], '1')",
+            ]:
+                with pytest.raises(duckdb.InvalidInputException, match="Integer"):
+                    con.execute(sql).fetchone()
     finally:
         no_py_cm.__exit__(None, None, None)
         py.close()
         cpp.close()
+
+
+def test_cql_list_part2_rejects_non_integer_skip_take_counts() -> None:
+    for expression in [
+        "Skip({1, 2, 3}, 1.5)",
+        "Take({1, 2, 3}, 1.5)",
+        "{1, 2, 3} skip 1.5",
+        "{1, 2, 3} take 1.5",
+    ]:
+        with pytest.raises(TranslationError, match="count argument must be Integer"):
+            translate_cql(
+                f"""library List2CountDiscipline version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define Bad: {expression}
+"""
+            )
 
 
 def test_cql_list_part2_edge_semantics_match_no_python_cpp() -> None:
@@ -191,6 +218,103 @@ def test_cql_list_part2_historian_runtime_chains_match_spec() -> None:
             assert cpp_result == py_result, name
             assert no_py_result == py_result, name
             assert py_result == expected[name], name
+    finally:
+        no_py_cm.__exit__(None, None, None)
+        py.close()
+        cpp.close()
+
+
+def test_cql_list_part2_interval_elements_use_interval_semantics() -> None:
+    translated = translate_cql(_cql_list_part2_interval_semantics_library())
+    expected = {
+        "IntervalListEqualSemantic": (True,),
+        "IntervalListNotEqualSemantic": (False,),
+        "IntervalListEquivalentSemantic": (True,),
+        "IntervalListNotEquivalentSemantic": (False,),
+        "IntervalListProperIncludesSemantic": (True,),
+        "IntervalListProperIncludedInSemantic": (True,),
+        "IntervalListUnionSemanticLength": (1,),
+    }
+
+    direct_sql = """
+WITH vals AS (
+  SELECT
+    intervalFromBounds('1', '6', false, true) AS open_interval,
+    intervalFromBounds('2', '6', true, true) AS closed_interval
+)
+SELECT
+  CQLListElementEqual(open_interval, closed_interval),
+  CQLListElementEquivalent(open_interval, closed_interval),
+  CQLListContainsEq([open_interval], closed_interval),
+  CQLListEqualEq([open_interval], [closed_interval]),
+  CQLListEquivalentEq([open_interval], [closed_interval]),
+  array_length("Distinct"(list_concat([open_interval], [closed_interval])))
+FROM vals
+"""
+    direct_expected = (True, True, True, True, True, 1)
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    no_py_cm = no_python_connection()
+    no_py = no_py_cm.__enter__()
+    try:
+        for name, expr in translated.items():
+            sql = f"SELECT {expr.to_sql()}"
+            py_result = py.execute(sql).fetchone()
+            cpp_result = cpp.execute(sql).fetchone()
+            no_py_result = no_py.execute(sql).fetchone()
+            assert cpp_result == py_result, name
+            assert no_py_result == py_result, name
+            assert py_result == expected[name], name
+
+        for con in (py, cpp, no_py):
+            assert con.execute(direct_sql).fetchone() == direct_expected
+    finally:
+        no_py_cm.__exit__(None, None, None)
+        py.close()
+        cpp.close()
+
+
+def test_cql_list_part2_query_produced_lists_remain_lists() -> None:
+    translated = translate_cql(_cql_list_part2_explorer_query_library())
+    expected = {
+        "LastQuery": (3,),
+        "LengthQuery": (3,),
+        "TailQuery": ([2, 3],),
+        "SkipQuery": ([2, 3],),
+        "TakeQuery": ([1, 2],),
+        "LengthAlias": (3,),
+        "TailAlias": ([2, 3],),
+        "LastAlias": (3,),
+        "ProperIncludesQueryElement": (True,),
+        "ProperIncludedInQueryElement": (True,),
+        "ProperIncludesQueryList": (True,),
+        "ProperIncludedInQueryList": (True,),
+        "UnionQueryLiteralLength": (3,),
+        "TailDistinctUnionQuery": ([2, 3],),
+        "SkipDistinctUnionQuery": ([2, 3],),
+        "TakeDistinctUnionQuery": ([1, 2],),
+        "SingletonQuerySingle": (2,),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    no_py_cm = no_python_connection()
+    no_py = no_py_cm.__enter__()
+    try:
+        for name, expected_row in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            py_result = py.execute(sql).fetchone()
+            cpp_result = cpp.execute(sql).fetchone()
+            no_py_result = no_py.execute(sql).fetchone()
+            assert cpp_result == py_result, name
+            assert no_py_result == py_result, name
+            assert py_result == expected_row, name
+
+        sql = f"SELECT {translated['SingletonQueryMulti'].to_sql()}"
+        for con in (py, cpp, no_py):
+            with pytest.raises(duckdb.InvalidInputException, match="SingletonFrom"):
+                con.execute(sql).fetchone()
     finally:
         no_py_cm.__exit__(None, None, None)
         py.close()
@@ -289,6 +413,46 @@ define SingletonSkipSingle: singleton from Skip({1,2},1)
 define SingletonTakeSingle: singleton from Take({1,2},1)
 define SingletonSkipMulti: singleton from Skip({1,2,3},0)
 define SingletonTakeMulti: singleton from Take({1,2,3},2)
+"""
+
+
+def _cql_list_part2_interval_semantics_library() -> str:
+    return """library List2IntervalSemantics version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define IntervalListEqualSemantic: { Interval(1, 6] } = { Interval[2, 6] }
+define IntervalListNotEqualSemantic: { Interval(1, 6] } != { Interval[2, 6] }
+define IntervalListEquivalentSemantic: { Interval(1, 6] } ~ { Interval[2, 6] }
+define IntervalListNotEquivalentSemantic: { Interval(1, 6] } !~ { Interval[2, 6] }
+define IntervalListProperIncludesSemantic: { Interval(1, 6], Interval[10, 11] } properly includes Interval[2, 6]
+define IntervalListProperIncludedInSemantic: Interval[2, 6] properly included in { Interval(1, 6], Interval[10, 11] }
+define IntervalListUnionSemanticLength: Length({ Interval(1, 6] } union { Interval[2, 6] })
+"""
+
+
+def _cql_list_part2_explorer_query_library() -> str:
+    return """library List2ExplorerQuery version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define QueryValues: (from {1, 2, 3} X return X)
+define LastQuery: Last((from {1, 2, 3} X return X))
+define LengthQuery: Length((from {1, 2, 3} X return X))
+define TailQuery: Tail((from {1, 2, 3} X return X))
+define SkipQuery: Skip((from {1, 2, 3} X return X), 1)
+define TakeQuery: Take((from {1, 2, 3} X return X), 2)
+define LengthAlias: Length(QueryValues)
+define TailAlias: Tail(QueryValues)
+define LastAlias: Last(QueryValues)
+define ProperIncludesQueryElement: (from {1, 2, 3} X return X) properly includes 2
+define ProperIncludedInQueryElement: 2 properly included in (from {1, 2, 3} X return X)
+define ProperIncludesQueryList: (from {1, 2, 3} X return X) properly includes {1, 2}
+define ProperIncludedInQueryList: {1, 2} properly included in (from {1, 2, 3} X return X)
+define UnionQueryLiteralLength: Length((from {1, 2} X return X) union {2, 3})
+define TailDistinctUnionQuery: Tail((from {1, 2} X return X) union {2, 3})
+define SkipDistinctUnionQuery: Skip((from {1, 2} X return X) union {2, 3}, 1)
+define TakeDistinctUnionQuery: Take((from {1, 2} X return X) union {2, 3}, 2)
+define SingletonQuerySingle: singleton from (from {2} X return X)
+define SingletonQueryMulti: singleton from (from {1, 2} X return X)
 """
 
 

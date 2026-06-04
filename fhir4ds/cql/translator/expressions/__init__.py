@@ -297,7 +297,7 @@ class ExpressionTranslator(
                          "min", "max", "sum", "avg", "count",
                          "median", "mode", "stddev", "variance",
                          "populationstddev", "populationvariance",
-                         "stddevpop", "product"):
+                         "stddevpop", "product", "geometricmean"):
             registry.register_pre_translate(
                 agg_name,
                 self._translate_aggregate_pre,
@@ -417,7 +417,8 @@ class ExpressionTranslator(
                 # Scalar constructor functions produce value column
                 if fn.lower() in ('datetime', 'date', 'time', 'now', 'today',
                                   'tointeger', 'todecimal', 'tostring', 'toboolean',
-                                  'todate', 'todatetime', 'totime', 'toquantity'):
+                                  'tolong', 'todate', 'todatetime', 'totime',
+                                  'toquantity', 'toratio', 'toconcept'):
                     return "value"
             # Identifier reference to another definition — follow the chain
             # to inherit the target's column (e.g., "Denominator" = "IP")

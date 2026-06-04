@@ -357,8 +357,12 @@ class IncludeHandlerMixin:
             self._context.codes[code_name] = code_info
         for cs_name, cs_url in included_translator._context.codesystems.items():
             self._context.codesystems[cs_name] = cs_url
+        for cs_name, version in included_translator._context.codesystem_versions.items():
+            self._context.codesystem_versions[cs_name] = version
         for vs_name, vs_url in included_translator._context.valuesets.items():
             self._context.valuesets[vs_name] = vs_url
+        for vs_name, cs_names in included_translator._context.valueset_codesystems.items():
+            self._context.valueset_codesystems[vs_name] = list(cs_names)
 
         # Store retrieve CTEs from included library
         for cte_name, (cte_ast, col_info) in phase2_ctes.items():

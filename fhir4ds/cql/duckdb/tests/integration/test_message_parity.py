@@ -10,6 +10,8 @@ from fhir4ds.cql.duckdb.extension import _register_python_supplements
 from fhir4ds.cql.parser import parse_cql, parse_expression
 from fhir4ds.cql.parser.ast_nodes import FunctionRef
 from fhir4ds.cql.translator import CQLToSQLTranslator, translate_cql
+from fhir4ds.cql.duckdb.tests.integration.wasm_runtime_helpers import no_python_connection
+from fhir4ds.cql.errors import TranslationError
 
 
 def _python_only_connection() -> duckdb.DuckDBPyConnection:
@@ -39,11 +41,33 @@ def test_cql_message_expressions_parse_and_translate() -> None:
     assert translated["WarningCondition"].to_sql() == "'src'"
     assert "CQLMessage" in translated["IdentifierSeverity"].to_sql()
     assert "CQLMessage" in translated["IdentifierWarning"].to_sql()
-    assert "CQLMessage" in translated["ParameterSeverity"].to_sql()
+    assert translated["ParameterSeverity"].to_sql() == "'src'"
     assert "getvariable('unresolvederrorlevel')" in translated["BareIdentifierSeverity"].to_sql()
     assert "CQLMessage" in translated["ErrorCondition"].to_sql()
     assert translated["NullCondition"].to_sql() == "'src'"
     assert "CQLMessage" in translated["ExpressionFalseCondition"].to_sql()
+
+
+def test_cql_message_rejects_statically_invalid_signature_operands() -> None:
+    invalid_cases = [
+        ("define BadConditionInteger: Message('src', 1, 'E', 'Error', 'boom')", "condition argument must be Boolean"),
+        ("define BadConditionString: Message('src', 'true', 'E', 'Error', 'boom')", "condition argument must be Boolean"),
+        ("define BadCodeInteger: Message('src', true, 5, 'Warning', 'boom')", "code argument must be String"),
+        ("define BadCodeBoolean: Message('src', true, false, 'Warning', 'boom')", "code argument must be String"),
+        ("define BadSeverityInteger: Message('src', true, 'E', 5, 'boom')", "severity argument must be String"),
+        ("define BadSeverityBoolean: Message('src', true, 'E', true, 'boom')", "severity argument must be String"),
+        ("define BadMessageInteger: Message('src', true, 'E', 'Warning', 5)", "message argument must be String"),
+        ("define BadMessageBoolean: Message('src', true, 'E', 'Warning', false)", "message argument must be String"),
+    ]
+    for definition, expected_error in invalid_cases:
+        with pytest.raises(TranslationError, match=expected_error):
+            translate_cql(
+                f"""library BadMessage version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+{definition}
+"""
+            )
 
 
 def test_cql_message_translated_sql_matches_cpp_registration() -> None:
@@ -62,9 +86,6 @@ def test_cql_message_translated_sql_matches_cpp_registration() -> None:
     try:
         for name, expected_value in expected.items():
             sql = f"SELECT {translated[name].to_sql()}"
-            if name == "ParameterSeverity":
-                py.execute("SELECT setvariable('errorlevelparameter', 'Warning')")
-                cpp.execute("SELECT setvariable('errorlevelparameter', 'Warning')")
             if name == "BareIdentifierSeverity":
                 py.execute("SELECT setvariable('unresolvederrorlevel', 'Warning')")
                 cpp.execute("SELECT setvariable('unresolvederrorlevel', 'Warning')")
@@ -80,8 +101,6 @@ def test_cql_message_translated_sql_matches_cpp_registration() -> None:
                 con.execute(f"SELECT {translated['ErrorCondition'].to_sql()}").fetchone()
             with pytest.raises(duckdb.Error):
                 con.execute(f"SELECT {translated['IdentifierSeverity'].to_sql()}").fetchone()
-            with pytest.raises(duckdb.Error):
-                con.execute(f"SELECT {translated['ParameterSeverity'].to_sql()}").fetchone()
             with pytest.raises(duckdb.Error):
                 con.execute(f"SELECT {translated['BareIdentifierSeverity'].to_sql()}").fetchone()
     finally:
@@ -120,6 +139,33 @@ def test_cql_message_direct_surface_matches_cpp_registration() -> None:
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_message_no_python_runtime_surface() -> None:
+    translated = translate_cql(
+        """library MessageNoPython version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define FalseCondition: Message(5, false, 'E', 'Error', 'boom')
+define WarningCondition: Message(5, true, 'W', 'Warning', 'warn')
+define TraceCondition: Message({1, 2, 3}, true, 'T', 'Trace', 'trace')
+define ErrorCondition: Message(5, true, 'E', 'Error', 'boom')
+"""
+    )
+
+    with no_python_connection() as con:
+        assert con.execute("SELECT CQLMessage('src', false, 'E', 'Error', 'boom')").fetchone() == ("src",)
+        assert con.execute("SELECT CQLMessage('src', NULL, 'E', 'Error', 'boom')").fetchone() == ("src",)
+        assert con.execute("SELECT CQLMessage('src', true, 'W', 'Warning', 'warn')").fetchone() == ("src",)
+        assert con.execute("SELECT typeof(CQLMessage(5, false, 'E', 'Error', 'boom'))").fetchone() == ("INTEGER",)
+        with pytest.raises(duckdb.Error):
+            con.execute("SELECT CQLMessage('src', true, 'E', 'Error', 'boom')").fetchone()
+
+        assert con.execute(f"SELECT {translated['FalseCondition'].to_sql()}").fetchone() == (5,)
+        assert con.execute(f"SELECT {translated['WarningCondition'].to_sql()}").fetchone() == (5,)
+        assert con.execute(f"SELECT {translated['TraceCondition'].to_sql()}").fetchone() == ([1, 2, 3],)
+        with pytest.raises(duckdb.Error):
+            con.execute(f"SELECT {translated['ErrorCondition'].to_sql()}").fetchone()
 
 
 def test_cql_message_null_code_or_message_still_raises_in_translated_sql() -> None:
@@ -172,6 +218,44 @@ define R: Message('src', true, 'E', ErrorLevel, 'boom')
             )
             with pytest.raises(duckdb.Error):
                 con.execute(sql).fetchall()
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_message_runtime_parameter_severity_in_population_sql() -> None:
+    library = parse_cql(
+        """library MessageRuntimeParameter version '1.0.0'
+using FHIR version '4.0.1'
+parameter ErrorLevelParameter String default 'Warning'
+context Patient
+define R: Message('src', true, 'E', ErrorLevelParameter, 'boom')
+"""
+    )
+    sql_default = CQLToSQLTranslator().translate_library_to_population_sql(
+        library,
+        output_columns={"R": "R"},
+    )
+    sql_error = CQLToSQLTranslator().translate_library_to_population_sql(
+        library,
+        output_columns={"R": "R"},
+        parameters={"ErrorLevelParameter": "Error"},
+    )
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            con.execute("CREATE TABLE resources(resourceType VARCHAR, id VARCHAR, patient_ref VARCHAR, resource VARCHAR)")
+            con.execute(
+                """
+                INSERT INTO resources VALUES
+                ('Patient', 'p1', 'p1', '{"resourceType":"Patient","id":"p1"}')
+                """
+            )
+            assert con.execute(sql_default).fetchall() == [("p1", "src")]
+            with pytest.raises(duckdb.Error):
+                con.execute(sql_error).fetchall()
     finally:
         py.close()
         cpp.close()

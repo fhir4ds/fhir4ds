@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-import duckdb
+import json
 
+import duckdb
+import pytest
+
+from fhir4ds.cql.errors import TranslationError
 from fhir4ds.cql.duckdb import register
 from fhir4ds.cql.duckdb.extension import _register_python_supplements
 from fhir4ds.cql.parser import parse_expression
@@ -114,6 +118,9 @@ def test_cql_string_duckdb_surface_matches_cpp_registration() -> None:
         "SELECT StartsWith('abc','a')",
         "SELECT StartsWith('abc','a%')",
         "SELECT Substring('abc', 1)",
+        "SELECT Substring('abc', 1, 2)",
+        "SELECT Substring('abc', 1, CAST(NULL AS INTEGER))",
+        "SELECT Substring('abc', 1, -1)",
         "SELECT Substring('abc', 3)",
         "SELECT SubstringLen('abc', 1, 2)",
         "SELECT SubstringLen('abc', 1, -1)",
@@ -194,6 +201,9 @@ define AmpersandBothNull: null & null
         "SELECT Combine([])": None,
         "SELECT CombineSep([], '-')": None,
         "SELECT CombineSep(['a','b'], NULL)": "ab",
+        "SELECT Substring('ab', 0, 1)": "a",
+        "SELECT Substring('ab', 0, CAST(NULL AS INTEGER))": None,
+        "SELECT Substring('ab', 0, -1)": None,
         "SELECT Substring('ab', 2)": None,
         "SELECT Substring('ab', 3)": None,
         "SELECT SubstringLen('ab', 0, -1)": None,
@@ -203,6 +213,51 @@ define AmpersandBothNull: null & null
     with no_python_connection() as con:
         for sql, expected_value in direct_queries.items():
             assert con.execute(sql).fetchone()[0] == expected_value
+
+
+def test_cql_string_skeptic_rejects_non_string_coercion() -> None:
+    """String operator signatures must not inherit DuckDB string coercion."""
+    invalid_cql = [
+        "Concatenate(1, 'x')",
+        "1 & 'x'",
+        "'a' + 2",
+        "Combine({1, 2})",
+    ]
+    for expression in invalid_cql:
+        cql = f"""library StringTypeDiscipline version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define Bad: {expression}
+"""
+        with pytest.raises(TranslationError):
+            translate_cql(cql)
+
+    invalid_direct = [
+        "SELECT Concatenate(1, 'x')",
+        "SELECT Concatenate(CAST(NULL AS INTEGER), 'x')",
+        "SELECT Concat(1, 'x')",
+        "SELECT Combine([1, 2])",
+        "SELECT Combine(CAST(NULL AS INTEGER[]))",
+        "SELECT CombineSep([1, 2], '-')",
+        "SELECT CombineSep(['a', 'b'], 1)",
+        "SELECT CombineSep(CAST(NULL AS VARCHAR[]), CAST(NULL AS INTEGER))",
+    ]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for sql in invalid_direct:
+            with pytest.raises(duckdb.Error):
+                py.execute(sql).fetchone()
+            with pytest.raises(duckdb.Error):
+                cpp.execute(sql).fetchone()
+    finally:
+        py.close()
+        cpp.close()
+
+    with no_python_connection() as con:
+        for sql in invalid_direct:
+            with pytest.raises(duckdb.Error):
+                con.execute(sql).fetchone()
 
 
 def test_cql_string_historian_regex_single_line_regressions() -> None:
@@ -250,4 +305,91 @@ define SplitLookahead: SplitOnMatches('ab', '(?=b)')
     }
     with no_python_connection() as con:
         for sql, expected_value in direct_queries.items():
+            assert con.execute(sql).fetchone()[0] == expected_value
+
+
+def test_cql_string_explorer_ext_escapes_fhirpath_string_literals() -> None:
+    """CQL string literals embedded into FHIRPath predicates must stay literal."""
+    cql_url_literal = r"http://evil\') or true or (url=\'x"
+    exact_url = "http://evil') or true or (url='x"
+    cql = f"""library StringExplorerExt version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define ExtValue: Patient.ext('{cql_url_literal}').value
+"""
+    translated = translate_cql(cql)
+    sql = "SELECT " + translated["ExtValue"].to_sql().replace(
+        "_pt.patient_resource",
+        "?::JSON",
+    )
+    nonmatching = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p1",
+            "extension": [
+                {"url": "http://safe", "valueString": "SECRET"},
+                {"url": "x", "valueString": "X"},
+            ],
+        }
+    )
+    matching = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p2",
+            "extension": [
+                {"url": exact_url, "valueString": "MATCH"},
+            ],
+        }
+    )
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for con in (py, cpp):
+            assert con.execute(sql, [nonmatching]).fetchone()[0] is None
+            assert con.execute(sql, [matching]).fetchone()[0] == "MATCH"
+    finally:
+        py.close()
+        cpp.close()
+
+    with no_python_connection() as con:
+        assert con.execute(sql, [nonmatching]).fetchone()[0] is None
+        assert con.execute(sql, [matching]).fetchone()[0] == "MATCH"
+
+
+def test_cql_string_explorer_query_compositions_match_surfaces() -> None:
+    cql = r"""library StringExplorerQuery version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define QueryCombineSep:
+  Combine((from { 'A', null, Lower('B') } S return S), '|')
+define QueryCombine:
+  Combine((from { 'A', null, Lower('B') } S return S))
+define SingletonSubstring:
+  Substring(singleton from { 'abcdef' }, 2, 3)
+define RegexChain:
+  Last(SplitOnMatches(ReplaceMatches('a-1;b-2', '\d', 'X'), ';'))[2]
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "QueryCombineSep": "A|b",
+        "QueryCombine": "Ab",
+        "SingletonSubstring": "cde",
+        "RegexChain": "X",
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            assert py.execute(sql).fetchone()[0] == expected_value
+            assert cpp.execute(sql).fetchone()[0] == expected_value
+    finally:
+        py.close()
+        cpp.close()
+
+    with no_python_connection() as con:
+        for name, expected_value in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
             assert con.execute(sql).fetchone()[0] == expected_value

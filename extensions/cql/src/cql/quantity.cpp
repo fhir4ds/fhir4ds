@@ -9,9 +9,13 @@ using namespace duckdb_yyjson; // NOLINT
 #include <cmath>
 #include <cctype>
 #include <cstdlib>
+#include <string>
 #include <unordered_map>
 
 namespace cql {
+
+static const int CQL_DECIMAL_INTEGER_DIGITS = 30;
+static const int CQL_DECIMAL_SCALE = 8;
 
 // Alias the shared table for local use
 static const std::unordered_map<std::string, fhir::UnitConversion> &GetUnitTable() {
@@ -90,6 +94,78 @@ static bool units_compatible(const std::string &u1, const std::string &u2) {
 		return false;
 	}
 	return b1.value() == b2.value();
+}
+
+static bool is_representable_cql_decimal_text(const std::string &text) {
+	size_t pos = 0;
+	if (pos < text.size() && (text[pos] == '+' || text[pos] == '-')) {
+		pos++;
+	}
+
+	std::string digits;
+	int digits_before_decimal = 0;
+	bool saw_digit = false;
+	while (pos < text.size() && std::isdigit(static_cast<unsigned char>(text[pos]))) {
+		digits.push_back(text[pos++]);
+		digits_before_decimal++;
+		saw_digit = true;
+	}
+	int fractional_digits = 0;
+	if (pos < text.size() && text[pos] == '.') {
+		pos++;
+		while (pos < text.size() && std::isdigit(static_cast<unsigned char>(text[pos]))) {
+			digits.push_back(text[pos++]);
+			fractional_digits++;
+			saw_digit = true;
+		}
+	}
+	if (!saw_digit) {
+		return false;
+	}
+
+	int exponent = 0;
+	if (pos < text.size() && (text[pos] == 'e' || text[pos] == 'E')) {
+		pos++;
+		int sign = 1;
+		if (pos < text.size() && (text[pos] == '+' || text[pos] == '-')) {
+			if (text[pos] == '-') {
+				sign = -1;
+			}
+			pos++;
+		}
+		if (pos >= text.size() || !std::isdigit(static_cast<unsigned char>(text[pos]))) {
+			return false;
+		}
+		while (pos < text.size() && std::isdigit(static_cast<unsigned char>(text[pos]))) {
+			if (exponent < 1000000) {
+				exponent = exponent * 10 + (text[pos] - '0');
+			}
+			pos++;
+		}
+		exponent *= sign;
+	}
+	if (pos != text.size()) {
+		return false;
+	}
+
+	int scale = fractional_digits - exponent;
+	if (scale < 0) {
+		scale = 0;
+	}
+	if (scale > CQL_DECIMAL_SCALE) {
+		return false;
+	}
+
+	size_t first_nonzero = digits.find_first_not_of('0');
+	if (first_nonzero == std::string::npos) {
+		return true;
+	}
+	int decimal_index = digits_before_decimal + exponent;
+	int integer_digits = decimal_index - static_cast<int>(first_nonzero);
+	if (integer_digits < 0) {
+		integer_digits = 0;
+	}
+	return integer_digits <= CQL_DECIMAL_INTEGER_DIGITS;
 }
 
 static Optional<std::string> most_granular_compatible_unit(const std::string &u1, const std::string &u2) {
@@ -635,6 +711,9 @@ Optional<std::string> to_quantity(const std::string &s) {
 		if (p == fraction_start) return NullOpt<std::string>();
 	}
 
+	std::string decimal_text(s.c_str(), p - s.c_str());
+	if (!is_representable_cql_decimal_text(decimal_text)) return NullOpt<std::string>();
+
 	char *end = NULL;
 	double val = std::strtod(s.c_str(), &end);
 	if (end != p || !std::isfinite(val)) return NullOpt<std::string>();
@@ -668,6 +747,14 @@ Optional<std::string> to_quantity(const std::string &s) {
 	return format_quantity_json(q);
 }
 
+static bool is_valid_code_object(yyjson_val *value) {
+	if (!yyjson_is_obj(value)) return false;
+	yyjson_val *code = yyjson_obj_get(value, "code");
+	if (!code || !yyjson_is_str(code)) return false;
+	if (yyjson_obj_get(value, "value")) return false;
+	return true;
+}
+
 Optional<std::string> to_concept(const std::string &code_json) {
 	if (code_json.empty()) return NullOpt<std::string>();
 	// Wrap code in a concept: {"codes": [code]}
@@ -682,6 +769,11 @@ Optional<std::string> to_concept(const std::string &code_json) {
 	yyjson_val *src_root = yyjson_doc_get_root(doc);
 
 	if (yyjson_is_obj(src_root)) {
+		if (!is_valid_code_object(src_root)) {
+			yyjson_mut_doc_free(mut_doc);
+			yyjson_doc_free(doc);
+			return NullOpt<std::string>();
+		}
 		yyjson_mut_val *copied = yyjson_val_mut_copy(mut_doc, src_root);
 		if (!copied) {
 			yyjson_mut_doc_free(mut_doc);
@@ -693,7 +785,7 @@ Optional<std::string> to_concept(const std::string &code_json) {
 		size_t idx, max;
 		yyjson_val *elem;
 		yyjson_arr_foreach(src_root, idx, max, elem) {
-			if (!yyjson_is_obj(elem)) {
+			if (!is_valid_code_object(elem)) {
 				yyjson_mut_doc_free(mut_doc);
 				yyjson_doc_free(doc);
 				return NullOpt<std::string>();
@@ -712,6 +804,12 @@ Optional<std::string> to_concept(const std::string &code_json) {
 		return NullOpt<std::string>();
 	}
 	yyjson_mut_obj_add_val(mut_doc, root, "codes", codes_arr);
+	if (yyjson_is_obj(src_root)) {
+		yyjson_val *display = yyjson_obj_get(src_root, "display");
+		if (display && yyjson_is_str(display)) {
+			yyjson_mut_obj_add_strcpy(mut_doc, root, "display", yyjson_get_str(display));
+		}
+	}
 
 	char *json_str = yyjson_mut_write(mut_doc, 0, NULL);
 	std::string result;

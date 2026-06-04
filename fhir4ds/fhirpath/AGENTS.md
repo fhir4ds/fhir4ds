@@ -2,6 +2,17 @@
 
 ## Known Fragile Areas
 
+- **SQL-on-FHIR runner JSON primitive boundary parity (SOF-VD-11 SKEPTIC fresh rerun, 2026-06-01):**
+  **FIXED:** Native C++ member access must preserve raw JSON number text and
+  numeric value for JSON primitives so `value.ofType(Quantity).value` authored
+  as `1.0` reports precision `1` and boundaries `0.95000000`/`1.05000000`,
+  matching the forced Python fallback. FHIR `date`, `dateTime`, and `time`
+  JSON strings must coerce by field/choice metadata before
+  `lowBoundary()`/`highBoundary()`, and root-level `where(criteria)` must use
+  the same filtering path as chained `.where(criteria)`. Keep
+  `test_environment_type_parity.py`, ViewDefinition runner regressions, and
+  the SOF-VD-11 native/fallback spec_tests probe aligned; rebuild/copy the
+  bundled extension after touching native evaluator paths.
 - **FHIRPath FP-20 EXPLORER resource-specific code metadata rerun (2026-05-24):**
   **FIXED:** Native C++ reflection must not classify every unknown primitive
   string field as FHIR `string` when the R4 model defines a narrower primitive.

@@ -436,12 +436,45 @@ class CQLParser:
         valueset_id = id_token.value
         version = None
         codesystem = None
+        codesystems = []
 
         if self.match_and_advance(TokenType.VERSION):
             version_token = self.expect(TokenType.STRING, "Expected version string")
             version = version_token.value
 
-        return ValueSetDefinition(name=name, id=valueset_id, version=version, codesystem=codesystem)
+        if self.match(TokenType.IDENTIFIER) and self.current().value == "codesystems":
+            self.advance()
+            self.expect(TokenType.LBRACE, "Expected '{' after valueset codesystems")
+            if self.check(TokenType.RBRACE):
+                token = self.current()
+                raise ParseError(
+                    "Expected codesystem identifier in valueset codesystems",
+                    position=(token.line, token.column),
+                )
+            while True:
+                code_system_name = self._parse_identifier_name()
+                while self.match_and_advance(TokenType.DOT):
+                    code_system_name = code_system_name + "." + self._parse_identifier_name()
+                codesystems.append(code_system_name)
+                if not self.match_and_advance(TokenType.COMMA):
+                    break
+                if self.check(TokenType.RBRACE):
+                    token = self.current()
+                    raise ParseError(
+                        "Expected codesystem identifier after ',' in valueset codesystems",
+                        position=(token.line, token.column),
+                    )
+            self.expect(TokenType.RBRACE, "Expected '}' after valueset codesystems")
+            if codesystems:
+                codesystem = codesystems[0]
+
+        return ValueSetDefinition(
+            name=name,
+            id=valueset_id,
+            version=version,
+            codesystem=codesystem,
+            codesystems=codesystems,
+        )
 
     def parse_code_definition(self) -> CodeDefinition:
         """Parse a code definition."""
@@ -1073,7 +1106,7 @@ class CQLParser:
             operand = self.parse_unary_expression()
             self.expect(TokenType.AS, "Expected 'as' after cast expression")
             target_type = self.parse_type_specifier()
-            return BinaryExpression(operator="as", left=operand, right=target_type)
+            return BinaryExpression(operator="as", left=operand, right=target_type, strict=True)
 
         # Convert expression: convert X to Type
         if self.match_and_advance(TokenType.CONVERT):
@@ -1475,12 +1508,12 @@ class CQLParser:
                 unit_token = self.advance()
                 # Normalize to singular form
                 unit = unit_token.value.lower().rstrip('s')
-                return Quantity(value=float(value), unit=unit)
+                return Quantity(value=value, unit=unit)
             # Check for UCUM unit string (e.g., 1 'ml', 10 'cm', 19.99 '[lb_av]')
             if self.match(TokenType.STRING):
                 unit_token = self.advance()
                 unit = unit_token.value
-                return Quantity(value=float(value), unit=unit)
+                return Quantity(value=value, unit=unit)
             return Literal(value=value, type="Integer")
         elif token.type == TokenType.LONG:
             value = int(token.value)
@@ -2136,6 +2169,9 @@ class CQLParser:
                 unit_token = self.advance()
                 unit = unit_token.value.lower().rstrip('s')
                 return Quantity(value=float(value), unit=unit)
+            if self.match(TokenType.STRING):
+                unit_token = self.advance()
+                return Quantity(value=float(value), unit=unit_token.value)
 
             # Just a number without unit
             return Quantity(value=float(value), unit="")

@@ -516,19 +516,73 @@ class IntervalMixin:
 
     def _is_list_typed_ast(self, cql_expr) -> bool:
         """Return True when the CQL AST node is statically typed as a list."""
-        from ...parser.ast_nodes import BinaryExpression, Identifier, Interval, ListExpression, Query, Retrieve
+        from ...parser.ast_nodes import BinaryExpression, Identifier, Interval, ListExpression, Query, QuerySource, Retrieve, SingletonExpression, TupleExpression, UnaryExpression
         from ...translator.context import RowShape
 
         if cql_expr is None or isinstance(cql_expr, Interval):
             return False
-        if isinstance(cql_expr, (Query, Retrieve)):
+        if isinstance(cql_expr, Retrieve):
             return False
+        if isinstance(cql_expr, Query):
+            sources = cql_expr.source if isinstance(cql_expr.source, list) else [cql_expr.source]
+            source_pairs = []
+            for source in sources:
+                if isinstance(source, QuerySource):
+                    source_pairs.append((source.alias, source.expression))
+                else:
+                    source_pairs.append((getattr(source, "alias", None), source))
+
+            def _source_is_scalar_list(source_expr: object) -> bool:
+                if isinstance(source_expr, Retrieve):
+                    return False
+                if isinstance(source_expr, ListExpression):
+                    return True
+                if isinstance(source_expr, Identifier):
+                    ast_defs = getattr(self.context, "_definition_cql_asts", {})
+                    ast_def = ast_defs.get(source_expr.name)
+                    return ast_def is not None and ast_def is not source_expr and self._is_list_typed_ast(ast_def)
+                return self._is_list_typed_ast(source_expr)
+
+            if not source_pairs or not all(_source_is_scalar_list(source_expr) for _alias, source_expr in source_pairs):
+                return False
+            return_clause = getattr(cql_expr, "return_clause", None)
+            return_expr = getattr(return_clause, "expression", return_clause)
+            if isinstance(return_expr, TupleExpression):
+                return False
+            if return_expr is not None:
+                return True
+            return True
         if isinstance(cql_expr, ListExpression):
             return True
         if isinstance(cql_expr, BinaryExpression) and getattr(cql_expr, "operator", "") == "as":
             type_spec = getattr(cql_expr, "right", None)
             if type_spec is not None and "list" in str(type_spec).lower():
                 return True
+        if isinstance(cql_expr, SingletonExpression):
+            source = cql_expr.source
+            if isinstance(source, ListExpression):
+                return any(self._is_list_typed_ast(element) for element in source.elements)
+            infer_cql_type = getattr(self, "_infer_cql_type", None)
+            if infer_cql_type is not None:
+                try:
+                    source_type = str(infer_cql_type(source))
+                except Exception:
+                    source_type = ""
+                return source_type.startswith("List<List<")
+        if (
+            isinstance(cql_expr, UnaryExpression)
+            and getattr(cql_expr, "operator", "") == "singleton from"
+        ):
+            source = cql_expr.operand
+            if isinstance(source, ListExpression):
+                return any(self._is_list_typed_ast(element) for element in source.elements)
+            infer_cql_type = getattr(self, "_infer_cql_type", None)
+            if infer_cql_type is not None:
+                try:
+                    source_type = str(infer_cql_type(source))
+                except Exception:
+                    source_type = ""
+                return source_type.startswith("List<List<")
 
         if isinstance(cql_expr, Identifier):
             meta = getattr(self.context, "definition_meta", {}).get(cql_expr.name)

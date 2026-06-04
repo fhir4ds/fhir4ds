@@ -9,6 +9,7 @@ import pytest
 
 from fhir4ds.cql.duckdb import register
 from fhir4ds.cql.duckdb.extension import _register_python_supplements
+from fhir4ds.cql.errors import TranslationError
 from fhir4ds.cql.parser import parse_expression
 from fhir4ds.cql.parser.ast_nodes import BinaryExpression, FunctionRef
 from fhir4ds.cql.translator import translate_cql
@@ -78,7 +79,7 @@ def test_cql_arithmetic_duckdb_surface_matches_cpp_registration() -> None:
         "SELECT Floor(2.9)",
         "SELECT Exp(0)::VARCHAR",
         "SELECT Ln(1)::VARCHAR",
-        "SELECT Log(100)::VARCHAR",
+        "SELECT Log(100, 10)::VARCHAR",
         "SELECT mathAbs('-5')",
         "SELECT mathCeiling('2.1')",
         "SELECT mathFloor('2.9')",
@@ -93,6 +94,14 @@ def test_cql_arithmetic_duckdb_surface_matches_cpp_registration() -> None:
         "SELECT TRY(system.log(10, 100))::VARCHAR",
         "SELECT HighBoundary('2024', 8)",
         "SELECT LowBoundary('2024', 8)",
+        "SELECT HighBoundary('1.587')",
+        "SELECT LowBoundary('1.587')",
+        "SELECT HighBoundary('2024')",
+        "SELECT LowBoundary('2024')",
+        "SELECT HighBoundary('2024-01-01T08')",
+        "SELECT LowBoundary('2024-01-01T08')",
+        "SELECT HighBoundary('T10:30')",
+        "SELECT LowBoundary('T10:30')",
         "SELECT HighBoundary('2024-02', 8)",
         "SELECT LowBoundary('2024-02', 8)",
         (
@@ -114,11 +123,25 @@ def test_cql_arithmetic_duckdb_surface_matches_cpp_registration() -> None:
 
         for expression in [
             "SELECT Ln(-1)",
-            "SELECT Log(-1)",
+            "SELECT Log(-1, 10)",
+            "SELECT Log(100, 1)",
             "SELECT LogBase(100, 1)",
             "SELECT HighBoundary(1.587, 99)",
             "SELECT LowBoundary('2024', 17)",
             "SELECT HighBoundary('T10:30', 10)",
+            "SELECT quantityValue('{\"value\":\"10\",\"code\":\"mg\"}')",
+            (
+                "SELECT quantityAdd('{\"value\":\"10\",\"code\":\"mg\"}', "
+                "'{\"value\":1,\"code\":\"mg\"}')"
+            ),
+            (
+                "SELECT quantityAdd('{\"value\":true,\"code\":\"mg\"}', "
+                "'{\"value\":1,\"code\":\"mg\"}')"
+            ),
+            (
+                "SELECT quantityDivide('{\"value\":\"10\",\"code\":\"mg\"}', "
+                "'{\"value\":2,\"code\":\"1\"}')"
+            ),
         ]:
             assert py.execute(expression).fetchone() == (None,)
             assert cpp.execute(expression).fetchone() == (None,)
@@ -243,6 +266,16 @@ define StaticScalarAddQuantityIsNull: 2 + 10 'mg'
             {"resourceType": "Observation", "valueQuantity": {"value": 5, "code": "mg"}},
             None,
         ),
+        (
+            "FhirQuantityDivide",
+            {"resourceType": "Observation", "valueQuantity": {"value": "10", "code": "mg"}},
+            None,
+        ),
+        (
+            "FhirQuantityDivide",
+            {"resourceType": "Observation", "valueQuantity": {"value": True, "code": "mg"}},
+            None,
+        ),
     ]
 
     py = _python_only_connection()
@@ -340,7 +373,6 @@ context Patient
 define QuantityDivideNull: 1 'mg' / null
 define QuantityMultiplyNull: 1 'mg' * null
 define QuantityTimesDynamic: 10 'mg' * O.value
-define OneArgLog: Log(100)
 define PowerInvalid: Power(-2, 0.5)
 define PowerOperatorInvalid: (-2) ^ 0.5
 define DatePlusInteger: @2024-01-01 + 1
@@ -375,10 +407,6 @@ define IntegerUnderflow: -2147483648 - 1
             assert py.execute(quantity_dynamic_sql, [resource_text]).fetchone() == (None,)
             assert cpp.execute(quantity_dynamic_sql, [resource_text]).fetchone() == (None,)
 
-        sql = "SELECT " + translated["OneArgLog"].to_sql()
-        assert py.execute(sql).fetchone() == cpp.execute(sql).fetchone()
-        assert py.execute(sql).fetchone()[0] == "4.60517018598809"
-
         for name in ("PowerInvalid", "PowerOperatorInvalid", "IntegerUnderflow"):
             sql = "SELECT " + translated[name].to_sql()
             assert py.execute(sql).fetchone() == (None,)
@@ -387,6 +415,53 @@ define IntegerUnderflow: -2147483648 - 1
         sql = "SELECT " + translated["DatePlusInteger"].to_sql()
         assert py.execute(sql).fetchone() == ("2025-01-01",)
         assert cpp.execute(sql).fetchone() == ("2025-01-01",)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_log_requires_base_and_boundary_default_precision() -> None:
+    cql = """library ArithmeticHistorian version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define DecimalHighDefault: HighBoundary(1.587)
+define DecimalLowDefault: LowBoundary(1.587)
+define DateHighDefault: HighBoundary(@2014)
+define DateLowDefault: LowBoundary(@2014)
+define DateTimeHighDefault: HighBoundary(@2014-01-01T08)
+define DateTimeLowDefault: LowBoundary(@2014-01-01T08)
+define TimeHighDefault: HighBoundary(@T10:30)
+define TimeLowDefault: LowBoundary(@T10:30)
+define LogBaseTwo: Log(16, 2)
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "DecimalHighDefault": 1.58799999,
+        "DecimalLowDefault": 1.587,
+        "DateHighDefault": "2014",
+        "DateLowDefault": "2014",
+        "DateTimeHighDefault": "2014-01-01T08:59:59.999",
+        "DateTimeLowDefault": "2014-01-01T08:00:00.000",
+        "TimeHighDefault": "T10:30:59.999",
+        "TimeLowDefault": "T10:30:00.000",
+        "LogBaseTwo": 4.0,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, value in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            assert py.execute(sql).fetchone() == (value,)
+            assert cpp.execute(sql).fetchone() == (value,)
+        with pytest.raises(TranslationError):
+            translate_cql(
+                """library BadLog version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define BadLog: Log(100)
+"""
+            )
     finally:
         py.close()
         cpp.close()

@@ -1175,27 +1175,26 @@ class TestTypeConversion:
         assert result.name == "ToInteger"
 
     def test_to_string(self, translator: ExpressionTranslator):
-        """Test ToString function: ToString(42) -> CAST(42 AS VARCHAR)."""
+        """Test ToString function routes through the spec-aware public macro."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
+        from ...translator.types import SQLFunctionCall
         result = translator.translate(
             FunctionRef(name="ToString", arguments=[Literal(value=42)])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "VARCHAR"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToString"
         sql = result.to_sql()
-        assert "CAST" in sql
-        assert "VARCHAR" in sql
+        assert "ToString" in sql
 
     def test_to_string_from_boolean(self, translator: ExpressionTranslator):
-        """Test ToString from boolean: ToString(true) -> CAST(TRUE AS VARCHAR)."""
+        """Test ToString from boolean routes through the public macro."""
         from ...parser.ast_nodes import FunctionRef
-        from ...translator.types import SQLCast
+        from ...translator.types import SQLFunctionCall
         result = translator.translate(
             FunctionRef(name="ToString", arguments=[Literal(value=True)])
         )
-        assert isinstance(result, SQLCast)
-        assert result.target_type == "VARCHAR"
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "ToString"
 
     def test_to_boolean(self, translator: ExpressionTranslator):
         """Test ToBoolean function: ToBoolean('true') -> ToBoolean('true')."""

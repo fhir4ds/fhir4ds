@@ -1430,6 +1430,7 @@ FPCollection Evaluator::evalMemberAccess(const ASTNode &node, const FPCollection
 				// FHIRPath §2.1.1: null values from navigation produce empty collections.
 				// Skip null JSON values to maintain consistency across all existence functions.
 				FPValue fpv = FPValue::FromJson(v);
+				if (yyjson_is_num(v)) fpv.source_text = jsonNumberText(v);
 				if (!fname.empty()) fpv.field_name = fname;
 				if (!ftype.empty()) fpv.fhir_type = ftype;
 				result.push_back(fpv);
@@ -1679,6 +1680,9 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 	if (name == "aggregate" && !(arg_count == 1 || arg_count == 2)) {
 		throw FHIRPathSpecError("aggregate() takes 1 or 2 arguments");
 	}
+	if (name == "where" && arg_count != 1) {
+		throw FHIRPathSpecError("where() takes exactly 1 criteria argument");
+	}
 	if ((name == "toBoolean" || name == "toInteger") && arg_count != 0) {
 		throw FHIRPathSpecError(name + "() takes no arguments");
 	}
@@ -1756,6 +1760,9 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 	}
 	if (name == "not") {
 		return fn_not(input);
+	}
+	if (name == "where") {
+		return evalWhere(node, input, doc);
 	}
 	if (name == "allTrue") {
 		return fn_allTrue(input);
@@ -6318,7 +6325,14 @@ static FPCollection decimalBoundary(const FPValue &val, const FPCollection *prec
 	}
 	if (out_prec < 0 || out_prec > 28) return {};
 
-	double d = (val.type == FPValue::Type::Integer) ? static_cast<double>(val.int_val) : val.decimal_val;
+	double d;
+	if (val.type == FPValue::Type::Integer) {
+		d = static_cast<double>(val.int_val);
+	} else if (val.type == FPValue::Type::Decimal) {
+		d = val.decimal_val;
+	} else {
+		d = getNumericValue(val);
+	}
 	int decimal_places = countDecimalPlaces(val);
 	double half_unit = 0.5 * std::pow(10.0, -decimal_places);
 
@@ -6410,10 +6424,27 @@ FPCollection Evaluator::fn_lowBoundary(const FPCollection &input, const FPCollec
 	// Detect date/dateTime strings from JSON
 	if (t == FPValue::Type::String) {
 		std::string s = toString(val);
+		std::string fhir_type = val.fhir_type;
+		std::transform(fhir_type.begin(), fhir_type.end(), fhir_type.begin(), [](unsigned char c) {
+			return static_cast<char>(std::tolower(c));
+		});
+		const char *field_type = fhirFieldType(val.field_name);
+		bool is_time_typed = fhir_type == "time" || (field_type && std::string(field_type) == "time");
+		DateTimeParts time_parts = parseTimeParts(s);
+		if (time_parts.valid && (is_time_typed || (s.find(':') != std::string::npos && s.find('-') == std::string::npos))) {
+			FPValue time_val;
+			time_val.type = FPValue::Type::Time;
+			time_val.string_val = normalizeTimeLiteralString(s);
+			FPCollection single = {time_val};
+			return fn_lowBoundary(single, precision_arg);
+		}
 		if (s.size() >= 4 && std::isdigit((unsigned char)s[0]) && std::isdigit((unsigned char)s[1]) &&
 		    std::isdigit((unsigned char)s[2]) && std::isdigit((unsigned char)s[3])) {
 			FPValue date_val;
-			if (s.find('T') != std::string::npos) {
+			bool is_datetime_typed = fhir_type == "datetime" || fhir_type == "instant" ||
+			                         (field_type && (std::string(field_type) == "dateTime" ||
+			                                         std::string(field_type) == "instant"));
+			if (s.find('T') != std::string::npos || is_datetime_typed) {
 				date_val.type = FPValue::Type::DateTime;
 			} else {
 				date_val.type = FPValue::Type::Date;
@@ -6461,21 +6492,17 @@ FPCollection Evaluator::fn_lowBoundary(const FPCollection &input, const FPCollec
 			v.string_val = result;
 			return {v};
 		}
-		// Default behavior (no precision arg) - return at maximum precision (DateTime)
 		if (t == FPValue::Type::Date) {
-			std::string result = formatDateTimeBoundary(p, 17, false, "", false);
-			FPValue v; v.type = FPValue::Type::DateTime; v.string_val = result; return {v};
+			FPValue v;
+			v.type = FPValue::Type::Date;
+			v.string_val = formatDateTimeBoundary(p, 8, false, "", false);
+			return {v};
 		}
-		// DateTime default
-		std::ostringstream oss;
-		oss << std::setfill('0') << std::setw(4) << p.year
-		    << "-" << std::setfill('0') << std::setw(2) << (p.precision >= 2 ? p.month : 1)
-		    << "-" << std::setfill('0') << std::setw(2) << (p.precision >= 3 ? p.day : 1)
-		    << "T" << std::setfill('0') << std::setw(2) << (p.precision >= 4 ? p.hour : 0)
-		    << ":" << std::setfill('0') << std::setw(2) << (p.precision >= 5 ? p.minute : 0)
-		    << ":" << std::setfill('0') << std::setw(2) << 0
-		    << "." << std::setfill('0') << std::setw(3) << 0;
-		FPValue v; v.type = FPValue::Type::DateTime; v.string_val = oss.str(); return {v};
+		// Default behavior (no precision arg) - return at maximum precision (DateTime)
+		FPValue v;
+		v.type = FPValue::Type::DateTime;
+		v.string_val = formatDateTimeBoundary(p, 17, false, tz, false);
+		return {v};
 	}
 	if (t == FPValue::Type::Time) {
 		std::string s = toString(val);
@@ -6502,10 +6529,27 @@ FPCollection Evaluator::fn_highBoundary(const FPCollection &input, const FPColle
 	// Detect date/dateTime strings from JSON
 	if (t == FPValue::Type::String) {
 		std::string s = toString(val);
+		std::string fhir_type = val.fhir_type;
+		std::transform(fhir_type.begin(), fhir_type.end(), fhir_type.begin(), [](unsigned char c) {
+			return static_cast<char>(std::tolower(c));
+		});
+		const char *field_type = fhirFieldType(val.field_name);
+		bool is_time_typed = fhir_type == "time" || (field_type && std::string(field_type) == "time");
+		DateTimeParts time_parts = parseTimeParts(s);
+		if (time_parts.valid && (is_time_typed || (s.find(':') != std::string::npos && s.find('-') == std::string::npos))) {
+			FPValue time_val;
+			time_val.type = FPValue::Type::Time;
+			time_val.string_val = normalizeTimeLiteralString(s);
+			FPCollection single = {time_val};
+			return fn_highBoundary(single, precision_arg);
+		}
 		if (s.size() >= 4 && std::isdigit((unsigned char)s[0]) && std::isdigit((unsigned char)s[1]) &&
 		    std::isdigit((unsigned char)s[2]) && std::isdigit((unsigned char)s[3])) {
 			FPValue date_val;
-			if (s.find('T') != std::string::npos) {
+			bool is_datetime_typed = fhir_type == "datetime" || fhir_type == "instant" ||
+			                         (field_type && (std::string(field_type) == "dateTime" ||
+			                                         std::string(field_type) == "instant"));
+			if (s.find('T') != std::string::npos || is_datetime_typed) {
 				date_val.type = FPValue::Type::DateTime;
 			} else {
 				date_val.type = FPValue::Type::Date;
@@ -6552,26 +6596,17 @@ FPCollection Evaluator::fn_highBoundary(const FPCollection &input, const FPColle
 			v.string_val = result;
 			return {v};
 		}
-		// Default (no precision arg) - return at maximum precision (DateTime)
 		if (t == FPValue::Type::Date) {
-			std::string result = formatDateTimeBoundary(p, 17, true, "", false);
-			FPValue v; v.type = FPValue::Type::DateTime; v.string_val = result; return {v};
+			FPValue v;
+			v.type = FPValue::Type::Date;
+			v.string_val = formatDateTimeBoundary(p, 8, true, "", false);
+			return {v};
 		}
-		// DateTime default
-		int max_month = 12, max_hour = 23, max_minute = 59;
-		int days_in_month[] = {31,28,31,30,31,30,31,31,30,31,30,31};
-		bool leap = (p.year % 4 == 0 && (p.year % 100 != 0 || p.year % 400 == 0));
-		if (leap) days_in_month[1] = 29;
-		int use_month = (p.precision >= 2) ? p.month : max_month;
-		int max_day = (use_month >= 1 && use_month <= 12) ? days_in_month[use_month - 1] : 31;
-		std::ostringstream oss;
-		oss << std::setfill('0') << std::setw(4) << p.year
-		    << "-" << std::setfill('0') << std::setw(2) << (p.precision >= 2 ? p.month : max_month)
-		    << "-" << std::setfill('0') << std::setw(2) << (p.precision >= 3 ? p.day : max_day)
-		    << "T" << std::setfill('0') << std::setw(2) << (p.precision >= 4 ? p.hour : max_hour)
-		    << ":" << std::setfill('0') << std::setw(2) << (p.precision >= 5 ? p.minute : max_minute)
-		    << ":59.999";
-		FPValue v; v.type = FPValue::Type::DateTime; v.string_val = oss.str(); return {v};
+		// Default (no precision arg) - return at maximum precision (DateTime)
+		FPValue v;
+		v.type = FPValue::Type::DateTime;
+		v.string_val = formatDateTimeBoundary(p, 17, true, tz, false);
+		return {v};
 	}
 	if (t == FPValue::Type::Time) {
 		std::string s = toString(val);

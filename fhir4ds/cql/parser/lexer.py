@@ -1046,11 +1046,11 @@ class Lexer:
                     "t": "\t",
                     "r": "\r",
                     "\\": "\\",
+                    "/": "/",
                     "'": "'",
                     '"': '"',
+                    "`": "`",
                     "f": "\f",
-                    "v": "\v",
-                    "0": "\0",
                 }
                 if next_char in escape_chars:
                     value += escape_chars[next_char]
@@ -1232,7 +1232,7 @@ class Lexer:
                 break
 
         # Check for Long suffix (before has_decimal check)
-        if not has_decimal and (self._current() == 'L' or self._current() == 'l'):
+        if not has_decimal and self._current() == 'L':
             self._advance()  # consume L
             if self._current() and (self._current().isalnum() or self._current() == "_"):
                 raise LexerError(

@@ -80,9 +80,11 @@ from ...translator.types import (
 from ...translator.expressions._utils import (
     BINARY_OPERATOR_MAP,
     UNARY_OPERATOR_MAP,
+    _coerce_query_rows_to_list,
     _is_list_returning_sql,
     _contains_sql_subquery,
     _ensure_scalar_body,
+    escape_fhirpath_string_literal,
     _get_qicore_extension_fhirpath,
     _resolve_library_code_constant,
 )
@@ -91,6 +93,7 @@ from ...translator.expressions._operators import (
     _is_patient_id_correlation,
     _is_quantity_expression,
     _is_ratio_expression,
+    _static_type_supports_string_conversion,
 )
 from ...errors import TranslationError
 
@@ -128,19 +131,59 @@ def _numeric_arg_for_uncertain_helper(expr: SQLExpression) -> SQLExpression:
 
 
 def _static_datetime_component_type(node: Any) -> Optional[str]:
+    def _normalize_type_name(name: Optional[str]) -> Optional[str]:
+        if name is None:
+            return None
+        return name.split(".")[-1]
+
     if isinstance(node, Literal):
         if isinstance(node.value, bool):
             return "Boolean"
-        return getattr(node, "type", None)
+        return _normalize_type_name(getattr(node, "type", None))
+    if isinstance(node, Quantity):
+        return "Quantity"
+    if isinstance(node, DateTimeLiteral):
+        return "Time" if str(node.value).startswith("T") else "DateTime"
     if isinstance(node, DateComponent):
         return "Decimal" if node.component.lower() == "timezoneoffset" else "Integer"
     if isinstance(node, UnaryExpression) and node.operator in {"+", "-"}:
         return _static_datetime_component_type(node.operand)
+    if isinstance(node, UnaryExpression) and node.operator.lower() == "not":
+        return "Boolean"
+    if isinstance(node, BinaryExpression) and node.operator == "as":
+        type_spec = getattr(node, "right", None)
+        if isinstance(type_spec, NamedTypeSpecifier):
+            return _normalize_type_name(type_spec.name)
     if isinstance(node, BinaryExpression):
+        op_lower = node.operator.lower()
+        if op_lower in {
+            "=",
+            "!=",
+            "<>",
+            "<",
+            "<=",
+            ">",
+            ">=",
+            "~",
+            "!~",
+            "and",
+            "or",
+            "xor",
+            "implies",
+            "in",
+            "contains",
+            "included in",
+            "includes",
+            "properly includes",
+            "properly included in",
+        }:
+            return "Boolean"
         left_type = _static_datetime_component_type(node.left)
         right_type = _static_datetime_component_type(node.right)
         if left_type is None or right_type is None:
             return None
+        if node.operator == "&" or (node.operator == "+" and left_type == right_type == "String"):
+            return "String"
         if node.operator == "div" and left_type == right_type == "Integer":
             return "Integer"
         if node.operator == "mod" and left_type == right_type == "Integer":
@@ -149,6 +192,23 @@ def _static_datetime_component_type(node: Any) -> Optional[str]:
             return "Integer"
         if node.operator in {"+", "-", "*", "/", "^", "div", "mod"} and "Decimal" in {left_type, right_type}:
             return "Decimal"
+    if isinstance(node, FunctionRef):
+        function_type = {
+            "tointeger": "Integer",
+            "tolong": "Long",
+            "todecimal": "Decimal",
+            "tostring": "String",
+            "toboolean": "Boolean",
+            "todate": "Date",
+            "todatetime": "DateTime",
+            "totime": "Time",
+            "toquantity": "Quantity",
+            "toratio": "Ratio",
+            "date": "Date",
+            "datetime": "DateTime",
+            "time": "Time",
+        }.get(node.name.lower())
+        return function_type
     return None
 
 
@@ -165,6 +225,10 @@ def _reject_non_integer_temporal_components(name: str, arg_nodes: list[Any]) -> 
         static_type = _static_datetime_component_type(node)
         if static_type is not None and static_type != "Integer":
             raise ValueError(f"{name} constructor components must be Integer values")
+    if name == "DateTime" and len(arg_nodes) > 7:
+        static_type = _static_datetime_component_type(arg_nodes[7])
+        if static_type is not None and static_type not in {"Integer", "Decimal"}:
+            raise ValueError("DateTime timezoneOffset must be a Decimal value")
 
 from ...translator.component_codes import get_code_to_column_mapping
 from ...translator.fhirpath_builder import (
@@ -187,6 +251,15 @@ class FunctionsMixin:
         return self.translate(node, usage=ExprUsage.SCALAR)
 
     def _translate_structural_traversal_value(self, node: Any) -> SQLExpression:
+        if isinstance(node, TupleExpression):
+            return self._translate_structural_traversal_arg(node)
+        if isinstance(node, ListExpression):
+            return SQLArray(
+                elements=[
+                    self._translate_structural_traversal_value(element)
+                    for element in node.elements
+                ]
+            )
         static_type = self._static_structural_type_name(node)
         if static_type in {"Long", "Date", "DateTime", "Time"}:
             return SQLFunctionCall(
@@ -212,6 +285,224 @@ class FunctionsMixin:
                 if 'list' in ts_str:
                     return True
         return False
+
+    @staticmethod
+    def _type_spec_name(type_spec) -> Optional[str]:
+        """Return a compact CQL type name from a parsed type specifier."""
+        if type_spec is None:
+            return None
+        if hasattr(type_spec, "name"):
+            return str(type_spec.name).split(".")[-1]
+        if hasattr(type_spec, "element_type"):
+            return FunctionsMixin._type_spec_name(type_spec.element_type)
+        text = str(type_spec)
+        for known in (
+            "Boolean", "Integer", "Long", "Decimal", "Quantity", "String",
+            "DateTime", "Date", "Time", "Code", "Concept", "Interval", "Tuple",
+        ):
+            if known.lower() in text.lower():
+                return known
+        return None
+
+    def _static_list_element_types(self, node) -> Optional[set[str]]:
+        """Infer static element types for simple list expressions and aliases.
+
+        This intentionally stays conservative: unknown dynamic sources return
+        None and remain runtime-checked by the existing SQL/helper surfaces.
+        """
+        from ...parser.ast_nodes import BinaryExpression as ASTBinaryExpression
+
+        def _from_cql_type(cql_type: str | None) -> Optional[set[str]]:
+            if not cql_type:
+                return None
+            text = str(cql_type)
+            if text.startswith("List<") and text.endswith(">"):
+                inner = text[5:-1].split(".")[-1]
+                return {inner}
+            return None
+
+        def _function_return_type(func: FunctionRef) -> Optional[str]:
+            name = (func.name or "").lower()
+            conversion_returns = {
+                "toboolean": "Boolean",
+                "tointeger": "Integer",
+                "tolong": "Long",
+                "todecimal": "Decimal",
+                "todate": "Date",
+                "todatetime": "DateTime",
+                "totime": "Time",
+                "toquantity": "Quantity",
+                "toconcept": "Concept",
+                "tostring": "String",
+                "quantitytostring": "String",
+                "ratiotostring": "String",
+                "date": "Date",
+                "datetime": "DateTime",
+                "time": "Time",
+                "quantity": "Quantity",
+            }
+            if name in conversion_returns:
+                return conversion_returns[name]
+            if name.startswith("convertsto") or name in {"canconvertquantity"}:
+                return "Boolean"
+            scalar_returns = {
+                "count": "Integer",
+                "length": "Integer",
+                "precision": "Integer",
+                "abs": None,
+                "ceiling": "Integer",
+                "floor": "Integer",
+                "round": "Decimal",
+                "sqrt": "Decimal",
+                "ln": "Decimal",
+                "exp": "Decimal",
+                "log": "Decimal",
+                "power": "Decimal",
+            }
+            if name in scalar_returns:
+                return scalar_returns[name]
+            return None
+
+        def _element_type(element) -> Optional[str]:
+            if isinstance(element, Literal):
+                if element.value is None:
+                    return "Null"
+                if element.type:
+                    return str(element.type).split(".")[-1]
+                if isinstance(element.value, bool):
+                    return "Boolean"
+                if isinstance(element.value, int):
+                    return "Integer"
+                if isinstance(element.value, float):
+                    return "Decimal"
+                if isinstance(element.value, str):
+                    return "String"
+                return None
+            if isinstance(element, ListExpression):
+                return "List"
+            if isinstance(element, TupleExpression):
+                return "Tuple"
+            if isinstance(element, Interval):
+                return "Interval"
+            if isinstance(element, InstanceExpression):
+                return str(element.type).split(".")[-1]
+            if isinstance(element, Quantity):
+                return "Quantity"
+            if isinstance(element, TimeLiteral):
+                return "Time"
+            if isinstance(element, DateTimeLiteral):
+                value = str(element.value)
+                return "DateTime" if "T" in value else "Date"
+            if isinstance(element, FunctionRef):
+                return _function_return_type(element)
+            if isinstance(element, ASTBinaryExpression) and getattr(element, "operator", "") == "as":
+                right = getattr(element, "right", None)
+                left = getattr(element, "left", None)
+                target_name = self._type_spec_name(right)
+                if isinstance(left, Literal) and left.value is None:
+                    return target_name or "Null"
+                if target_name == "Any":
+                    return _element_type(left)
+                return target_name or _element_type(left)
+            return None
+
+        if isinstance(node, Identifier):
+            meta = self.context.definition_meta.get(node.name)
+            inferred = _from_cql_type(str(getattr(meta, "cql_type", "") or ""))
+            if inferred:
+                return inferred
+            symbol = self.context.lookup_symbol(node.name)
+            symbol_expr = getattr(symbol, "ast_expr", None) if symbol else None
+            if symbol_expr is not None and symbol_expr is not node:
+                return self._static_list_element_types(symbol_expr)
+            definition_ast = getattr(self.context, "_definition_cql_asts", {}).get(node.name)
+            if definition_ast is not None and definition_ast is not node:
+                return self._static_list_element_types(definition_ast)
+
+        if isinstance(node, ASTBinaryExpression) and getattr(node, "operator", "") == "as":
+            right = getattr(node, "right", None)
+            if hasattr(right, "element_type"):
+                element_name = self._type_spec_name(right.element_type)
+                return {element_name} if element_name else None
+            if isinstance(getattr(node, "left", None), Literal) and node.left.value is None:
+                type_name = self._type_spec_name(right)
+                return {type_name} if type_name else {"Null"}
+            return self._static_list_element_types(getattr(node, "left", None))
+
+        if isinstance(node, Query):
+            sources = node.source if isinstance(node.source, list) else [node.source]
+            alias_types: dict[str, Optional[set[str]]] = {}
+            source_expr_types: list[Optional[set[str]]] = []
+            for source in sources:
+                if isinstance(source, QuerySource):
+                    source_types = self._static_list_element_types(source.expression)
+                    source_expr_types.append(source_types)
+                    if source.alias:
+                        alias_types[source.alias] = source_types
+
+            if node.return_clause is not None:
+                returned = node.return_clause.expression
+                if isinstance(returned, AliasRef):
+                    return alias_types.get(returned.name)
+                if isinstance(returned, Identifier) and returned.name in alias_types:
+                    return alias_types.get(returned.name)
+                returned_type = _element_type(returned)
+                return {returned_type} if returned_type else None
+
+            if len(source_expr_types) == 1:
+                return source_expr_types[0]
+            return None
+
+        if not isinstance(node, ListExpression):
+            return None
+
+        types: set[str] = set()
+        for element in node.elements:
+            element_type = _element_type(element)
+            if element_type:
+                types.add(element_type)
+                continue
+            return None
+        return types
+
+    def _validate_static_aggregate_argument(self, name: str, arg) -> None:
+        """Fail fast for statically invalid CQL aggregate list element types."""
+        lower = name.lower()
+        element_types = self._static_list_element_types(arg)
+        if not element_types:
+            return
+
+        concrete = {t for t in element_types if t not in {"Null", "Any", "None"}}
+        if not concrete:
+            return
+
+        numeric = {"Integer", "Long", "Decimal"}
+        numeric_or_quantity = numeric | {"Quantity"}
+
+        if lower in {"alltrue", "anytrue", "allfalse", "anyfalse"}:
+            if not concrete <= {"Boolean"}:
+                raise TranslationError(f"{name} requires List<Boolean> source")
+            return
+
+        if lower == "geometricmean":
+            if not concrete <= numeric:
+                raise TranslationError(f"{name} requires List<Decimal> source")
+            return
+
+        if lower in {"avg", "median", "stddev", "stddevpop", "populationstddev", "variance", "populationvariance"}:
+            if not (concrete <= numeric or concrete == {"Quantity"}):
+                raise TranslationError(f"{name} requires List<Decimal> or List<Quantity> source")
+            return
+
+        if lower in {"sum", "product"}:
+            if not (concrete <= numeric or concrete == {"Quantity"}):
+                raise TranslationError(f"{name} requires numeric or Quantity list source")
+            return
+
+        if lower in {"min", "max"}:
+            supported = numeric_or_quantity | {"Date", "DateTime", "Time", "String"}
+            if not concrete <= supported:
+                raise TranslationError(f"{name} does not support List<{', '.join(sorted(concrete))}> source")
 
     def _unwrap_list_source(self, arg):
         """Unwrap a potential list argument for aggregate handling.
@@ -318,6 +609,7 @@ class FunctionsMixin:
                 "stddev_samp", "stddev_pop", "var_samp", "var_pop",
                 "system.stddev_samp", "system.stddev_pop",
                 "system.var_samp", "system.var_pop",
+                "system.product",
             }:
                 agg_col = SQLCast(expression=col_ref, target_type="DOUBLE", try_cast=True)
 
@@ -762,13 +1054,19 @@ class FunctionsMixin:
         )
         name = func.name
         arity = len(func.arguments) if func.arguments else 0
+        bare_lower = name.rsplit(".", 1)[-1].lower() if "." in name else name.lower()
 
         # Special handling for First/Last with Query args — must check BEFORE
         # translating args so we can use window functions for deterministic ordering
         if name.lower() in ("first", "last") and func.arguments:
-            from ...parser.ast_nodes import Query
             arg = func.arguments[0]
             if isinstance(arg, Query):
+                if self._is_list_typed_ast(arg):
+                    source = _coerce_query_rows_to_list(self.translate(arg, usage=ExprUsage.LIST))
+                    return SQLFunctionCall(
+                        name="LIST_EXTRACT",
+                        args=[source, SQLLiteral(value=1 if name.lower() == "first" else -1)],
+                    )
                 direction = "ASC" if name.lower() == "first" else "DESC"
                 return self._translate_first_last_with_window(arg, direction=direction)
 
@@ -793,8 +1091,60 @@ class FunctionsMixin:
         # as conversion inputs should keep their scalar expression shape instead
         # of becoming patient-correlated CTE lookups.
         arg_nodes = list(func.arguments)
+        if bare_lower == "combine" and arg_nodes:
+            self._validate_static_string_list_operand(arg_nodes[0], "Combine")
+            if len(arg_nodes) > 1:
+                self._validate_static_string_operand(arg_nodes[1], "Combine")
+        elif bare_lower == "concatenate":
+            for arg_node in arg_nodes:
+                self._validate_static_string_operand(arg_node, "Concatenate")
+        elif bare_lower in {"lower", "upper"} and arg_nodes:
+            self._validate_static_string_operand(arg_nodes[0], name)
+        elif bare_lower in {
+            "endswith",
+            "startswith",
+            "matches",
+            "positionof",
+            "lastpositionof",
+            "split",
+            "splitonmatches",
+        }:
+            for arg_node in arg_nodes[:2]:
+                self._validate_static_string_operand(arg_node, name)
+        elif bare_lower == "replacematches":
+            for arg_node in arg_nodes[:3]:
+                self._validate_static_string_operand(arg_node, name)
+        elif bare_lower == "substring" and arg_nodes:
+            self._validate_static_string_operand(arg_nodes[0], "Substring")
+        elif bare_lower == "indexer" and arg_nodes:
+            self._validate_static_string_operand(arg_nodes[0], "Indexer")
+        elif bare_lower == "message":
+            self._validate_message_signature_args(arg_nodes)
+        elif bare_lower in {"skip", "take"} and len(arg_nodes) >= 2:
+            count_type = self._infer_static_cql_type_for_logical_operand(arg_nodes[1])
+            normalized_count_type = (count_type or "Any").split(".")[-1]
+            if normalized_count_type not in {"Any", "Integer"}:
+                raise TranslationError(
+                    f"CQL {name} count argument must be Integer; got {count_type}"
+                )
+        if bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom"} and arg_nodes:
+            source_node = self._definition_ast_for_identifier(arg_nodes[0])
+            if source_node is not None and self._is_list_typed_ast(source_node):
+                arg_nodes[0] = source_node
         static_inline_functions = {
+            "canconvertquantity",
             "coalesce",
+            "convertquantity",
+            "convertstoboolean",
+            "convertstodate",
+            "convertstodatetime",
+            "convertstodecimal",
+            "convertstointeger",
+            "convertstolong",
+            "convertstoquantity",
+            "convertstoratio",
+            "convertstostring",
+            "convertstotime",
             "isfalse",
             "isnotnull",
             "isnull",
@@ -816,18 +1166,39 @@ class FunctionsMixin:
                 source_node = self._static_conversion_source_node(arg_node)
                 if source_node is not None:
                     arg_nodes[idx] = source_node
+        if name.lower() == "coalesce" and len(arg_nodes) == 1:
+            source_node = self._definition_ast_for_identifier(arg_nodes[0])
+            if isinstance(source_node, Query):
+                arg_nodes[0] = source_node
         if name.lower() in {"istrue", "isfalse"} and len(arg_nodes) == 1:
             args = [self.translate(arg_nodes[0], usage=ExprUsage.SCALAR, boolean_context=True)]
+        elif bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom"} and arg_nodes and self._is_list_typed_ast(arg_nodes[0]):
+            args = [_coerce_query_rows_to_list(self.translate(arg_nodes[0], usage=ExprUsage.LIST))]
+            args.extend(self.translate(arg, usage=ExprUsage.SCALAR) for arg in arg_nodes[1:])
         else:
             _reject_non_integer_temporal_components(name, arg_nodes)
             args = [self.translate(arg, usage=ExprUsage.SCALAR) for arg in arg_nodes]
 
         # CQL ToString(Ratio) must use the round-trippable ratio text form,
         # not the implementation JSON used internally for Ratio values.
-        if name.lower() == "tostring" and len(args) == 1:
+        if name.lower() in {"tostring", "convertstostring"} and len(args) == 1:
             static_source = self._static_structural_type_name(func.arguments[0])
-            if static_source == "Ratio" or _is_ratio_expression(args[0]):
+            if name.lower() == "convertstostring":
+                if not _static_type_supports_string_conversion(static_source):
+                    return SQLLiteral(value=False)
+            elif (
+                static_source == "Quantity"
+                or _is_quantity_expression(args[0])
+                or self._is_cql_quantity_expr(func.arguments[0])
+            ):
+                return SQLFunctionCall(
+                    name="QuantityToString",
+                    args=[_ensure_parse_quantity(args[0])],
+                )
+            elif static_source == "Ratio" or _is_ratio_expression(args[0]):
                 return SQLFunctionCall(name="RatioToString", args=args)
+            elif not _static_type_supports_string_conversion(static_source):
+                return SQLNull()
 
         # Step 2a: CQL Round — half-up semantics via custom macros
         # 1-arg → Round(x), 2-arg → RoundTo(x, precision)
@@ -856,6 +1227,18 @@ class FunctionsMixin:
         # json_object() already returns VARCHAR, no wrapping needed
         if name == "ToConcept" and len(args) == 1:
             arg = args[0]
+            if isinstance(arg, SQLArray):
+                return SQLFunctionCall(
+                    name="ToConceptFromList",
+                    args=[
+                        SQLArray(
+                            elements=[
+                                SQLCast(expression=item, target_type="VARCHAR")
+                                for item in arg.elements
+                            ]
+                        )
+                    ],
+                )
             if isinstance(arg, SQLFunctionCall) and arg.name == "struct_pack":
                 arg = SQLFunctionCall(name="to_json", args=[arg])
             return SQLFunctionCall(name="ToConcept", args=[arg])
@@ -908,13 +1291,72 @@ class FunctionsMixin:
                     ],
                 )
 
+        if name in {"HighBoundary", "LowBoundary"} and args:
+            boundary_call = SQLFunctionCall(name=name, args=args)
+            source_type = self._bare_cql_type_name(
+                self._static_structural_type_name(func.arguments[0])
+            )
+            if source_type in {"Integer", "Long", "Decimal"}:
+                return SQLCast(
+                    expression=SQLCast(
+                        expression=boundary_call,
+                        target_type="VARCHAR",
+                    ),
+                    target_type="DOUBLE",
+                    try_cast=True,
+                )
+            return boundary_call
+
         if name.lower() == "indexof" and len(args) == 2:
             if any(
                 isinstance(arg, SQLNull) or (isinstance(arg, SQLLiteral) and arg.value is None)
                 for arg in args
             ):
                 return SQLNull()
-            return SQLFunctionCall(name="CQLIndexOf", args=args)
+            def _query_rows_as_index_list(source: SQLSelect) -> SQLExpression:
+                if not source.columns:
+                    return SQLArray([])
+                first_col = source.columns[0]
+                if isinstance(first_col, tuple):
+                    first_expr = first_col[0]
+                elif isinstance(first_col, SQLAlias):
+                    first_expr = first_col.expr
+                else:
+                    first_expr = first_col
+                value_alias = "__cql_indexof_value"
+                projected = SQLSelect(
+                    columns=[SQLAlias(expr=first_expr, alias=value_alias)],
+                    from_clause=source.from_clause,
+                    joins=source.joins,
+                    where=source.where,
+                    group_by=source.group_by,
+                    having=source.having,
+                    order_by=source.order_by,
+                    limit=source.limit,
+                    distinct=source.distinct,
+                )
+                value_ref = SQLQualifiedIdentifier(parts=["_cql_indexof_source", value_alias])
+                return SQLSubquery(query=SQLSelect(
+                    columns=[SQLFunctionCall(
+                        name="COALESCE",
+                        args=[
+                            SQLFunctionCall(name="list", args=[value_ref]),
+                            SQLArray(elements=[]),
+                        ],
+                    )],
+                    from_clause=SQLAlias(
+                        expr=SQLSubquery(query=projected),
+                        alias="_cql_indexof_source",
+                    ),
+                ))
+
+            index_args = list(args)
+            source_arg = index_args[0]
+            if isinstance(source_arg, SQLSubquery) and isinstance(source_arg.query, SQLSelect):
+                index_args[0] = _query_rows_as_index_list(source_arg.query)
+            elif isinstance(source_arg, SQLSelect):
+                index_args[0] = _query_rows_as_index_list(source_arg)
+            return SQLFunctionCall(name="CQLIndexOf", args=index_args)
 
         # Step 3: Check registry for simple renames and parameterized translations
         strategy = function_registry.get(name, arity)
@@ -961,7 +1403,7 @@ class FunctionsMixin:
 
         # Step 6: Collapse/Expand (need access to both raw CQL and translated args)
         if name.lower() == "collapse" and args:
-            return self._translate_collapse(args)
+            return self._translate_collapse(func, args)
         if name.lower() == "expand" and func.arguments:
             result = self._translate_expand(func)
             if result is not None:
@@ -972,7 +1414,8 @@ class FunctionsMixin:
             url_arg = args[1]
             url_val = getattr(url_arg, 'value', None) if hasattr(url_arg, 'value') else None
             if url_val and isinstance(url_val, str):
-                fhirpath_expr = f"extension.where(url='{url_val}')"
+                escaped_url = escape_fhirpath_string_literal(url_val)
+                fhirpath_expr = f"extension.where(url='{escaped_url}')"
                 return SQLFunctionCall(
                     name="fhirpath_text",
                     args=[args[0], SQLLiteral(fhirpath_expr)],
@@ -981,8 +1424,48 @@ class FunctionsMixin:
         # Step 6.6: Combine with separator → CombineSep macro
         # DuckDB doesn't support macro overloading, so 2-arg Combine needs
         # to use the CombineSep macro instead.
-        if bare_name == "Combine" and len(args) == 2:
-            return SQLFunctionCall(name="CombineSep", args=args)
+        if bare_name == "Combine" and args:
+            def _query_rows_as_list(source: SQLSelect) -> SQLExpression:
+                if not source.columns:
+                    return SQLNull()
+                first_col = source.columns[0]
+                if isinstance(first_col, tuple):
+                    first_expr = first_col[0]
+                elif isinstance(first_col, SQLAlias):
+                    first_expr = first_col.expr
+                else:
+                    first_expr = first_col
+                value_alias = "__cql_combine_value"
+                projected = SQLSelect(
+                    columns=[SQLAlias(expr=first_expr, alias=value_alias)],
+                    from_clause=source.from_clause,
+                    joins=source.joins,
+                    where=source.where,
+                    group_by=source.group_by,
+                    having=source.having,
+                    order_by=source.order_by,
+                    limit=source.limit,
+                    distinct=source.distinct,
+                )
+                value_ref = SQLQualifiedIdentifier(parts=["_cql_combine_source", value_alias])
+                return SQLSubquery(query=SQLSelect(
+                    columns=[SQLFunctionCall(name="list", args=[value_ref])],
+                    from_clause=SQLAlias(
+                        expr=SQLSubquery(query=projected),
+                        alias="_cql_combine_source",
+                    ),
+                ))
+
+            combine_args = list(args)
+            source_arg = combine_args[0]
+            if isinstance(source_arg, SQLSubquery) and isinstance(source_arg.query, SQLSelect):
+                combine_args[0] = _query_rows_as_list(source_arg.query)
+            elif isinstance(source_arg, SQLSelect):
+                combine_args[0] = _query_rows_as_list(source_arg)
+            if len(combine_args) == 2:
+                return SQLFunctionCall(name="CombineSep", args=combine_args)
+            if len(combine_args) == 1:
+                return SQLFunctionCall(name="Combine", args=combine_args)
 
         # Step 7: Fallback — pass through as function call
         _inlining_lib = getattr(self.context, '_current_inlining_library', None)
@@ -1022,19 +1505,28 @@ class FunctionsMixin:
             "variance": "system.var_samp",
             "populationstddev": "system.stddev_pop",
             "populationvariance": "system.var_pop",
-            "product": "PRODUCT",
+            "product": "system.product",
         }
         name = func.name
         if not func.arguments:
             return None
+        from ...parser.ast_nodes import Query as CQLQuery, ListExpression, Retrieve, DistinctExpression
+        arg = func.arguments[0]
+        self._validate_static_aggregate_argument(name, arg)
+
+        if name.lower() == "geometricmean":
+            usage = ExprUsage.LIST if isinstance(arg, (CQLQuery, FunctionRef)) else ExprUsage.SCALAR
+            source_sql = self.translate(arg, usage=usage)
+            if isinstance(source_sql, (SQLSelect, SQLSubquery)):
+                source_sql = _coerce_query_rows_to_list(source_sql)
+            if isinstance(source_sql, SQLArray) or _is_list_returning_sql(source_sql):
+                return SQLFunctionCall(name="GeometricMean", args=[source_sql])
+
         agg_func = _CQL_AGG_TO_SQL.get(name.lower())
         if agg_func is None:
             return None
         # CQL §20.3-20.4: AllFalse/AnyFalse negate their base aggregate
         _negate_result = name.lower() in ("allfalse", "anyfalse")
-
-        from ...parser.ast_nodes import Query as CQLQuery, ListExpression, Retrieve, DistinctExpression
-        arg = func.arguments[0]
 
         def _maybe_negate(expr: SQLExpression) -> SQLExpression:
             """Wrap with NOT for AllFalse/AnyFalse (CQL §20.3-20.4)."""
@@ -1290,10 +1782,49 @@ class FunctionsMixin:
         CQL §22.6: Coalesce returns the first non-null argument.
         When called with a single list argument, returns the first non-null element.
         """
+        def _coalesce_query_list(source: SQLSelect) -> SQLSubquery:
+            if not source.columns:
+                return SQLSubquery(query=SQLSelect(columns=[SQLNull()], limit=1))
+            first_col = source.columns[0]
+            if isinstance(first_col, tuple):
+                first_expr = first_col[0]
+            elif isinstance(first_col, SQLAlias):
+                first_expr = first_col.expr
+            else:
+                first_expr = first_col
+            value_alias = "__cql_coalesce_value"
+            projected = SQLSelect(
+                columns=[SQLAlias(expr=first_expr, alias=value_alias)],
+                from_clause=source.from_clause,
+                joins=source.joins,
+                where=source.where,
+                group_by=source.group_by,
+                having=source.having,
+                order_by=source.order_by,
+                limit=source.limit,
+                distinct=source.distinct,
+            )
+            value_ref = SQLQualifiedIdentifier(parts=["_cql_coalesce_source", value_alias])
+            return SQLSubquery(query=SQLSelect(
+                columns=[value_ref],
+                from_clause=SQLAlias(
+                    expr=SQLSubquery(query=projected),
+                    alias="_cql_coalesce_source",
+                ),
+                where=SQLUnaryOp(operator="IS NOT NULL", operand=value_ref, prefix=False),
+                limit=1,
+            ))
+
         # Single list argument: reduce to first non-null element
         if len(args) == 1 and isinstance(args[0], SQLArray):
             # Expand list elements into COALESCE arguments
             args = args[0].elements
+        elif len(args) == 1 and _is_list_returning_sql(args[0]):
+            return SQLFunctionCall(name="Coalesce", args=args)
+        elif len(args) == 1 and isinstance(args[0], SQLSubquery) and isinstance(args[0].query, SQLSelect):
+            return _coalesce_query_list(args[0].query)
+        elif len(args) == 1 and isinstance(args[0], SQLSelect):
+            return _coalesce_query_list(args[0])
         elif len(args) < 2 or len(args) > 5:
             raise TranslationError(
                 "Coalesce scalar overload requires 2 to 5 arguments; "
@@ -1322,6 +1853,22 @@ class FunctionsMixin:
                 for a in args
             ]
 
+        def _is_boolean_expr(a):
+            if isinstance(a, SQLLiteral) and isinstance(a.value, bool):
+                return True
+            if isinstance(a, SQLFunctionCall) and a.name in ("fhirpath_bool", "IsTrue", "IsFalse"):
+                return True
+            if isinstance(a, SQLBinaryOp) and a.operator in {"=", "!=", "<>", "<", "<=", ">", ">=", "AND", "OR", "XOR"}:
+                return True
+            return False
+
+        if any(_is_boolean_expr(a) for a in args):
+            def _cast_to_boolean(a):
+                if isinstance(a, SQLFunctionCall) and a.name in ("fhirpath_text", "fhirpath_scalar"):
+                    return SQLFunctionCall(name="fhirpath_bool", args=a.args)
+                return a
+            args = [_cast_to_boolean(a) for a in args]
+
         def _is_numeric_expr(a):
             if isinstance(a, SQLFunctionCall) and (a.name or "").upper() == "TRY" and a.args:
                 return _is_numeric_expr(a.args[0])
@@ -1329,7 +1876,7 @@ class FunctionsMixin:
                 return True
             if isinstance(a, SQLBinaryOp) and a.operator in ("+", "-", "*", "/"):
                 return True
-            if isinstance(a, SQLLiteral) and isinstance(a.value, (int, float)):
+            if isinstance(a, SQLLiteral) and not isinstance(a.value, bool) and isinstance(a.value, (int, float)):
                 return True
             return False
 
@@ -1508,37 +2055,42 @@ class FunctionsMixin:
         )
 
     def _translate_log(self, args: list) -> SQLExpression:
-        """Translate CQL Log: 2-arg is Log(value, base), 1-arg is Ln.
+        """Translate CQL Log(value, base).
 
-        CQL §16.13/§16.12: Returns null for invalid inputs (negative, base=1).
-        Uses ``system.log`` to bypass the 1-arg CQL macro that would
-        otherwise shadow DuckDB's native 2-arg LOG.
-        Wraps in TRY() to return null on out-of-range errors.
+        CQL §16.11: Returns null for invalid inputs (negative, base=1).
+        Uses ``system.log`` with DuckDB's base-first argument order and wraps in
+        TRY() to return null on out-of-range errors.
         """
-        if len(args) >= 2:
-            # CQL: Log(value, base) → DuckDB: TRY(system.log(base, value))
-            return SQLFunctionCall(name="TRY", args=[
-                SQLFunctionCall(name="system.log", args=[args[1], args[0]])
-            ])
-        return SQLFunctionCall(name="mathLn", args=[
-            SQLCast(expression=args[0], target_type="VARCHAR")
+        if len(args) != 2:
+            raise TranslationError("CQL Log requires exactly two arguments: Log(value, base)")
+        # CQL: Log(value, base) → DuckDB: TRY(system.log(base, value))
+        return SQLFunctionCall(name="TRY", args=[
+            SQLFunctionCall(name="system.log", args=[args[1], args[0]])
         ])
 
     def _translate_exp(self, args: list) -> SQLExpression:
         """Translate CQL Exp through the parity-aligned math UDF."""
         if not args:
             return SQLNull()
-        return SQLFunctionCall(name="mathExp", args=[
-            SQLCast(expression=args[0], target_type="VARCHAR")
-        ])
+        return SQLCast(
+            expression=SQLFunctionCall(name="mathExp", args=[
+                SQLCast(expression=args[0], target_type="VARCHAR")
+            ]),
+            target_type="DOUBLE",
+            try_cast=True,
+        )
 
     def _translate_ln(self, args: list) -> SQLExpression:
         """Translate CQL Ln (§16.12) through the parity-aligned math UDF."""
         if not args:
             return SQLNull()
-        return SQLFunctionCall(name="mathLn", args=[
-            SQLCast(expression=args[0], target_type="VARCHAR")
-        ])
+        return SQLCast(
+            expression=SQLFunctionCall(name="mathLn", args=[
+                SQLCast(expression=args[0], target_type="VARCHAR")
+            ]),
+            target_type="DOUBLE",
+            try_cast=True,
+        )
 
     def _translate_power(self, args: list) -> SQLExpression:
         """Translate CQL Power through the parity-aligned math UDF."""
@@ -1609,6 +2161,29 @@ class FunctionsMixin:
 
         return SQLFunctionCall(name="CQLMessage", args=args[:5])
 
+    def _validate_message_signature_args(self, arg_nodes: list) -> None:
+        """Reject statically invalid CQL Message operands before SQL lowering."""
+        if len(arg_nodes) >= 2:
+            condition_type = self._infer_static_cql_type_for_logical_operand(arg_nodes[1])
+            normalized = str(condition_type or "Any").replace("System.", "")
+            if not (
+                normalized in {"Any", "Boolean"}
+                or (normalized.startswith("Choice<") and "Boolean" in normalized)
+            ):
+                raise TranslationError(
+                    f"CQL Message condition argument must be Boolean; got {condition_type}"
+                )
+
+        for index, label in ((2, "code"), (3, "severity"), (4, "message")):
+            if len(arg_nodes) <= index:
+                continue
+            if self._is_static_string_operand(arg_nodes[index]):
+                continue
+            arg_type = self._infer_static_cql_type_for_logical_operand(arg_nodes[index])
+            raise TranslationError(
+                f"CQL Message {label} argument must be String; got {arg_type}"
+            )
+
     def _translate_quantity_constructor(self, args: list) -> SQLExpression:
         """Translate CQL Quantity(value, unit) constructor."""
         if len(args) >= 2:
@@ -1646,18 +2221,38 @@ class FunctionsMixin:
             "integer": 2147483647,
             "long": 9223372036854775807,
             "decimal": ("99999999999999999999.99999999", "decimal"),
+            "quantity": ("99999999999999999999.99999999", "quantity"),
         }
         if func.arguments:
             type_arg = func.arguments[0]
             if isinstance(type_arg, (NamedTypeSpecifier, Identifier)):
-                type_name = type_arg.name.lower()
-                if type_name == "boolean":
-                    raise ValueError("The Maximum operator is not defined for type Boolean")
+                raw_type_name = type_arg.name
+                type_name = raw_type_name.split(".")[-1].lower()
                 val = _MAX_VALUES.get(type_name)
                 if val is not None:
                     if isinstance(val, tuple) and val[1] == "decimal":
                         return SQLLiteral(value=val[0], raw_sql=val[0])
+                    if isinstance(val, tuple) and val[1] == "quantity":
+                        result = SQLFunctionCall(
+                            name="json_object",
+                            args=[
+                                SQLLiteral(value="value"),
+                                SQLCast(
+                                    expression=SQLLiteral(value=val[0]),
+                                    target_type="DECIMAL(38,8)",
+                                ),
+                                SQLLiteral(value="unit"),
+                                SQLLiteral(value="1"),
+                                SQLLiteral(value="code"),
+                                SQLLiteral(value="1"),
+                                SQLLiteral(value="system"),
+                                SQLLiteral(value="http://unitsofmeasure.org"),
+                            ],
+                        )
+                        result.result_type = "Quantity"
+                        return result
                     return SQLLiteral(value=val)
+                raise ValueError(f"The Maximum operator is not defined for type {raw_type_name}")
         return SQLNull()
 
     def _translate_minimum_pre(self, func: FunctionRef, translator) -> Optional[SQLExpression]:
@@ -1669,18 +2264,38 @@ class FunctionsMixin:
             "integer": -2147483648,
             "long": -9223372036854775808,
             "decimal": ("-99999999999999999999.99999999", "decimal"),
+            "quantity": ("-99999999999999999999.99999999", "quantity"),
         }
         if func.arguments:
             type_arg = func.arguments[0]
             if isinstance(type_arg, (NamedTypeSpecifier, Identifier)):
-                type_name = type_arg.name.lower()
-                if type_name == "boolean":
-                    raise ValueError("The Minimum operator is not defined for type Boolean")
+                raw_type_name = type_arg.name
+                type_name = raw_type_name.split(".")[-1].lower()
                 val = _MIN_VALUES.get(type_name)
                 if val is not None:
                     if isinstance(val, tuple) and val[1] == "decimal":
                         return SQLLiteral(value=val[0], raw_sql=val[0])
+                    if isinstance(val, tuple) and val[1] == "quantity":
+                        result = SQLFunctionCall(
+                            name="json_object",
+                            args=[
+                                SQLLiteral(value="value"),
+                                SQLCast(
+                                    expression=SQLLiteral(value=val[0]),
+                                    target_type="DECIMAL(38,8)",
+                                ),
+                                SQLLiteral(value="unit"),
+                                SQLLiteral(value="1"),
+                                SQLLiteral(value="code"),
+                                SQLLiteral(value="1"),
+                                SQLLiteral(value="system"),
+                                SQLLiteral(value="http://unitsofmeasure.org"),
+                            ],
+                        )
+                        result.result_type = "Quantity"
+                        return result
                     return SQLLiteral(value=val)
+                raise ValueError(f"The Minimum operator is not defined for type {raw_type_name}")
         return SQLNull()
 
     def _translate_precision_pre(self, func, translator) -> "Optional[SQLExpression]":
@@ -1705,8 +2320,66 @@ class FunctionsMixin:
         # Fall through: let the normal rename handle it
         return None
 
-    def _translate_collapse(self, args: list) -> SQLExpression:
+    @staticmethod
+    def _collapse_interval_point_kind(arg: object) -> str | None:
+        candidate = arg
+        if isinstance(candidate, ListExpression):
+            interval_elements = [
+                element for element in candidate.elements
+                if isinstance(element, Interval)
+            ]
+            if not interval_elements:
+                return None
+            candidate = interval_elements[0]
+        if not isinstance(candidate, Interval):
+            return None
+        bounds = [candidate.low, candidate.high]
+        if any(isinstance(bound, Quantity) for bound in bounds):
+            return "quantity"
+        if any(isinstance(bound, (DateTimeLiteral, TimeLiteral)) for bound in bounds):
+            return "temporal"
+        if any(
+            isinstance(bound, Literal)
+            and (
+                bound.type in {"Integer", "Long", "Decimal"}
+                or isinstance(bound.value, (int, float))
+            )
+            for bound in bounds
+        ):
+            return "numeric"
+        return None
+
+    @staticmethod
+    def _collapse_per_incompatible(arg: object, per: object) -> bool:
+        if not isinstance(per, Quantity):
+            return False
+        kind = FunctionsMixin._collapse_interval_point_kind(arg)
+        if kind is None:
+            return False
+        unit = (per.unit or "").strip().lower()
+        default_unit = unit in {"", "1"}
+        temporal_units = {
+            "year", "years", "a",
+            "month", "months", "mo",
+            "week", "weeks", "wk",
+            "day", "days", "d",
+            "hour", "hours", "h",
+            "minute", "minutes", "min",
+            "second", "seconds", "s",
+            "millisecond", "milliseconds", "ms",
+        }
+        if kind == "numeric":
+            return not default_unit
+        if kind == "temporal":
+            return unit not in temporal_units
+        if kind == "quantity":
+            return default_unit or unit in temporal_units
+        return False
+
+    def _translate_collapse(self, func: FunctionRef, args: list) -> SQLExpression:
         """Translate CQL Collapse to collapse_intervals UDF."""
+        if len(func.arguments) > 1 and self._collapse_per_incompatible(func.arguments[0], func.arguments[1]):
+            return SQLNull()
         arg = args[0]
         if (
             isinstance(arg, SQLQualifiedIdentifier)
@@ -1737,6 +2410,21 @@ class FunctionsMixin:
                         ),
                     ))
                     break
+        if len(args) > 1:
+            expand_arg = arg
+            if isinstance(expand_arg, SQLSubquery):
+                expand_arg = SQLFunctionCall(
+                    name="from_json",
+                    args=[expand_arg, SQLLiteral(value='["VARCHAR"]')],
+                )
+            elif not isinstance(expand_arg, SQLArray) and not (
+                isinstance(expand_arg, SQLFunctionCall)
+                and expand_arg.name
+                and expand_arg.name.startswith("list_")
+            ) and not _is_list_returning_sql(expand_arg):
+                expand_arg = SQLFunctionCall(name="list_value", args=[expand_arg])
+            arg = SQLFunctionCall(name="expand", args=[expand_arg, args[1]])
+            return SQLFunctionCall(name="collapse_intervals", args=[arg])
         if _is_list_returning_sql(arg):
             arg = SQLFunctionCall(name="to_json", args=[arg])
         return SQLFunctionCall(name="collapse_intervals", args=[arg])
@@ -1846,6 +2534,7 @@ class FunctionsMixin:
                     return SQLFunctionCall("RatioToString", args)
                 if 'parse_quantity' in arg_sql or 'Quantity' in arg_sql:
                     return SQLFunctionCall("QuantityToString", args)
+                return SQLFunctionCall("ToString", args)
             if name_lower in ('todatetime', 'todate'):
                 macro_name = "ToDateTime" if name_lower == "todatetime" else "ToDate"
                 return SQLFunctionCall(macro_name, args)
@@ -1961,6 +2650,12 @@ class FunctionsMixin:
 
         # Determine the outer alias to correlate against
         outer_alias = self.context.resource_alias or self.context.patient_alias
+        if not outer_alias and self.context.is_patient_context():
+            # translate_library() builds patient-scalar CTE bodies before the
+            # surrounding FROM _patients AS _pt wrapper exists.  Use the same
+            # deferred alias expected by cte_manager so scalar subqueries such
+            # as singleton-from(query) are still correlated per patient.
+            outer_alias = "_pt"
         if not outer_alias:
             return select
 

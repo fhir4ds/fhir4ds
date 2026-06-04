@@ -214,6 +214,17 @@ def test_cql_list_part1_direct_surface_matches_cpp_registration() -> None:
             (0,),
         ),
         (
+            "SELECT CQLIndexOf([parse_quantity('{\"value\":1,\"unit\":\"cm\"}')], "
+            "parse_quantity('{\"value\":1,\"unit\":\"cm2\"}'))",
+            (None,),
+        ),
+        (
+            "SELECT CQLIndexOf("
+            "[json('{\"code\":\"1234-5\",\"system\":\"http://loinc.org\"}')], "
+            "json('{\"code\":\"1234-5\",\"system\":\"http://loinc.org\",\"display\":\"A\"}'))",
+            (None,),
+        ),
+        (
             "SELECT CQLListElementEqual("
             "9223372036854775807::BIGINT, "
             "9223372036854775806::DECIMAL(19,0))",
@@ -248,6 +259,42 @@ def test_cql_list_part1_direct_surface_matches_cpp_registration() -> None:
             "[9223372036854775807::BIGINT], "
             "9223372036854775806::DECIMAL(19,0))",
             (-1,),
+        ),
+        (
+            "SELECT CQLListEquivalentEq("
+            "[json('{\"code\":\"1234-5\",\"system\":\"http://loinc.org\",\"display\":\"A\"}')], "
+            "[json('{\"code\":\"1234-5\",\"system\":\"http://loinc.org\",\"display\":\"B\"}')])",
+            (True,),
+        ),
+        (
+            "SELECT CQLListElementEqual("
+            "json('{\"code\":\"1234-5\",\"system\":\"http://loinc.org\",\"display\":\"A\"}'), "
+            "json('{\"display\":\"A\",\"system\":\"http://loinc.org\",\"code\":\"1234-5\"}'))",
+            (True,),
+        ),
+        (
+            "SELECT CQLListElementEqual("
+            "json('{\"code\":\"1234-5\",\"system\":\"http://loinc.org\"}'), "
+            "json('{\"code\":\"1234-5\",\"system\":\"http://loinc.org\",\"display\":\"A\"}'))",
+            (None,),
+        ),
+        (
+            "SELECT CQLListEqualEq("
+            "[parse_quantity('{\"value\":1,\"unit\":\"cm\"}')], "
+            "[parse_quantity('{\"value\":1,\"unit\":\"cm2\"}')])",
+            (None,),
+        ),
+        (
+            "SELECT CQLListContainsEq("
+            "[parse_quantity('{\"value\":1,\"unit\":\"cm\"}')], "
+            "parse_quantity('{\"value\":1,\"unit\":\"cm2\"}'))",
+            (None,),
+        ),
+        (
+            "SELECT CQLListEquivalentEq("
+            "[json('{\"codes\":[{\"code\":\"1234-5\",\"system\":\"http://loinc.org\"}],\"display\":\"A\"}')], "
+            "[json('{\"codes\":[{\"code\":\"1234-5\",\"system\":\"http://loinc.org\"}],\"display\":\"B\"}')])",
+            (True,),
         ),
         ("SELECT SingletonFrom(['only'])", ("only",)),
         ("SELECT SingletonFrom([1])", ("1",)),
@@ -286,6 +333,44 @@ def test_cql_list_part1_direct_surface_matches_cpp_registration() -> None:
         cpp.close()
 
 
+def test_cql_list_part1_translated_clinical_and_quantity_unknowns_match_cpp_registration() -> None:
+    cql = """library List1Unknowns version '1.0.0'
+codesystem CS: 'http://loinc.org'
+code "A No Display": '1234-5' from CS
+code "A Display": '1234-5' from CS display 'Display A'
+
+define QuantityIncompatibleEqual: { 1 'cm' } = { 1 'cm2' }
+define QuantityIncompatibleContains: { 1 'cm' } contains 1 'cm2'
+define QuantityIncompatibleIndexOf: IndexOf({ 1 'cm' }, 1 'cm2')
+define ClinicalMissingComponentEqual: { "A No Display" } = { "A Display" }
+define ClinicalMissingComponentEquivalent: { "A No Display" } ~ { "A Display" }
+define ClinicalMissingComponentIndexOf: IndexOf({ "A No Display" }, "A Display")
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "QuantityIncompatibleEqual": (None,),
+        "QuantityIncompatibleContains": (None,),
+        "QuantityIncompatibleIndexOf": (None,),
+        "ClinicalMissingComponentEqual": (None,),
+        "ClinicalMissingComponentEquivalent": (True,),
+        "ClinicalMissingComponentIndexOf": (None,),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for label, con in (("forced_python", py), ("native_loaded", cpp), ("no_python_cpp", no_py)):
+                actual = {
+                    name: _normalize(con.execute(f"SELECT {translated[name].to_sql()}").fetchone())
+                    for name in expected
+                }
+                assert actual == expected, label
+    finally:
+        py.close()
+        cpp.close()
+
+
 def test_cql_list_part1_direct_singletonfrom_multi_item_errors_match_cpp_registration() -> None:
     sql = "SELECT SingletonFrom([1, 2])"
 
@@ -296,6 +381,48 @@ def test_cql_list_part1_direct_singletonfrom_multi_item_errors_match_cpp_registr
             for con in (py, cpp, no_py):
                 with pytest.raises(duckdb.InvalidInputException, match="SingletonFrom"):
                     con.execute(sql).fetchone()
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_list_part1_transported_clinical_list_equivalence_matches_cpp_registration() -> None:
+    cql = """library List1ClinicalTransport version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+codesystem LOINC: 'http://loinc.org'
+code "Code A": '1234-5' from LOINC display 'Display A'
+code "Code B": '1234-5' from LOINC display 'Display B'
+concept "Concept A": { "Code A" } display 'Concept A'
+concept "Concept B": { "Code B" } display 'Concept B'
+define CodeListAliasEquivalent:
+  (singleton from { { "Code A" } }) ~ (singleton from { { "Code B" } })
+define ConceptListAliasEquivalent:
+  (singleton from { { "Concept A" } }) ~ (singleton from { { "Concept B" } })
+"""
+    expected = {
+        "CodeListAliasEquivalent": (True,),
+        "ConceptListAliasEquivalent": (True,),
+    }
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql),
+        output_columns={name: name for name in expected},
+    )
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for con in (py, cpp, no_py):
+                _seed_resources(con)
+            for label, con in (("forced_python", py), ("native_loaded", cpp), ("no_python_cpp", no_py)):
+                row = con.execute(sql).fetchone()
+                assert row is not None, label
+                actual = {
+                    name: _normalize((row[index + 1],))
+                    for index, name in enumerate(expected)
+                }
+                assert actual == expected, label
     finally:
         py.close()
         cpp.close()
@@ -322,6 +449,9 @@ define IncludedInElementIdentifier: 2 included in LNumeric
 define IncludesListIdentifier: LNumeric includes { 1, null }
 define IncludedInListIdentifier: { 1, null } included in LNumeric
 define IndexOfNullIdentifier: IndexOf(LNumeric, null)
+define IndexOfIncompatibleQuantityIdentifier: IndexOf({ 1 'cm' }, 1 'cm2')
+define IndexOfQueryQuantityIdentifier: IndexOf((from { 1 'g' } Q return Q), 1000 'mg')
+define IndexOfQueryQuantityUnknown: IndexOf((from { 1 'cm' } Q return Q), 1 'cm2')
 define ExceptIdentifierNull: LNumeric except { null }
 define IntersectIdentifierNull: LNumeric intersect { null, 2 }
 define EqualIdentifierNull: LNumeric = { 1, 2, null }
@@ -341,6 +471,9 @@ define EquivalentIdentifierNull: LNumeric ~ { 1, 2, null }
         "IncludesListIdentifier": (True,),
         "IncludedInListIdentifier": (True,),
         "IndexOfNullIdentifier": (None,),
+        "IndexOfIncompatibleQuantityIdentifier": (None,),
+        "IndexOfQueryQuantityIdentifier": (0,),
+        "IndexOfQueryQuantityUnknown": (None,),
         "ExceptIdentifierNull": ([1, 2],),
         "IntersectIdentifierNull": ([2, None],),
         "EqualIdentifierNull": (True,),

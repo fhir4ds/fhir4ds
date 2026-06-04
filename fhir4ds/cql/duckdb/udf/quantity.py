@@ -15,8 +15,10 @@ Quantity format: JSON string {"value": 140, "code": "mm[Hg]", "system": "http://
 
 from __future__ import annotations
 
+import ast as _ast
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import math
+import re
 import threading
 from typing import TYPE_CHECKING
 
@@ -45,6 +47,11 @@ _logger = logging.getLogger(__name__)
 # Thread-safe singleton for UnitRegistry
 _ureg_lock = threading.Lock()
 _ureg = None
+
+_CQL_DECIMAL_INTEGER_DIGITS = 30
+_CQL_DECIMAL_SCALE = 8
+_JSON_NUMBER_RE = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+_JSON_VALUE_RE = re.compile(rf'"value"\s*:\s*({_JSON_NUMBER_RE})')
 
 # Mapping from UCUM codes to Pint unit names
 # UCUM uses special characters that aren't valid Python identifiers
@@ -383,11 +390,10 @@ def _parse_quantity(value: str | None) -> dict | None:
         return None
     raw_precision = None
     try:
-        import re
-        match = re.search(r'"value"\s*:\s*([-+]?\d+(?:\.\d+)?)', value)
+        match = _JSON_VALUE_RE.search(value)
         if match:
             raw_number = match.group(1)
-            raw_precision = len(raw_number.split(".", 1)[1].rstrip("0")) if "." in raw_number else 0
+            raw_precision = len(raw_number.split(".", 1)[1].split("e", 1)[0].split("E", 1)[0].rstrip("0")) if "." in raw_number else 0
     except (TypeError, AttributeError):
         raw_precision = None
     try:
@@ -395,9 +401,17 @@ def _parse_quantity(value: str | None) -> dict | None:
         if not isinstance(data, dict):
             _logger.warning("_parse_quantity expected object, got %s", type(data).__name__)
             return None
+        raw_value = data.get("value")
+        quantity_value = raw_value
+        if raw_value is not None and (
+            isinstance(raw_value, (bool, str))
+            or not isinstance(raw_value, (int, float))
+        ):
+            quantity_value = None
+
         code = data.get("code") or data.get("unit") or "1"
         result = {
-            "value": data.get("value"),
+            "value": quantity_value,
             "code": code,
             "system": data.get("system", "http://unitsofmeasure.org"),
         }
@@ -415,7 +429,13 @@ def _parse_quantity(value: str | None) -> dict | None:
 
 def _quantity_to_pint(q_dict: dict | None):
     """Convert quantity dict to pint Quantity."""
-    if not q_dict or q_dict.get("value") is None or not q_dict.get("code"):
+    value = q_dict.get("value") if q_dict else None
+    if (
+        not q_dict
+        or value is None
+        or isinstance(value, (bool, str))
+        or not q_dict.get("code")
+    ):
         return None
 
     ureg = _get_ureg()
@@ -424,7 +444,7 @@ def _quantity_to_pint(q_dict: dict | None):
 
     try:
         ucum_code = q_dict["code"]
-        value = float(q_dict["value"])
+        value = float(value)
         pint_unit = _ucum_to_pint_unit(ucum_code)
         return value * ureg(pint_unit)
     except (TypeError, ValueError, UndefinedUnitError) as e:
@@ -476,6 +496,8 @@ def _most_granular_compatible_unit(code1: str, code2: str) -> str | None:
 
 
 def _is_finite_decimal_value(value) -> bool:
+    if isinstance(value, bool):
+        return False
     try:
         decimal_value = Decimal(str(value))
     except (InvalidOperation, ValueError):
@@ -483,9 +505,43 @@ def _is_finite_decimal_value(value) -> bool:
     return decimal_value.is_finite()
 
 
+def _representable_cql_decimal(value) -> Decimal | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        decimal_value = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    if not decimal_value.is_finite():
+        return None
+    if decimal_value.as_tuple().exponent < -_CQL_DECIMAL_SCALE:
+        return None
+    if decimal_value.is_zero():
+        return decimal_value
+    integer_digits = decimal_value.copy_abs().adjusted() + 1
+    if integer_digits > _CQL_DECIMAL_INTEGER_DIGITS:
+        return None
+    return decimal_value
+
+
+def _raw_json_quantity_value_is_representable(value: str) -> bool:
+    match = _JSON_VALUE_RE.search(value)
+    return match is not None and _representable_cql_decimal(match.group(1)) is not None
+
+
+def _decimal_json_number(value: Decimal) -> str:
+    return format(value, "f")
+
+
 def is_valid_quantity_object(value) -> bool:
     """Return true when a JSON object has the minimum CQL Quantity shape."""
-    if not isinstance(value, dict) or value.get("value") is None or not _is_finite_decimal_value(value.get("value")):
+    quantity_value = value.get("value") if isinstance(value, dict) else None
+    if (
+        not isinstance(value, dict)
+        or quantity_value is None
+        or isinstance(quantity_value, (bool, str))
+        or _representable_cql_decimal(quantity_value) is None
+    ):
         return False
     return _is_valid_quantity_unit(value.get("unit") or value.get("code") or "1")
 
@@ -494,27 +550,26 @@ def _format_cql_quantity(value, unit: str = "1") -> str | None:
     if (
         value is None
         or isinstance(value, bool)
-        or not _is_finite_decimal_value(value)
         or not _is_valid_quantity_unit(unit)
     ):
         return None
-    try:
-        numeric_value = float(value)
-    except (OverflowError, ValueError):
+    decimal_value = _representable_cql_decimal(value)
+    if decimal_value is None:
         return None
-    if not math.isfinite(numeric_value):
-        return None
-    return orjson.dumps(
-        {
-            "value": numeric_value,
-            "unit": unit,
-            "code": unit,
-            "system": "http://unitsofmeasure.org",
-        }
-    ).decode("utf-8")
+    return (
+        '{"value":'
+        + _decimal_json_number(decimal_value)
+        + ',"unit":'
+        + orjson.dumps(unit).decode("utf-8")
+        + ',"code":'
+        + orjson.dumps(unit).decode("utf-8")
+        + ',"system":"http://unitsofmeasure.org"}'
+    )
 
 
 def _quantity_from_ratio_json(value: str) -> str | None:
+    if not _raw_json_quantity_value_is_representable(value):
+        return None
     try:
         data = orjson.loads(value)
     except JSONDecodeError:
@@ -910,21 +965,26 @@ def toQuantity(s) -> str | None:
 
 def toConcept(code_json: str | None) -> str | None:
     """CQL §22.30: ToConcept — wrap a Code in a Concept."""
-    if code_json is None:
-        return None
-    try:
-        code = orjson.loads(code_json)
-        if isinstance(code, dict):
-            codes = [code]
-        elif isinstance(code, list) and all(isinstance(item, dict) for item in code):
-            codes = code
-        else:
+    data = _load_clinical_json(code_json)
+    if isinstance(data, dict):
+        code = _normalize_code_object(data)
+        if code is None:
             return None
-        concept = {"codes": codes}
+        concept = {"codes": [code]}
+        if code.get("display") is not None:
+            concept["display"] = code["display"]
         return orjson.dumps(concept).decode("utf-8")
-    except Exception as e:
-        _logger.debug("Unexpected error in UDF toConcept: %s", e)
-        return None
+    if isinstance(data, list):
+        normalized = []
+        for item in data:
+            if isinstance(item, str):
+                item = _load_clinical_json(item)
+            code = _normalize_code_object(item)
+            if code is None:
+                return None
+            normalized.append(code)
+        return orjson.dumps({"codes": normalized}).decode("utf-8")
+    return None
 
 
 def _load_clinical_json(value):
@@ -936,6 +996,12 @@ def _load_clinical_json(value):
         try:
             return orjson.loads(value)
         except JSONDecodeError:
+            try:
+                parsed = _ast.literal_eval(value)
+            except (SyntaxError, ValueError):
+                return None
+            if isinstance(parsed, (dict, list)):
+                return parsed
             return None
     return value
 
@@ -1023,7 +1089,29 @@ def registerQuantityUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("quantityTruncatedDivide", quantityTruncatedDivide, null_handling="special")
     con.create_function("quantityModulo", quantityModulo, null_handling="special")
     con.create_function("ToQuantity", toQuantity, return_type="VARCHAR", null_handling="special")
-    con.create_function("ToConcept", toConcept, null_handling="special")
+    to_concept_exists = False
+    try:
+        to_concept_exists = con.execute(
+            """
+            SELECT 1
+            FROM duckdb_functions()
+            WHERE lower(function_name) = 'toconcept'
+            LIMIT 1
+            """
+        ).fetchone() is not None
+    except Exception:
+        to_concept_exists = False
+    if not to_concept_exists:
+        con.create_function(
+            "__fhir4ds_py_ToConcept",
+            toConcept,
+            parameters=["VARCHAR"],
+            return_type="VARCHAR",
+            null_handling="special",
+        )
+        con.execute(
+            'CREATE OR REPLACE MACRO ToConcept(arg) AS "__fhir4ds_py_ToConcept"(CAST(arg AS VARCHAR))'
+        )
     con.create_function(
         "ToConceptFromList",
         toConceptFromList,

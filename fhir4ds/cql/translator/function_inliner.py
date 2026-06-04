@@ -341,7 +341,12 @@ class FunctionInliner:
 
         # Recurse into BinaryExpression
         if isinstance(expr, BinaryExpression):
-            return BinaryExpression(operator=expr.operator, left=_r(expr.left), right=_r(expr.right))
+            return BinaryExpression(
+                operator=expr.operator,
+                left=_r(expr.left),
+                right=_r(expr.right),
+                strict=getattr(expr, "strict", False),
+            )
 
         # Recurse into UnaryExpression
         if isinstance(expr, UnaryExpression):
@@ -509,7 +514,12 @@ class FunctionInliner:
         if isinstance(expr, BinaryExpression):
             new_left = self._substitute_parameters(expr.left, param_map)
             new_right = self._substitute_parameters(expr.right, param_map)
-            return BinaryExpression(operator=expr.operator, left=new_left, right=new_right)
+            return BinaryExpression(
+                operator=expr.operator,
+                left=new_left,
+                right=new_right,
+                strict=getattr(expr, "strict", False),
+            )
 
         # Handle unary expression
         if isinstance(expr, UnaryExpression):
@@ -798,7 +808,12 @@ class FunctionInliner:
         if isinstance(expr, BinaryExpression):
             new_left = self._inline_nested_calls(expr.left, context, current_library)
             new_right = self._inline_nested_calls(expr.right, context, current_library)
-            return BinaryExpression(operator=expr.operator, left=new_left, right=new_right)
+            return BinaryExpression(
+                operator=expr.operator,
+                left=new_left,
+                right=new_right,
+                strict=getattr(expr, "strict", False),
+            )
 
         # Handle unary expression
         if isinstance(expr, UnaryExpression):
@@ -1226,7 +1241,12 @@ class FunctionInliner:
         if isinstance(expr, BinaryExpression):
             new_left = self._substitute_parameters_cql(expr.left, param_map)
             new_right = self._substitute_parameters_cql(expr.right, param_map)
-            return BinaryExpression(operator=expr.operator, left=new_left, right=new_right)
+            return BinaryExpression(
+                operator=expr.operator,
+                left=new_left,
+                right=new_right,
+                strict=getattr(expr, "strict", False),
+            )
 
         if isinstance(expr, UnaryExpression):
             new_operand = self._substitute_parameters_cql(expr.operand, param_map)
@@ -1469,7 +1489,12 @@ class FunctionInliner:
         if isinstance(expr, BinaryExpression):
             new_left = self._inline_nested_calls_cql(expr.left, current_library)
             new_right = self._inline_nested_calls_cql(expr.right, current_library)
-            return BinaryExpression(operator=expr.operator, left=new_left, right=new_right)
+            return BinaryExpression(
+                operator=expr.operator,
+                left=new_left,
+                right=new_right,
+                strict=getattr(expr, "strict", False),
+            )
 
         if isinstance(expr, UnaryExpression):
             new_operand = self._inline_nested_calls_cql(expr.operand, current_library)

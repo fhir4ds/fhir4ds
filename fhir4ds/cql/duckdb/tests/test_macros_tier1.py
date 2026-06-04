@@ -126,8 +126,16 @@ class TestStringMacros:
 
     def test_substring_with_length(self, con):
         # CQL: Substring("hello", 1, 3) should return "ell"
+        result = con.execute("SELECT Substring('hello', 1, 3)").fetchone()[0]
+        assert result == "ell"
+
+    def test_substring_len_alias(self, con):
         result = con.execute("SELECT SubstringLen('hello', 1, 3)").fetchone()[0]
         assert result == "ell"
+
+    def test_substring_null_length(self, con):
+        result = con.execute("SELECT Substring('hello', 1, CAST(NULL AS INTEGER))").fetchone()[0]
+        assert result is None
 
     def test_substring_start_at_zero(self, con):
         # CQL: Substring("hello", 0) should return "hello"

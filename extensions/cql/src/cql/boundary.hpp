@@ -11,6 +11,9 @@ Optional<std::string> high_boundary(const std::string &value, int precision);
 // CQL §22.14: LowBoundary — lowest value within precision
 Optional<std::string> low_boundary(const std::string &value, int precision);
 
+// CQL default boundary precision when the precision argument is omitted.
+Optional<int64_t> default_boundary_precision(const std::string &value);
+
 // CQL §18.15 / §22.24: Precision — number of digit characters of precision.
 // Date/DateTime/Time values count temporal digits; decimal values count fractional digits.
 Optional<int64_t> cql_precision(const std::string &value);

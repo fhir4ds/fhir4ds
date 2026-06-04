@@ -10,6 +10,29 @@ from __future__ import annotations
 from typing import List, Optional
 
 
+def escape_fhirpath_string_literal(value: str) -> str:
+    """Escape text for the body of a single-quoted FHIRPath string literal."""
+    pieces: List[str] = []
+    for ch in value:
+        if ch == "\\":
+            pieces.append("\\\\")
+        elif ch == "'":
+            pieces.append("\\'")
+        elif ch == "\r":
+            pieces.append("\\r")
+        elif ch == "\n":
+            pieces.append("\\n")
+        elif ch == "\t":
+            pieces.append("\\t")
+        elif ch == "\f":
+            pieces.append("\\f")
+        elif ord(ch) < 32 or ord(ch) == 127:
+            pieces.append(f"\\u{ord(ch):04X}")
+        else:
+            pieces.append(ch)
+    return "".join(pieces)
+
+
 class FHIRPathBuilder:
     """
     Fluent builder for FHIRPath expressions.
@@ -234,8 +257,7 @@ class FHIRPathBuilder:
         Returns:
             Escaped string safe for FHIRPath.
         """
-        # Escape single quotes by doubling them
-        return value.replace("'", "''")
+        return escape_fhirpath_string_literal(value)
 
     @staticmethod
     def _build_system_code_condition(system: str, code: str) -> str:

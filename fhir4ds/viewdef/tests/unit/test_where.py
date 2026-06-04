@@ -204,7 +204,7 @@ class TestWhereWithConstants:
         vd = parse_view_definition('''
         {
             "resource": "Patient",
-            "constants": [
+            "constant": [
                 {"name": "FemaleGender", "valueCode": "female"}
             ],
             "select": [{"column": [{"path": "id", "name": "id"}]}],

@@ -6,6 +6,7 @@ Handles DateTime(), Date(), Time() constructors and date component extraction
 from __future__ import annotations
 
 import calendar
+import math
 from typing import List
 
 from ...parser.ast_nodes import DateComponent, DateTimeLiteral, Literal, TimeLiteral
@@ -31,18 +32,76 @@ class DateComponentMixin:
     on ExpressionTranslator.
     """
 
-    def _validated_temporal_constructor(self, expression: SQLExpression, component: str) -> SQLExpression:
+    _DUCKDB_INTEGER_TYPES = (
+        "TINYINT",
+        "SMALLINT",
+        "INTEGER",
+        "BIGINT",
+        "HUGEINT",
+        "UTINYINT",
+        "USMALLINT",
+        "UINTEGER",
+        "UBIGINT",
+        "UHUGEINT",
+    )
+    _DUCKDB_FLOAT_TYPES = ("FLOAT", "DOUBLE", "REAL")
+
+    def _chain_conditions(self, operator: str, conditions: List[SQLExpression]) -> SQLExpression:
+        if not conditions:
+            return SQLLiteral(True)
+        result = conditions[0]
+        for condition in conditions[1:]:
+            result = SQLBinaryOp(operator=operator, left=result, right=condition)
+        return result
+
+    def _duckdb_type_is(self, expression: SQLExpression, type_names: tuple[str, ...]) -> SQLExpression:
+        type_expr = SQLFunctionCall(name="typeof", args=[expression])
+        conditions = [
+            SQLBinaryOp(operator="=", left=type_expr, right=SQLLiteral(type_name))
+            for type_name in type_names
+        ]
+        return self._chain_conditions("OR", conditions)
+
+    def _duckdb_type_starts_with(self, expression: SQLExpression, prefix: str) -> SQLExpression:
+        return SQLBinaryOp(
+            operator="LIKE",
+            left=SQLFunctionCall(name="typeof", args=[expression]),
+            right=SQLLiteral(f"{prefix}%"),
+        )
+
+    def _integer_component_value(self, expression: SQLExpression) -> tuple[SQLExpression, SQLExpression]:
+        return (
+            SQLCast(expression=expression, target_type="INTEGER", try_cast=True),
+            self._duckdb_type_is(expression, self._DUCKDB_INTEGER_TYPES),
+        )
+
+    def _decimal_component_value(self, expression: SQLExpression) -> tuple[SQLExpression, SQLExpression]:
+        numeric_type = self._chain_conditions(
+            "OR",
+            [
+                self._duckdb_type_is(expression, self._DUCKDB_INTEGER_TYPES + self._DUCKDB_FLOAT_TYPES),
+                self._duckdb_type_starts_with(expression, "DECIMAL"),
+            ],
+        )
+        return SQLCast(expression=expression, target_type="DOUBLE", try_cast=True), numeric_type
+
+    def _validated_temporal_constructor(
+        self,
+        expression: SQLExpression,
+        component: str,
+        guard: SQLExpression | None = None,
+    ) -> SQLExpression:
         """Return constructor output only when the temporal parser accepts it."""
         component_value = SQLFunctionCall(
             name="dateComponent",
             args=[expression, SQLLiteral(component)],
         )
+        condition = SQLBinaryOp(operator="IS NOT", left=component_value, right=SQLNull())
+        if guard is not None:
+            condition = SQLBinaryOp(operator="AND", left=guard, right=condition)
         return SQLCase(
             when_clauses=[
-                (
-                    SQLBinaryOp(operator="IS NOT", left=component_value, right=SQLNull()),
-                    expression,
-                )
+                (condition, expression)
             ],
             else_clause=SQLNull(),
         )
@@ -62,6 +121,7 @@ class DateComponentMixin:
         minute: SQLExpression,
         second: SQLExpression,
         millisecond: SQLExpression,
+        guard: SQLExpression | None = None,
     ) -> SQLExpression:
         """Return Time constructor output only when all provided fields are in range."""
         range_check = SQLBinaryOp(
@@ -77,6 +137,8 @@ class DateComponentMixin:
                 right=self._bounded_component(millisecond, 0, 999),
             ),
         )
+        if guard is not None:
+            range_check = SQLBinaryOp(operator="AND", left=guard, right=range_check)
         validated = self._validated_temporal_constructor(expression, component)
         return SQLCase(
             when_clauses=[(range_check, validated)],
@@ -85,34 +147,118 @@ class DateComponentMixin:
 
     def _time_component_constructor(self, args: List[SQLExpression]) -> SQLExpression:
         """Translate Time(hour[, minute[, second[, millisecond]]]) component construction."""
-        hour = args[0]
-        minute = args[1] if len(args) > 1 else SQLLiteral(value=0)
-        second = args[2] if len(args) > 2 else SQLLiteral(value=0)
-        millisecond = args[3] if len(args) > 3 else SQLLiteral(value=0)
+        hour_expr = args[0]
+        minute_expr = args[1] if len(args) > 1 else None
+        second_expr = args[2] if len(args) > 2 else None
+        millisecond_expr = args[3] if len(args) > 3 else None
 
-        if len(args) == 1:
-            candidate = SQLFunctionCall(
-                name="printf",
-                args=[SQLLiteral('T%02d'), hour],
+        hour, hour_guard = self._integer_component_value(hour_expr)
+
+        def _is_null(expr: SQLExpression) -> SQLExpression:
+            return SQLBinaryOp(operator="IS", left=expr, right=SQLNull())
+
+        def _is_not_null(expr: SQLExpression) -> SQLExpression:
+            return SQLBinaryOp(operator="IS NOT", left=expr, right=SQLNull())
+
+        def _required_component(
+            expr: SQLExpression,
+            value: SQLExpression,
+            guard: SQLExpression,
+            minimum: int,
+            maximum: int,
+        ) -> SQLExpression:
+            return self._chain_conditions(
+                "AND",
+                [
+                    guard,
+                    _is_not_null(expr),
+                    self._bounded_component(value, minimum, maximum),
+                ],
             )
-            return self._validated_time_constructor(candidate, "hour", hour, minute, second, millisecond)
-        if len(args) == 2:
-            candidate = SQLFunctionCall(
-                name="printf",
-                args=[SQLLiteral('T%02d:%02d'), hour, minute],
+
+        def _optional_component(
+            expr: SQLExpression,
+            minimum: int,
+            maximum: int,
+        ) -> tuple[SQLExpression, SQLExpression, SQLExpression, SQLExpression]:
+            value, guard = self._integer_component_value(expr)
+            present = _required_component(expr, value, guard, minimum, maximum)
+            absent = _is_null(expr)
+            return value, guard, present, absent
+
+        hour_present = _required_component(hour_expr, hour, hour_guard, 0, 23)
+        minute = SQLLiteral(value=0)
+        second = SQLLiteral(value=0)
+        millisecond = SQLLiteral(value=0)
+        minute_present = SQLLiteral(value=False)
+        second_present = SQLLiteral(value=False)
+        millisecond_present = SQLLiteral(value=False)
+        minute_absent = SQLLiteral(value=True)
+        second_absent = SQLLiteral(value=True)
+        millisecond_absent = SQLLiteral(value=True)
+
+        if minute_expr is not None:
+            minute, _minute_guard, minute_present, minute_absent = _optional_component(minute_expr, 0, 59)
+        if second_expr is not None:
+            second, _second_guard, second_present, second_absent = _optional_component(second_expr, 0, 59)
+        if millisecond_expr is not None:
+            millisecond, _millisecond_guard, millisecond_present, millisecond_absent = _optional_component(
+                millisecond_expr, 0, 999
             )
-            return self._validated_time_constructor(candidate, "minute", hour, minute, second, millisecond)
-        if len(args) == 3:
-            candidate = SQLFunctionCall(
-                name="printf",
-                args=[SQLLiteral('T%02d:%02d:%02d'), hour, minute, second],
-            )
-            return self._validated_time_constructor(candidate, "second", hour, minute, second, millisecond)
-        candidate = SQLFunctionCall(
-            name="printf",
-            args=[SQLLiteral('T%02d:%02d:%02d.%03d'), hour, minute, second, millisecond],
+
+        def _validated_candidate(
+            condition: SQLExpression,
+            component: str,
+            fmt: str,
+            fmt_args: List[SQLExpression],
+        ) -> tuple[SQLExpression, SQLExpression]:
+            candidate = SQLFunctionCall(name="printf", args=[SQLLiteral(fmt), *fmt_args])
+            return condition, self._validated_temporal_constructor(candidate, component)
+
+        hour_condition = self._chain_conditions(
+            "AND",
+            [hour_present, minute_absent, second_absent, millisecond_absent],
         )
-        return self._validated_time_constructor(candidate, "millisecond", hour, minute, second, millisecond)
+        when_clauses: list[tuple[SQLExpression, SQLExpression]] = [
+            _validated_candidate(hour_condition, "hour", "T%02d", [hour])
+        ]
+
+        if len(args) >= 2:
+            minute_condition = self._chain_conditions(
+                "AND",
+                [hour_present, minute_present, second_absent, millisecond_absent],
+            )
+            when_clauses.append(
+                _validated_candidate(minute_condition, "minute", "T%02d:%02d", [hour, minute])
+            )
+
+        if len(args) >= 3:
+            second_condition = self._chain_conditions(
+                "AND",
+                [hour_present, minute_present, second_present, millisecond_absent],
+            )
+            when_clauses.append(
+                _validated_candidate(second_condition, "second", "T%02d:%02d:%02d", [hour, minute, second])
+            )
+
+        if len(args) >= 4:
+            millisecond_condition = self._chain_conditions(
+                "AND",
+                [hour_present, minute_present, second_present, millisecond_present],
+            )
+            when_clauses.append(
+                _validated_candidate(
+                    millisecond_condition,
+                    "millisecond",
+                    "T%02d:%02d:%02d.%03d",
+                    [hour, minute, second, millisecond],
+                )
+            )
+
+        return SQLCase(
+            when_clauses=when_clauses,
+            else_clause=SQLNull(),
+        )
 
     def _translate_time_pre(self, func, translator=None) -> SQLExpression | None:
         """Disambiguate one-argument Time(hour) from `time from <temporal>` extraction."""
@@ -148,7 +294,7 @@ class DateComponentMixin:
         """Translate a DateTime constructor.
 
         CQL §22.5: DateTime(year, month?, day?, hour?, minute?, second?, millisecond?, timezoneOffset?)
-        All components are Integer.
+        Date/time components are Integer; timezoneOffset is Decimal hours.
 
         Emits VARCHAR ISO 8601 strings preserving precision based on the number
         of provided components.  When all args are integer literals, we can
@@ -194,13 +340,32 @@ class DateComponentMixin:
             if len(vals) >= 7 and not 0 <= vals[6] <= 999:
                 raise ValueError(f"Invalid DateTime millisecond {vals[6]}")
 
-        # Check if all provided args are integer literals — if so, emit a
-        # compile-time ISO 8601 string literal preserving precision.
+        def _literal_timezone_offset(arg: SQLExpression) -> tuple[bool, float | None]:
+            """Return (is_static, value) for literal DateTime timezone offsets."""
+            if isinstance(arg, SQLLiteral):
+                if isinstance(arg.value, bool) or not isinstance(arg.value, (int, float)):
+                    raise ValueError("DateTime timezoneOffset must be a Decimal value")
+                return True, float(arg.value)
+            if isinstance(arg, SQLUnaryOp) and arg.operator == '-':
+                inner = arg.operand
+                if isinstance(inner, SQLLiteral):
+                    if isinstance(inner.value, bool) or not isinstance(inner.value, (int, float)):
+                        raise ValueError("DateTime timezoneOffset must be a Decimal value")
+                    return True, -float(inner.value)
+            return False, None
+
+        timezone_is_static = True
+        if len(args) > 7:
+            timezone_is_static, _ = _literal_timezone_offset(args[7])
+
+        # Check if all provided date/time args are integer literals — if so,
+        # emit a compile-time ISO 8601 string literal preserving precision.
+        # A dynamic timezoneOffset still needs the runtime path.
         all_literal = all(
             isinstance(a, SQLLiteral) and isinstance(a.value, int) and not isinstance(a.value, bool)
             for a in args[:min(len(args), 7)]
         )
-        if all_literal and len(args) <= 8:
+        if all_literal and len(args) <= 8 and timezone_is_static:
             vals = [int(a.value) for a in args[:min(len(args), 7)]]
             _validate_literal_components(vals)
             n = len(vals)
@@ -222,115 +387,137 @@ class DateComponentMixin:
             # Handle timezone offset (8th arg) — may be SQLLiteral(+N) or
             # SQLUnaryOp('-', SQLLiteral(N)) for negative offsets.
             if len(args) > 7:
-                tz_val = None
-                tz_arg = args[7]
-                if isinstance(tz_arg, SQLLiteral) and isinstance(tz_arg.value, (int, float)):
-                    tz_val = float(tz_arg.value)
-                elif isinstance(tz_arg, SQLUnaryOp) and tz_arg.operator == '-':
-                    inner = tz_arg.operand
-                    if isinstance(inner, SQLLiteral) and isinstance(inner.value, (int, float)):
-                        tz_val = -float(inner.value)
-                if tz_val is not None:
-                    if tz_val < -14 or tz_val > 14:
-                        raise ValueError(f"Invalid DateTime timezone offset {tz_val}")
-                    sign = '+' if tz_val >= 0 else '-'
-                    abs_h = abs(tz_val)
-                    tz_h = int(abs_h)
-                    tz_m = round((abs_h - tz_h) * 60)
-                    iso += f"{sign}{tz_h:02d}:{tz_m:02d}"
+                _, tz_val = _literal_timezone_offset(args[7])
+                if tz_val is None:
+                    raise ValueError("DateTime timezoneOffset must be a Decimal value")
+                if not math.isfinite(tz_val) or tz_val < -14 or tz_val > 14:
+                    raise ValueError(f"Invalid DateTime timezone offset {tz_val}")
+                sign = '+' if tz_val >= 0 else '-'
+                total_minutes = int(round(abs(tz_val) * 60))
+                if total_minutes > 14 * 60:
+                    raise ValueError(f"Invalid DateTime timezone offset {tz_val}")
+                tz_h = total_minutes // 60
+                tz_m = total_minutes % 60
+                iso += f"{sign}{tz_h:02d}:{tz_m:02d}"
 
             return SQLLiteral(value=iso)
 
         # Non-literal args: fall back to runtime printf()
         if len(args) == 1:
-            year = args[0]
+            year, year_guard = self._integer_component_value(args[0])
             candidate = SQLFunctionCall(
                 name="printf",
                 args=[SQLLiteral('%04dT'), year],
             )
-            return self._validated_temporal_constructor(candidate, "year")
+            return self._validated_temporal_constructor(candidate, "year", year_guard)
 
         # Build runtime string using printf — use AST nodes (not SQLRaw with
         # .to_sql()) to avoid premature placeholder resolution (CQL §22.26).
-        year = args[0]
-        month = args[1] if len(args) > 1 else SQLLiteral(value=1)
-        day = args[2] if len(args) > 2 else SQLLiteral(value=1)
+        year, year_guard = self._integer_component_value(args[0])
+        month, month_guard = self._integer_component_value(args[1] if len(args) > 1 else SQLLiteral(value=1))
+        day, day_guard = self._integer_component_value(args[2] if len(args) > 2 else SQLLiteral(value=1))
 
         # Determine format based on number of args for correct precision
         if len(args) == 2:
+            component_guard = self._chain_conditions("AND", [year_guard, month_guard])
             candidate = SQLFunctionCall(
                 name="printf",
                 args=[SQLLiteral('%04d-%02dT'), year, month],
             )
-            return self._validated_temporal_constructor(candidate, "month")
+            return self._validated_temporal_constructor(candidate, "month", component_guard)
         if len(args) == 3:
+            component_guard = self._chain_conditions("AND", [year_guard, month_guard, day_guard])
             candidate = SQLFunctionCall(
                 name="printf",
                 args=[SQLLiteral('%04d-%02d-%02dT'), year, month, day],
             )
-            return self._validated_temporal_constructor(candidate, "day")
+            return self._validated_temporal_constructor(candidate, "day", component_guard)
 
-        hour = args[3] if len(args) > 3 else SQLLiteral(value=0)
-        minute = args[4] if len(args) > 4 else SQLLiteral(value=0)
-        second = args[5] if len(args) > 5 else SQLLiteral(value=0)
+        hour, hour_guard = self._integer_component_value(args[3] if len(args) > 3 else SQLLiteral(value=0))
+        minute, minute_guard = self._integer_component_value(args[4] if len(args) > 4 else SQLLiteral(value=0))
+        second, second_guard = self._integer_component_value(args[5] if len(args) > 5 else SQLLiteral(value=0))
 
         if len(args) <= 6:
             n = len(args)
             if n == 4:
+                component_guard = self._chain_conditions("AND", [year_guard, month_guard, day_guard, hour_guard])
                 candidate = SQLFunctionCall(
                     name="printf",
                     args=[SQLLiteral('%04d-%02d-%02dT%02d'), year, month, day, hour],
                 )
-                return self._validated_temporal_constructor(candidate, "hour")
+                return self._validated_temporal_constructor(candidate, "hour", component_guard)
             if n == 5:
+                component_guard = self._chain_conditions(
+                    "AND", [year_guard, month_guard, day_guard, hour_guard, minute_guard]
+                )
                 candidate = SQLFunctionCall(
                     name="printf",
                     args=[SQLLiteral('%04d-%02d-%02dT%02d:%02d'), year, month, day, hour, minute],
                 )
-                return self._validated_temporal_constructor(candidate, "minute")
+                return self._validated_temporal_constructor(candidate, "minute", component_guard)
+            component_guard = self._chain_conditions(
+                "AND", [year_guard, month_guard, day_guard, hour_guard, minute_guard, second_guard]
+            )
             candidate = SQLFunctionCall(
                 name="printf",
                 args=[SQLLiteral('%04d-%02d-%02dT%02d:%02d:%02d'), year, month, day, hour, minute, second],
             )
-            return self._validated_temporal_constructor(candidate, "second")
+            return self._validated_temporal_constructor(candidate, "second", component_guard)
 
         # 7+ args: milliseconds
-        millisecond = args[6]
+        millisecond, millisecond_guard = self._integer_component_value(args[6])
+        component_guard = self._chain_conditions(
+            "AND",
+            [year_guard, month_guard, day_guard, hour_guard, minute_guard, second_guard, millisecond_guard],
+        )
         base_call = SQLFunctionCall(
             name="printf",
             args=[SQLLiteral('%04d-%02d-%02dT%02d:%02d:%02d.%03d'), year, month, day, hour, minute, second, millisecond],
         )
 
         if len(args) > 7:
-            tz_offset = args[7]
+            tz_offset_double, tz_guard = self._decimal_component_value(args[7])
             abs_tz = SQLFunctionCall(
                 name="ABS",
-                args=[SQLCast(tz_offset, "DOUBLE")],
+                args=[tz_offset_double],
             )
-            tz_hour = SQLCast(
-                SQLFunctionCall(name="FLOOR", args=[abs_tz]),
-                "INTEGER",
-            )
-            tz_minute = SQLCast(
+            total_minutes = SQLCast(
                 SQLFunctionCall(
                     name="system.round",
                     args=[
                         SQLBinaryOp(
                             operator="*",
-                            left=SQLBinaryOp(
-                                operator="-",
-                                left=abs_tz,
-                                right=SQLFunctionCall(name="FLOOR", args=[abs_tz]),
-                            ),
+                            left=abs_tz,
                             right=SQLLiteral(value=60),
                         )
                     ],
                 ),
                 "INTEGER",
             )
+            tz_hour = SQLCast(
+                SQLFunctionCall(
+                    name="FLOOR",
+                    args=[
+                        SQLBinaryOp(
+                            operator="/",
+                            left=total_minutes,
+                            right=SQLLiteral(value=60),
+                        )
+                    ],
+                ),
+                "INTEGER",
+            )
+            tz_minute = SQLCast(
+                SQLBinaryOp(
+                    operator="%",
+                    left=total_minutes,
+                    right=SQLLiteral(value=60),
+                ),
+                "INTEGER",
+            )
             sign = SQLCase(
                 when_clauses=[(
-                    SQLBinaryOp(operator="<", left=SQLCast(tz_offset, "DOUBLE"), right=SQLLiteral(value=0)),
+                    SQLBinaryOp(operator="<", left=tz_offset_double, right=SQLLiteral(value=0)),
                     SQLLiteral(value="-"),
                 )],
                 else_clause=SQLLiteral(value="+"),
@@ -340,9 +527,24 @@ class DateComponentMixin:
                 args=[SQLLiteral('%s%02d:%02d'), sign, tz_hour, tz_minute],
             )
             candidate = SQLBinaryOp(operator="||", left=base_call, right=tz_str)
-            return self._validated_temporal_constructor(candidate, "millisecond")
+            range_check = SQLBinaryOp(
+                operator="AND",
+                left=self._chain_conditions("AND", [component_guard, tz_guard]),
+                right=SQLBinaryOp(
+                    operator="AND",
+                    left=SQLBinaryOp(operator="<=", left=abs_tz, right=SQLLiteral(value=14)),
+                    right=SQLBinaryOp(operator="<=", left=total_minutes, right=SQLLiteral(value=14 * 60)),
+                ),
+            )
+            return SQLCase(
+                when_clauses=[(
+                    range_check,
+                    self._validated_temporal_constructor(candidate, "millisecond"),
+                )],
+                else_clause=SQLNull(),
+            )
 
-        return self._validated_temporal_constructor(base_call, "millisecond")
+        return self._validated_temporal_constructor(base_call, "millisecond", component_guard)
 
     def _translate_date_constructor(self, args: List[SQLExpression]) -> SQLExpression:
         """Translate a Date constructor.
@@ -391,9 +593,9 @@ class DateComponentMixin:
                         f"The year {year.value} falls outside the accepted bounds of 0001-9999"
                     )
                 return SQLLiteral(value=f"{year.value:04d}")
-            # CQL §22.6: date from DateTime — extract date portion.
-            # When the parser emits FunctionRef(name='date', args=[datetime_expr]),
-            # treat 1-arg non-integer call as "date from X" extraction.
+            # CQL date from DateTime is represented by the parser as a one-arg
+            # date function. Keep that extraction path distinct from the
+            # multi-component Date constructor.
             if isinstance(year, SQLLiteral) and isinstance(year.value, str) and len(year.value) > 4:
                 normalized = year.value.replace(" ", "T")
                 if normalized.startswith("T"):
@@ -409,21 +611,23 @@ class DateComponentMixin:
                 args=[normalized],
             )
 
-        year = args[0]
-        month = args[1] if len(args) > 1 else SQLLiteral(value=1)
-        day = args[2] if len(args) > 2 else SQLLiteral(value=1)
+        year, year_guard = self._integer_component_value(args[0])
+        month, month_guard = self._integer_component_value(args[1] if len(args) > 1 else SQLLiteral(value=1))
+        day, day_guard = self._integer_component_value(args[2] if len(args) > 2 else SQLLiteral(value=1))
 
         if len(args) == 2:
+            component_guard = self._chain_conditions("AND", [year_guard, month_guard])
             candidate = SQLFunctionCall(
                 name="printf",
                 args=[SQLLiteral('%04d-%02d'), year, month],
             )
-            return self._validated_temporal_constructor(candidate, "month")
+            return self._validated_temporal_constructor(candidate, "month", component_guard)
+        component_guard = self._chain_conditions("AND", [year_guard, month_guard, day_guard])
         candidate = SQLFunctionCall(
             name="printf",
             args=[SQLLiteral('%04d-%02d-%02d'), year, month, day],
         )
-        return self._validated_temporal_constructor(candidate, "day")
+        return self._validated_temporal_constructor(candidate, "day", component_guard)
 
     def _translate_time_constructor(self, args: List[SQLExpression]) -> SQLExpression:
         """Translate a Time constructor."""
@@ -518,72 +722,13 @@ class DateComponentMixin:
 
         pos_info = component_positions.get(component_lower)
         if pos_info:
-            start, length, min_len = pos_info
-            # Normalize space→T and extract; return NULL if string too short
-            # (component not specified per CQL §22.6).
-            # Use SUBSTR (not Substring) to avoid conflict with CQL Substring macro.
-            # CQL Time values look like 'T23:20:15.555' — different positions than DateTime.
-            # Build AST nodes to avoid premature placeholder resolution.
-            replace_expr = SQLFunctionCall(
-                name="REPLACE",
-                args=[SQLCast(operand, "VARCHAR"), SQLLiteral(' '), SQLLiteral('T')],
+            return SQLFunctionCall(
+                name="dateComponent",
+                args=[
+                    SQLCast(operand, "VARCHAR"),
+                    SQLLiteral(component_lower),
+                ],
             )
-            len_expr = SQLFunctionCall(name="LENGTH", args=[replace_expr])
-
-            # Time-specific component positions
-            time_positions = {
-                'hour':        (2, 2, 3),    # THH
-                'minute':      (5, 2, 6),    # THH:MM
-                'second':      (8, 2, 9),    # THH:MM:SS
-                'millisecond': (11, 3, 13),  # THH:MM:SS.mmm
-            }
-
-            time_pos = time_positions.get(component_lower)
-            if time_pos:
-                t_start, t_length, t_min_len = time_pos
-                # If first char is 'T' → CQL Time value; use Time positions.
-                # DateTimes never start with 'T' (they start with a year digit).
-                first_char = SQLFunctionCall(name="SUBSTR", args=[replace_expr, SQLLiteral(1), SQLLiteral(1)])
-                is_time = SQLBinaryOp(operator="=", left=first_char, right=SQLLiteral('T'))
-                time_extract = SQLCast(
-                    SQLFunctionCall(name="SUBSTR", args=[replace_expr, SQLLiteral(t_start), SQLLiteral(t_length)]),
-                    "INTEGER",
-                )
-                time_branch = SQLCase(
-                    when_clauses=[(
-                        SQLBinaryOp(operator=">=", left=len_expr, right=SQLLiteral(t_min_len)),
-                        time_extract,
-                    )],
-                    else_clause=SQLNull(),
-                )
-                dt_extract = SQLCast(
-                    SQLFunctionCall(name="SUBSTR", args=[replace_expr, SQLLiteral(start), SQLLiteral(length)]),
-                    "INTEGER",
-                )
-                dt_branch = SQLCase(
-                    when_clauses=[(
-                        SQLBinaryOp(operator=">=", left=len_expr, right=SQLLiteral(min_len)),
-                        dt_extract,
-                    )],
-                    else_clause=SQLNull(),
-                )
-                return SQLCase(
-                    when_clauses=[(is_time, time_branch)],
-                    else_clause=dt_branch,
-                )
-            else:
-                # year/month/day — only applicable to DateTime/Date, not Time
-                dt_extract = SQLCast(
-                    SQLFunctionCall(name="SUBSTR", args=[replace_expr, SQLLiteral(start), SQLLiteral(length)]),
-                    "INTEGER",
-                )
-                return SQLCase(
-                    when_clauses=[(
-                        SQLBinaryOp(operator=">=", left=len_expr, right=SQLLiteral(min_len)),
-                        dt_extract,
-                    )],
-                    else_clause=SQLNull(),
-                )
 
         # Fallback for unknown components
         return SQLFunctionCall(name="Year", args=[operand])

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import duckdb
+import pytest
 
 from fhir4ds.cql.duckdb import register
 from fhir4ds.cql.duckdb.extension import _register_python_supplements
+from fhir4ds.cql.duckdb.macros import conversion as conversion_macros
 from fhir4ds.cql.parser import parse_expression
 from fhir4ds.cql.parser.ast_nodes import FunctionRef
 from fhir4ds.cql.translator import translate_cql
@@ -66,9 +68,13 @@ def test_cql_conversion_check_duckdb_surface_matches_cpp_registration() -> None:
         "SELECT ConvertsToQuantity('5 ''not-a-unit''')",
         "SELECT ConvertsToQuantity('5 mg')",
         "SELECT ConvertsToQuantity('{\"value\":\"abc\",\"unit\":\"mg\"}')",
+        "SELECT ConvertsToQuantity('{\"numerator\":{\"value\":10,\"unit\":\"mg\"},\"denominator\":{\"value\":2,\"unit\":\"mL\"}}')",
         f"SELECT ConvertsToRatio('{ratio}')",
         "SELECT ConvertsToRatio('1 ''not-a-unit'':2 ''mg''')",
         "SELECT ConvertsToString('abc')",
+        "SELECT ConvertsToString([1, 2])",
+        "SELECT ConvertsToString({'a': 1})",
+        "SELECT ConvertsToString(json_object('a', 1))",
         "SELECT ConvertsToTime('T10:30:00')",
         "SELECT CanConvertQuantity('1000 ''mg''', 'g')",
         "SELECT ConvertQuantity('1000 ''mg''', 'g')",
@@ -101,10 +107,27 @@ def test_cql_conversion_check_spec_boundaries_match_cpp_registration() -> None:
         ("SELECT ConvertsToDateTime(2024)", False),
         ("SELECT ConvertsToDate(TIMESTAMP '2024-01-15 10:30:00')", True),
         ("SELECT ConvertsToQuantity('.5 ''mg''')", False),
+        ("SELECT ConvertsToQuantity('1.123456789 ''mg''')", False),
+        ("SELECT ConvertsToQuantity('1000000000000000000000000000000 ''mg''')", False),
         ("SELECT ConvertsToQuantity('5 ''not-a-unit''')", False),
+        ("SELECT ConvertsToQuantity('{\"value\":1e100,\"unit\":\"mg\"}')", False),
         ("SELECT ConvertsToQuantity('{\"value\":5,\"unit\":\"not-a-unit\"}')", False),
+        ("SELECT ConvertsToQuantity('{\"numerator\":{\"value\":10,\"unit\":\"mg\"},\"denominator\":{\"value\":2,\"unit\":\"mL\"}}')", True),
+        ("SELECT ConvertsToString([1, 2])", False),
+        ("SELECT ConvertsToString({'a': 1})", False),
+        ("SELECT ConvertsToString(json_object('a', 1))", False),
+        ("SELECT ToQuantity('1.123456789 ''mg''')", None),
+        ("SELECT ToQuantity('1000000000000000000000000000000 ''mg''')", None),
+        ("SELECT ConvertQuantity('{\"value\":1e100,\"unit\":\"mg\"}', 'g')", None),
         ("SELECT ConvertsToRatio('.5 ''mg'':2 ''mg''')", False),
+        ("SELECT ConvertsToRatio('1.123456789 ''mg'':2 ''mg''')", False),
+        ("SELECT ConvertsToRatio('1000000000000000000000000000000 ''mg'':2 ''mg''')", False),
         ("SELECT ConvertsToRatio('1 ''not-a-unit'':2 ''mg''')", False),
+        ("SELECT ConvertsToRatio('{\"numerator\":{\"value\":1e100,\"unit\":\"mg\"},\"denominator\":{\"value\":2,\"unit\":\"mg\"}}')", False),
+        ("SELECT ToRatio('1.123456789 ''mg'':2 ''mg''')", None),
+        ("SELECT ToRatio('1000000000000000000000000000000 ''mg'':2 ''mg''')", None),
+        ("SELECT ToRatio('{\"numerator\":{\"value\":1e100,\"unit\":\"mg\"},\"denominator\":{\"value\":2,\"unit\":\"mg\"}}')", None),
+        ("SELECT parse_quantity('{\"value\":0.6733333333333333,\"unit\":\"mg/dL\"}') IS NOT NULL", True),
     ]
 
     py = _python_only_connection()
@@ -116,3 +139,55 @@ def test_cql_conversion_check_spec_boundaries_match_cpp_registration() -> None:
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_converts_to_string_rejects_structural_values() -> None:
+    cql = """library ConversionChecksStructuralString version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define ListStringable: ConvertsToString({1, 2})
+define TupleStringable: ConvertsToString(Tuple { a: 1 })
+define QuantityStringable: ConvertsToString(5 'mg')
+define QuantityFromString: ToQuantity('-0.1 ''mg''')
+define RatioValue: ToRatio('1.0 ''mg'':2.0 ''mg''')
+define QuantityAliasStringable: ConvertsToString(QuantityFromString)
+define RatioAliasStringable: ConvertsToString(RatioValue)
+define QuantityAliasConvertable: ConvertsToQuantity(QuantityFromString)
+define RatioAliasConvertable: ConvertsToRatio(RatioValue)
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "ListStringable": False,
+        "TupleStringable": False,
+        "QuantityStringable": True,
+        "QuantityAliasStringable": True,
+        "RatioAliasStringable": True,
+        "QuantityAliasConvertable": True,
+        "RatioAliasConvertable": True,
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == (expected_value,), name
+            assert cpp.execute(sql).fetchone() == (expected_value,), name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_conversion_private_helper_registration_does_not_swallow_unexpected_errors() -> None:
+    class BrokenConnection:
+        def create_function(self, name, fn, null_handling=None):
+            raise RuntimeError("synthetic registration failure")
+
+    class DuplicateConnection:
+        def create_function(self, name, fn, null_handling=None):
+            raise duckdb.CatalogException("Function already exists")
+
+    with pytest.raises(RuntimeError, match="synthetic registration failure"):
+        conversion_macros._create_private_function(BrokenConnection(), "__broken", lambda value: value)
+
+    conversion_macros._create_private_function(DuplicateConnection(), "__duplicate", lambda value: value)

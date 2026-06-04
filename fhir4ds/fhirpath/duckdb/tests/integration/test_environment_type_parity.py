@@ -466,6 +466,111 @@ def test_quantity_value_type_reflection_matches_cpp(monkeypatch) -> None:
         fallback.close()
 
 
+def test_json_decimal_precision_boundaries_match_cpp_and_fallback(monkeypatch) -> None:
+    """JSON-authored decimal scale feeds precision and boundary functions."""
+    resource = json.dumps(
+        {
+            "resourceType": "Observation",
+            "id": "o1",
+            "valueQuantity": {"value": 1.0},
+        }
+    )
+    expressions = {
+        "value.ofType(Quantity).value.precision()": (["1"], "1", "[1]", 1.0),
+        "value.ofType(Quantity).value.lowBoundary()": (
+            ["0.95000000"],
+            "0.95000000",
+            "[0.95000000]",
+            0.95,
+        ),
+        "value.ofType(Quantity).value.highBoundary()": (
+            ["1.05000000"],
+            "1.05000000",
+            "[1.05000000]",
+            1.05,
+        ),
+    }
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = duckdb.connect(config={"allow_unsigned_extensions": True})
+    assert register_fhirpath(fallback) is False
+    try:
+        for expression, expected in expressions.items():
+            query = (
+                "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?), "
+                "fhirpath_json(?::JSON, ?), fhirpath_number(?::JSON, ?)"
+            )
+            params = [
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+                resource,
+                expression,
+            ]
+            assert con.execute(query, params).fetchone() == expected, expression
+            assert fallback.execute(query, params).fetchone() == expected, expression
+    finally:
+        con.close()
+        fallback.close()
+
+
+def test_json_temporal_boundaries_and_root_where_match_cpp_and_fallback(monkeypatch) -> None:
+    """FHIR primitive metadata drives boundary functions and root-level where()."""
+    cases = [
+        (
+            {"resourceType": "Patient", "id": "p1", "birthDate": "1970-06"},
+            {
+                "birthDate.lowBoundary()": (["1970-06-01"], "1970-06-01"),
+                "birthDate.highBoundary()": (["1970-06-30"], "1970-06-30"),
+            },
+        ),
+        (
+            {"resourceType": "Observation", "id": "o1", "valueDateTime": "2010-10-10"},
+            {
+                "value.ofType(dateTime).lowBoundary()": (
+                    ["2010-10-10T00:00:00.000+14:00"],
+                    "2010-10-10T00:00:00.000+14:00",
+                ),
+                "value.ofType(dateTime).highBoundary()": (
+                    ["2010-10-10T23:59:59.999-12:00"],
+                    "2010-10-10T23:59:59.999-12:00",
+                ),
+            },
+        ),
+        (
+            {"resourceType": "Observation", "id": "o2", "valueTime": "12:34"},
+            {
+                "value.ofType(time).lowBoundary()": (["12:34:00.000"], "12:34:00.000"),
+                "value.ofType(time).highBoundary()": (["12:34:59.999"], "12:34:59.999"),
+            },
+        ),
+        (
+            {"resourceType": "Observation", "id": "o3", "valueInteger": 12},
+            {"where(value.ofType(integer) > 11).exists()": (["true"], "true")},
+        ),
+    ]
+
+    con = _connection()
+    monkeypatch.setattr(duckdb, "__version__", "0.0.0-forced-python-fallback")
+    fallback = duckdb.connect(config={"allow_unsigned_extensions": True})
+    assert register_fhirpath(fallback) is False
+    try:
+        for resource_dict, expressions in cases:
+            resource = json.dumps(resource_dict)
+            for expression, expected in expressions.items():
+                query = "SELECT fhirpath(?::JSON, ?), fhirpath_text(?::JSON, ?)"
+                params = [resource, expression, resource, expression]
+                assert con.execute(query, params).fetchone() == expected, expression
+                assert fallback.execute(query, params).fetchone() == expected, expression
+    finally:
+        con.close()
+        fallback.close()
+
+
 def test_type_reflection_rejects_arguments_in_cpp_and_fallback(monkeypatch) -> None:
     """FHIRPath N1 §10.2 reflection defines type() with no arguments."""
     resource = json.dumps({"resourceType": "Patient", "id": "p1"})

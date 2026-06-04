@@ -17,7 +17,7 @@ def registerMathMacros(con: "duckdb.DuckDBPyConnection") -> None:
 
     Registers native DuckDB SQL macros for CQL math functions:
     - Abs, Ceiling, Floor, Round, RoundTo, Sqrt, Exp, Ln, Log, Power
-    - Truncate, Sign, Mod, Div
+    - Truncate, Sign, Mod, Div, CQLMessage
 
     All functions have zero Python overhead.
 
@@ -29,12 +29,23 @@ def registerMathMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute("CREATE OR REPLACE MACRO Ceiling(x) AS TRY(system.ceiling(x))")
     con.execute("CREATE OR REPLACE MACRO Floor(x) AS TRY(system.floor(x))")
 
-    # Round - CQL §16.16: Round half up (toward positive infinity).
-    # DuckDB's built-in ROUND uses half-away-from-zero which gives wrong
-    # results for negative ties (-0.5 → -1 instead of 0).
-    # Use FLOOR(x + 0.5) for the 0-precision case.
-    con.execute("CREATE OR REPLACE MACRO Round(x) AS CASE WHEN x IS NULL THEN NULL ELSE CAST(FLOOR(CAST(x AS DOUBLE) + 0.5) AS DECIMAL(38, 8)) END")
-    con.execute("CREATE OR REPLACE MACRO RoundTo(x, prec) AS CASE WHEN x IS NULL THEN NULL ELSE CAST(FLOOR(CAST(x AS DOUBLE) * POWER(10, prec) + 0.5) / POWER(10, prec) AS DECIMAL(38, 8)) END")
+    # Round - CQL Appendix B: traditional rounding, with negative half values
+    # rounded away from zero. Null precision is defined as precision 0.
+    con.execute(
+        "CREATE OR REPLACE MACRO Round(x) AS "
+        "CASE WHEN x IS NULL THEN NULL ELSE CAST("
+        "CASE WHEN CAST(x AS DOUBLE) >= 0 THEN FLOOR(CAST(x AS DOUBLE) + 0.5) "
+        "ELSE CEIL(CAST(x AS DOUBLE) - 0.5) END AS DECIMAL(38, 8)) END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO RoundTo(x, prec) AS "
+        "CASE WHEN x IS NULL THEN NULL ELSE CAST(("
+        "CASE "
+        "WHEN CAST(x AS DOUBLE) * POWER(10, COALESCE(prec, 0)) >= 0 "
+        "THEN FLOOR(CAST(x AS DOUBLE) * POWER(10, COALESCE(prec, 0)) + 0.5) "
+        "ELSE CEIL(CAST(x AS DOUBLE) * POWER(10, COALESCE(prec, 0)) - 0.5) "
+        "END) / POWER(10, COALESCE(prec, 0)) AS DECIMAL(38, 8)) END"
+    )
 
     # Other math functions
     con.execute("CREATE OR REPLACE MACRO Sqrt(x) AS TRY(system.sqrt(x))")
@@ -54,13 +65,12 @@ def registerMathMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "WHEN isfinite(TRY(system.ln(CAST(x AS DOUBLE)))) THEN system.ln(x) "
         "ELSE NULL END"
     )
+    # CQL Log is the arbitrary-base two-argument operator. Natural log is Ln.
     con.execute(
-        "CREATE OR REPLACE MACRO Log(x) AS "
-        "CASE WHEN isfinite(TRY(system.log(CAST(x AS DOUBLE)))) "
-        "THEN system.log(x) ELSE NULL END"
-    )  # Base 10
-
-    # Arbitrary base logarithm
+        "CREATE OR REPLACE MACRO Log(x, base) AS "
+        "CASE WHEN isfinite(TRY(system.ln(CAST(x AS DOUBLE)) / system.ln(CAST(base AS DOUBLE)))) "
+        "THEN system.ln(x) / system.ln(base) ELSE NULL END"
+    )
     con.execute(
         "CREATE OR REPLACE MACRO LogBase(x, base) AS "
         "CASE WHEN isfinite(TRY(system.ln(CAST(x AS DOUBLE)) / system.ln(CAST(base AS DOUBLE)))) "
@@ -81,6 +91,19 @@ def registerMathMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # Modulo and integer division
     con.execute("CREATE MACRO IF NOT EXISTS Mod(x, y) AS x % y")
     con.execute("CREATE MACRO IF NOT EXISTS Div(x, y) AS system.trunc(x / NULLIF(y, 0))")
+
+    # CQL Appendix B Errors and Messaging: Message returns source unchanged,
+    # except true-condition Error severity raises a runtime error.
+    con.execute(
+        """
+        CREATE OR REPLACE MACRO CQLMessage(source, condition, code, severity, message) AS
+        CASE
+            WHEN COALESCE(condition, FALSE) AND lower(CAST(severity AS VARCHAR)) = 'error'
+            THEN error(COALESCE(CAST(code AS VARCHAR), '') || ': ' || COALESCE(CAST(message AS VARCHAR), ''))
+            ELSE source
+        END
+        """
+    )
 
 
 __all__ = ["registerMathMacros"]

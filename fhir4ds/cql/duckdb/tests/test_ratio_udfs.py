@@ -158,6 +158,13 @@ def test_ratio_value_missing_denominator():
     assert result is None
 
 
+def test_ratio_value_rejects_string_numeric_components():
+    """Ratio Quantity components require JSON-numeric Decimal values."""
+    ratio = '{"numerator": {"value": "5", "unit": "mg"}, "denominator": {"value": 1, "unit": "mL"}}'
+    assert ratioNumeratorValue(ratio) is None
+    assert ratioValue(ratio) is None
+
+
 # ========================================
 # ratioNumeratorUnit tests
 # ========================================
@@ -192,6 +199,12 @@ def test_numerator_unit_malformed_component():
     assert ratioNumeratorUnit(ratio) is None
 
 
+def test_numerator_unit_rejects_component_missing_value():
+    """Ratio unit helpers require a valid Quantity component."""
+    ratio = '{"numerator": {"unit": "mg"}, "denominator": {"value": 1, "unit": "mL"}}'
+    assert ratioNumeratorUnit(ratio) is None
+
+
 # ========================================
 # ratioDenominatorUnit tests
 # ========================================
@@ -223,6 +236,12 @@ def test_denominator_unit_missing():
 def test_denominator_unit_malformed_component():
     """Malformed denominator shapes return NULL instead of raising."""
     ratio = '{"numerator": {"value": 5}, "denominator": 5}'
+    assert ratioDenominatorUnit(ratio) is None
+
+
+def test_denominator_unit_rejects_component_missing_value():
+    """Ratio unit helpers require a valid Quantity component."""
+    ratio = '{"numerator": {"value": 5, "unit": "mg"}, "denominator": {"unit": "mL"}}'
     assert ratioDenominatorUnit(ratio) is None
 
 

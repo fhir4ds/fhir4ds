@@ -107,6 +107,74 @@ def _camel_to_snake_cached(name: str) -> str:
 
 class CoreMixin:
     """Mixin providing literal, identifier, and basic conversion translations."""
+    @staticmethod
+    def _bare_parameter_type_name(cql_type: Optional[str]) -> Optional[str]:
+        """Return the bare CQL type name for parameter metadata."""
+        if cql_type is None:
+            return None
+        text = str(cql_type)
+        if "name='" in text:
+            text = text.split("name='", 1)[1].split("'", 1)[0]
+        elif 'name="' in text:
+            text = text.split('name="', 1)[1].split('"', 1)[0]
+        if "." in text:
+            text = text.rsplit(".", 1)[-1]
+        return text
+
+    def _parameter_binding_expression(
+        self,
+        binding: Any,
+        cql_type: Optional[str],
+    ) -> SQLExpression:
+        """Lower a scalar parameter binding/default with declared CQL type."""
+        if isinstance(
+            binding,
+            (
+                BinaryExpression,
+                DateTimeLiteral,
+                FunctionRef,
+                Identifier,
+                ListExpression,
+                Literal,
+                Quantity,
+                TimeLiteral,
+                TupleExpression,
+                UnaryExpression,
+            ),
+        ):
+            return self.translate(binding, usage=ExprUsage.SCALAR)
+
+        if binding is None:
+            return SQLNull()
+
+        bare_type = (self._bare_parameter_type_name(cql_type) or "Any").lower()
+        literal = SQLLiteral(value=binding)
+        target_sql_type = {
+            "boolean": "BOOLEAN",
+            "integer": "INTEGER",
+            "long": "BIGINT",
+            "decimal": "DECIMAL(38, 8)",
+        }.get(bare_type)
+        if target_sql_type is not None:
+            return SQLCast(expression=literal, target_type=target_sql_type, try_cast=True)
+        if bare_type == "string":
+            return SQLLiteral(value=str(binding))
+        return literal
+
+    def _parameter_reference_expression(self, name: str, cql_type: Optional[str]) -> SQLExpression:
+        """Return a runtime parameter reference preserving declared primitive type."""
+        ref = SQLParameterRef(name=name)
+        bare_type = (self._bare_parameter_type_name(cql_type) or "Any").lower()
+        target_sql_type = {
+            "boolean": "BOOLEAN",
+            "integer": "INTEGER",
+            "long": "BIGINT",
+            "decimal": "DECIMAL(38, 8)",
+        }.get(bare_type)
+        if target_sql_type is not None:
+            return SQLCast(expression=ref, target_type=target_sql_type, try_cast=True)
+        return ref
+
     def _camel_to_snake(self, name: str) -> str:
         """Convert CamelCase to snake_case."""
         return _camel_to_snake_cached(name)
@@ -149,6 +217,21 @@ class CoreMixin:
         valueset_obj: Dict[str, Any] = {"id": identifier, "name": name}
         if version:
             valueset_obj["version"] = version
+        codesystems = []
+        for cs_name in self.context.valueset_codesystems.get(name, []):
+            lookup_name = cs_name.split(".")[-1]
+            cs_id = self.context.codesystems.get(cs_name)
+            if cs_id is None:
+                cs_id = self.context.codesystems.get(lookup_name, cs_name)
+            cs_obj: Dict[str, Any] = {"id": cs_id, "name": lookup_name}
+            cs_version = self.context.codesystem_versions.get(cs_name)
+            if cs_version is None:
+                cs_version = self.context.codesystem_versions.get(lookup_name)
+            if cs_version:
+                cs_obj["version"] = cs_version
+            codesystems.append(cs_obj)
+        if codesystems:
+            valueset_obj["codesystems"] = codesystems
         return SQLLiteral(value=json.dumps(valueset_obj, separators=(",", ":")))
 
     def _clinical_codesystem_literal(self, name: str, ref: str) -> SQLLiteral:
@@ -324,7 +407,7 @@ class CoreMixin:
 
         # Create a JSON representation of the quantity
         quantity_dict = {
-            "value": float(value) if not isinstance(value, float) else value,
+            "value": value,
             "unit": unit,
             "system": "http://unitsofmeasure.org",
         }
@@ -420,6 +503,9 @@ class CoreMixin:
             symbol = self.context.lookup_symbol(name)
             table_alias = getattr(symbol, "table_alias", None) if symbol else None
             if table_alias and usage == ExprUsage.SCALAR:
+                source_ast = getattr(self.context, "_alias_source_asts", {}).get(name)
+                if isinstance(source_ast, ListExpression):
+                    return SQLIdentifier(name=table_alias)
                 cte_name = getattr(symbol, "cte_name", None)
                 col = "resource"
                 if cte_name:
@@ -517,7 +603,9 @@ class CoreMixin:
         if symbol:
             if symbol.symbol_type == "parameter":
                 # Generic interval parameter binding lookup
-                binding = self.context.get_parameter_binding(name)
+                parameter_bindings = getattr(self.context, "_parameter_bindings", {})
+                has_binding = name in parameter_bindings
+                binding = parameter_bindings[name] if has_binding else None
                 if binding is not None and isinstance(binding, tuple) and len(binding) == 2:
                     b_start, b_end = binding
                     p_start = b_start or "{mp_start}"
@@ -547,7 +635,9 @@ class CoreMixin:
                             SQLLiteral(value=True),
                         ],
                     )
-                return SQLParameterRef(name=name)
+                if has_binding:
+                    return self._parameter_binding_expression(binding, symbol.cql_type)
+                return self._parameter_reference_expression(name, symbol.cql_type)
             elif symbol.symbol_type == "definition":
                 # Reference to a named expression - generate subquery reference to CTE
                 # The definition will be available as a CTE in the final SQL

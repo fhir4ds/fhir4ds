@@ -23,8 +23,8 @@ class TestGenerateForeachUnnest:
         sql = generate_foreach_unnest("name", "t.resource", "name_elem")
 
         assert "CROSS JOIN LATERAL" in sql
-        assert "unnest" in sql.lower()
-        assert "fhirpath" in sql
+        assert "UNNEST(range(len(arr)))" in sql
+        assert "fhirpath_json" in sql
         assert "name_elem" in sql
         assert "name_elem_table" in sql
 
@@ -56,8 +56,8 @@ class TestGenerateForeachornullUnnest:
         sql = generate_foreachornull_unnest("telecom", "t.resource", "telecom_elem")
 
         assert "LEFT JOIN LATERAL" in sql
-        assert "unnest" in sql.lower()
-        assert "fhirpath" in sql
+        assert "UNNEST(range(len(arr)))" in sql
+        assert "fhirpath_json" in sql
         assert "telecom_elem" in sql
         assert "ON true" in sql
 

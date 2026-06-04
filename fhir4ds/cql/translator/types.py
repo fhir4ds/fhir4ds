@@ -18,6 +18,7 @@ from .column_generation import (
     get_default_property_paths,
 )
 from .temporal_fields import TEMPORAL_BOUND_COLUMN_NAMES
+from .fhirpath_builder import escape_fhirpath_string_literal
 
 
 # SQL reserved words that must be quoted when used as identifiers/aliases
@@ -1402,7 +1403,9 @@ class SQLRetrieveCTE:
                 parts = self.valueset_url[len("urn:cql:code:"):].split("|", 1)
                 system_url = parts[0] if len(parts) > 0 else ""
                 code_val = parts[1] if len(parts) > 1 else ""
-                fhirpath_expr = f"{effective_code_property}.coding.where(system='{system_url}' and code='{code_val}').exists()"
+                escaped_system = escape_fhirpath_string_literal(system_url)
+                escaped_code = escape_fhirpath_string_literal(code_val)
+                fhirpath_expr = f"{effective_code_property}.coding.where(system='{escaped_system}' and code='{escaped_code}').exists()"
                 valueset_filter = SQLFunctionCall(
                     name="fhirpath_bool",
                     args=[

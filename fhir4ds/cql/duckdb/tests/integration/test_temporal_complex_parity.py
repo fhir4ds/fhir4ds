@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import duckdb
+import pytest
 
 from fhir4ds.cql.duckdb import register
 from fhir4ds.cql.duckdb.extension import _register_python_supplements
@@ -112,18 +113,29 @@ def test_cql_temporal_complex_negative_boundaries_match_spec_and_backend_parity(
         "SELECT ToDate('2024-02-30')": None,
         "SELECT ConvertsToDateTime('2024-01-01T25:00:00')": False,
         "SELECT ConvertsToDateTime('2024-01-01T10:00:00+99:99')": False,
+        "SELECT ConvertsToDateTime('2024-01-01T10:00:00+14:01')": False,
         "SELECT ToDateTime('2024-01-01T10:00:00+99:99')": None,
+        "SELECT ToDateTime('2024-01-01T10:00:00+14:01')": None,
         "SELECT ConvertsToTime('T25:00:00')": False,
+        "SELECT ConvertsToTime('T10:00:00+14:01')": False,
         "SELECT ToTime('T10:00:00Z')": "10:00:00",
+        "SELECT ToTime('T10:00:00+14:01')": None,
         "SELECT ConvertsToQuantity('5..5 ''cm''')": False,
         "SELECT ConvertsToQuantity('{\"value\":\"abc\",\"unit\":\"mg\"}')": False,
+        "SELECT ConvertsToQuantity('{\"value\":\"5\",\"unit\":\"mg\"}')": False,
         "SELECT ToQuantity('5..5 ''cm''')": None,
         "SELECT ToQuantity(true)": None,
+        "SELECT ToQuantity('{\"numerator\":{\"value\":\"10\",\"unit\":\"mg\"},\"denominator\":{\"value\":2,\"unit\":\"mL\"}}')": None,
         "SELECT ConvertsToRatio('1.0 ''mg'':2.0 ''mg''')": True,
         "SELECT ConvertsToRatio('{\"numerator\":{},\"denominator\":{}}')": False,
+        "SELECT ConvertsToRatio('{\"numerator\":{\"value\":\"1\",\"unit\":\"mg\"},\"denominator\":{\"value\":2,\"unit\":\"mg\"}}')": False,
         "SELECT ToRatio('{\"numerator\":{},\"denominator\":{}}')": None,
+        "SELECT ToRatio('{\"numerator\":{\"value\":\"1\",\"unit\":\"mg\"},\"denominator\":{\"value\":2,\"unit\":\"mg\"}}')": None,
         "SELECT ratioValue('{\"numerator\":{\"value\":\"abc\"},\"denominator\":{\"value\":2}}')": None,
+        "SELECT ratioValue('{\"numerator\":{\"value\":\"1\",\"unit\":\"mg\"},\"denominator\":{\"value\":2,\"unit\":\"mg\"}}')": None,
         "SELECT ratioDenominatorValue('{\"numerator\":{\"value\":1},\"denominator\":{\"value\":\"abc\"}}')": None,
+        "SELECT ratioNumeratorUnit('{\"numerator\":{\"unit\":\"mg\"},\"denominator\":{\"value\":1,\"unit\":\"mL\"}}')": None,
+        "SELECT ratioDenominatorUnit('{\"numerator\":{\"value\":1,\"unit\":\"mg\"},\"denominator\":{\"unit\":\"mL\"}}')": None,
     }
 
     py = _python_only_connection()
@@ -164,8 +176,12 @@ def test_translated_temporal_conversions_use_spec_aware_duckdb_surface() -> None
         "ToDate('2024-02-30')": None,
         "ToDateTime('2014')": "2014",
         "ToDateTime('2024-02-30')": None,
+        "ToDateTime('2024-01-01T00:00:00+14:01')": None,
+        "ToTime('T00:00:00+14:01')": None,
         "convert '2014-01' to Date": "2014-01",
         "convert '2014' to DateTime": "2014",
+        "convert '{\"value\":\"5\",\"unit\":\"mg\"}' to Quantity": None,
+        "convert '{\"numerator\":{\"value\":\"1\",\"unit\":\"mg\"},\"denominator\":{\"value\":2,\"unit\":\"mg\"}}' to Ratio": None,
     }
 
     py = _python_only_connection()
@@ -180,6 +196,63 @@ def test_translated_temporal_conversions_use_spec_aware_duckdb_surface() -> None
     finally:
         py.close()
         cpp.close()
+
+
+def test_datetime_constructor_timezone_offset_rounds_and_rejects_non_decimal_literals() -> None:
+    cases = {
+        "DateTime(2024, 1, 1, 0, 0, 0, 0, 13.5)": "2024-01-01T00:00:00.000+13:30",
+        "DateTime(2024, 1, 1, 0, 0, 0, 0, 13.999)": "2024-01-01T00:00:00.000+14:00",
+        "DateTime(2024, 1, 1, 0, 0, 0, 0, -13.999)": "2024-01-01T00:00:00.000-14:00",
+        "DateTime(2024, 1, 1, 0, 0, 0, 0, 14.0)": "2024-01-01T00:00:00.000+14:00",
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression, expected in cases.items():
+            sql = _translated_definition_sql(expression)
+            assert py.execute(sql).fetchone() == (expected,), expression
+            assert cpp.execute(sql).fetchone() == (expected,), expression
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_temporal_constructors_reject_non_integer_expression_components() -> None:
+    invalid_static_expressions = [
+        "Date(2024, 1 = 1, 1)",
+        "DateTime(2024, 1 = 1, 1)",
+        "Time(1 = 1, 0, 0)",
+        "Time('1' + '0', 0, 0)",
+        "DateTime(2024, 1, 1, 0, 0, 0, 0, 1 = 1)",
+        "DateTime(2024, 1, 1, 0, 0, 0, 0, '1' + '0')",
+    ]
+    for expression in invalid_static_expressions:
+        with pytest.raises(ValueError):
+            _translated_definition_sql(expression)
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for expression in [
+            "Time(Coalesce(null as String, '10'), 0, 0)",
+            "DateTime(2024, 1, 1, 0, 0, 0, 0, Coalesce(null as String, '10'))",
+        ]:
+            sql = _translated_definition_sql(expression)
+            assert py.execute(sql).fetchone() == (None,)
+            assert cpp.execute(sql).fetchone() == (None,)
+    finally:
+        py.close()
+        cpp.close()
+
+    for expression in [
+        "DateTime(2024, 1, 1, 0, 0, 0, 0, true)",
+        "DateTime(2024, 1, 1, 0, 0, 0, 0, '1')",
+        "DateTime(2024, 1, 1, 0, 0, 0, 0, 14.001)",
+        "DateTime(2024, 1, 1, 0, 0, 0, 0, -14.001)",
+    ]:
+        with pytest.raises(ValueError):
+            _translated_definition_sql(expression)
 
     py = _python_only_connection()
     cpp = _cpp_connection()

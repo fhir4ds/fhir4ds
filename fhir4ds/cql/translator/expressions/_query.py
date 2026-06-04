@@ -394,6 +394,49 @@ class QueryMixin:
     }
     _VOCABULARY_SUBTYPES = {"ValueSet", "CodeSystem"}
 
+    @staticmethod
+    def _quantity_literal_preserving_sql(qty: Quantity) -> SQLLiteral:
+        """Return raw Quantity JSON with authored integer/decimal spelling."""
+        import json as _json
+
+        result = SQLLiteral(
+            value=_json.dumps(
+                {
+                    "value": qty.value,
+                    "unit": qty.unit,
+                    "system": "http://unitsofmeasure.org",
+                }
+            )
+        )
+        result.result_type = "Quantity"
+        return result
+
+    def _preserve_quantity_literals_in_array(
+        self,
+        source_expr: SQLExpression,
+        source_ast: Any,
+    ) -> SQLExpression:
+        """Keep raw Quantity literals when a literal list becomes a query source.
+
+        The normal Quantity literal path canonicalizes through parse_quantity().
+        Native C++ parse_quantity serializes integer JSON numbers as ``1.0``,
+        which is fine for most Quantity arithmetic but loses the authored
+        precision needed by predecessor/successor through query aliases.
+        """
+        if not isinstance(source_expr, SQLArray) or not isinstance(source_ast, ListExpression):
+            return source_expr
+        if len(source_expr.elements) != len(source_ast.elements):
+            return source_expr
+        changed = False
+        elements = []
+        for sql_element, ast_element in zip(source_expr.elements, source_ast.elements):
+            if isinstance(ast_element, Quantity):
+                elements.append(self._quantity_literal_preserving_sql(ast_element))
+                changed = True
+            else:
+                elements.append(sql_element)
+        return SQLArray(elements=elements) if changed else source_expr
+
     def _static_clinical_type(self, node: Any) -> Optional[str]:
         """Return a statically known CQL clinical type for terminology values."""
         from ...parser.ast_nodes import InstanceExpression as _InstExpr
@@ -401,6 +444,42 @@ class QueryMixin:
 
         if isinstance(node, CodeSelector):
             return "Code"
+
+        if isinstance(node, BinaryExpression):
+            operator = node.operator.lower() if isinstance(node.operator, str) else node.operator
+            if operator == "as":
+                target = node.right
+                target_name = None
+                if isinstance(target, NamedTypeSpecifier):
+                    target_name = target.name
+                elif isinstance(target, Identifier):
+                    target_name = target.name
+                if target_name:
+                    bare_target = self._bare_cql_type_name(target_name)
+                    source_type = self._static_clinical_type(node.left)
+                    if source_type is None:
+                        return None
+                    if bare_target == "Any":
+                        return source_type
+                    target_type = self._CLINICAL_CQL_TYPES.get((bare_target or "").lower())
+                    if target_type and self._clinical_type_matches(source_type, target_type):
+                        return source_type
+                    return None
+            if operator == "convert":
+                target = node.right
+                target_name = None
+                if isinstance(target, NamedTypeSpecifier):
+                    target_name = target.name
+                elif isinstance(target, Identifier):
+                    target_name = target.name
+                if target_name:
+                    bare_target = self._bare_cql_type_name(target_name)
+                    source_type = self._static_clinical_type(node.left)
+                    if bare_target == "Any":
+                        return source_type
+                    target_type = self._CLINICAL_CQL_TYPES.get((bare_target or "").lower())
+                    if target_type is not None:
+                        return target_type
 
         if isinstance(node, UnaryExpression) and node.operator == "singleton from":
             return self._static_clinical_type(node.operand)
@@ -421,6 +500,20 @@ class QueryMixin:
             meta = self.context.definition_meta.get(node.name)
             if meta and meta.cql_type:
                 bare = self._bare_cql_type_name(meta.cql_type)
+                clinical_type = self._CLINICAL_CQL_TYPES.get((bare or "").lower())
+                if clinical_type is not None:
+                    source = self._definition_source_ast(node.name, node)
+                    if source is not None:
+                        source_type = self._static_clinical_type(source)
+                        if (
+                            source_type in self._VOCABULARY_SUBTYPES
+                            and clinical_type == "Vocabulary"
+                        ):
+                            return source_type
+                    return clinical_type
+            symbol = self.context.lookup_symbol(node.name)
+            if symbol and getattr(symbol, "cql_type", None):
+                bare = self._bare_cql_type_name(getattr(symbol, "cql_type", None))
                 clinical_type = self._CLINICAL_CQL_TYPES.get((bare or "").lower())
                 if clinical_type is not None:
                     return clinical_type
@@ -623,6 +716,13 @@ class QueryMixin:
 
     def _static_structural_type_name(self, node: Any) -> Optional[str]:
         """Infer exact CQL structural type when it is known before SQL execution."""
+        if isinstance(node, UnaryExpression):
+            operator = node.operator.lower() if isinstance(node.operator, str) else node.operator
+            if operator == "singleton from":
+                operand_type = self._static_structural_type_name(node.operand)
+                if operand_type and operand_type.startswith("List<") and operand_type.endswith(">"):
+                    return operand_type[5:-1]
+                return operand_type
         if isinstance(node, DateTimeLiteral):
             if node.value.startswith("T"):
                 return "Time"
@@ -700,7 +800,73 @@ class QueryMixin:
                 "today": "Date",
                 "now": "DateTime",
                 "timeofday": "Time",
+                "abs": "Decimal",
+                "ceiling": "Integer",
+                "floor": "Integer",
+                "exp": "Decimal",
+                "log": "Decimal",
+                "ln": "Decimal",
             }.get(node.name.lower())
+        if isinstance(node, Query):
+            sources = node.source if isinstance(node.source, list) else [node.source]
+            if node.return_clause and getattr(node.return_clause, "expression", None) is not None:
+                returned = node.return_clause.expression
+                if isinstance(returned, Identifier):
+                    for source in sources:
+                        if isinstance(source, QuerySource) and source.alias == returned.name:
+                            return self._static_structural_type_name(source.expression)
+                return self._static_structural_type_name(returned)
+            if len(sources) == 1 and isinstance(sources[0], QuerySource):
+                source_type = self._static_structural_type_name(sources[0].expression)
+                if source_type and source_type.startswith("List<") and source_type.endswith(">"):
+                    return source_type[5:-1]
+                return source_type
+        if isinstance(node, BinaryExpression):
+            operator = node.operator.lower() if isinstance(node.operator, str) else node.operator
+            if operator == "as":
+                target = node.right
+                if isinstance(target, NamedTypeSpecifier):
+                    bare_target = target.name.split(".")[-1]
+                    source_type = self._static_structural_type_name(node.left)
+                    if bare_target == "Any":
+                        return source_type
+                    if (
+                        bare_target == "Vocabulary"
+                        and source_type in self._VOCABULARY_SUBTYPES
+                    ):
+                        return source_type
+                    return target.name
+                if isinstance(target, Identifier):
+                    bare_target = target.name.split(".")[-1]
+                    source_type = self._static_structural_type_name(node.left)
+                    if bare_target == "Any":
+                        return source_type
+                    if (
+                        bare_target == "Vocabulary"
+                        and source_type in self._VOCABULARY_SUBTYPES
+                    ):
+                        return source_type
+                    return target.name
+                if isinstance(target, (ListTypeSpecifier, IntervalTypeSpecifier, ChoiceTypeSpecifier, TupleTypeSpecifier)):
+                    target_name = self._type_specifier_name(target)
+                    source_type = self._static_structural_type_name(node.left)
+                    if source_type and self._structural_type_conforms(source_type, target_name):
+                        return source_type
+                    return target_name
+            if operator == "convert":
+                target = node.right
+                if isinstance(target, NamedTypeSpecifier):
+                    bare_target = self._bare_cql_type_name(target.name)
+                    if bare_target == "Any":
+                        return self._static_structural_type_name(node.left)
+                    return target.name
+                if isinstance(target, Identifier):
+                    bare_target = self._bare_cql_type_name(target.name)
+                    if bare_target == "Any":
+                        return self._static_structural_type_name(node.left)
+                    return target.name
+                if isinstance(target, (ListTypeSpecifier, IntervalTypeSpecifier, ChoiceTypeSpecifier, TupleTypeSpecifier)):
+                    return self._type_specifier_name(target)
         if isinstance(node, Identifier):
             if node.name in self.context.valuesets:
                 return "ValueSet"
@@ -712,10 +878,65 @@ class QueryMixin:
             meta = self.context.definition_meta.get(node.name)
             if meta and meta.cql_type and meta.cql_type != "Any":
                 return meta.cql_type
-            ast_defs = getattr(self.context, "_definition_cql_asts", {})
-            ast_def = ast_defs.get(node.name)
+            ast_def = self._definition_source_ast(node.name, node)
             if ast_def is not None and ast_def is not node:
                 return self._static_structural_type_name(ast_def)
+        if isinstance(node, Property) and isinstance(node.source, Identifier):
+            source_ast = self.context._alias_source_asts.get(node.source.name)
+            field_type = self._static_tuple_field_type(source_ast, node.path)
+            if field_type:
+                return field_type
+        return None
+
+    def _static_tuple_field_type(
+        self,
+        source_ast: Any,
+        field_name: str,
+        _depth: int = 0,
+    ) -> Optional[str]:
+        """Infer a tuple field type from a static query/list source."""
+        if source_ast is None or _depth > 6:
+            return None
+        if isinstance(source_ast, ListExpression):
+            field_types = [
+                self._static_tuple_field_type(element, field_name, _depth + 1)
+                for element in source_ast.elements
+            ]
+            known = [field_type for field_type in field_types if field_type]
+            if not known:
+                return None
+            first = known[0]
+            if all(field_type == first for field_type in known):
+                return first
+            return None
+        if isinstance(source_ast, TupleExpression):
+            for element in source_ast.elements:
+                if element.name != field_name:
+                    continue
+                static_type = self._static_structural_type_name(element.type)
+                if static_type:
+                    return static_type
+                inferred_type = self._infer_cql_type(element.type)
+                return inferred_type if inferred_type != "Any" else None
+        if isinstance(source_ast, Query):
+            ret_expr = (
+                source_ast.return_clause.expression
+                if source_ast.return_clause is not None
+                else None
+            )
+            if isinstance(ret_expr, TupleExpression):
+                return self._static_tuple_field_type(ret_expr, field_name, _depth + 1)
+            if isinstance(ret_expr, Identifier):
+                sources = source_ast.source if isinstance(source_ast.source, list) else [source_ast.source]
+                for source in sources:
+                    if isinstance(source, QuerySource) and source.alias == ret_expr.name:
+                        return self._static_tuple_field_type(source.expression, field_name, _depth + 1)
+        if isinstance(source_ast, Identifier):
+            meta = self.context.definition_meta.get(source_ast.name)
+            if meta and meta.quantity_fields and field_name in meta.quantity_fields:
+                return "Quantity"
+            field_type = self._definition_tuple_field_type(source_ast.name, field_name, set())
+            return field_type if field_type and field_type != "Any" else None
         return None
 
     def _is_static_non_null_structural_value(self, node: Any) -> bool:
@@ -739,11 +960,20 @@ class QueryMixin:
 
     def _definition_ast_for_identifier(self, node: Any) -> Optional[Any]:
         if isinstance(node, Identifier):
-            ast_defs = getattr(self.context, "_definition_cql_asts", {})
-            ast_def = ast_defs.get(node.name)
+            ast_def = self._definition_source_ast(node.name, node)
             if ast_def is not None and ast_def is not node:
                 return ast_def
         return None
+
+    def _definition_source_ast(self, name: str, current: Any = None) -> Optional[Any]:
+        """Return the original CQL AST for a definition when available."""
+        ast_defs = getattr(self.context, "_definition_cql_asts", {})
+        ast_def = ast_defs.get(name)
+        if ast_def is None:
+            ast_def = self.context.expression_definitions.get(name)
+        if ast_def is current:
+            return None
+        return ast_def
 
     def _static_conversion_source_node(self, node: Any) -> Optional[Any]:
         """Return the definition body for conversion operands that are safe to inline.
@@ -780,6 +1010,18 @@ class QueryMixin:
             )
         if isinstance(node, FunctionRef):
             static_functions = {
+                "canconvertquantity",
+                "convertquantity",
+                "convertstoboolean",
+                "convertstodate",
+                "convertstodatetime",
+                "convertstodecimal",
+                "convertstointeger",
+                "convertstolong",
+                "convertstoquantity",
+                "convertstoratio",
+                "convertstostring",
+                "convertstotime",
                 "date",
                 "datetime",
                 "time",
@@ -2579,6 +2821,10 @@ class QueryMixin:
         if bare_type in _PRIMITIVE_TYPES and isinstance(expr.left, Identifier):
             meta = self.context.definition_meta.get(expr.left.name)
             meta_type = self._bare_cql_type_name(getattr(meta, "cql_type", None)) if meta else None
+            if meta_type is None:
+                symbol = self.context.lookup_symbol(expr.left.name)
+                if symbol and getattr(symbol, "symbol_type", None) == "parameter":
+                    meta_type = self._bare_cql_type_name(getattr(symbol, "cql_type", None))
             if meta_type in _PRIMITIVE_TYPES:
                 left = self.translate(expr.left, usage=ExprUsage.SCALAR)
                 if meta_type.lower() == bare_type.lower():
@@ -3162,7 +3408,11 @@ class QueryMixin:
                 if _bb_done is not None:
                     return _bb_done
 
-                source_expr = self.translate(node.source[0], usage=ExprUsage.SCALAR)
+                source_expr = self.translate(_src0_expr, usage=ExprUsage.SCALAR)
+                source_expr = self._preserve_quantity_literals_in_array(
+                    source_expr,
+                    _src0_expr,
+                )
                 alias = _src0_alias
                 # QA-014/QA-017: List literals used as query sources need
                 # unnesting AND proper alias binding so WHERE/RETURN can
@@ -3177,6 +3427,7 @@ class QueryMixin:
                         from_clause=SQLAlias(expr=SQLSubquery(query=_inner), alias="_list"),
                     )
                     self.context.add_alias(alias, table_alias=alias)
+                    self.context._alias_source_asts[alias] = _src0_expr
                 elif isinstance(source_expr, SQLArray):
                     source_expr = SQLFunctionCall(name="unnest", args=[source_expr])
             else:
@@ -3226,6 +3477,10 @@ class QueryMixin:
                     self.context.add_alias(alias, table_alias=alias, cte_name=cte_name)
                 else:
                     source_expr = self.translate(_pi_expr, usage=ExprUsage.SCALAR)
+                    source_expr = self._preserve_quantity_literals_in_array(
+                        source_expr,
+                        _pi_expr,
+                    )
                     # List literals / array expressions must be unnested for FROM clause
                     if isinstance(source_expr, SQLArray) or (
                         isinstance(source_expr, SQLFunctionCall)
@@ -3234,6 +3489,7 @@ class QueryMixin:
                         source_expr = SQLFunctionCall(name="unnest", args=[source_expr])
                     if alias:
                         self.context.add_alias(alias, table_alias=alias)
+                        self.context._alias_source_asts[alias] = _pi_expr
 
                 # --- 2. Build a single EXISTS with all secondary sources ---
                 # Only the LAST source carries WHERE/RETURN/LET; intermediate
@@ -3256,6 +3512,10 @@ class QueryMixin:
                         _sec_cte_name = _sec_expr_node.name
                     else:
                         _sec_from_sql = self.translate(_sec_expr_node, usage=ExprUsage.LIST)
+                        _sec_from_sql = self._preserve_quantity_literals_in_array(
+                            _sec_from_sql,
+                            _sec_expr_node,
+                        )
                         _sec_cte_name = None
                         # List literals / array expressions must be unnested for FROM clause
                         if isinstance(_sec_from_sql, SQLArray) or (
@@ -3586,7 +3846,11 @@ class QueryMixin:
                         node, _pp_base, source_alias,
                     )
                 else:
-                    source_expr = self.translate(node.source, usage=ExprUsage.SCALAR)
+                    source_expr = self.translate(source_expr_node, usage=ExprUsage.SCALAR)
+                    source_expr = self._preserve_quantity_literals_in_array(
+                        source_expr,
+                        source_expr_node,
+                    )
                     alias = source_alias
             else:
                 # Check for backbone array property on a definition
@@ -3616,8 +3880,12 @@ class QueryMixin:
                     if _method_done is not None:
                         return _method_done
 
-                    source_expr = self.translate(node.source, usage=ExprUsage.SCALAR)
-                    alias = getattr(node.source, 'alias', None)
+                    source_expr = self.translate(source_expr_node, usage=ExprUsage.SCALAR)
+                    source_expr = self._preserve_quantity_literals_in_array(
+                        source_expr,
+                        source_expr_node,
+                    )
+                    alias = source_alias
                     # QA-017: List literals as query source need unnesting AND
                     # proper alias binding when the query has WHERE/RETURN that
                     # reference the iteration variable.  Only wrap when the
@@ -3630,6 +3898,7 @@ class QueryMixin:
                             from_clause=SQLAlias(expr=SQLSubquery(query=_inner), alias="_list"),
                         )
                         self.context.add_alias(alias, table_alias=alias)
+                        self.context._alias_source_asts[alias] = source_expr_node
 
         # Register alias in context for property access
         # Store the source SQL expression so property access can use it
@@ -3651,7 +3920,7 @@ class QueryMixin:
             _already_registered = False
             if not _alias_cte_name:
                 _sym = self.context.lookup_symbol(alias)
-                if _sym and getattr(_sym, 'table_alias', None) == alias and not getattr(_sym, 'ast_expr', None):
+                if _sym and getattr(_sym, 'table_alias', None) == alias:
                     _already_registered = True
 
             # Track the FHIR resource type for this alias (for fluent overload resolution)

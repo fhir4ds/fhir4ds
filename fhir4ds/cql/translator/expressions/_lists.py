@@ -82,13 +82,16 @@ from ...translator.types import (
 from ...translator.expressions._utils import (
     BINARY_OPERATOR_MAP,
     UNARY_OPERATOR_MAP,
+    _coerce_query_rows_to_list,
     _is_list_returning_sql,
     _list_has_order_by,
     _contains_sql_subquery,
     _ensure_scalar_body,
+    escape_fhirpath_string_literal,
     _get_qicore_extension_fhirpath,
     _resolve_library_code_constant,
 )
+from ...errors import TranslationError
 
 if TYPE_CHECKING:
     from ...translator.context import SQLTranslationContext
@@ -558,7 +561,8 @@ class ListsMixin:
         if method == "ext" and len(args) == 1:
             url_val = getattr(args[0], 'value', None)
             if url_val and isinstance(url_val, str):
-                fhirpath_expr = f"extension.where(url='{url_val}')"
+                escaped_url = escape_fhirpath_string_literal(url_val)
+                fhirpath_expr = f"extension.where(url='{escaped_url}')"
                 return SQLFunctionCall(
                     name="fhirpath_json",
                     args=[source, SQLLiteral(value=fhirpath_expr)],
@@ -834,12 +838,20 @@ class ListsMixin:
 
     def _translate_skip_expression(self, node: SkipExpression, boolean_context: bool = False) -> SQLExpression:
         """Skip first N elements using the CQL Skip macro for null/negative count semantics."""
+        count_type = self._infer_static_cql_type_for_logical_operand(node.count)
+        normalized_count_type = (count_type or "Any").split(".")[-1]
+        if normalized_count_type not in {"Any", "Integer"}:
+            raise TranslationError(f"CQL Skip count argument must be Integer; got {count_type}")
         source = self.translate(node.source, boolean_context=False)
         count = self.translate(node.count, boolean_context=False)
         return SQLFunctionCall(name="Skip", args=[source, count])
 
     def _translate_take_expression(self, node: TakeExpression, boolean_context: bool = False) -> SQLExpression:
         """Take first N elements using the CQL Take macro for null/non-positive counts."""
+        count_type = self._infer_static_cql_type_for_logical_operand(node.count)
+        normalized_count_type = (count_type or "Any").split(".")[-1]
+        if normalized_count_type not in {"Any", "Integer"}:
+            raise TranslationError(f"CQL Take count argument must be Integer; got {count_type}")
         source = self.translate(node.source, boolean_context=False)
         count = self.translate(node.count, boolean_context=False)
         return SQLFunctionCall(name="Take", args=[source, count])
@@ -2007,9 +2019,10 @@ class ListsMixin:
         """Apply 'singleton from' semantics to source.
 
         CQL singleton from semantics: returns the element if there is exactly one,
-        returns NULL if there are 0 or more than 1 elements.
+        returns NULL if there are 0 elements, and raises if there is more than
+        one element.
 
-        For subqueries over retrieve CTEs (SELECT * FROM "CTE") the LIST_EXTRACT
+        For row subqueries over retrieve CTEs (SELECT * FROM "CTE") the LIST_EXTRACT
         pattern fails because the subquery returns multiple columns. In that case,
         rewrite to a cardinality-checking subquery:
             CASE WHEN (SELECT COUNT(*) FROM ...) = 1
@@ -2018,6 +2031,37 @@ class ListsMixin:
 
         For array/list expressions, use a similar pattern with array_length.
         """
+        if _is_list_returning_sql(source):
+            length_expr = SQLFunctionCall(name="array_length", args=[source, SQLLiteral(value=1)])
+            return SQLCase(
+                when_clauses=[
+                    (
+                        SQLUnaryOp(operator="IS NULL", operand=source, prefix=False),
+                        SQLNull(),
+                    ),
+                    (
+                        SQLBinaryOp(
+                            operator="=",
+                            left=length_expr,
+                            right=SQLLiteral(value=0),
+                        ),
+                        SQLNull(),
+                    ),
+                    (
+                        SQLBinaryOp(
+                            operator="=",
+                            left=length_expr,
+                            right=SQLLiteral(value=1),
+                        ),
+                        SQLFunctionCall(name="LIST_EXTRACT", args=[source, SQLLiteral(value=1)]),
+                    )
+                ],
+                else_clause=SQLFunctionCall(
+                    name="error",
+                    args=[SQLLiteral("SingletonFrom: Expected a list with at most one element")],
+                ),
+            )
+
         # Determine the inner SELECT (works for both SQLSelect and SQLSubquery)
         if isinstance(source, SQLSubquery) and isinstance(source.query, SQLSelect):
             inner = source.query
@@ -2133,7 +2177,11 @@ class ListsMixin:
         if self._is_component_filter_query(node.source):
             return self._translate_component_filter_singleton(node.source)
 
-        source = self.translate(node.source, boolean_context=False)
+        source_node = self._definition_ast_for_identifier(node.source) or node.source
+        if isinstance(source_node, Query) and self._is_list_typed_ast(source_node):
+            source = _coerce_query_rows_to_list(self.translate(source_node, usage=ExprUsage.LIST))
+        else:
+            source = self.translate(node.source, boolean_context=False)
         return self._apply_singleton_from(source)
 
     def _translate_component_filter_singleton(self, query: Query) -> SQLExpression:

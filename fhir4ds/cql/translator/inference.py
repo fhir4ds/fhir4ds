@@ -432,7 +432,8 @@ class InferenceMixin:
             # Constructor functions that produce scalar values
             if func_name in ('datetime', 'date', 'time', 'now', 'today', 'timeofdayvalue',
                             'tointeger', 'todecimal', 'tostring', 'toboolean',
-                            'todate', 'todatetime', 'totime', 'toquantity',
+                            'tolong', 'todate', 'todatetime', 'totime',
+                            'toquantity', 'toratio', 'toconcept',
                             'abs', 'ceiling', 'floor', 'truncate', 'round',
                             'length', 'indexof', 'substring', 'lower', 'upper',
                             'combine', 'concatenate'):
@@ -1180,6 +1181,36 @@ class InferenceMixin:
                     if source_type.startswith("List<"):
                         return "List<Any>"
                 return "List<Any>"
+            elif func_name in {
+                "toboolean",
+                "tointeger",
+                "tolong",
+                "todecimal",
+                "tostring",
+                "todate",
+                "todatetime",
+                "totime",
+                "toquantity",
+                "toratio",
+                "toconcept",
+            }:
+                return {
+                    "toboolean": "Boolean",
+                    "tointeger": "Integer",
+                    "tolong": "Long",
+                    "todecimal": "Decimal",
+                    "tostring": "String",
+                    "todate": "Date",
+                    "todatetime": "DateTime",
+                    "totime": "Time",
+                    "toquantity": "Quantity",
+                    "toratio": "Ratio",
+                    "toconcept": "Concept",
+                }[func_name]
+            else:
+                func_info = self.context.get_function(ast_node.name)
+                if func_info and func_info.expression is not None:
+                    return self._infer_cql_type(func_info.expression)
 
         # Binary comparisons and temporal operators return Boolean
         if isinstance(ast_node, BinaryExpression):
@@ -1243,8 +1274,36 @@ class InferenceMixin:
                 if isinstance(ts, NamedTypeSpecifier):
                     type_name = getattr(ts, 'name', None)
                     if type_name:
+                        bare_type = type_name.split(".")[-1]
+                        source_type = self._infer_cql_type(ast_node.left)
+                        if bare_type == "Any":
+                            return source_type
+                        if bare_type == "Vocabulary" and source_type in {"ValueSet", "CodeSystem"}:
+                            return source_type
                         return type_name
                 elif isinstance(ts, Identifier):
+                    bare_type = ts.name.split(".")[-1]
+                    source_type = self._infer_cql_type(ast_node.left)
+                    if bare_type == "Any":
+                        return source_type
+                    if bare_type == "Vocabulary" and source_type in {"ValueSet", "CodeSystem"}:
+                        return source_type
+                    return ts.name
+            if op == 'convert':
+                from ..parser.ast_nodes import NamedTypeSpecifier
+                ts = ast_node.right
+                source_type = self._infer_cql_type(ast_node.left)
+                if isinstance(ts, NamedTypeSpecifier):
+                    type_name = getattr(ts, 'name', None)
+                    if type_name:
+                        bare_type = type_name.split(".")[-1]
+                        if bare_type == "Any":
+                            return source_type
+                        return type_name
+                elif isinstance(ts, Identifier):
+                    bare_type = ts.name.split(".")[-1]
+                    if bare_type == "Any":
+                        return source_type
                     return ts.name
 
         # Unary NOT returns Boolean; "singleton from" extracts element type
@@ -1297,6 +1356,9 @@ class InferenceMixin:
             meta = self._context.definition_meta.get(ast_node.name)
             if meta:
                 return meta.cql_type
+            param_info = self._context.parameters.get(ast_node.name)
+            if param_info and getattr(param_info, "cql_type", None):
+                return str(param_info.cql_type)
             # Forward ref: check CQL AST for type hints.
             # The cql_ast represents the EXPRESSION of the definition, so infer
             # its type directly (it already represents the full definition type,

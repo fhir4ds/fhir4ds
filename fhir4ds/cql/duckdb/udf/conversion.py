@@ -99,7 +99,7 @@ def _valid_timezone(tz: str | None) -> bool:
         return False
     hour = int(match.group("hour"))
     minute = int(match.group("minute"))
-    return 0 <= hour <= 14 and 0 <= minute <= 59
+    return 0 <= hour <= 14 and 0 <= minute <= 59 and (hour < 14 or minute == 0)
 
 
 def _is_valid_cql_date(text: str) -> bool:
@@ -189,7 +189,11 @@ def ConvertsToDecimal(value) -> bool | None:
 
 
 def ConvertsToString(value) -> bool | None:
-    return None if value is None else True
+    if value is None:
+        return None
+    if isinstance(value, (dict, list, tuple)):
+        return False
+    return True
 
 
 def ConvertsToDate(value) -> bool | None:
@@ -234,7 +238,9 @@ def ConvertsToQuantity(value) -> bool | None:
     if text.strip().startswith("{"):
         try:
             data = json.loads(text)
-            return is_valid_quantity_object(data)
+            if is_valid_quantity_object(data):
+                return True
+            return toQuantity(text) is not None
         except (TypeError, ValueError):
             return False
     try:
@@ -345,7 +351,16 @@ def ConvertQuantity(value, target_unit: str | None) -> str | None:
     if value is None or target_unit is None:
         return None
     text = str(value)
-    quantity_json = text if text.strip().startswith("{") else toQuantity(text)
+    if text.strip().startswith("{"):
+        try:
+            data = json.loads(text)
+        except (TypeError, ValueError):
+            return None
+        if not is_valid_quantity_object(data):
+            return None
+        quantity_json = text
+    else:
+        quantity_json = toQuantity(text)
     if quantity_json is None:
         return None
     return quantityConvert(quantity_json, target_unit)
@@ -391,7 +406,6 @@ def registerConversionCheckUdfs(con: "duckdb.DuckDBPyConnection") -> None:
         ("ConvertsToLong", ConvertsToLong),
         ("ConvertsToQuantity", ConvertsToQuantity),
         ("ConvertsToRatio", ConvertsToRatio),
-        ("ConvertsToString", ConvertsToString),
         ("ConvertsToTime", ConvertsToTime),
         ("CanConvertQuantity", CanConvertQuantity),
         ("ToLong", ToLong),

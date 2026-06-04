@@ -18,10 +18,12 @@ from ...translator.types import (
     SQLIdentifier,
     SQLInterval,
     SQLNamedArg,
+    SQLQualifiedIdentifier,
     SQLSelect,
     SQLSubquery,
     SQLUnaryOp,
 )
+from ...translator.fhirpath_builder import escape_fhirpath_string_literal
 
 try:
     from ...translator.types import SQLList
@@ -46,6 +48,8 @@ def _is_list_returning_sql(node) -> bool:
     if isinstance(node, SQLCast) and node.target_type.endswith("[]"):
         return True
     if isinstance(node, SQLFunctionCall):
+        if node.name.upper() == "COALESCE":
+            return any(_is_list_returning_sql(arg) for arg in node.args)
         if node.name in ("list_transform", "list_filter", "list", "list_sort",
                          "list_distinct", "list_concat", "list_intersect", "flatten",
                          "str_split", "STR_SPLIT", "string_split",
@@ -66,6 +70,53 @@ def _is_list_returning_sql(node) -> bool:
             return _is_list_returning_sql(col.expr)
         return _is_list_returning_sql(col)
     return False
+
+
+def _coerce_query_rows_to_list(node):
+    """Convert a row-producing single-column query into a scalar DuckDB list."""
+    inner_select = None
+    if isinstance(node, SQLSubquery) and isinstance(node.query, SQLSelect):
+        inner_select = node.query
+    elif isinstance(node, SQLSelect):
+        inner_select = node
+
+    if inner_select is None or not inner_select.columns:
+        return node
+
+    first_col = inner_select.columns[0]
+    if isinstance(first_col, tuple):
+        first_expr = first_col[0]
+    elif isinstance(first_col, SQLAlias):
+        first_expr = first_col.expr
+    else:
+        first_expr = first_col
+
+    value_alias = "__cql_list_value"
+    projected = SQLSelect(
+        columns=[SQLAlias(expr=first_expr, alias=value_alias)],
+        from_clause=inner_select.from_clause,
+        joins=inner_select.joins,
+        where=inner_select.where,
+        group_by=inner_select.group_by,
+        having=inner_select.having,
+        order_by=inner_select.order_by,
+        limit=inner_select.limit,
+        distinct=inner_select.distinct,
+    )
+    value_ref = SQLQualifiedIdentifier(parts=["_cql_list_source", value_alias])
+    return SQLSubquery(query=SQLSelect(
+        columns=[SQLFunctionCall(
+            name="COALESCE",
+            args=[
+                SQLFunctionCall(name="list", args=[value_ref]),
+                SQLArray([]),
+            ],
+        )],
+        from_clause=SQLAlias(
+            expr=SQLSubquery(query=projected),
+            alias="_cql_list_source",
+        ),
+    ))
 
 
 def _list_has_order_by(node) -> bool:
@@ -265,8 +316,10 @@ def _get_qicore_extension_fhirpath(registry, resource_type: Optional[str], prop_
     if resource_type:
         ext = registry.get_extension_info(resource_type, prop_name)
         if ext is not None:
-            return f"extension.where(url='{ext.url}').value{ext.value_type}"
+            escaped_url = escape_fhirpath_string_literal(ext.url)
+            return f"extension.where(url='{escaped_url}').value{ext.value_type}"
     for key, entry in registry._property_extensions.items():
         if key.split(".", 1)[-1] == prop_name:
-            return f"extension.where(url='{entry['url']}').value{entry['value_type']}"
+            escaped_url = escape_fhirpath_string_literal(entry["url"])
+            return f"extension.where(url='{escaped_url}').value{entry['value_type']}"
     return None

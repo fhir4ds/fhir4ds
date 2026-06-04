@@ -116,11 +116,15 @@ Optional<std::string> math_round(const std::string &x, const std::string &precis
 	prec = static_cast<int>(std::strtol(precision.c_str(), &end, 10));
 	if (end == precision.c_str()) prec = 0;
 
-	// CQL half-up rounding moves ties toward positive infinity:
-	// Round(-2.5) is -2, matching the official Round(-0.5)=0 case.
+	// CQL traditional rounding moves negative half ties away from zero:
+	// the reference explicitly gives Round(-0.5) = -1.
 	double multiplier = std::pow(10.0, prec);
 	double shifted = val * multiplier;
-	shifted = std::floor(shifted + 0.5);
+	if (shifted >= 0.0) {
+		shifted = std::floor(shifted + 0.5);
+	} else {
+		shifted = std::ceil(shifted - 0.5);
+	}
 	double result = shifted / multiplier;
 
 	if (prec <= 0) {

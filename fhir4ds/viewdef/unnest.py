@@ -2,7 +2,8 @@
 UNNEST generation for forEach/forEachOrNull in SQL-on-FHIR v2.
 
 Generates CROSS JOIN LATERAL (forEach) or LEFT JOIN LATERAL (forEachOrNull)
-with UNNEST to flatten FHIRPath array expressions into SQL rows.
+using FHIRPath list order while extracting each element from the corresponding
+FHIRPath JSON array so primitive iterator focus keeps valid JSON shape.
 """
 
 import logging
@@ -41,15 +42,18 @@ def generate_foreach_unnest(
 
     Example:
         >>> generate_foreach_unnest('name', 't.resource', 'name_elem')
-        "CROSS JOIN LATERAL (\\n    SELECT unnest(arr) as name_elem, unnest(range(len(arr))) as name_elem__row_index\\n    FROM (VALUES (fhirpath(t.resource, 'name'))) v(arr)\\n) as name_elem_table"
+        "CROSS JOIN LATERAL (\\n    SELECT json_extract(jarr, '$[' || CAST(idx AS VARCHAR) || ']') as name_elem, idx as name_elem__row_index\\n    FROM (VALUES (fhirpath(t.resource, 'name'), fhirpath_json(t.resource, 'name'))) v(arr, jarr)\\n    CROSS JOIN UNNEST(range(len(arr))) AS u(idx)\\n    ORDER BY idx\\n) as name_elem_table"
     """
     table_alias = f"{alias}_table"
     path_arg = _fhirpath_path_argument(path, path_sql)
     return (
         f"CROSS JOIN LATERAL (\n"
-        f"    SELECT unnest(arr) as {alias}, "
-        f"unnest(range(len(arr))) as {alias}__row_index\n"
-        f"    FROM (VALUES (fhirpath({resource_var}, {path_arg}))) v(arr)\n"
+        f"    SELECT json_extract(jarr, '$[' || CAST(idx AS VARCHAR) || ']') as {alias}, "
+        f"idx as {alias}__row_index\n"
+        f"    FROM (VALUES (fhirpath({resource_var}, {path_arg}), "
+        f"fhirpath_json({resource_var}, {path_arg}))) v(arr, jarr)\n"
+        f"    CROSS JOIN UNNEST(range(len(arr))) AS u(idx)\n"
+        f"    ORDER BY idx\n"
         f") as {table_alias}"
     )
 
@@ -103,15 +107,18 @@ def generate_foreachornull_unnest(
 
     Example:
         >>> generate_foreachornull_unnest('telecom', 't.resource', 'telecom_elem')
-        "LEFT JOIN LATERAL (\\n    SELECT unnest(arr) as telecom_elem, unnest(range(len(arr))) as telecom_elem__row_index\\n    FROM (VALUES (fhirpath(t.resource, 'telecom'))) v(arr)\\n) as telecom_elem_table ON true"
+        "LEFT JOIN LATERAL (\\n    SELECT json_extract(jarr, '$[' || CAST(idx AS VARCHAR) || ']') as telecom_elem, idx as telecom_elem__row_index\\n    FROM (VALUES (fhirpath(t.resource, 'telecom'), fhirpath_json(t.resource, 'telecom'))) v(arr, jarr)\\n    CROSS JOIN UNNEST(range(len(arr))) AS u(idx)\\n    ORDER BY idx\\n) as telecom_elem_table ON true"
     """
     table_alias = f"{alias}_table"
     path_arg = _fhirpath_path_argument(path, path_sql)
     return (
         f"LEFT JOIN LATERAL (\n"
-        f"    SELECT unnest(arr) as {alias}, "
-        f"unnest(range(len(arr))) as {alias}__row_index\n"
-        f"    FROM (VALUES (fhirpath({resource_var}, {path_arg}))) v(arr)\n"
+        f"    SELECT json_extract(jarr, '$[' || CAST(idx AS VARCHAR) || ']') as {alias}, "
+        f"idx as {alias}__row_index\n"
+        f"    FROM (VALUES (fhirpath({resource_var}, {path_arg}), "
+        f"fhirpath_json({resource_var}, {path_arg}))) v(arr, jarr)\n"
+        f"    CROSS JOIN UNNEST(range(len(arr))) AS u(idx)\n"
+        f"    ORDER BY idx\n"
         f") as {table_alias} ON true"
     )
 
