@@ -1055,7 +1055,7 @@ class InferenceMixin:
             FirstExpression, LastExpression, ConditionalExpression,
             DurationBetween, DifferenceBetween, Interval, CodeSelector,
             InstanceExpression, ListExpression, Quantity, DateTimeLiteral,
-            TimeLiteral, DistinctExpression,
+            TimeLiteral, DistinctExpression, TupleExpression,
         )
 
         if ast_node is None:
@@ -1067,7 +1067,15 @@ class InferenceMixin:
         if isinstance(ast_node, InstanceExpression):
             type_name = getattr(ast_node, "type", "")
             bare = type_name.split(".")[-1] if "." in type_name else type_name
-            if bare in {"Code", "Concept", "ValueSet", "CodeSystem", "Vocabulary"}:
+            if bare in {
+                "Code",
+                "Concept",
+                "ValueSet",
+                "CodeSystem",
+                "Vocabulary",
+                "Quantity",
+                "Ratio",
+            }:
                 return bare
 
         if isinstance(ast_node, Quantity):
@@ -1123,6 +1131,13 @@ class InferenceMixin:
             if all(element_type == first_type for element_type in element_types):
                 return f"List<{first_type}>"
             return "List<Any>"
+
+        if isinstance(ast_node, TupleExpression):
+            fields = []
+            for element in ast_node.elements:
+                field_type = self._infer_cql_type(element.type)
+                fields.append(f"{element.name}: {field_type}")
+            return "Tuple{" + ", ".join(fields) + "}"
 
         # Interval expressions
         if isinstance(ast_node, Interval):

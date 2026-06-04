@@ -25,6 +25,7 @@ Reference: docs/PLAN-CQL-TO-SQL-TRANSLATOR.md
 
 from __future__ import annotations
 
+import copy
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
@@ -286,6 +287,14 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
     def context(self) -> SQLTranslationContext:
         """Get the current translation context."""
         return self._context
+
+    def get_definition_meta(self, name: str):
+        """Return a defensive copy of metadata for a translated definition.
+
+        The CQL/FHIR server facade needs semantic result metadata after
+        translation, but should not mutate the translator's live context.
+        """
+        return copy.deepcopy(self._context.definition_meta.get(name))
 
     @property
     def fhir_schema(self):

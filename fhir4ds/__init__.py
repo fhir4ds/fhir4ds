@@ -28,6 +28,11 @@ from .core import register, register_fhirpath, register_cql
 from .measure import evaluate_measure
 from .connection import create_connection
 from .cql.loader import FHIRDataLoader
+from .cql.fhir_server import (
+    CQLServerConfig,
+    create_http_server as create_cql_http_server,
+    handle_cql_operation,
+)
 
 # Zero-ETL source adapters
 from .sources.base import SourceAdapter, SchemaValidationError
@@ -135,6 +140,10 @@ __all__ = [
     "register_cql",
     # CQL measure evaluation
     "evaluate_measure",
+    # FHIR $cql facade
+    "CQLServerConfig",
+    "create_cql_http_server",
+    "handle_cql_operation",
     # FHIR data loading
     "FHIRDataLoader",
     # SQL-on-FHIR v2

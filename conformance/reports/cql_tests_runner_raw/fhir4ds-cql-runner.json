@@ -1,0 +1,24 @@
+{
+  "FhirServer": {
+    "BaseUrl": "http://127.0.0.1:51709/fhir",
+    "CqlOperation": "$cql"
+  },
+  "Build": {
+    "CqlFileVersion": "1.0.000",
+    "CqlOutputPath": "./cql",
+    "CqlVersion": "1.5",
+    "testsRunDescription": "FHIR4DS local $cql facade test run",
+    "cqlTranslator": "FHIR4DS",
+    "cqlTranslatorVersion": "0.0.7",
+    "cqlEngine": "FHIR4DS",
+    "cqlEngineVersion": "0.0.7"
+  },
+  "Debug": {
+    "QuickTest": false
+  },
+  "Tests": {
+    "ResultsPath": "/mnt/d/fhir4ds/conformance/reports/cql_tests_runner_raw/results",
+    "SkipList": [],
+    "OnlyList": []
+  }
+}

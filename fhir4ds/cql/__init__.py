@@ -653,6 +653,7 @@ from .translator import (
     translate_library,
     translate_library_to_sql,
 )
+from .fhir_server import CQLServerConfig, create_http_server, handle_cql_operation
 
 __all__ = [
     "__version__",
@@ -665,6 +666,10 @@ __all__ = [
     "translate_cql",
     "translate_library",
     "translate_library_to_sql",
+    # FHIR $cql facade
+    "CQLServerConfig",
+    "create_http_server",
+    "handle_cql_operation",
     # High-level evaluation API
     "evaluate_measure",
     "evaluate_measure_legacy",

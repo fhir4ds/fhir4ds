@@ -11,6 +11,7 @@
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
+    "test:e2e": "npm run build && playwright test",
     "dev:local": "BASE_URL=/ docusaurus start",
     "dev:local:wsl": "BASE_URL=/ WATCHPACK_POLLING=true docusaurus start",
     "write-translations": "docusaurus write-translations",
