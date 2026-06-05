@@ -1026,18 +1026,29 @@ def intervalProperlyContains(interval: str | None, point: str | None) -> bool | 
         return None
 
     low, high = iv["low"], iv["high"]
+    point_for_compare = point if _is_temporal_string(point) else pt
 
     # Official CQL conformance treats interval-point "properly includes" as
     # strict containment: boundary points are not properly contained.
     low_ok = True
     if low is not None:
-        cmp = _compare_interval_values(low, pt)
+        low_for_compare = _interval_bound(iv, "low", "low_raw")
+        cmp = (
+            _precision_aware_compare(low_for_compare, point_for_compare)
+            if _is_temporal_string(low_for_compare) and _is_temporal_string(point_for_compare)
+            else _compare_interval_values(low, pt)
+        )
         if cmp is None:
             return None
         low_ok = cmp < 0
     high_ok = True
     if high is not None:
-        cmp = _compare_interval_values(pt, high)
+        high_for_compare = _interval_bound(iv, "high", "high_raw")
+        cmp = (
+            _precision_aware_compare(point_for_compare, high_for_compare)
+            if _is_temporal_string(point_for_compare) and _is_temporal_string(high_for_compare)
+            else _compare_interval_values(pt, high)
+        )
         if cmp is None:
             return None
         high_ok = cmp < 0
@@ -1578,6 +1589,9 @@ def intervalMeets(interval1: str | None, interval2: str | None) -> bool | None:
             if s == t:
                 return True
 
+    if end1 is None or start2 is None or end2 is None or start1 is None:
+        return None
+
     return False
 
 
@@ -1586,6 +1600,8 @@ def _is_temporal_string(s) -> bool:
     if not isinstance(s, str):
         return False
     s = s.strip()
+    if _is_time_like_string(s):
+        return True
     # ISO 8601 date/datetime patterns: YYYY or YYYY-MM etc.
     return len(s) >= 4 and s[0:4].isdigit() and (len(s) == 4 or s[4] == '-' or s[4] == 'T')
 
@@ -2003,6 +2019,21 @@ def intervalOverlapsAfter(interval1: str | None, interval2: str | None) -> bool 
     return cmp > 0
 
 
+def _interval_definitely_after(iv1: dict, iv2: dict) -> bool:
+    """Return True when iv1 starts after iv2 ends with known bounds."""
+    start1 = _effective_start(iv1)
+    end2 = _effective_end(iv2)
+    if start1 is None or end2 is None:
+        return False
+    start1_raw = _authored_closed_temporal_raw(iv1, "low_raw", "low_closed", "low_was_open")
+    end2_raw = _authored_closed_temporal_raw(iv2, "high_raw", "high_closed", "high_was_open")
+    cmp = _precision_aware_compare(
+        start1_raw if start1_raw else start1,
+        end2_raw if end2_raw else end2,
+    )
+    return cmp is not None and cmp > 0
+
+
 def intervalMeetsBefore(interval1: str | None, interval2: str | None) -> bool | None:
     """Check if interval1 meets interval2 from before (successor(end1) == start2).
 
@@ -2016,6 +2047,8 @@ def intervalMeetsBefore(interval1: str | None, interval2: str | None) -> bool | 
     end1 = _effective_end(iv1)
     start2 = _effective_start(iv2)
     if end1 is None or start2 is None:
+        if _interval_definitely_after(iv1, iv2):
+            return False
         return None
     succ = _successor_for_bound(end1, iv1.get("high_raw"))
     if succ is None:

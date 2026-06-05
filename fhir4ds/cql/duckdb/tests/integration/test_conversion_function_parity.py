@@ -224,9 +224,9 @@ define MultiCodeConcept: convert { Code { code: 'x', system: 's' }, Code { code:
         "IntegerConvertFromStringAlias": (5,),
         "BooleanFromStringAlias": (True,),
         "StringFromDateAlias": ("2024-01-01",),
-        "StringFromTimeAlias": ("T10:30:00",),
-        "QuantityStringFromAlias": ("5.0 'mg'",),
-        "QuantityConvertFromAlias": ("5.0 'mg'",),
+        "StringFromTimeAlias": ("10:30:00",),
+        "QuantityStringFromAlias": ("5 'mg'",),
+        "QuantityConvertFromAlias": ("5 'mg'",),
         "RatioStringFromAlias": ("10.0 'mg':2.0 'mL'",),
         "RatioConvertFromAlias": ("10.0 'mg':2.0 'mL'",),
     }
@@ -289,10 +289,10 @@ define QuantityAliasIsQuantity: QuantityAlias is Quantity
             _install_patient_fixture(con)
         expected = (
             "p1",
-            "5.0 'mg'",
-            "5.0 'mg'",
-            "5.0 'mg'",
-            "5.0 'mg'",
+            "5 'mg'",
+            "5 'mg'",
+            "5 'mg'",
+            "5 'mg'",
             True,
         )
         assert py.execute(sql).fetchone() == expected

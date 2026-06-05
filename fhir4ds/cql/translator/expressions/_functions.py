@@ -2446,8 +2446,10 @@ class FunctionsMixin:
 
         first_arg = self.translate(func.arguments[0], usage=ExprUsage.SCALAR)
 
-        from ...parser.ast_nodes import Interval as CQLInterval, ListExpression
+        from ...parser.ast_nodes import Interval as CQLInterval, ListExpression, Literal
         ast_arg = func.arguments[0]
+        if isinstance(ast_arg, Literal) and ast_arg.value is None:
+            return SQLNull()
         is_single_interval = isinstance(ast_arg, CQLInterval)
 
         if is_single_interval:

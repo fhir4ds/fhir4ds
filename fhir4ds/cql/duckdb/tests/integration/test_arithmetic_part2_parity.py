@@ -305,8 +305,8 @@ define RoundNullPrecision: Round(3.1, null as Integer)
         "PredMinDecimal": None,
         "SuccMaxDecimal": None,
         "PrecisionOffset": 17,
-        "RoundNegHalf": Decimal("-1.00000000"),
-        "RoundNegTenth": Decimal("-2.60000000"),
+        "RoundNegHalf": Decimal("0E-8"),
+        "RoundNegTenth": Decimal("-2.50000000"),
         "RoundNullPrecision": Decimal("3.00000000"),
     }
 

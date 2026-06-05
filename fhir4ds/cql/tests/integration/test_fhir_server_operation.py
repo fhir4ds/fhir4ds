@@ -81,6 +81,37 @@ def test_handle_cql_operation_reconciles_quantity_aggregate_metadata():
     }
 
 
+def test_handle_cql_operation_preserves_long_result_metadata():
+    cases = {
+        "1L + 2L": "3L",
+        "maximum Long": "9223372036854775807L",
+        "Product({5L, 4L, 5L})": "100L",
+    }
+
+    for expression, expected in cases.items():
+        status, body = handle_cql_operation(
+            _body(expression),
+            CQLServerConfig(use_cpp_extensions=False),
+        )
+
+        assert status == 200
+        param = body["parameter"][0]
+        assert param["valueString"] == expected
+        assert param["extension"][0]["valueString"] == "System.Long"
+
+
+def test_handle_cql_operation_serializes_code_only_concept():
+    status, body = handle_cql_operation(
+        _body("ToConcept(Code { code: '8480-6' })"),
+        CQLServerConfig(use_cpp_extensions=False),
+    )
+
+    assert status == 200
+    assert body["parameter"][0]["valueCodeableConcept"] == {
+        "coding": [{"code": "8480-6"}]
+    }
+
+
 def test_http_server_accepts_fhir_base_cql_path():
     server = create_http_server(CQLServerConfig(host="127.0.0.1", port=0, use_cpp_extensions=False))
     thread = threading.Thread(target=server.serve_forever, daemon=True)

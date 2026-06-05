@@ -41,6 +41,15 @@ def registerConversionMacros(con: "duckdb.DuckDBPyConnection") -> None:
         CASE
             WHEN x IS NULL THEN NULL
             WHEN {structural_type_guard} THEN NULL
+            WHEN typeof(x) = 'VARCHAR'
+                AND regexp_full_match(
+                    CAST(x AS VARCHAR),
+                    '^T[0-9]{{2}}(:[0-9]{{2}}(:[0-9]{{2}}(\\.[0-9]{{1,3}})?)?)?(Z|[+-][0-9]{{2}}:[0-9]{{2}})?$'
+                )
+                THEN substr(CAST(x AS VARCHAR), 2)
+            WHEN typeof(x) = 'VARCHAR'
+                AND regexp_full_match(CAST(x AS VARCHAR), '^[0-9]{{4}}(-[0-9]{{2}}){{0,2}}T$')
+                THEN regexp_replace(CAST(x AS VARCHAR), 'T$', '')
             ELSE CAST(x AS VARCHAR)
         END
     """)
@@ -119,7 +128,7 @@ def registerConversionMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "regexp_replace("
         "CAST(TRY_CAST(json_extract_string(CAST(q AS VARCHAR), '$.value') AS DECIMAL(38, 8)) AS VARCHAR), "
         "'0+$', ''), "
-        "'\\.$', '.0') || ' ''' || "
+        "'\\.$', '') || ' ''' || "
         "COALESCE(json_extract_string(CAST(q AS VARCHAR), '$.unit'), "
         "json_extract_string(CAST(q AS VARCHAR), '$.code'), '1') || '''' "
         "ELSE CAST(q AS VARCHAR) END"

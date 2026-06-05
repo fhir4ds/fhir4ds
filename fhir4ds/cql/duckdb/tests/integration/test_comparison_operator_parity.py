@@ -36,6 +36,7 @@ def test_cql_comparison_expressions_parse_and_translate() -> None:
         "'abc' ~ 'abc'": "~",
         "'abc' !~ 'def'": "!~",
         "5 between 1 and 10": "between",
+        "1'cm':2'cm' = 1'cm':2'cm'": "=",
     }
     for expression, operator in operators.items():
         parsed = parse_expression(expression)
@@ -110,6 +111,10 @@ context Patient
 define QuantityBetweenCompatible: 1 'm' between 50 'cm' and 150 'cm'
 define QuantityBetweenOutside: 1 'm' between 150 'cm' and 200 'cm'
 define QuantityBetweenIncompatible: 1 'm' between 1 's' and 2 's'
+define RatioLiteralEqual: 1'cm':2'cm' = 1'cm':2'cm'
+define RatioLiteralNotEqualNumerator: 1'cm':2'cm' = 1.1'cm':2'cm'
+define RatioLiteralEquivalent: 1'cm':2'cm' ~ 1'cm':2'cm'
+define RatioLiteralNotEquivalentDenominator: 1'cm':2'cm' ~ 1'cm':3'cm'
 define BetweenNullLowHighFalse: 5 between (null as Integer) and 4
 define QuantityBetweenNullLowHighFalse: 1 'm' between (null as Quantity) and 0 'cm'
 define StringBetweenNullLowHighFalse: 'b' between (null as String) and 'a'
@@ -118,6 +123,8 @@ define IntervalBetweenOutside: Interval[1, 4] between 1 and 3
 define DateTimeBetweenImprecise: @2012-01-01 between @2012-01-01T12 and @2012-01-02T12
 define DecimalEquivalentLeastPrecision: 3.54 ~ 3.5
 define DecimalNotEquivalentLeastPrecision: 3.54 !~ 3.5
+define DecimalEquivalentHalfUnitBoundary: 1.5 ~ 1.55
+define DecimalEquivalentTrailingZeroPrecision: 1.50 ~ 1.55
 define QuantityDecimalEquivalentLeastPrecision: 1.24 'mg' ~ 1.2 'mg'
 define QuantityDecimalNotEquivalentLeastPrecision: 1.26 'mg' !~ 1.2 'mg'
 define CalendarDefiniteDurationEqual: 1 year = 365 days
@@ -137,6 +144,10 @@ define TupleStringEquivalentCase: Tuple { x: 'ABC' } ~ Tuple { x: 'abc' }
         "QuantityBetweenCompatible": True,
         "QuantityBetweenOutside": False,
         "QuantityBetweenIncompatible": None,
+        "RatioLiteralEqual": True,
+        "RatioLiteralNotEqualNumerator": False,
+        "RatioLiteralEquivalent": True,
+        "RatioLiteralNotEquivalentDenominator": False,
         "BetweenNullLowHighFalse": None,
         "QuantityBetweenNullLowHighFalse": None,
         "StringBetweenNullLowHighFalse": None,
@@ -145,6 +156,8 @@ define TupleStringEquivalentCase: Tuple { x: 'ABC' } ~ Tuple { x: 'abc' }
         "DateTimeBetweenImprecise": None,
         "DecimalEquivalentLeastPrecision": True,
         "DecimalNotEquivalentLeastPrecision": False,
+        "DecimalEquivalentHalfUnitBoundary": True,
+        "DecimalEquivalentTrailingZeroPrecision": True,
         "QuantityDecimalEquivalentLeastPrecision": True,
         "QuantityDecimalNotEquivalentLeastPrecision": True,
         "CalendarDefiniteDurationEqual": None,

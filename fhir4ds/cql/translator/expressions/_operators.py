@@ -773,10 +773,9 @@ class OperatorsMixin:
             or container_type.startswith("List<")
         ):
             return True
-        element_type = self._static_structural_type_name(element_ast)
-        # `null contains 5` is an official interval/list null-container case.
-        # String contains keeps ordinary SQL NULL propagation for string peers.
-        return element_type is not None and self._bare_cql_type_name(element_type) != "String"
+        # A null container cannot contain a known non-null element, regardless
+        # of whether the intended container is a list, interval, or string.
+        return True
 
     def _list_has_all_call(
         self,
@@ -2300,18 +2299,23 @@ class OperatorsMixin:
                 precision_interval = self.translate(cql_right.right, usage=ExprUsage.SCALAR)
             right_for_interval = precision_interval if precision_interval is not None else right
             right_is_interval = self._is_fhir_interval_expression(right)
+            right_for_precision_is_interval = self._is_fhir_interval_expression(right_for_interval)
             if precision is not None:
                 left_interval = left if self._is_fhir_interval_expression(left) else self._point_as_interval(left)
                 right_interval = (
                     right_for_interval
-                    if self._is_fhir_interval_expression(right_for_interval)
+                    if right_for_precision_is_interval
                     else self._point_as_interval(right_for_interval)
                 )
                 includes = SQLFunctionCall(
                     name="intervalIncludesPrecise",
                     args=[left_interval, right_interval, SQLLiteral(value=precision)],
                 )
-                same = self._interval_same_at_precision(left_interval, right_interval, precision)
+                same = (
+                    self._interval_same_at_precision(left_interval, right_interval, precision)
+                    if right_for_precision_is_interval
+                    else self._point_same_as_interval_boundary_at_precision(left_interval, right_interval, precision)
+                )
                 return SQLBinaryOp(operator="AND", left=includes, right=SQLUnaryOp(operator="NOT", operand=same))
             if right_is_interval:
                 return SQLFunctionCall(name="intervalProperlyIncludes", args=[left, right])
@@ -2361,6 +2365,7 @@ class OperatorsMixin:
                 precision_interval = self.translate(cql_right.right, usage=ExprUsage.SCALAR)
             right_for_interval = precision_interval if precision_interval is not None else right
             if precision is not None:
+                left_for_precision_is_interval = self._is_fhir_interval_expression(left)
                 left_interval = left if self._is_fhir_interval_expression(left) else self._point_as_interval(left)
                 right_interval = (
                     right_for_interval
@@ -2371,7 +2376,11 @@ class OperatorsMixin:
                     name="intervalIncludesPrecise",
                     args=[right_interval, left_interval, SQLLiteral(value=precision)],
                 )
-                same = self._interval_same_at_precision(left_interval, right_interval, precision)
+                same = (
+                    self._interval_same_at_precision(left_interval, right_interval, precision)
+                    if left_for_precision_is_interval
+                    else self._point_same_as_interval_boundary_at_precision(right_interval, left_interval, precision)
+                )
                 return SQLBinaryOp(operator="AND", left=included, right=SQLUnaryOp(operator="NOT", operand=same))
             left_is_interval = self._is_fhir_interval_expression(left)
             right_is_interval = self._is_fhir_interval_expression(right)
@@ -4050,6 +4059,40 @@ class OperatorsMixin:
         )
         return SQLBinaryOp(operator="AND", left=starts_same, right=ends_same)
 
+    @staticmethod
+    def _point_same_as_interval_boundary_at_precision(
+        interval: SQLExpression,
+        point_interval: SQLExpression,
+        precision: str,
+    ) -> SQLExpression:
+        point = SQLCast(
+            expression=SQLFunctionCall(name="intervalStart", args=[point_interval]),
+            target_type="VARCHAR",
+        )
+        starts_same = SQLFunctionCall(
+            name="cqlSameAsP",
+            args=[
+                SQLCast(
+                    expression=SQLFunctionCall(name="intervalStart", args=[interval]),
+                    target_type="VARCHAR",
+                ),
+                point,
+                SQLLiteral(value=precision),
+            ],
+        )
+        ends_same = SQLFunctionCall(
+            name="cqlSameAsP",
+            args=[
+                SQLCast(
+                    expression=SQLFunctionCall(name="intervalEnd", args=[interval]),
+                    target_type="VARCHAR",
+                ),
+                point,
+                SQLLiteral(value=precision),
+            ],
+        )
+        return SQLBinaryOp(operator="OR", left=starts_same, right=ends_same)
+
     def _translate_before_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
         # Convert bare resource aliases to their primary date intervals
@@ -4718,20 +4761,24 @@ class OperatorsMixin:
         ):
             return None
         precision = min(left_precision, right_precision)
-        def _rounded(operand: SQLExpression) -> SQLExpression:
-            decimal_operand = SQLCast(
-                expression=operand,
-                target_type="DECIMAL(38,8)",
-            )
-            return SQLFunctionCall(
-                name="system.round",
-                args=[decimal_operand, SQLLiteral(value=precision)],
-            )
-
+        delta = SQLFunctionCall(
+            name="ABS",
+            args=[
+                SQLBinaryOp(
+                    operator="-",
+                    left=SQLCast(expression=left, target_type="DECIMAL(38,8)"),
+                    right=SQLCast(expression=right, target_type="DECIMAL(38,8)"),
+                )
+            ],
+        )
+        tolerance = SQLCast(
+            expression=SQLLiteral(value=f"{0.5 * (10 ** -precision):.8f}"),
+            target_type="DECIMAL(38,8)",
+        )
         result: SQLExpression = SQLBinaryOp(
-            operator="=",
-            left=_rounded(left),
-            right=_rounded(right),
+            operator="<=",
+            left=delta,
+            right=tolerance,
         )
         if is_negated:
             return SQLUnaryOp(operator="NOT", operand=result)

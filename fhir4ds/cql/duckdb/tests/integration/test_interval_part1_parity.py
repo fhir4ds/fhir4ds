@@ -263,6 +263,7 @@ context Patient
 define CollapseEmpty: collapse { }
 define CollapseInvalidPer: collapse { Interval[1, 3] } per 1 'cm'
 define CollapseValidPer: collapse { Interval[1, 3], Interval[5, 6] } per 2
+define ExpandNull: expand null
 define ExpandInvalidPer: expand Interval[1, 3] per 1 'cm'
 define ExpandValidNumericPer: expand Interval[1, 5] per 2
 """
@@ -282,6 +283,7 @@ define ExpandValidNumericPer: expand Interval[1, 5] per 2
             {"low": "1", "high": "2", "lowClosed": True, "highClosed": True},
             {"low": "5", "high": "6", "lowClosed": True, "highClosed": True},
         ],
+        "ExpandNull": None,
         "ExpandInvalidPer": "[]",
         "ExpandValidNumericPer": [1, 3],
     }

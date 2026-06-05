@@ -446,6 +446,15 @@ class TestFunctionCalls:
         assert expr.name == "Substring"
         assert len(expr.arguments) == 3
 
+    def test_ratio_literal_lowers_to_toratio(self):
+        """Test quantity:quantity ratio literal parsing."""
+        expr = parse_expression("1'cm':2.1'cm'")
+        assert isinstance(expr, FunctionRef)
+        assert expr.name == "ToRatio"
+        assert len(expr.arguments) == 1
+        assert isinstance(expr.arguments[0], Literal)
+        assert expr.arguments[0].value == "1 'cm':2.1 'cm'"
+
     def test_qualified_function(self):
         """Test qualified function call.
 

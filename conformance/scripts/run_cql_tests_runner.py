@@ -106,7 +106,7 @@ def _run_runner_from_path(path: Path, args: argparse.Namespace, base_url: str) -
                 "Debug": {"QuickTest": args.quick},
                 "Tests": {
                     "ResultsPath": str(output_path),
-                    "SkipList": [],
+                    "SkipList": _known_runner_skip_list(),
                     "OnlyList": _only_items(args.only),
                 },
             },
@@ -142,7 +142,7 @@ def _run_runner_docker(image: str, args: argparse.Namespace, base_url: str) -> d
                 "Debug": {"QuickTest": args.quick},
                 "Tests": {
                     "ResultsPath": "/results",
-                    "SkipList": [],
+                    "SkipList": _known_runner_skip_list(),
                     "OnlyList": _only_items(args.only),
                 },
             },
@@ -221,6 +221,58 @@ def _only_items(items: list[str]) -> list[dict[str, str]]:
             raise SystemExit(f"--only must be testsName:groupName:testName, got {item!r}")
         result.append({"testsName": parts[0], "groupName": parts[1], "testName": parts[2]})
     return result
+
+
+def _known_runner_skip_list() -> list[dict[str, str]]:
+    """Known cql-tests-runner comparison limitations, not FHIR4DS behavior gaps."""
+    long_reason = (
+        "Test Runner Not Detecting Equal Long Values: "
+        "https://github.com/cqframework/cql-tests-runner/issues/79"
+    )
+    long_cases = [
+        ("CqlAggregateFunctionsTest", "Product", "ProductLong"),
+        ("CqlAggregateFunctionsTest", "Max", "MaxTestLong"),
+        ("CqlAggregateFunctionsTest", "Min", "MinTestLong"),
+        ("CqlAggregateFunctionsTest", "Sum", "SumTestLong"),
+        ("CqlArithmeticFunctionsTest", "Abs", "AbsLong"),
+        ("CqlArithmeticFunctionsTest", "Add", "Add1L2L"),
+        ("CqlArithmeticFunctionsTest", "Add", "Add1L1L"),
+        ("CqlArithmeticFunctionsTest", "MinValue", "LongMinValue"),
+        ("CqlArithmeticFunctionsTest", "MaxValue", "LongMaxValue"),
+        ("CqlArithmeticFunctionsTest", "Modulo", "Modulo4LBy2L"),
+        ("CqlArithmeticFunctionsTest", "Multiply", "Multiply2LBy3L"),
+        ("CqlArithmeticFunctionsTest", "Multiply", "Multiply1By1L"),
+        ("CqlArithmeticFunctionsTest", "Negate", "Negate1L"),
+        ("CqlArithmeticFunctionsTest", "Negate", "NegateMaxLong"),
+        ("CqlArithmeticFunctionsTest", "Negate", "NegateNeg1L"),
+        ("CqlArithmeticFunctionsTest", "Predecessor", "PredecessorOf1L"),
+        ("CqlArithmeticFunctionsTest", "Power", "Power2LTo2L"),
+        ("CqlArithmeticFunctionsTest", "Power", "Power2LTo3L"),
+        ("CqlArithmeticFunctionsTest", "Subtract", "Subtract1LAnd1L"),
+        ("CqlArithmeticFunctionsTest", "Successor", "SuccessorOf1L"),
+        ("CqlArithmeticFunctionsTest", "Truncated Divide", "TruncatedDivide10LBy3L"),
+    ]
+    skips = [
+        {
+            "testsName": tests_name,
+            "groupName": group_name,
+            "testName": test_name,
+            "reason": long_reason,
+        }
+        for tests_name, group_name, test_name in long_cases
+    ]
+    skips.append(
+        {
+            "testsName": "CqlTypeOperatorsTest",
+            "groupName": "ToConcept",
+            "testName": "CodeToConcept1",
+            "reason": (
+                "Test Runner Concept extractor includes undefined display/system/version "
+                "keys for code-only Concepts, preventing equality with parsed expected output"
+            ),
+        }
+    )
+    return skips
 
 
 def _build_config() -> dict[str, str]:

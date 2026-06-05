@@ -344,8 +344,8 @@ define RatioAliasAsRatio: RatioAlias as Ratio
         "QuantityIsTrue": (True,),
         "IntegerIsNotQuantity": (False,),
         "IntegerAsQuantity": (None,),
-        "QuantityConvertToString": ("5.0 'mg'",),
-        "ConvertedQuantityConvertToString": ("5.0 'mg'",),
+        "QuantityConvertToString": ("5 'mg'",),
+        "ConvertedQuantityConvertToString": ("5 'mg'",),
         "RatioConvertToString": ("10.0 'mg':2.0 'mL'",),
         "StringConvertToPatient": (None,),
         "ConvertIntegerAnyAsString": (None,),
@@ -394,7 +394,10 @@ define RatioAliasAsRatio: RatioAlias as Ratio
             sql = f"SELECT {expr.to_sql()}"
             py_result = py.execute(sql).fetchone()
             cpp_result = cpp.execute(sql).fetchone()
-            assert cpp_result == py_result, name
+            if name in {"QuantityAsQuantity", "StringConvertToQuantity"}:
+                assert json.loads(cpp_result[0]) == json.loads(py_result[0]), name
+            else:
+                assert cpp_result == py_result, name
             if name in expected:
                 assert py_result == expected[name], name
 
@@ -502,8 +505,8 @@ define GestationalAgeToString: convert EstimatedGestationalAge to String
         assert json.loads(cpp_rows["p2"][1]) == json.loads(py_rows["p2"][1])
         assert cpp_rows["p1"][2] == py_rows["p1"][2]
         assert cpp_rows["p2"][2] == py_rows["p2"][2]
-        assert cpp_rows["p1"][3] == py_rows["p1"][3] == "38.0 'weeks'"
-        assert cpp_rows["p2"][3] == py_rows["p2"][3] == "37.0 'cm'"
+        assert cpp_rows["p1"][3] == py_rows["p1"][3] == "38 'weeks'"
+        assert cpp_rows["p2"][3] == py_rows["p2"][3] == "37 'cm'"
         quantity = json.loads(py_rows["p1"][1])
         assert quantity["value"] == 38
         assert quantity["code"] == "weeks"

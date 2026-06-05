@@ -1508,12 +1508,12 @@ class CQLParser:
                 unit_token = self.advance()
                 # Normalize to singular form
                 unit = unit_token.value.lower().rstrip('s')
-                return Quantity(value=value, unit=unit)
+                return self._maybe_parse_ratio_literal(Quantity(value=value, unit=unit))
             # Check for UCUM unit string (e.g., 1 'ml', 10 'cm', 19.99 '[lb_av]')
             if self.match(TokenType.STRING):
                 unit_token = self.advance()
                 unit = unit_token.value
-                return Quantity(value=value, unit=unit)
+                return self._maybe_parse_ratio_literal(Quantity(value=value, unit=unit))
             return Literal(value=value, type="Integer")
         elif token.type == TokenType.LONG:
             value = int(token.value)
@@ -1527,12 +1527,12 @@ class CQLParser:
                           TokenType.SECOND, TokenType.SECONDS, TokenType.MILLISECOND, TokenType.MILLISECONDS):
                 unit_token = self.advance()
                 unit = unit_token.value.lower().rstrip('s')
-                return Quantity(value=value, unit=unit)
+                return self._maybe_parse_ratio_literal(Quantity(value=value, unit=unit))
             # Check for UCUM unit string (e.g., 1.5 'ml', 19.99 '[lb_av]')
             if self.match(TokenType.STRING):
                 unit_token = self.advance()
                 unit = unit_token.value
-                return Quantity(value=value, unit=unit)
+                return self._maybe_parse_ratio_literal(Quantity(value=value, unit=unit))
             # CQL §2.3: standalone Decimal has max 28 integer digits and 8 fractional digits.
             # Validation only applies to Decimal literals, not Quantity values.
             raw_decimal = token.value.lstrip('+').lstrip('-')
@@ -1560,6 +1560,28 @@ class CQLParser:
             return Literal(value=None, type=None)
         else:
             raise ParseError(f"Unexpected literal type: {token.type}")
+
+    def _maybe_parse_ratio_literal(self, numerator: Quantity) -> Union[Quantity, FunctionRef]:
+        """Parse CQL ratio literal syntax: ``<quantity>:<quantity>``."""
+        if not self.match(TokenType.COLON):
+            return numerator
+        self.advance()
+        denominator = self.parse_literal()
+        if not isinstance(denominator, Quantity):
+            raise ParseError("Expected Quantity after ':' in Ratio literal")
+
+        def _quantity_text(quantity: Quantity) -> str:
+            return f"{quantity.value} '{quantity.unit}'"
+
+        return FunctionRef(
+            name="ToRatio",
+            arguments=[
+                Literal(
+                    value=f"{_quantity_text(numerator)}:{_quantity_text(denominator)}",
+                    type="String",
+                )
+            ],
+        )
 
     def parse_datetime_literal(self) -> DateTimeLiteral:
         """Parse a date/time literal."""

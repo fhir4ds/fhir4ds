@@ -113,6 +113,15 @@ class DateComponentMixin:
             right=SQLBinaryOp(operator="<=", left=expression, right=SQLLiteral(maximum)),
         )
 
+    def _is_static_null_component(self, expression: SQLExpression) -> bool:
+        if isinstance(expression, SQLNull):
+            return True
+        if isinstance(expression, SQLLiteral) and expression.value is None:
+            return True
+        if isinstance(expression, SQLCast):
+            return self._is_static_null_component(expression.expression)
+        return False
+
     def _validated_time_constructor(
         self,
         expression: SQLExpression,
@@ -303,6 +312,10 @@ class DateComponentMixin:
         """
         if not args:
             return SQLNull()
+
+        args = list(args)
+        while len(args) > 1 and self._is_static_null_component(args[-1]):
+            args.pop()
 
         for component in args[:min(len(args), 7)]:
             if isinstance(component, SQLLiteral) and (
