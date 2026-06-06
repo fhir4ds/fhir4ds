@@ -64,6 +64,10 @@ struct Interval {
 	bool meets(const Interval &other) const;
 	bool meets_before(const Interval &other) const;
 	bool meets_after(const Interval &other) const;
+	Optional<bool> properly_contains_point_nullable(const BoundValue &point) const;
+	Optional<bool> meets_nullable(const Interval &other) const;
+	Optional<bool> meets_before_nullable(const Interval &other) const;
+	Optional<bool> meets_after_nullable(const Interval &other) const;
 	bool includes(const Interval &other) const;
 	bool properly_includes(const Interval &other) const;
 	bool overlaps_before(const Interval &other) const;

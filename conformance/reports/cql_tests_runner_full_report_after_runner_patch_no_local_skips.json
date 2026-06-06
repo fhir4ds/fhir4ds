@@ -1,11 +1,11 @@
 {
-  "runner_ref": "local-patched-long-concept-round-interval-final",
-  "server_url": "http://127.0.0.1:41911/fhir",
+  "runner_ref": "main",
+  "server_url": "http://127.0.0.1:59021/fhir",
   "quick": false,
   "only": [],
   "status": "pass",
   "returncode": 0,
-  "raw_results_path": "/mnt/d/fhir4ds/conformance/reports/cql_tests_runner_raw/results/202606060933_results.json",
+  "raw_results_path": "/mnt/d/fhir4ds/conformance/reports/cql_tests_runner_raw/results/202606042013_results.json",
   "pass_count": 1691,
   "skip_count": 40,
   "fail_count": 0,
@@ -51,7 +51,7 @@
     "Test ValueLiteralsAndSelectors:Decimal:Decimal10Pow28 status: skip skipMessage: No output specified",
     "Test ValueLiteralsAndSelectors:Decimal:DecimalPos10Pow28 status: skip skipMessage: No output specified",
     "Test ValueLiteralsAndSelectors:Decimal:DecimalNeg10Pow28 status: skip skipMessage: No output specified",
-    "Results saved to: /mnt/d/fhir4ds/conformance/reports/cql_tests_runner_raw/results/202606060933_results.json"
+    "Results saved to: /mnt/d/fhir4ds/conformance/reports/cql_tests_runner_raw/results/202606042013_results.json"
   ],
   "stderr_tail": [],
   "unsupported": []

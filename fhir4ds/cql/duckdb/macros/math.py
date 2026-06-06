@@ -29,17 +29,22 @@ def registerMathMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute("CREATE OR REPLACE MACRO Ceiling(x) AS TRY(system.ceiling(x))")
     con.execute("CREATE OR REPLACE MACRO Floor(x) AS TRY(system.floor(x))")
 
-    # Round - CQL Appendix B: traditional rounding. Ties round toward positive
-    # infinity, so -0.5 becomes 0 and -1.5 becomes -1.
+    # Round - CQL Appendix B: traditional rounding. Half ties round away from
+    # zero, so -0.5 becomes -1 and -1.5 becomes -2.
     con.execute(
         "CREATE OR REPLACE MACRO Round(x) AS "
         "CASE WHEN x IS NULL THEN NULL ELSE CAST("
-        "FLOOR(CAST(x AS DOUBLE) + 0.5) AS DECIMAL(38, 8)) END"
+        "CASE WHEN CAST(x AS DOUBLE) >= 0 "
+        "THEN FLOOR(CAST(x AS DOUBLE) + 0.5) "
+        "ELSE CEIL(CAST(x AS DOUBLE) - 0.5) END "
+        "AS DECIMAL(38, 8)) END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO RoundTo(x, prec) AS "
         "CASE WHEN x IS NULL THEN NULL ELSE CAST(("
-        "FLOOR(CAST(x AS DOUBLE) * POWER(10, COALESCE(prec, 0)) + 0.5)"
+        "CASE WHEN CAST(x AS DOUBLE) * POWER(10, COALESCE(prec, 0)) >= 0 "
+        "THEN FLOOR(CAST(x AS DOUBLE) * POWER(10, COALESCE(prec, 0)) + 0.5) "
+        "ELSE CEIL(CAST(x AS DOUBLE) * POWER(10, COALESCE(prec, 0)) - 0.5) END"
         ") / POWER(10, COALESCE(prec, 0)) AS DECIMAL(38, 8)) END"
     )
 

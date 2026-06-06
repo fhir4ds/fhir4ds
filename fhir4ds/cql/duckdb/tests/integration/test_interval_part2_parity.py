@@ -114,14 +114,6 @@ def test_cql_interval_part2_translated_sql_matches_cpp_registration() -> None:
 
     py = _python_only_connection()
     cpp = _cpp_connection()
-    no_python_known_gaps = {
-        "MeetsNullLow",
-        "MeetsAfterNullHigh",
-        "TimeProperContainsUncertain",
-        "TimeProperInUncertain",
-        "TimeProperContainsPrecisionUncertain",
-        "TimeProperInPrecisionUncertain",
-    }
     try:
         with no_python_connection() as no_py:
             for name, expr in translated.items():
@@ -130,8 +122,7 @@ def test_cql_interval_part2_translated_sql_matches_cpp_registration() -> None:
                 cpp_result = cpp.execute(sql).fetchone()
                 no_py_result = no_py.execute(sql).fetchone()
                 assert cpp_result == py_result, name
-                if name not in no_python_known_gaps:
-                    assert no_py_result == py_result, name
+                assert no_py_result == py_result, name
                 if name in expected:
                     assert py_result == expected[name], name
     finally:
@@ -258,6 +249,27 @@ def test_cql_interval_part2_boundary_regressions_match_no_python_cpp() -> None:
             "SELECT intervalMeets(intervalFromBounds('2012-01-01T03', '2012-01-01T04', true, true), "
             "intervalFromBounds('2012-01-01T05', '2012-01-01T06', true, true))",
             (True,),
+        ),
+        (
+            "SELECT intervalMeets(intervalFromBounds('__null__', '5', false, true), "
+            "intervalFromBounds('__null__', '15', false, false))",
+            (None,),
+        ),
+        (
+            "SELECT intervalMeetsAfter(intervalFromBounds('__null__', '5', false, true), "
+            "intervalFromBounds('11', '__null__', true, false))",
+            (False,),
+        ),
+        (
+            "SELECT intervalProperlyContains("
+            "intervalFromBounds('T12:00:00.001', 'T21:59:59.999', true, true), 'T12:00:00')",
+            (None,),
+        ),
+        (
+            "SELECT intervalIncludesPrecise("
+            "intervalFromBounds('T12:00:00.001', 'T21:59:59.999', true, true), "
+            "intervalFromBounds('T12:00:00', 'T12:00:00', true, true), 'millisecond')",
+            (None,),
         ),
         (
             "SELECT intervalOverlapsBefore(intervalFromBounds('2014', '2014', true, true), "

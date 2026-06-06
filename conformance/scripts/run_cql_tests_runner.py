@@ -224,55 +224,12 @@ def _only_items(items: list[str]) -> list[dict[str, str]]:
 
 
 def _known_runner_skip_list() -> list[dict[str, str]]:
-    """Known cql-tests-runner comparison limitations, not FHIR4DS behavior gaps."""
-    long_reason = (
-        "Test Runner Not Detecting Equal Long Values: "
-        "https://github.com/cqframework/cql-tests-runner/issues/79"
-    )
-    long_cases = [
-        ("CqlAggregateFunctionsTest", "Product", "ProductLong"),
-        ("CqlAggregateFunctionsTest", "Max", "MaxTestLong"),
-        ("CqlAggregateFunctionsTest", "Min", "MinTestLong"),
-        ("CqlAggregateFunctionsTest", "Sum", "SumTestLong"),
-        ("CqlArithmeticFunctionsTest", "Abs", "AbsLong"),
-        ("CqlArithmeticFunctionsTest", "Add", "Add1L2L"),
-        ("CqlArithmeticFunctionsTest", "Add", "Add1L1L"),
-        ("CqlArithmeticFunctionsTest", "MinValue", "LongMinValue"),
-        ("CqlArithmeticFunctionsTest", "MaxValue", "LongMaxValue"),
-        ("CqlArithmeticFunctionsTest", "Modulo", "Modulo4LBy2L"),
-        ("CqlArithmeticFunctionsTest", "Multiply", "Multiply2LBy3L"),
-        ("CqlArithmeticFunctionsTest", "Multiply", "Multiply1By1L"),
-        ("CqlArithmeticFunctionsTest", "Negate", "Negate1L"),
-        ("CqlArithmeticFunctionsTest", "Negate", "NegateMaxLong"),
-        ("CqlArithmeticFunctionsTest", "Negate", "NegateNeg1L"),
-        ("CqlArithmeticFunctionsTest", "Predecessor", "PredecessorOf1L"),
-        ("CqlArithmeticFunctionsTest", "Power", "Power2LTo2L"),
-        ("CqlArithmeticFunctionsTest", "Power", "Power2LTo3L"),
-        ("CqlArithmeticFunctionsTest", "Subtract", "Subtract1LAnd1L"),
-        ("CqlArithmeticFunctionsTest", "Successor", "SuccessorOf1L"),
-        ("CqlArithmeticFunctionsTest", "Truncated Divide", "TruncatedDivide10LBy3L"),
-    ]
-    skips = [
-        {
-            "testsName": tests_name,
-            "groupName": group_name,
-            "testName": test_name,
-            "reason": long_reason,
-        }
-        for tests_name, group_name, test_name in long_cases
-    ]
-    skips.append(
-        {
-            "testsName": "CqlTypeOperatorsTest",
-            "groupName": "ToConcept",
-            "testName": "CodeToConcept1",
-            "reason": (
-                "Test Runner Concept extractor includes undefined display/system/version "
-                "keys for code-only Concepts, preventing equality with parsed expected output"
-            ),
-        }
-    )
-    return skips
+    """Local FHIR4DS compatibility skips.
+
+    Keep this empty now that Long and code-only Concept comparison are handled
+    in the local cql-tests-runner checkout.
+    """
+    return []
 
 
 def _build_config() -> dict[str, str]:

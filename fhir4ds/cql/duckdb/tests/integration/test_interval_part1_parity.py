@@ -227,7 +227,7 @@ define ContainsNullPoint: Interval[1, 10] contains null
         "ContainsNullPoint": (None,),
     }
     direct_cases = [
-        ("SELECT intervalContains(NULL, '5')", (False,)),
+        ("SELECT intervalContains(NULL, '5')", (None,)),
         ("SELECT intervalContains(intervalFromBounds('1', '10', true, true), NULL)", (None,)),
         ("SELECT intervalContainsPrecise(NULL, '2024-01-05', 'day')", (False,)),
         (

@@ -947,11 +947,10 @@ def intervalContains(interval: str | None, point: str | None) -> bool | None:
     (interval in interval) and point-in-interval checks.  When *point* is
     actually an interval JSON string, delegate to ``intervalIncludes``.
 
-    Per CQL interval semantics, a null container returns false, while a null
-    point returns null.
+    Null inputs return null per CQL three-valued logic.
     """
     if interval is None:
-        return False
+        return None
     if point is None:
         return None
 

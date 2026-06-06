@@ -1170,7 +1170,7 @@ static void IntervalContainsFunc(DataChunk &args, ExpressionState &state, Vector
 		auto a_idx = a_data.sel->get_index(i);
 		auto b_idx = b_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(a_idx)) {
-			result_data[i] = false;
+			result_mask.SetInvalid(i);
 			continue;
 		}
 		if (!b_data.validity.RowIsValid(b_idx)) {
@@ -1221,7 +1221,16 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalProperlyContainsFunc, {
 			result_mask.SetInvalid(i);
 			continue;
 		}
-		result_data[i] = point ? iv->properly_contains_point(*point) : false;
+		if (!point) {
+			result_data[i] = false;
+			continue;
+		}
+		auto res = iv->properly_contains_point_nullable(*point);
+		if (!res) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = *res;
 	}
 })
 
@@ -1276,7 +1285,16 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalAfterFunc, {
 DEFINE_TWO_STR_BOOL_UDF(IntervalMeetsFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
-	result_data[i] = (iv1 && iv2) ? iv1->meets(*iv2) : false;
+	if (!iv1 || !iv2) {
+		result_data[i] = false;
+		continue;
+	}
+	auto res = iv1->meets_nullable(*iv2);
+	if (!res) {
+		result_mask.SetInvalid(i);
+		continue;
+	}
+	result_data[i] = *res;
 })
 
 DEFINE_TWO_STR_BOOL_UDF(IntervalIncludesFunc, {
@@ -1383,13 +1401,31 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalOverlapsAfterFunc, {
 DEFINE_TWO_STR_BOOL_UDF(IntervalMeetsBeforeFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
-	result_data[i] = (iv1 && iv2) ? iv1->meets_before(*iv2) : false;
+	if (!iv1 || !iv2) {
+		result_data[i] = false;
+		continue;
+	}
+	auto res = iv1->meets_before_nullable(*iv2);
+	if (!res) {
+		result_mask.SetInvalid(i);
+		continue;
+	}
+	result_data[i] = *res;
 })
 
 DEFINE_TWO_STR_BOOL_UDF(IntervalMeetsAfterFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
-	result_data[i] = (iv1 && iv2) ? iv1->meets_after(*iv2) : false;
+	if (!iv1 || !iv2) {
+		result_data[i] = false;
+		continue;
+	}
+	auto res = iv1->meets_after_nullable(*iv2);
+	if (!res) {
+		result_mask.SetInvalid(i);
+		continue;
+	}
+	result_data[i] = *res;
 })
 
 DEFINE_TWO_STR_BOOL_UDF(IntervalStartsSameFunc, {

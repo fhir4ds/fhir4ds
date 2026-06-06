@@ -1,6 +1,6 @@
 {
   "FhirServer": {
-    "BaseUrl": "http://127.0.0.1:57317/fhir",
+    "BaseUrl": "http://127.0.0.1:41911/fhir",
     "CqlOperation": "$cql"
   },
   "Build": {
@@ -18,140 +18,7 @@
   },
   "Tests": {
     "ResultsPath": "/mnt/d/fhir4ds/conformance/reports/cql_tests_runner_raw/results",
-    "SkipList": [
-      {
-        "testsName": "CqlAggregateFunctionsTest",
-        "groupName": "Product",
-        "testName": "ProductLong",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlAggregateFunctionsTest",
-        "groupName": "Max",
-        "testName": "MaxTestLong",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlAggregateFunctionsTest",
-        "groupName": "Min",
-        "testName": "MinTestLong",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlAggregateFunctionsTest",
-        "groupName": "Sum",
-        "testName": "SumTestLong",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Abs",
-        "testName": "AbsLong",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Add",
-        "testName": "Add1L2L",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Add",
-        "testName": "Add1L1L",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "MinValue",
-        "testName": "LongMinValue",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "MaxValue",
-        "testName": "LongMaxValue",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Modulo",
-        "testName": "Modulo4LBy2L",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Multiply",
-        "testName": "Multiply2LBy3L",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Multiply",
-        "testName": "Multiply1By1L",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Negate",
-        "testName": "Negate1L",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Negate",
-        "testName": "NegateMaxLong",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Negate",
-        "testName": "NegateNeg1L",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Predecessor",
-        "testName": "PredecessorOf1L",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Power",
-        "testName": "Power2LTo2L",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Power",
-        "testName": "Power2LTo3L",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Subtract",
-        "testName": "Subtract1LAnd1L",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Successor",
-        "testName": "SuccessorOf1L",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlArithmeticFunctionsTest",
-        "groupName": "Truncated Divide",
-        "testName": "TruncatedDivide10LBy3L",
-        "reason": "Test Runner Not Detecting Equal Long Values: https://github.com/cqframework/cql-tests-runner/issues/79"
-      },
-      {
-        "testsName": "CqlTypeOperatorsTest",
-        "groupName": "ToConcept",
-        "testName": "CodeToConcept1",
-        "reason": "Test Runner Concept extractor includes undefined display/system/version keys for code-only Concepts, preventing equality with parsed expected output"
-      }
-    ],
+    "SkipList": [],
     "OnlyList": []
   }
 }

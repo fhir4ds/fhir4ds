@@ -66,6 +66,10 @@ class TestMathMacros:
         result = con.execute("SELECT RoundTo(3.14159, 2)").fetchone()[0]
         assert float(result) == 3.14
 
+    def test_round_negative_half_ties_away_from_zero(self, con):
+        assert con.execute("SELECT Round(-0.5)::VARCHAR").fetchone()[0] == "-1.00000000"
+        assert con.execute("SELECT RoundTo(-2.55, 1)::VARCHAR").fetchone()[0] == "-2.60000000"
+
     def test_round_null(self, con):
         result = con.execute("SELECT Round(NULL)").fetchone()[0]
         assert result is None

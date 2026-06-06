@@ -235,6 +235,9 @@ def test_cql_arithmetic_part2_duckdb_surface_matches_cpp_registration() -> None:
         assert_scalar("SELECT mathRound('-2.5','0')", "-3")
         assert_scalar("SELECT mathRound('-2.55','1')", "-2.6")
         assert_scalar("SELECT mathRound('3.1', NULL)", "3")
+        assert_scalar("SELECT Round(-0.5)::VARCHAR", "-1.00000000")
+        assert_scalar("SELECT Round(-1.5)::VARCHAR", "-2.00000000")
+        assert_scalar("SELECT RoundTo(-2.55, 1)::VARCHAR", "-2.60000000")
         assert_scalar("SELECT RoundTo(3.1, NULL)::VARCHAR", "3.00000000")
         assert_scalar("SELECT Power(-2, 0.5)", None)
         assert_scalar("SELECT mathPower('1e308','2')", None)
@@ -305,8 +308,8 @@ define RoundNullPrecision: Round(3.1, null as Integer)
         "PredMinDecimal": None,
         "SuccMaxDecimal": None,
         "PrecisionOffset": 17,
-        "RoundNegHalf": Decimal("0E-8"),
-        "RoundNegTenth": Decimal("-2.50000000"),
+        "RoundNegHalf": Decimal("-1.00000000"),
+        "RoundNegTenth": Decimal("-2.60000000"),
         "RoundNullPrecision": Decimal("3.00000000"),
     }
 

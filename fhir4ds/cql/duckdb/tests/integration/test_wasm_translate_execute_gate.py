@@ -124,7 +124,7 @@ def test_no_python_math_macros_follow_cql_edge_cases() -> None:
         assert con.execute("SELECT Power(-2, 0.5)").fetchone()[0] is None
         assert con.execute("SELECT Log(16, 2)").fetchone()[0] == 4.0
         assert con.execute("SELECT Log(100, 1)").fetchone()[0] is None
-        assert con.execute("SELECT Round(-0.5)::VARCHAR").fetchone()[0] == "0.00000000"
-        assert con.execute("SELECT Round(-2.5)::VARCHAR").fetchone()[0] == "-2.00000000"
-        assert con.execute("SELECT RoundTo(-2.55, 1)::VARCHAR").fetchone()[0] == "-2.50000000"
+        assert con.execute("SELECT Round(-0.5)::VARCHAR").fetchone()[0] == "-1.00000000"
+        assert con.execute("SELECT Round(-2.5)::VARCHAR").fetchone()[0] == "-3.00000000"
+        assert con.execute("SELECT RoundTo(-2.55, 1)::VARCHAR").fetchone()[0] == "-2.60000000"
         assert con.execute("SELECT RoundTo(3.1, NULL)::VARCHAR").fetchone()[0] == "3.00000000"
