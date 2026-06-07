@@ -904,30 +904,37 @@ class TestDateComponent:
         return ExpressionTranslator(context)
 
     def test_date_component_year(self, translator: ExpressionTranslator):
-        """Test year extraction: year from @2024-01-15 -> CASE WHEN LENGTH(...) >= 4 THEN CAST(SUBSTR(...))."""
+        """Test year extraction routes through the spec-aware component UDF."""
         from ...parser.ast_nodes import DateComponent
         result = translator.translate(
             DateComponent(component="year", operand=DateTimeLiteral(value="2024-01-15"))
         )
-        assert isinstance(result, SQLCase)
-        assert "SUBSTR" in result.to_sql()
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "dateComponent"
+        assert len(result.args) == 2
+        assert result.args[1] == SQLLiteral("year")
 
     def test_date_component_month(self, translator: ExpressionTranslator):
-        """Test month extraction: month from @2024-06-15 -> CASE WHEN LENGTH(...) >= N THEN CAST(SUBSTR(...))."""
+        """Test month extraction routes through the spec-aware component UDF."""
         from ...parser.ast_nodes import DateComponent
         result = translator.translate(
             DateComponent(component="month", operand=DateTimeLiteral(value="2024-06-15"))
         )
-        assert isinstance(result, SQLCase)
-        assert "SUBSTR" in result.to_sql()
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "dateComponent"
+        assert len(result.args) == 2
+        assert result.args[1] == SQLLiteral("month")
 
     def test_date_component_millisecond(self, translator: ExpressionTranslator):
-        """Test millisecond extraction: millisecond from @T12:30:45.123 -> CASE WHEN ..."""
+        """Test millisecond extraction routes through the spec-aware component UDF."""
         from ...parser.ast_nodes import DateComponent, TimeLiteral
         result = translator.translate(
             DateComponent(component="millisecond", operand=TimeLiteral(value="T12:30:45.123"))
         )
-        assert isinstance(result, SQLCase)
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "dateComponent"
+        assert len(result.args) == 2
+        assert result.args[1] == SQLLiteral("millisecond")
 
 
 class TestExistsExpression:
