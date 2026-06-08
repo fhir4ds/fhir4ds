@@ -2,8 +2,9 @@ import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 import WasmDemo from '@site/src/components/WasmDemo';
+import type {ReactElement} from 'react';
 
-export default function DemoPage(): JSX.Element {
+export default function DemoPage(): ReactElement {
   return (
     <Layout title="Live Demo">
       <main>

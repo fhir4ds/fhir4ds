@@ -23,6 +23,7 @@ from fhir4ds.dqm.hapi_materialization import (
     claim_pending_patients,
     enqueue_current_patients,
     explain_patient_scope_plan,
+    load_materialization_config,
     materialization_sql,
     materialization_status,
     materialized_measure_hash,
@@ -229,6 +230,36 @@ def test_parse_materialization_config_rejects_invalid_hapi_valueset_policy():
     }
 
     with pytest.raises(DQMConfigError, match="valueset_version_policy"):
+        parse_materialization_config(raw)
+
+
+def test_load_materialization_config_wraps_invalid_json(tmp_path):
+    config_path = tmp_path / "hapi.json"
+    config_path.write_text("{")
+
+    with pytest.raises(DQMConfigError, match="Invalid JSON HAPI materialization config"):
+        load_materialization_config(config_path)
+
+
+def test_parse_materialization_config_rejects_non_object_libraries():
+    raw = {
+        "postgres": {"connection_string": "postgresql://hapi:hapi@localhost/hapi"},
+        "measures": [{"id": "CMS_TEST", "artifact_source": "hapi", "artifact_ref": "CMS_TEST"}],
+        "libraries": [],
+    }
+
+    with pytest.raises(DQMConfigError, match="'libraries' must be an object"):
+        parse_materialization_config(raw)
+
+
+def test_parse_materialization_config_rejects_non_object_terminology():
+    raw = {
+        "postgres": {"connection_string": "postgresql://hapi:hapi@localhost/hapi"},
+        "measures": [{"id": "CMS_TEST", "artifact_source": "hapi", "artifact_ref": "CMS_TEST"}],
+        "terminology": [],
+    }
+
+    with pytest.raises(DQMConfigError, match="'terminology' must be an object"):
         parse_materialization_config(raw)
 
 

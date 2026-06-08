@@ -153,8 +153,16 @@ subpackage `__version__` constants must move together. Keep
 `pyproject.toml`, `fhir4ds.__version__`, `fhir4ds.cql.__version__`,
 `fhir4ds.dqm.__version__`, `fhir4ds.fhirpath.__version__`,
 `fhir4ds.fhirpath.duckdb.__version__`, `fhir4ds.viewdef.__version__`, and
-notebook install snippets aligned with the release target. Guard this with
-`fhir4ds/tests/test_version.py` and a wheel metadata/import check.
+notebook install snippets aligned with the release target. Public conformance
+facades that emit engine/translator version metadata, such as
+`conformance/scripts/run_cql_tests_runner.py`, should read the package version
+rather than hardcoding a release string. Guard this with
+`fhir4ds/tests/test_version.py`, a generated-metadata smoke check, and a wheel
+metadata/import check. Website and WASM release surfaces must move with the
+same target: homepage `PRODUCT_VERSION`, website tests, public install
+snippets, release notes, `web/wasm-demo/public/` wheel contents, and the copied
+`web/website/static/wasm-app/` snapshot. Guard those with the `web/wasm-demo`
+build and website typecheck/build.
 
 1. Implementation: `fhir4ds/fhirpath/engine/invocations/`
 2. Tests: `fhir4ds/fhirpath/tests/unit/`
@@ -988,6 +996,20 @@ registration. `CSVSource` rejects non-string `path`/`projection_sql` with
 `TypeError` and empty required strings with `ValueError`; projection/view shape
 errors still belong to `SchemaValidationError`.
 
+**Fixed in Release 0.0.8 Domain 8 (2026-06-07).** `FileSystemSource` follows
+the same public constructor boundary: non-string `path_pattern`/`format`
+arguments raise `TypeError`, and empty strings raise `ValueError`, before
+cloud-prefix checks, SQL literal quoting, or DuckDB registration.
+
+### DQM Configuration API Contract
+
+**Fixed in Release 0.0.8 Domain 8 (2026-06-07).** DQM run, HAPI
+materialization, and Mongo materialization config loaders wrap malformed JSON
+or YAML in `DQMConfigError` instead of leaking decoder internals. Nested
+`libraries` and `terminology` sections must be objects before reading
+`paths`/`valuesets`; malformed section shapes should raise `DQMConfigError`
+with the field name, not `AttributeError`.
+
 ### DQM Audit Evidence Boundary
 
 **Fixed in Release 0.0.6 Domain 9 (2026-05-20).** `AuditEngine.prune_evidence()`
@@ -997,12 +1019,38 @@ cell at a time must wrap the cell as `{col_name: cell}`. Passing the raw audit
 cell erases causal evidence and causes narratives/exports to report missing
 detail incorrectly.
 
+**Fixed in Release 0.0.8 Domain 9 (2026-06-07).** Multi-group DQM audit
+pruning must run only against the current group. Passing each group DataFrame
+through every `PopulationMap` group can compact evidence more than once and
+erase resource targets in the final findings. Materialized compact result JSON
+must also stay audit-free: HAPI and Mongo materialization should unwrap audit
+structs to their `result` value and keep supporting evidence columns only in
+the full audit JSON.
+
 ### Release Version Consistency
 
 **Fixed in Release 0.0.6 Domain 10 (2026-05-20).** Public subpackage
 `__version__` values in the unified namespace should match `fhir4ds.__version__`.
 Keep `fhir4ds/tests/test_version.py` release-neutral by comparing against the
 root package version rather than hardcoding the current version.
+
+**Fixed in Release 0.0.8 Domain 10 (2026-06-07).** Release metadata and public
+versions must also include `fhir4ds.cql.duckdb.__version__`, not only the root
+and major feature packages. Keep `pyproject.toml`, public subpackage
+`__version__` constants, notebook install snippets, wheel metadata, and the
+bundled-extension wheel contents aligned with the release target.
+
+**Fixed in Release 0.0.8 Hardening 14 (2026-06-07).** Conformance-facing
+version metadata is part of the release surface. The CQL tests-runner facade
+must emit `cqlTranslatorVersion` and `cqlEngineVersion` from
+`fhir4ds.__version__`, not a hardcoded prior release.
+
+**Fixed in Release 0.0.8 Hardening 17 (2026-06-07).** Website and WASM demo
+assets are part of the release surface. The homepage version badge, website
+tests, WASM integration docs, notebook docs, release notes, demo public wheel,
+and `web/website/static/wasm-app/` snapshot must all be refreshed for the
+target version. Keep `web/wasm-demo` build plus website typecheck/build in the
+release gate.
 
 ### HEDIS Continuous Enrollment Primitives
 

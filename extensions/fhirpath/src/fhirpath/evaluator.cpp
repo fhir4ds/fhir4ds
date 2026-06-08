@@ -1547,6 +1547,9 @@ FPCollection Evaluator::evalWhere(const ASTNode &node, const FPCollection &input
 }
 
 FPCollection Evaluator::evalExists(const ASTNode &node, const FPCollection &input, yyjson_doc *doc) {
+	if (node.children.size() > 1) {
+		throw FHIRPathSpecError("exists() takes at most 1 criteria argument");
+	}
 	if (node.children.empty()) {
 		return {FPValue::FromBoolean(!input.empty())};
 	}
@@ -1682,6 +1685,18 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 	}
 	if (name == "where" && arg_count != 1) {
 		throw FHIRPathSpecError("where() takes exactly 1 criteria argument");
+	}
+	if ((name == "empty" || name == "count" || name == "distinct" || name == "isDistinct" ||
+	     name == "hasValue" ||
+	     name == "allTrue" || name == "anyTrue" || name == "allFalse" || name == "anyFalse") &&
+	    arg_count != 0) {
+		throw FHIRPathSpecError(name + "() takes no arguments");
+	}
+	if (name == "exists" && arg_count > 1) {
+		throw FHIRPathSpecError("exists() takes at most 1 criteria argument");
+	}
+	if ((name == "all" || name == "subsetOf" || name == "supersetOf") && arg_count != 1) {
+		throw FHIRPathSpecError(name + "() takes exactly 1 argument");
 	}
 	if ((name == "toBoolean" || name == "toInteger") && arg_count != 0) {
 		throw FHIRPathSpecError(name + "() takes no arguments");

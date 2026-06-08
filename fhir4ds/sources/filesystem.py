@@ -161,6 +161,14 @@ class FileSystemSource:
         credentials: CloudCredentials | None = None,
         hive_partitioning: bool = False,
     ) -> None:
+        if not isinstance(path_pattern, str):
+            raise TypeError("path_pattern must be a string")
+        if not path_pattern:
+            raise ValueError("path_pattern must be non-empty")
+        if not isinstance(format, str):
+            raise TypeError("format must be a string")
+        if not format:
+            raise ValueError("format must be non-empty")
         fmt = format.lower()
         if fmt not in _SUPPORTED_FORMATS:
             raise ValueError(

@@ -91,6 +91,11 @@ fhir4ds/sources/
 
 ## Security Notes
 
+- Release 0.0.8 Domain 6 SKEPTIC verified clean (2026-06-07): source adapter
+  SQL safety remained aligned under malicious file paths, cloud secret names,
+  and credential values. Keep `.temp/qa/domain6_skeptic_probe.py` and
+  `fhir4ds/sources/tests/unit/test_filesystem.py` aligned when changing path,
+  secret, credential, or identifier interpolation.
 - All user-supplied identifiers must be quoted with `quote_identifier()` before interpolation
 - Cloud storage paths are passed to DuckDB's own parser — never used as SQL identifiers
 - `resource_type` string literals are escaped by doubling single quotes before interpolation
@@ -113,6 +118,11 @@ fhir4ds/sources/
   Invalid argument types must raise `TypeError`, and empty strings must raise
   `ValueError`; do not let bad public constructor inputs fall through to
   internal `AttributeError` during `register()`.
+- Release 0.0.8 Domain 8 HISTORIAN fixed the same constructor-boundary leak in
+  `FileSystemSource`: validate `path_pattern` and `format` before cloud URI
+  checks, SQL literal quoting, or DuckDB registration. Keep
+  `fhir4ds/sources/tests/unit/test_filesystem.py::TestUnsupportedFormat`
+  aligned when changing filesystem source initialization.
 - `MongoFhirServerSchema` supports `per_resource`, `explicit`, and `shared`
   collection layouts. Preserve explicit `resource_path`, `id_path`, and
   `resource_type_path` configurability when changing collection projection SQL.

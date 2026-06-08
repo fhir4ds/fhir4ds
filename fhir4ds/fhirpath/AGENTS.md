@@ -2,6 +2,17 @@
 
 ## Known Fragile Areas
 
+- **FHIRPath Section 5.1 native C++ arity validation (Domain 1 SKEPTIC, 2026-06-07):**
+  **FIXED:** Native DuckDB/C++ FHIRPath now rejects invalid Section 5.1 helper
+  arities in parity with the forced Python fallback. Ordinary helper dispatch
+  is guarded in `Evaluator::evalFunction()` including the FHIR-specific
+  zero-argument `hasValue()` helper, and `exists()` has its own guard in
+  `Evaluator::evalExists()` because the parser emits `NodeType::ExistsCall`
+  and bypasses generic function dispatch. Keep
+  `test_existence_parity.py::test_existence_helpers_reject_invalid_arity_in_native_and_fallback`,
+  `.temp/qa/domain1_skeptic_probe.py`, and the native sqllogictest surface
+  aligned. Rebuild and copy `fhirpath.duckdb_extension` after future native
+  evaluator changes.
 - **SQL-on-FHIR runner JSON primitive boundary parity (SOF-VD-11 SKEPTIC fresh rerun, 2026-06-01):**
   **FIXED:** Native C++ member access must preserve raw JSON number text and
   numeric value for JSON primitives so `value.ofType(Quantity).value` authored
@@ -628,6 +639,15 @@
 
 ## NOT A BUG Registry
 
+- **Release 0.0.8 Domain 2 ARCHAEOLOGIST rerun (2026-06-07):**
+  **VERIFIED CLEAN:** Fresh native C++ vs forced Python fallback probes found no
+  defects across lazy `iif()` branch evaluation, `$index` scoping inside
+  `repeat(iif(...))`, `trace()` identity with valid projection, self-cycle
+  `repeat($this)` de-duplication, union duplicate elimination versus
+  `combine()` duplicate preservation, and strict equality versus
+  whitespace/case-normalizing string equivalence. Evidence lives in
+  `.temp/qa/domain2_archaeologist_probe.py`; targeted parity pytest passed 5/5
+  and FHIRPath R4 conformance stayed 935/935.
 - **FHIRPath Section 7/8 HISTORIAN rerun (FP-19, 2026-05-24):**
   **VERIFIED CLEAN:** A fresh 31-case native C++ vs forced Python fallback
   probe plus 7 direct core checks found no additional aggregate or lexical

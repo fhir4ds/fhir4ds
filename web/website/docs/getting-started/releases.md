@@ -7,6 +7,50 @@ title: What's New
 
 This page summarizes the major changes in each release of FHIR4DS.
 
+## Version 0.0.8
+*June 2026*
+
+Version 0.0.8 focuses on release hardening, public API robustness, audit
+evidence fidelity, and refreshed browser/package artifacts while preserving the
+full conformance baseline.
+
+### Highlights
+
+- **FHIRPath Native Parity**: Native DuckDB FHIRPath now rejects malformed
+  Section 5.1 existence-helper arities, including specialized `exists()` and
+  FHIR-specific `hasValue()` dispatch paths, in parity with the Python
+  fallback.
+- **Measurement Period Fidelity**: CQL-authored `Interval<DateTime>` parameter
+  defaults retain DateTime precision and authored open/closed boundary flags
+  through DQM population SQL generation.
+- **Public API Error Contracts**: DQM config loaders, HAPI/Mongo
+  materialization config parsing, and filesystem sources now raise actionable
+  package errors for malformed public inputs.
+- **Audit Evidence Accuracy**: Multi-group DQM audit pruning preserves
+  group-local causal resource targets, and Mongo compact materialization now
+  mirrors the HAPI compact result/full audit split.
+- **Release Artifact Consistency**: Package metadata, public subpackage
+  versions, notebook snippets, CQL runner metadata, wheel contents, and WASM
+  translator assets are aligned with `0.0.8`.
+
+### Conformance
+
+| Suite | Passed | Total | Rate |
+|-------|-------:|------:|-----:|
+| ViewDefinition v2 | 134 | 134 | 100.0% |
+| FHIRPath R4 | 935 | 935 | 100.0% |
+| CQL | 1,706 | 1,706 | 100.0% |
+| DQM QI-Core 2025 | 47 | 47 | 100.0% |
+| Overall | 2,822 | 2,822 | 100.0% |
+
+### Upgrade
+
+```bash
+pip install fhir4ds-v2==0.0.8
+```
+
+---
+
 ## Version 0.0.7
 *May 2026*
 

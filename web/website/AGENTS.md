@@ -16,6 +16,16 @@ The interactive demo is a standalone React application (`web/wasm-demo`) that is
 - **Isolation**: Requires `SharedArrayBuffer` for DuckDB-WASM and Pyodide.
 - **Current wheel path**: the Vite build serves the Python wheel from `/wasm-app/assets/fhir4ds_v2-*.whl`. Do not reintroduce old `cql_py` path assumptions in tests or docs.
 - **SMART demo eager load**: `docs/examples/smart-demo.md` intentionally does not pass `lazyLaunch` to `WasmDemoWC`. The SMART example should render the web component directly, and `tests/wasm-demo-wc.spec.ts` should protect that behavior.
+- **Release version assets**: when the Python package version changes, update
+  the homepage `PRODUCT_VERSION`, `tests/demo.spec.ts`, install snippets,
+  `docs/getting-started/releases.md`, and the bundled WASM wheel under
+  `web/wasm-demo/public/`; rebuild `web/wasm-demo`, copy `dist/` into
+  `static/wasm-app/`, then run `npm run typecheck` and `npm run build` here.
+- **Pyodide install snippets**: examples that install the bundled wheel in
+  Pyodide must install pure-Python dependencies first and call
+  `micropip.install(..., deps=False)` for the fhir4ds wheel. Without
+  `deps=False`, micropip tries to install the native `duckdb` Python package
+  and fails in browser environments.
 
 ## Cross-Origin Isolation (COOP/COEP)
 

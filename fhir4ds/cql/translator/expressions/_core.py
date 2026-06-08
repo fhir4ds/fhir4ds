@@ -161,6 +161,44 @@ class CoreMixin:
             return SQLLiteral(value=str(binding))
         return literal
 
+    @staticmethod
+    def _interval_parameter_binding_parts(
+        binding: Any,
+    ) -> tuple[Any, Any, bool, bool] | None:
+        """Return low/high/closure metadata for an interval parameter binding.
+
+        Runtime two-tuples keep their historical closed-bound behavior. CQL
+        authored defaults are stored as dictionaries so their interval syntax
+        (`[`, `]`, `(`, `)`) survives into population SQL.
+        """
+        if isinstance(binding, dict) and ("low" in binding or "high" in binding):
+            return (
+                binding.get("low"),
+                binding.get("high"),
+                bool(binding.get("lowClosed", True)),
+                bool(binding.get("highClosed", False)),
+            )
+        if isinstance(binding, tuple):
+            if len(binding) == 2:
+                return (binding[0], binding[1], True, True)
+            if len(binding) == 4:
+                return (binding[0], binding[1], bool(binding[2]), bool(binding[3]))
+        return None
+
+    @staticmethod
+    def _interval_parameter_bound_sql(
+        value: Any,
+        *,
+        is_datetime: bool,
+        is_high: bool,
+    ) -> SQLExpression:
+        if value is None:
+            return SQLLiteral(value="{mp_end}" if is_high else "{mp_start}")
+        text = str(value)
+        if is_datetime and _re.match(r"^\d{4}-\d{2}-\d{2}$", text):
+            text = text + ("T23:59:59.999" if is_high else "T00:00:00.000")
+        return SQLLiteral(value=text)
+
     def _parameter_reference_expression(self, name: str, cql_type: Optional[str]) -> SQLExpression:
         """Return a runtime parameter reference preserving declared primitive type."""
         ref = SQLParameterRef(name=name)
@@ -606,33 +644,34 @@ class CoreMixin:
                 parameter_bindings = getattr(self.context, "_parameter_bindings", {})
                 has_binding = name in parameter_bindings
                 binding = parameter_bindings[name] if has_binding else None
-                if binding is not None and isinstance(binding, tuple) and len(binding) == 2:
-                    b_start, b_end = binding
-                    p_start = b_start or "{mp_start}"
-                    p_end = b_end or "{mp_end}"
+                interval_parts = self._interval_parameter_binding_parts(binding)
+                if interval_parts is not None:
+                    b_start, b_end, low_closed, high_closed = interval_parts
                     # For Interval<DateTime> parameters, use TIMESTAMP precision
                     # so that datetime comparisons are exact (e.g.,
                     # 2026-01-01T08:00 is NOT within [2025-07-01, 2026-01-01]
                     # because at datetime precision 08:00 > 00:00).
                     # Date-only end bounds get end-of-day (T23:59:59.999)
                     # to match CQL date→datetime promotion semantics.
-                    _date_only_re = _re.compile(r"^\d{4}-\d{2}-\d{2}$")
                     is_dt = symbol.cql_type and "DateTime" in str(symbol.cql_type)
-                    if is_dt:
-                        if isinstance(p_start, str) and _date_only_re.match(p_start):
-                            p_start = p_start + "T00:00:00.000"
-                        if isinstance(p_end, str) and _date_only_re.match(p_end):
-                            p_end = p_end + "T23:59:59.999"
-                        cast_type = "TIMESTAMP"
-                    else:
-                        cast_type = "DATE"
+                    cast_type = "TIMESTAMP" if is_dt else "DATE"
+                    start_literal = self._interval_parameter_bound_sql(
+                        b_start,
+                        is_datetime=bool(is_dt),
+                        is_high=False,
+                    )
+                    end_literal = self._interval_parameter_bound_sql(
+                        b_end,
+                        is_datetime=bool(is_dt),
+                        is_high=True,
+                    )
                     return SQLFunctionCall(
                         name="intervalFromBounds",
                         args=[
-                            SQLCast(expression=SQLLiteral(value=p_start), target_type=cast_type),
-                            SQLCast(expression=SQLLiteral(value=p_end), target_type=cast_type),
-                            SQLLiteral(value=True),
-                            SQLLiteral(value=True),
+                            SQLCast(expression=start_literal, target_type=cast_type),
+                            SQLCast(expression=end_literal, target_type=cast_type),
+                            SQLLiteral(value=low_closed),
+                            SQLLiteral(value=high_closed),
                         ],
                     )
                 if has_binding:

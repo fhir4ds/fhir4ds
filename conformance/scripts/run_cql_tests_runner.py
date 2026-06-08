@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import fhir4ds  # noqa: E402
 from fhir4ds.cql.fhir_server import CQLServerConfig, create_http_server  # noqa: E402
 
 
@@ -239,9 +240,9 @@ def _build_config() -> dict[str, str]:
         "CqlVersion": "1.5",
         "testsRunDescription": "FHIR4DS local $cql facade test run",
         "cqlTranslator": "FHIR4DS",
-        "cqlTranslatorVersion": "0.0.7",
+        "cqlTranslatorVersion": fhir4ds.__version__,
         "cqlEngine": "FHIR4DS",
-        "cqlEngineVersion": "0.0.7",
+        "cqlEngineVersion": fhir4ds.__version__,
     }
 
 

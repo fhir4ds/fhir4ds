@@ -1,6 +1,14 @@
 # ViewDefinition Agent Notes
 
 ## Known Fragile Areas
+- Release 0.0.8 Domain 5 SPECIALIST verified clean (2026-06-07):
+  Fresh composed ViewDefinition probing found no new issues across
+  `forEachOrNull` row preservation, nested `unionAll`, branch-local `where`,
+  constants, shared `source_table` resource filtering, native-loaded versus
+  forced Python fallback execution, and invalid `unionAll` parser/generator
+  boundaries. Keep `.temp/qa/domain5_specialist_probe.py`, full
+  ViewDefinition pytest, and `conformance/scripts/run_viewdef.py` aligned when
+  changing iterator, union, constant, or type/schema validation paths.
 - SOF-VD-12 EXPLORER fresh rerun verified clean (2026-06-01):
   combined ShareableViewDefinition and TabularViewDefinition `meta.profile`
   declarations with version suffixes still activate supported profile

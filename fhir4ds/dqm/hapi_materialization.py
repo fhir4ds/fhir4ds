@@ -232,13 +232,23 @@ def load_materialization_config(path: str | Path) -> HapiMaterializationConfig:
     text = config_path.read_text()
     suffix = config_path.suffix.lower()
     if suffix == ".json":
-        raw = json.loads(text)
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise DQMConfigError(
+                f"Invalid JSON HAPI materialization config {config_path}: {exc}"
+            ) from exc
     elif suffix in {".yaml", ".yml"}:
         try:
             import yaml  # type: ignore[import-untyped]
         except ImportError as exc:  # pragma: no cover - PyYAML is a dependency
             raise DQMConfigError("YAML config files require PyYAML") from exc
-        raw = yaml.safe_load(text)
+        try:
+            raw = yaml.safe_load(text)
+        except Exception as exc:  # pragma: no cover - depends on optional PyYAML internals
+            raise DQMConfigError(
+                f"Invalid YAML HAPI materialization config {config_path}: {exc}"
+            ) from exc
     else:
         raise DQMConfigError("HAPI materialization config must be JSON or YAML")
     return parse_materialization_config(raw, base_dir=config_path.parent)
@@ -317,8 +327,10 @@ def parse_materialization_config(
             (global_period["start"], global_period["end"]),
         )
 
-    global_libraries = _parse_paths(raw.get("libraries", {}).get("paths", []), base)
-    global_valuesets = _parse_paths(raw.get("terminology", {}).get("valuesets", []), base)
+    global_libraries = _parse_section_paths(raw.get("libraries"), "libraries", "paths", base)
+    global_valuesets = _parse_section_paths(
+        raw.get("terminology"), "terminology", "valuesets", base
+    )
     measures = _parse_materialized_measures(
         raw.get("measures", []),
         base=base,
@@ -2025,6 +2037,14 @@ def _parse_paths(raw: Any, base: Path) -> list[Path]:
     if not isinstance(raw, list) or not all(isinstance(path, str) for path in raw):
         raise DQMConfigError("Expected a path string or list of path strings")
     return [_resolve_path(path, base) for path in raw]
+
+
+def _parse_section_paths(raw: Any, section: str, field: str, base: Path) -> list[Path]:
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        raise DQMConfigError(f"'{section}' must be an object")
+    return _parse_paths(raw.get(field, []), base)
 
 
 def _optional_path(raw: Any, base: Path) -> Path | None:

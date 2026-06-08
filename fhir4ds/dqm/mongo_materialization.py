@@ -203,13 +203,23 @@ def load_mongo_materialization_config(path: str | Path) -> MongoMaterializationC
     text = config_path.read_text()
     suffix = config_path.suffix.lower()
     if suffix == ".json":
-        raw = json.loads(text)
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise DQMConfigError(
+                f"Invalid JSON Mongo materialization config {config_path}: {exc}"
+            ) from exc
     elif suffix in {".yaml", ".yml"}:
         try:
             import yaml  # type: ignore[import-untyped]
         except ImportError as exc:  # pragma: no cover - PyYAML is required
             raise DQMConfigError("YAML config files require PyYAML") from exc
-        raw = yaml.safe_load(text)
+        try:
+            raw = yaml.safe_load(text)
+        except Exception as exc:  # pragma: no cover - depends on optional PyYAML internals
+            raise DQMConfigError(
+                f"Invalid YAML Mongo materialization config {config_path}: {exc}"
+            ) from exc
     else:
         raise DQMConfigError("Mongo materialization config must be JSON or YAML")
     return parse_mongo_materialization_config(raw, base_dir=config_path.parent)
@@ -269,8 +279,10 @@ def parse_mongo_materialization_config(
             (global_period["start"], global_period["end"]),
         )
 
-    global_libraries = _parse_paths(raw.get("libraries", {}).get("paths", []), base)
-    global_valuesets = _parse_paths(raw.get("terminology", {}).get("valuesets", []), base)
+    global_libraries = _parse_section_paths(raw.get("libraries"), "libraries", "paths", base)
+    global_valuesets = _parse_section_paths(
+        raw.get("terminology"), "terminology", "valuesets", base
+    )
     source_schema = _parse_source_schema(mongo.get("source_schema"), database_name)
     collections = _parse_materialization_collections(mongo.get("collections"))
     measures = _parse_materialized_measures(
@@ -1570,6 +1582,14 @@ def _parse_paths(raw: Any, base: Path) -> list[Path]:
     return paths
 
 
+def _parse_section_paths(raw: Any, section: str, field: str, base: Path) -> list[Path]:
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        raise DQMConfigError(f"'{section}' must be an object")
+    return _parse_paths(raw.get(field, []), base)
+
+
 def _resolve_path(value: str, base: Path) -> Path:
     path = Path(value)
     if not path.is_absolute():
@@ -1813,9 +1833,14 @@ def _document_key_id(change: dict[str, Any]) -> str | None:
 def _compact_row(row: dict[str, Any]) -> dict[str, Any]:
     compact = {}
     for key, value in row.items():
-        if key.endswith("_evidence") or key.endswith("_narrative"):
+        if key == "patient_id":
+            compact[key] = _jsonable(value)
+        elif isinstance(value, dict) and "result" in value:
+            compact[key] = _jsonable(value.get("result"))
+        elif key.startswith("evidence_") or key.endswith("_evidence") or key.endswith("_narrative"):
             continue
-        compact[key] = _jsonable(value)
+        else:
+            compact[key] = _jsonable(value)
     return compact
 
 

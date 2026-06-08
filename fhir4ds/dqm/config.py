@@ -94,7 +94,10 @@ def load_run_config(path: str | Path) -> DQMRunConfig:
     text = config_path.read_text()
     suffix = config_path.suffix.lower()
     if suffix == ".json":
-        raw = json.loads(text)
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise DQMConfigError(f"Invalid JSON DQM config {config_path}: {exc}") from exc
     elif suffix in {".yaml", ".yml"}:
         try:
             import yaml  # type: ignore[import-untyped]
@@ -102,7 +105,10 @@ def load_run_config(path: str | Path) -> DQMRunConfig:
             raise DQMConfigError(
                 "YAML config files require PyYAML. Install PyYAML or use JSON config."
             ) from exc
-        raw = yaml.safe_load(text)
+        try:
+            raw = yaml.safe_load(text)
+        except Exception as exc:  # pragma: no cover - depends on optional PyYAML internals
+            raise DQMConfigError(f"Invalid YAML DQM config {config_path}: {exc}") from exc
     else:
         raise DQMConfigError("DQM config must be a .json, .yaml, or .yml file")
     return parse_run_config(raw, base_dir=config_path.parent)
@@ -115,7 +121,7 @@ def parse_run_config(raw: dict[str, Any], *, base_dir: Path | None = None) -> DQ
     base = base_dir or Path.cwd()
 
     measures = _parse_measures(raw.get("measures"), base)
-    libraries = _parse_paths(raw.get("libraries", {}).get("paths", []), base)
+    libraries = _parse_section_paths(raw.get("libraries"), "libraries", "paths", base)
     source = _parse_source(raw.get("source"), base)
     terminology = _parse_terminology(raw.get("terminology", {}), base)
     audit = _parse_audit(raw.get("audit", {}))
@@ -317,6 +323,14 @@ def _parse_paths(raw: Any, base: Path) -> list[Path]:
     if not isinstance(raw, list) or not all(isinstance(path, str) for path in raw):
         raise DQMConfigError("Expected a path string or list of path strings")
     return [_resolve_path(path, base) for path in raw]
+
+
+def _parse_section_paths(raw: Any, section: str, field: str, base: Path) -> list[Path]:
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        raise DQMConfigError(f"'{section}' must be an object")
+    return _parse_paths(raw.get(field, []), base)
 
 
 def _resolve_path(path: str, base: Path) -> Path:

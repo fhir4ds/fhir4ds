@@ -219,7 +219,11 @@ class MeasureEvaluator:
         # Prune evidence before concatenation to preserve group context
         if effective_mode != AuditMode.NONE:
             for i, gdf in enumerate(group_dfs):
-                group_dfs[i] = self._prune_population_evidence(gdf, pop_map)
+                group_dfs[i] = self._prune_population_evidence(
+                    gdf,
+                    pop_map,
+                    group=pop_map.groups[i] if i < len(pop_map.groups) else None,
+                )
 
         if len(group_dfs) == 1:
             result_df = group_dfs[0].drop(columns=["_group_id"])
@@ -1450,7 +1454,7 @@ class MeasureEvaluator:
             )
 
     def _prune_population_evidence(
-        self, df: pd.DataFrame, pop_map: PopulationMap,
+        self, df: pd.DataFrame, pop_map: PopulationMap, group: GroupMap | None = None,
     ) -> pd.DataFrame:
         """Apply persona-based evidence pruning to population columns.
 
@@ -1458,7 +1462,29 @@ class MeasureEvaluator:
         IS excluded. For non-excluded patients the evidence is pruned to reduce
         noise in downstream narratives and exports.
         """
-        for group in pop_map.groups:
+        if group is not None:
+            groups = [group]
+        elif "_group_id" in df.columns:
+            frame_group_ids = {str(value) for value in df["_group_id"].dropna().unique()}
+            groups = [candidate for candidate in pop_map.groups if candidate.group_id in frame_group_ids]
+            if len(groups) > 1:
+                result = df.copy()
+                for current_group in groups:
+                    mask = result["_group_id"].astype(str) == current_group.group_id
+                    if not mask.any():
+                        continue
+                    subset = self._prune_population_evidence(
+                        result.loc[mask].copy(),
+                        pop_map,
+                        group=current_group,
+                    )
+                    for column in subset.columns:
+                        result.loc[mask, column] = subset[column]
+                return result
+        else:
+            groups = pop_map.groups
+
+        for group in groups:
             def _population_mask(col_name: str) -> pd.Series:
                 if col_name not in df.columns:
                     return pd.Series(False, index=df.index)

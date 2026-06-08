@@ -733,13 +733,29 @@ class IntervalMixin:
             name = cql_expr.name if isinstance(cql_expr, Identifier) else cql_expr.parts[-1]
             # Generic interval parameter binding lookup
             binding = self.context.get_parameter_binding(name)
-            if binding is not None and isinstance(binding, tuple) and len(binding) == 2:
-                b_start, b_end = binding
-                p_start = b_start or "{mp_start}"
-                p_end = b_end or "{mp_end}"
-                start = SQLCast(expression=SQLLiteral(value=p_start), target_type="DATE")
-                end = SQLCast(expression=SQLLiteral(value=p_end), target_type="DATE")
-                return (start, end, True, True)
+            interval_parts = self._interval_parameter_binding_parts(binding)
+            if interval_parts is not None:
+                b_start, b_end, low_closed, high_closed = interval_parts
+                is_dt = getattr(self.context.lookup_symbol(name), "cql_type", None)
+                is_dt = bool(is_dt and "DateTime" in str(is_dt))
+                cast_type = "TIMESTAMP" if is_dt else "DATE"
+                start = SQLCast(
+                    expression=self._interval_parameter_bound_sql(
+                        b_start,
+                        is_datetime=is_dt,
+                        is_high=False,
+                    ),
+                    target_type=cast_type,
+                )
+                end = SQLCast(
+                    expression=self._interval_parameter_bound_sql(
+                        b_end,
+                        is_datetime=is_dt,
+                        is_high=True,
+                    ),
+                    target_type=cast_type,
+                )
+                return (start, end, low_closed, high_closed)
             # For intervalFromBounds SQL nodes, extract directly
             if isinstance(sql_expr, SQLFunctionCall) and sql_expr.name == "intervalFromBounds" and len(sql_expr.args) >= 2:
                 return (sql_expr.args[0], sql_expr.args[1], True, False)

@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from fhir4ds.cli.main import main
+from fhir4ds.dqm.config import DQMConfigError
 from fhir4ds.dqm.mongo_materialization import (
     FHIR4DS_MATERIALIZATION_TAG_SYSTEM,
     FHIR4DS_MEASURE_REPORT_TAG_CODE,
@@ -13,8 +16,10 @@ from fhir4ds.dqm.mongo_materialization import (
     MongoMaterializedMeasure,
     _prepare_measure_report_for_materialization,
     enqueue_patient_change_from_mongo_change,
+    load_mongo_materialization_config,
     parse_mongo_materialization_config,
     publish_measure_report_to_mongo,
+    split_patient_result_rows,
 )
 from fhir4ds.dqm.types import AuditMode
 from fhir4ds.sources import MongoFhirServerSchema
@@ -119,6 +124,40 @@ def test_parse_mongo_materialization_config_resolves_paths_and_defaults(tmp_path
     assert measure_config.persist_measure_report is True
     assert measure_config.publish_measure_report_to_mongo is True
     assert measure_config.generate_narratives is True
+
+
+def test_load_mongo_materialization_config_wraps_invalid_json(tmp_path):
+    config_path = tmp_path / "mongo.json"
+    config_path.write_text("{")
+
+    with pytest.raises(DQMConfigError, match="Invalid JSON Mongo materialization config"):
+        load_mongo_materialization_config(config_path)
+
+
+def test_parse_mongo_materialization_config_rejects_non_object_libraries():
+    raw = {
+        "mongo": {
+            "connection_string": "mongodb://localhost:27017",
+            "database_name": "fhir",
+        },
+        "libraries": [],
+    }
+
+    with pytest.raises(DQMConfigError, match="'libraries' must be an object"):
+        parse_mongo_materialization_config(raw)
+
+
+def test_parse_mongo_materialization_config_rejects_non_object_terminology():
+    raw = {
+        "mongo": {
+            "connection_string": "mongodb://localhost:27017",
+            "database_name": "fhir",
+        },
+        "terminology": [],
+    }
+
+    with pytest.raises(DQMConfigError, match="'terminology' must be an object"):
+        parse_mongo_materialization_config(raw)
 
 
 def test_prepare_measure_report_tags_and_identifies():
@@ -241,6 +280,27 @@ def test_publish_measure_report_to_mongo_supports_wrapped_shared_collection():
     query, update, _upsert = collection.update_calls[0]
     assert query == {"payload.resource.id": "mr-1"}
     assert update["$set"] == {"payload.resource": report}
+
+
+def test_split_patient_result_rows_keeps_compact_and_full_audit():
+    compact, audit = split_patient_result_rows(
+        [
+            {
+                "patient_id": "patient-1",
+                "initial_population": {
+                    "result": True,
+                    "evidence": [{"target": "Encounter/e1"}],
+                },
+                "evidence_Helper": [{"target": "Observation/o1"}],
+            }
+        ]
+    )
+
+    assert compact["rows"] == [
+        {"patient_id": "patient-1", "initial_population": True}
+    ]
+    assert audit["rows"][0]["initial_population"]["evidence"][0]["target"] == "Encounter/e1"
+    assert audit["rows"][0]["evidence_Helper"][0]["target"] == "Observation/o1"
 
 
 def test_mongo_cli_requires_nested_subcommand(capsys):

@@ -2834,14 +2834,15 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
             # Populate parameter bindings from default interval values
             if isinstance(default, dict) and ("low" in default or "high" in default):
-                p_start = default.get("low")
-                p_end = default.get("high")
-                if p_start:
-                    # Strip time/timezone suffix for DATE literal (e.g. "2026-01-01T00:00:00.000Z" -> "2026-01-01")
-                    p_start = str(p_start)[:10]
-                if p_end:
-                    p_end = str(p_end)[:10]
-                context.set_parameter_binding(param.name, (p_start, p_end))
+                context.set_parameter_binding(
+                    param.name,
+                    {
+                        "low": default.get("low"),
+                        "high": default.get("high"),
+                        "lowClosed": default.get("lowClosed", True),
+                        "highClosed": default.get("highClosed", False),
+                    },
+                )
                 # No special-case for "Measurement Period" — set_parameter_binding is sufficient
             elif has_default and param.name not in context._parameter_bindings:
                 context.set_parameter_binding(param.name, param.default)
