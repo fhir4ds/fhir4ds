@@ -10,12 +10,27 @@ This page summarizes the major changes in each release of FHIR4DS.
 ## Version 0.0.8
 *June 2026*
 
-Version 0.0.8 focuses on release hardening, public API robustness, audit
-evidence fidelity, and refreshed browser/package artifacts while preserving the
-full conformance baseline.
+Version 0.0.8 focuses on Mongo-backed FHIR server integration, FHIR `$cql`
+conformance-runner compatibility, release hardening, public API robustness,
+audit evidence fidelity, and refreshed browser/package artifacts while
+preserving the full conformance baseline.
 
 ### Highlights
 
+- **Mongo FHIR Server Integration**: Added `MongoFhirServerSource` for
+  read-only analytics over Mongo-backed FHIR servers through DuckDB's community
+  `mongo_scan` extension, with support for per-resource, explicit, and shared
+  collection layouts.
+- **Mongo DQM Materialization**: Added `fhir4ds dqm mongo ...` commands and
+  worker support for durable patient-change queues, change-stream processing,
+  result/audit storage, optional generated `MeasureReport` publishing, and
+  patient-scoped source pushdown.
+- **FHIR `$cql` Facade**: Added a narrow local FHIR R4 `$cql` operation facade
+  and `fhir4ds cql-server` CLI for running `cqframework/cql-tests-runner`
+  against the FHIR4DS CQL engine.
+- **CQL Spec Parity Sweep**: Tightened CQL primitive, clinical, temporal,
+  interval, list, quantity/ratio, conversion, rounding, and no-Python/native
+  DuckDB parity behavior across the conformance surface.
 - **FHIRPath Native Parity**: Native DuckDB FHIRPath now rejects malformed
   Section 5.1 existence-helper arities, including specialized `exists()` and
   FHIR-specific `hasValue()` dispatch paths, in parity with the Python
@@ -32,6 +47,32 @@ full conformance baseline.
 - **Release Artifact Consistency**: Package metadata, public subpackage
   versions, notebook snippets, CQL runner metadata, wheel contents, and WASM
   translator assets are aligned with `0.0.8`.
+
+### Bug Fixes
+
+- **CQL `$cql` Runner Compatibility**: FHIR `Parameters` serialization now
+  handles intervals, empty/null values, temporal values, quantities, ratios,
+  Codes, Concepts, Lists, and Tuples in runner-compatible shapes, and runner
+  report status now reflects JSON-level failures even when the Node process
+  exits successfully.
+- **CQL Semantic Edge Cases**: Fixed ratio literals, Long metadata
+  preservation, DateTime null precision, decimal equivalence, interval
+  null/open-bound behavior, interval uncertainty propagation, `ToString`
+  formatting, and public `Round`/`RoundTo` half-away-from-zero behavior across
+  Python fallback, native-loaded DuckDB, and no-Python/browser-style surfaces.
+- **Measurement Period Fidelity**: CQL-authored `Interval<DateTime>` parameter
+  defaults retain DateTime precision and authored open/closed boundary flags
+  through DQM population SQL generation.
+- **Public API Error Contracts**: DQM config loaders, HAPI/Mongo
+  materialization config parsing, and filesystem sources now raise actionable
+  package errors for malformed public inputs instead of leaking decoder or
+  attribute errors.
+- **Audit Evidence Accuracy**: Multi-group DQM audit pruning preserves
+  group-local causal resource targets, and Mongo compact materialization now
+  mirrors the HAPI compact result/full audit split.
+- **Release Artifact Consistency**: Package metadata, public subpackage
+  versions, notebook snippets, CQL runner metadata, wheel contents, website
+  release surfaces, and browser demo assets are aligned with `0.0.8`.
 
 ### Conformance
 
